@@ -9,13 +9,14 @@ The functions to specify and prepare the data and models for three specific data
 Example:
 Launch Julia from the directory where the file StochasticGene.jl is located and type:
 
+```
 include("StochasticGene.jl")
-
 data,model,options = data,model,options = StochasticGene.scrna_steadystate(datafolder,gene,r,nGstates,nalleles,cv,maxruntime,nsamples,temp)
-
 fit,waic=StochasticGene.metropolis_hastings(data,model,options)
+```
 
 where
+```
 data = data structure,
 model = model structure,
 options = MCMC run parameters,
@@ -28,4 +29,4 @@ maxruntime = 60. (in seconds),
 nsamples = 10000 (number of MCMC samples),
 temp = 100.  (MCMC temperature),
 r = vector containing intial parameter guess
-
+```
