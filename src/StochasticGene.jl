@@ -82,37 +82,7 @@ A Julia module for simulation and Bayesian inference of parameters of stochastic
 
 API Overview:
 
+
 """
-# StochasticGene
-# """
-# #Probability distributions for Bayesian inference:
-# y = data, return  = model parameters
-#
-# prior = p(r)
-# likelihood = sum_y p(y|r)
-# lprior = log prior = log p(r)
-# ll = log likelihood = log p(y|r) =  \sum llC[i]
-# llC::Array = log likelihood of components, e.g. LC, FISH, ...
-#
-# lpost = log posterior = log p(y|theta)p(theta) = ll + lprior
-#
-# #For WAIC calculations
-# lppd = log pointwise predictive density = log E(p(y|theta)) E over MCMC draws
-# pWAIC = var(log p(y|theta)) var over MCMC draws
-#
-# WAIC = -2(llpd - pWAIC)
-# AIC = -2(llpd - k), k = number of parameters
-# """
-# """
-# # Output types
-# #all draws
-# r,llC,lprior,lpost
-#
-# #draw stats
-# (max likelihood r,rlast, E(r), var(r), r quantiles)
-# (E(llC), var(llC), llC quantiles)
-# accepted, draws
-# (E(p), var(log p)   #For WAIC calculation:
-# """
 
 end #Module
