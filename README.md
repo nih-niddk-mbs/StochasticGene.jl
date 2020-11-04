@@ -11,7 +11,7 @@ Launch Julia from the directory where the file StochasticGene.jl is located and 
 
 ```
 include("StochasticGene.jl")
-data,model,options = data,model,options = StochasticGene.scrna_steadystate(datafolder,gene,r,nGstates,nalleles,cv,maxruntime,nsamples,temp)
+data,model,options = StochasticGene.scrna_steadystate(datafolder,gene,r,nGstates,nalleles,cv,maxruntime,nsamples,temp)
 fit,waic=StochasticGene.metropolis_hastings(data,model,options)
 ```
 
