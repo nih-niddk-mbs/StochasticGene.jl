@@ -6,7 +6,7 @@ The repository is organized into files that contain functions for specifying the
 
 The functions to specify and prepare the data and models for three specific data sets have been provided. The models and data are organized into Julia structs. The MCMC alogorithm will call for function methods specific to the models and data for the prior and proposal distributions and the loglikelihood of the model prediction.
 
-Example:
+### Example:
 Launch Julia from the directory where the file StochasticGene.jl is located and type:
 
 ```
@@ -16,17 +16,16 @@ fit,waic=StochasticGene.metropolis_hastings(data,model,options)
 ```
 
 where
-```
-data = data structure,
-model = model structure,
-options = MCMC run parameters,
-datafolder = "/datafolder"  (folder where data is stored),
-gene = "MYC" ,
-nGstates = 2 (Int),
-nalleles = 2 (Int),
-cv = 0.05 (coefficient of variation in proposal distribution, Float64),
-maxruntime = 60. (in seconds),
-nsamples = 10000 (number of MCMC samples),
-temp = 100.  (MCMC temperature),
-r = vector containing intial parameter guess
-```
+`data = data structure`,
+`model = model structure`,
+`options = MCMC run parameters`,
+`datafolder = "/datafolder"  (folder where data is stored)`,
+`gene = "MYC"`,
+`nGstates = 2 (Int)`,
+`nalleles = 2 (Int)`,
+`cv = 0.05 (coefficient of variation in proposal distribution, Float64)`,
+`maxruntime = 60. (in seconds)`,
+`nsamples = 10000 (number of MCMC samples)`,
+`temp = 100.  (MCMC temperature)`,
+`r = vector containing intial parameter guess`
+
