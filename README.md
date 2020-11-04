@@ -27,5 +27,7 @@ where
 `maxruntime = 60. (in seconds)`,
 `nsamples = 10000 (number of MCMC samples)`,
 `temp = 100.  (MCMC temperature)`,
-`r = vector containing intial parameter guess`
+`r = vector containing intial parameter guess`,
+`fit = structure containing MCMC ouputs`,
+`waic = tuple containing Watanabe-Akaike Information Criterion (WAIC) measure for model`
 
