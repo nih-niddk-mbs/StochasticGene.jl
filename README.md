@@ -29,5 +29,5 @@ where
 `temp = 100.  (MCMC temperature)`,
 `r = vector containing intial parameter guess`,
 `fit = structure containing MCMC ouputs`,
-`waic = tuple containing Watanabe-Akaike Information Criterion (WAIC) measure for model`
+`waic = tuple containing Watanabe-Akaike Information Criterion (WAIC) for model`
 
