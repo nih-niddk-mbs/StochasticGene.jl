@@ -14,16 +14,16 @@ data,model,options = data,model,options = StochasticGene.scrna_steadystate(dataf
 fit,waic=StochasticGene.metropolis_hastings(data,model,options)
 
 where
-data = data structure
-model = model structure
-options = MCMC run parameters
-datafolder = "/datafolder"  (folder where data is stored)
-gene = "MYC" 
-nGstates = 2 (integer)
-nalleles = 2 (integer)
-cv = 0.05 (coefficient of variation in proposal distribution)
-maxruntime = 60. (in seconds)
-nsamples = 10000 (number of MCMC samples)
-temp = 100.  (MCMC temperature)
+data = data structure,
+model = model structure,
+options = MCMC run parameters,
+datafolder = "/datafolder"  (folder where data is stored),
+gene = "MYC" ,
+nGstates = 2 (Int),
+nalleles = 2 (Int),
+cv = 0.05 (coefficient of variation in proposal distribution, Float64),
+maxruntime = 60. (in seconds),
+nsamples = 10000 (number of MCMC samples),
+temp = 100.  (MCMC temperature),
 r = vector containing intial parameter guess
 
