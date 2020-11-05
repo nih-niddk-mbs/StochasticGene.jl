@@ -20,7 +20,7 @@ where
 `data = data structure`,
 `model = model structure`,
 `options = MCMC run parameters`,
-`datafolder = "/datafolder"  (folder where data is stored)`,
+`datafolder = "datafolder/"  (folder where data is stored)`,
 `gene = "MYC"`,
 `nGstates = 2 (Int)`,
 `nalleles = 2 (Int)`,
@@ -32,4 +32,4 @@ where
 `fit = structure containing MCMC ouputs`,
 `waic = tuple containing Watanabe-Akaike Information Criterion (WAIC) for model`
 
-The data in folder `/datafolder` needs to be in the form of a scRNA histogram H(\# of mRNA) (number of cells for a given mRNA count) with the naming convention genename.txt (e.g. MYC.txt for the above example).
+The data in folder `datafolder/` needs to be in the form of a scRNA histogram H(\# of mRNA) (number of cells for a given mRNA count) with the naming convention genename.txt (e.g. MYC.txt for the above example).
