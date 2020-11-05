@@ -7,7 +7,8 @@ The repository is organized into files that contain functions for specifying the
 The functions to specify and prepare the data and models for three specific data sets have been provided. The models and data are organized into Julia structs. The MCMC alogorithm will call for function methods specific to the models and data for the prior and proposal distributions and the loglikelihood of the model prediction.
 
 ### Example:
-Launch Julia from the directory where the file StochasticGene.jl is located and type:
+To fit the four rates (and a loss factor) simple 2 G state model (i.e. telegraph model, G0<=>G1 -> mRNA -> 0) to scRNA data,
+launch Julia from the directory where the file StochasticGene.jl is located and type:
 
 ```
 include("StochasticGene.jl")
@@ -31,3 +32,4 @@ where
 `fit = structure containing MCMC ouputs`,
 `waic = tuple containing Watanabe-Akaike Information Criterion (WAIC) for model`
 
+The data in folder `/datafolder` needs to be in the form of a scRNA histogram H(\# of mRNA) (number of cells for a given mRNA count) with the naming convention genename.txt (e.g. MYC.txt for the above example).
