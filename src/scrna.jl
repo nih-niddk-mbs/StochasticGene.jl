@@ -9,10 +9,10 @@ function write_results(fit,model::GMmodel)
     return fit
 end
 
-function scrna_transient(control::String,treatment::String,infolder::String,rinchar::String,gene::String,G::Int,nalleles::Int,maxtime::Float64,samplesteps::Int,annealsteps=0,warmupsteps=0,temp=1)
-    time = 60 * 6.
+function scrna_transient(control::String,treatment::String,gene::String,r::Vector,G::Int,nalleles::Int,cv::Float64,maxtime::Float64,samplesteps::Int,temp=1000,annealsteps=0,warmupsteps=0,time = 60 * 6.)
     data = data_scrna(control,treatment,gene,time)
-    model = model_scrna(infolder,rinchar,gene,G,nalleles,2)
+    nsets = 2
+    model = model_scrna(r,G,nalleles,nsets,cv*ones(nsets*(2*G-1)+1))
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
@@ -228,7 +228,7 @@ function read_rates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/
     end
 end
 
-function read_rates_scrna(infile::String,rinchar::String,gene::String,nparams::Int,inpath="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results/")
+function read_rates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
     if rinchar == "rml" || rinchar == "rlast"
         rskip = 1
         rstart = 1
@@ -251,9 +251,9 @@ function read_rates_scrna(infile::String,rinchar::String,gene::String,nparams::I
         #     println(genes[gene]," ",reffect," no prior")
         #     r = [rmm;rmm]
         # else
-        #     if length(x) == 2*nparams
+        #     if length(x) == 2*nparam
         #         println(gene, " ",reffect)
-        #     elseif length(x) == nparams
+        #     elseif length(x) == nparam
         #         r = [x;x]
         #         println(gene, " ",reffect)
         #     else

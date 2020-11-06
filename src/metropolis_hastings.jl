@@ -8,7 +8,7 @@ struct MHOptions <: Options
 end
 
 struct Fit <: Results
-    params::Array
+    param::Array
     ll::Array
     parml::Array
     llml::Float64
@@ -36,7 +36,6 @@ run_mhparallel(data,model,options,nchains)
 """
 
 function run_mhparallel(data,model,options,nchains)
-    r = model.rates
     sdspawn = Array{Future,1}(undef,nchains)
     for chain in 1:nchains
         sdspawn[chain] = @spawn metropolis_hastings(param,data,model,options)
@@ -149,14 +148,29 @@ function waicupdate(ppd,pwaic,predictions)
     var_update(pwaic,log.(max.(predictions,eps(Float64))))
 end
 
+function extractfit(sdspawn)
+    sd = Array{Tuple,1}(undef,length(sdspawn))
+    for i in eachindex(sdspawn)
+        sd[i] = fetch(sdspawn[i])
+    end
+    return sd
+end
+
 function combinechains(sdspawn)
 
-    # return rout,llout,rml,llml,ppd,pwaic,accepttotal,step
-    return fit,waic
 end
 
 function compute_stats(fit::Fit)
-    cor(fit.params)
+    meanparam = mean(fit.param,dims=2)
+    stdparam = std(fit.param,dims=2)
+    corparam = cor(fit.param')
+    medparam = median(fit.param,dims=2)
+    madparam = mad(fit.param[1,:])
+    qparam = Array{Array,1}(undef,size(fit.param,1))
+    for i in eachindex(fit.param[:,1])
+        qparam[i] = quantile(fit.param[i,:],[.025;.5;.975])
+    end
+    return meanparam,stdparam,medparam,madparam,corparam,qparam
 end
 
 """

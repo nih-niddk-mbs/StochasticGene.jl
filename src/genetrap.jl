@@ -1,6 +1,8 @@
 
 """
 genetrap.jl
+
+Fit GRSM models to live cell and smFISH data
 """
 
 """
