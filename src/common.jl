@@ -78,7 +78,7 @@ struct GMLossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abst
     method::MethodType
 end
 
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRModel
+struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRmodel
     G::Int
     R::Int
     nalleles::Int
@@ -102,7 +102,7 @@ end
 # end
 
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRModel
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRmodel
     G::Int
     R::Int
     nalleles::Int

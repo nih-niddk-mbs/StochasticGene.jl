@@ -68,7 +68,7 @@ include("ClassicTelegraph.jl")
 
 # functions specific for Gene Trap experiments of Wan et al.
 include("geneTrap.jl")
-include("scrna.jl")
+include("rna.jl")
 
 
 # include("/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/code/GillespieSimulatorExInt.jl")
