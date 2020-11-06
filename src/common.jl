@@ -52,8 +52,8 @@ end
 Abstract model types
 """
 abstract type Model end
-abstract type StochasticGRModel <: Model end
-abstract type AbstractGMmodel <: StochasticGRModel end
+abstract type StochasticGRmodel <: Model end
+abstract type AbstractGMmodel <: StochasticGRmodel end
 
 """
 Model structures
@@ -68,15 +68,15 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
     method::MethodType
 end
 
-# struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
-#     G::Int
-#     nalleles::Int
-#     rates::RateType
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     method::MethodType
-# end
+struct GMLossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+end
 
 struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRModel
     G::Int

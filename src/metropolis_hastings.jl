@@ -34,14 +34,18 @@ smRNA FISH data, and burst correlations between alleles
 """
 run_mhparallel(data,model,options,nchains)
 """
+function write_results(file::String,fit)
+    f = open(file,"w")
+    writedlm(f,fit.parml)
+    close(f)
+end
 
 function run_mhparallel(data,model,options,nchains)
     sdspawn = Array{Future,1}(undef,nchains)
     for chain in 1:nchains
-        sdspawn[chain] = @spawn metropolis_hastings(param,data,model,options)
+        sdspawn[chain] = @spawn metropolis_hastings(data,model,options)
     end
-    fit=combinechains(sdspawn)
-    write_results(fit)
+    extractfit(sdspawn)
 end
 
 function run_mh(data,model,options)
@@ -149,15 +153,21 @@ function waicupdate(ppd,pwaic,predictions)
 end
 
 function extractfit(sdspawn)
-    sd = Array{Tuple,1}(undef,length(sdspawn))
+    chain = Array{Tuple,1}(undef,length(sdspawn))
     for i in eachindex(sdspawn)
-        sd[i] = fetch(sdspawn[i])
+        chain[i] = fetch(sdspawn[i])
     end
-    return sd
+    return chain
 end
 
-function combinechains(sdspawn)
-
+function combinechains(chain)
+    fits = Array{Fit,1}(undef,length(chain))
+    waics = Array{Tuple,1}(undef,length(chain))
+    for i in eachindex(chain)
+        stats[i] = compute_stats(chain[i].fit)
+        waics[i] = chain[i].waic
+    end
+    stats,waics
 end
 
 function compute_stats(fit::Fit)
