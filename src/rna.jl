@@ -1,50 +1,61 @@
 """
-scrna.jl
+rna.jl
 
-Fits Single Cell RNA data
+Fit G state models (generalized telegraph models) to RNA abundance data
+For single cell RNA (scRNA) technical noise is included as a lossfactor
+single molecule FISH (smFISH) is treated as loss less
 """
 
-function write_results(fit,model::GMmodel)
-    println(fit[1].llml)
-    return fit
-end
-
-function scrna_transient(control::String,treatment::String,gene::String,r::Vector,G::Int,nalleles::Int,cv::Float64,maxtime::Float64,samplesteps::Int,temp=1000,annealsteps=0,warmupsteps=0,time = 60 * 6.)
-    data = data_scrna(control,treatment,gene,time)
+function rna_transient(control,treatment,time,gene::String,r::Vector,G::Int,nalleles::Int,cv::Float64,maxtime::Float64,samplesteps::Int,temp=1000,annealsteps=0,warmupsteps=0)
+    data = data_rna(control,treatment,time,gene)
     nsets = 2
-    model = model_scrna(r,G,nalleles,nsets,cv*ones(nsets*(2*G-1)+1))
+    model = model_rna(r,G,nalleles,nsets,cv*ones(nsets*(2*G-1)+1))
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 
-function scrna_steadystate(control::String,gene::String,r::Vector,G::Int,nalleles::Int,cv::Float64,maxtime::Float64,samplesteps::Int,temp=1,annealsteps=0,warmupsteps=0)
-    data = data_scrna(control,gene)
+function rna_steadystate(control::String,gene::String,r::Vector,G::Int,nalleles::Int,cv::Float64,maxtime::Float64,samplesteps::Int,temp=1,annealsteps=0,warmupsteps=0)
+    data = data_rna(control,gene)
     nsets = 1
-    model = model_scrna(r,G,nalleles,nsets,cv*ones(nsets*(2*G-1)+1))
+    model = model_rna(r,G,nalleles,nsets,cv*ones(nsets*(2*G-1)+1))
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 
-function data_scrna(control::String,treatment::String,gene::String,time)
+function data_rna(control::String,treatment::String,time,gene::String)
     h = Array{Array,1}(undef,2)
-    h[1] = readRNA_scrna(control * gene * txtstr)
-    h[2] = readRNA_scrna(treatment * gene * txtstr)
+    h[1] = readRNA_rna(control * gene * txtstr)
+    h[2] = readRNA_rna(treatment * gene * txtstr)
     TransientRNAData(gene,[length(h[1]);length(h[2])],time,h)
 end
 
-function data_scrna(control::String,gene::String)
-    h = readRNA_scrna(control * gene * txtstr)
+function data_rna(control::Array,treatment::Array,time,gene::String)
+    h = Array{Array,1}(undef,2)
+    h[1] = readRNA_rna(control * gene * txtstr)
+    h[2] = readRNA_rna(treatment * gene * txtstr)
+    TransientRNAData(gene,[length(h[1]);length(h[2])],time,h)
+end
+
+function data_rna(control::String,gene::String)
+    h = readRNA_rna(control * gene * txtstr)
     RNAData(gene,length(h),h)
 end
 
-function model_scrna(r::Vector,G::Int,nalleles,nsets,propcv,fittedparam=collect(1:2*G-1),method=0,Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
+function model_rna(r::Vector,G::Int,nalleles,nsets,propcv,fittedparam=collect(1:2*G-1),method=0,Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
+    if
     rm,rcv = setpriorrate(G,nsets)
-    fittedparam = fittedparam_scrna(G,1,nsets)
+    fittedparam = fittedparam_rna(G,1,nsets)
     d = priordistributionLogNormal(rm[fittedparam],rcv[fittedparam],G)
-    GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    if r == 2*G * nsets + 1
+        return GMLossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    elseif r == 2*G * nsets
+        return GMLossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    end
+
+
 end
 
-function fittedparam_scrna(G,lossfactor,nsets)
+function fittedparam_rna(G,lossfactor,nsets)
     nrates = 2*G  # total number of rates in GM model
     k = nrates - 1  # adjust all rate parameters except decay time
     fp = Array{Int,1}(undef,nsets*k+1)
@@ -57,7 +68,7 @@ function fittedparam_scrna(G,lossfactor,nsets)
     return fp
 end
 
-function fittedparam_scrna(G,nsets)
+function fittedparam_rna(G,nsets)
     nrates = 2*G  # total number of rates in GM model
     k = nrates - 1  # adjust all rate parameters except decay time
     fp = Array{Int,1}(undef,nsets*k)
@@ -69,13 +80,13 @@ function fittedparam_scrna(G,nsets)
     return fp
 end
 
-function get_rates(param,model::GMmodel)
+function get_rates(param,model::AbstractGMmodel)
     r = copy(model.rates)
     r[model.fittedparam] = param
     return r
 end
 
-function logprior(param,model::GMmodel)
+function logprior(param,model::AbstractGMmodel)
     d = model.rateprior
     p=0
     for i in eachindex(d)
@@ -88,7 +99,7 @@ end
 priordistributionLogNormal(r,cv,G,R)
 LogNormal Prior distribution
 """
-function priordistributionLogNormal(r,cv,G)
+function priorLogNormal(r,cv,G)
     sigma = sigmalognormal(cv)
     d = []
     for i in 1:2*G-1
@@ -113,28 +124,25 @@ function setpriorrate(G,nsets,decayrate=log(2)/(60 * 16))
     return [rm;.2],[rcv;.25]
 end
 
-function priordistributionLogNormal(param,cv,G)
-    sigma = sigmalognormal(cv)
-    d = []
-    for i in eachindex(param)
-        push!(d,Distributions.LogNormal(log(param[i]),sigma[i]))
-    end
-    return d
+function likelihoodfn(param,data::RNAData,model::GMmodel)
+    r = get_rates(param,model)
+    n = model.G-1
+    steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
 end
 
-function likelihoodfn(param,data::RNAData,model::GMmodel)
+function likelihoodfn(param,data::RNAData,model::GMLossmodel)
     r = get_rates(param,model)
     lossfactor = r[end]
     n = model.G-1
     steady_state(r[1:2*n+2],lossfactor,n,data.nRNA,model.nalleles)
 end
 
-function likelihoodfn(param,data::TransientRNAData,model::GMmodel)
+function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
     h1,h2 = likelihoodtuple(param,data,model)
     return [h1;h2]
 end
 
-function likelihoodtuple(param,data::TransientRNAData,model::GMmodel)
+function likelihoodtuple(param,data::TransientRNAData,model::GMLossmodel)
     r = get_rates(param,model)
     lossfactor = r[end]
     n = model.G-1
@@ -147,7 +155,7 @@ function likelihoodtuple(param,data::TransientRNAData,model::GMmodel)
     return h1, h2
 end
 
-function get_rates(param,model::GMmodel)
+function get_rates(param,model::AbstractGMmodel)
     r = copy(model.rates)
     r[model.fittedparam] = param
     return r
@@ -267,10 +275,16 @@ function read_rates_scrna(infile::String,rinchar::String,gene::String,inpath="/U
     end
 end
 
-function datahistogram(data::TransientRNAData)
-    return [data.histRNA[1];data.histRNA[2]]
-end
+"""
+datahistogram(data)
 
-function datahistogram(data::RNAData)
-    return data.histRNA
+Return the RNA histogram data as one vector
+"""
+function datahistogram(data::TransientRNAData)
+    v = [data.histRNA[1]]
+    for i in 2:length(data.histRNA)
+        v = vcat(v,data.histRNA[i])
+    end
+    return v
 end
+datahistogram(data::RNAData) = data.histRNA
