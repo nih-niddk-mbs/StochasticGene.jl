@@ -12,6 +12,7 @@ using Distributed
 using LinearAlgebra
 using PyPlot
 using SparseArrays
+using DifferentialEquations
 
 
 export

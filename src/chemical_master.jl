@@ -118,8 +118,7 @@ function steady_state(r,lossfactor,n,nhist,nalleles)
 end
 
 function steady_state(r,n,nhist,nalleles)
-    M = Mat(r,n,nhist)
-    P = normalized_nullspace(M)
+    P = steady_state_full(r,n,nhist)
     mhist = marginalize(P,n,nhist)
     allele_convolve(mhist,nalleles)
 end
@@ -151,29 +150,73 @@ and eigenvalues and eigenvectors of model transition rate matrix
 """
 function transient(t,r,lossfactor,n,nhist,nalleles,P0)
     mhist = transient(t,r,n,nhist,nalleles,P0)
-    noise_convolve(mhist,lossfactor,nhist)
+    mhist = noise_convolve(mhist,lossfactor,nhist)
 end
 
 function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
     M = Mat(r,n,nhist)
     Mvals,Mvects = eig_decompose(M)
-    TAweights = solve_vector(Mvects,P0)
-    P=time_evolve(t,Mvals,Mvects,TAweights)
+    weights = solve_vector(Mvects,P0)
+    P=time_evolve(t,Mvals,Mvects,weights)
     mhist = Array{Float64,2}(undef,nhist,length(t))
     for i in 1:size(P,1)
-        p = marginalize(P[i,:],n,nhist)
-        mhist[:,i]= allele_convolve(p,nalleles)
+        mh = marginalize(P[i,:],n,nhist)
+        mhist[:,i]= allele_convolve(mh,nalleles)
     end
     return mhist
 end
 function transient(t::Float64,r,n,nhist,nalleles,P0::Vector)
     M = Mat(r,n,nhist)
     Mvals,Mvects = eig_decompose(M)
-    TAweights = solve_vector(Mvects,P0)
-    P=time_evolve(t,Mvals,Mvects,TAweights)
+    weights = solve_vector(Mvects,P0)
+    P=time_evolve(t,Mvals,Mvects,weights)
     mhist = marginalize(P,n,nhist)
     allele_convolve(mhist,nalleles)
 end
+
+function transient(t::Float64,r,n,nhist,P0::Vector)
+    M = Mat(r,n,nhist)
+    Mvals,Mvects = eig_decompose(M)
+    TAweights = solve_vector(Mvects,P0)
+    time_evolve(t,Mvals,Mvects,TAweights)
+end
+
+function f!(du,u,p,t)
+	r = p[1:end-2]
+    n = Int(p[end-1])
+    nhist = Int(p[end])
+    M = Mat(r,n,nhist)
+    for i in eachindex(du)
+        du[i] = M[i,:]'*u[:]
+    end
+end
+
+function f(u,p,t)
+	r = p[1:end-2]
+    n = Int(p[end-1])
+    nhist = Int(p[end])
+    M = Mat(r,n,nhist)
+    M*u
+end
+"""
+Solve using DifferentialEquations
+"""
+function transientODE(t,r,lossfactor,n,nhist,nalleles,P0)
+    mhist = transientODE(t,r,n,nhist,nalleles,P0)
+    noise_convolve(mhist,lossfactor,nhist)
+end
+function transientODE(t,r,n,nhist,nalleles,P0)
+    sol = transientODE(t,r,n,nhist,P0)
+    mhist = marginalize(sol.u[end],n,nhist)
+    allele_convolve(mhist,nalleles)
+end
+function transientODE(t,r,n,nhist,P0)
+	p = [r;n;nhist]
+	tspan = (0.,t)
+	prob = ODEProblem(f!,P0,tspan,p)
+	solve(prob,saveat=t)
+end
+
 function noise_convolve(mhist,lossfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
@@ -323,7 +366,7 @@ Convolve to compute distribution for contributions from multiple alleles
 function allele_convolve(mhist,nalleles)
     nhist = length(mhist)
     mhists = Array{Array{Float64,1}}(undef,nalleles)
-    mhists[1] = vec(mhist)
+    mhists[1] = float.(mhist)
     for i = 2:nalleles
         mhists[i] = zeros(nhist)
         for m = 0:nhist-1

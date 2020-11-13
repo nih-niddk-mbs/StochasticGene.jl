@@ -34,24 +34,34 @@ smRNA FISH data, and burst correlations between alleles
 """
 run_mhparallel(data,model,options,nchains)
 """
-function write_results(file::String,fit)
+function write_results(file::String,x)
     f = open(file,"w")
-    writedlm(f,fit.parml)
+    writedlm(f,x)
     close(f)
 end
 
-function run_mhparallel(data,model,options,nchains)
-    sdspawn = Array{Future,1}(undef,nchains)
-    for chain in 1:nchains
-        sdspawn[chain] = @spawn metropolis_hastings(data,model,options)
-    end
-    extractfit(sdspawn)
+function run_mh(data,model,options,nchains)
+    sd = run_chains(data,model,options,nchains)
+    chain = extract_chain(sd)
+    fits,stats,waics = combine_chains(chain)
+    waic = combine_waic(waics)
+    parml = find_ml(fits)
+    return fits,stats,waic,parml
 end
 
 function run_mh(data,model,options)
-    fit=metropolis_hastings(data,model,options)
-    write_results(fit,model)
-    # compute_stats(fit)
+    fit,waic = metropolis_hastings(data,model,options)
+    stats = compute_stats(fit)
+    # write_results(fit,model)
+    return fit, stats, waic, (fit.parml,fit.llml)
+end
+
+function run_chains(data,model,options,nchains)
+    sd = Array{Future,1}(undef,nchains)
+    for chain in 1:nchains
+        sd[chain] = @spawn metropolis_hastings(data,model,options)
+    end
+    return sd
 end
 
 function metropolis_hastings(data,model,options)
@@ -64,7 +74,7 @@ function metropolis_hastings(data,model,options)
     #     warmup()
     # end
     fit=sample(predictions,param,param,ll,ll,d,data,model,options.samplesteps,options.temp,time(),options.maxtime)
-    waic = computewaic(fit.ppd,fit.pwaic,data)
+    waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
 
@@ -103,10 +113,10 @@ function sample(predictions,param,parml,ll,llml,d,data,model,samplesteps,temp,t1
         step += 1
         accept,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,model,data,temp)
         accepttotal += accept
-        pwaic = waicupdate(ppd,pwaic,predictions)
+        pwaic = update_waic(ppd,pwaic,predictions)
         if ll < llml
             llml = ll
-            parml = param
+            parml = copy(param)
             priorml = prior
         end
         parout[:,step] = param
@@ -124,7 +134,9 @@ function mhstep(predictions,param,ll,prior,d,model,data,temp)
     paramt,dt = proposal(d,model.proposal)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
-    # println(exp((ll + prior - llt - priort)/temp))# * mhfactor(param,d,paramt,dt))
+    #
+    # println(ll," ",llt)
+    # println(ll + prior - llt - priort)
     if rand() < exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt)
         return 1,predictionst,paramt,llt,priort,dt
     else
@@ -139,7 +151,7 @@ end
 """
 computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
 """
-function computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
+function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
     hist = datahistogram(data)
     se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
     lppd = hist'*log.(max.(ppd,eps(T)))
@@ -147,12 +159,12 @@ function computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
     return -2*(lppd-pwaic), 2*se
 end
 
-function waicupdate(ppd,pwaic,predictions)
+function update_waic(ppd,pwaic,predictions)
     ppd .+= predictions
     var_update(pwaic,log.(max.(predictions,eps(Float64))))
 end
 
-function extractfit(sdspawn)
+function extract_chain(sdspawn)
     chain = Array{Tuple,1}(undef,length(sdspawn))
     for i in eachindex(sdspawn)
         chain[i] = fetch(sdspawn[i])
@@ -160,27 +172,55 @@ function extractfit(sdspawn)
     return chain
 end
 
-function combinechains(chain)
+function combine_chains(chain)
     fits = Array{Fit,1}(undef,length(chain))
+    stats = Array{Tuple,1}(undef,length(chain))
     waics = Array{Tuple,1}(undef,length(chain))
     for i in eachindex(chain)
-        stats[i] = compute_stats(chain[i].fit)
-        waics[i] = chain[i].waic
+        stats[i] = compute_stats(chain[i][1])
+        waics[i] = chain[i][2]
+        fits[i] = chain[i][1]
     end
-    stats,waics
+    return fits,stats, waics
 end
+
+function combine_waic(waics)
+    waic = Array{Float64,2}(undef,length(waics),2)
+    for i in eachindex(waics)
+        waic[i,1] = waics[i][1]
+        waic[i,2] = waics[i][2]
+    end
+    return mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
+end
+
+function find_ml(fits)
+    llml = Array{Float64,1}(undef,length(fits))
+    for i in eachindex(fits)
+        llml[i] = fits[i].llml
+    end
+    return fits[argmin(llml)].parml, llml[argmin(llml)]
+end
+
+
 
 function compute_stats(fit::Fit)
     meanparam = mean(fit.param,dims=2)
     stdparam = std(fit.param,dims=2)
     corparam = cor(fit.param')
     medparam = median(fit.param,dims=2)
-    madparam = mad(fit.param[1,:])
+    madparam = mad(fit.param[1,:],normalize=false)
     qparam = Array{Array,1}(undef,size(fit.param,1))
     for i in eachindex(fit.param[:,1])
         qparam[i] = quantile(fit.param[i,:],[.025;.5;.975])
     end
     return meanparam,stdparam,medparam,madparam,corparam,qparam
+end
+
+
+
+function rhat()
+
+
 end
 
 """
