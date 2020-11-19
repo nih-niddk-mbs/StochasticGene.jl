@@ -118,6 +118,8 @@ function steady_state(r,lossfactor,n,nhist,nalleles)
 end
 
 function steady_state(r,n,nhist,nalleles)
+    mu = r[2*n+1]/r[2*n+2]
+    nhist = max(nhist,round(Int,mu + 3*sqrt(mu)))
     P = steady_state_full(r,n,nhist)
     mhist = marginalize(P,n,nhist)
     allele_convolve(mhist,nalleles)
@@ -150,7 +152,7 @@ and eigenvalues and eigenvectors of model transition rate matrix
 """
 function transient(t,r,lossfactor,n,nhist,nalleles,P0)
     mhist = transient(t,r,n,nhist,nalleles,P0)
-    mhist = noise_convolve(mhist,lossfactor,nhist)
+    noise_convolve(mhist,lossfactor,nhist)
 end
 
 function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)

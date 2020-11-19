@@ -40,6 +40,23 @@ function write_results(file::String,x)
     close(f)
 end
 
+function write_results(stats,waic,data,model)
+    f = open("test" * data.gene * txtstr,"w")
+        writedlm(f,stats[1]')
+        writedlm(f,stats[2]')
+        writedlm(f,stats[3]')
+        writedlm(f,stats[4])
+        writedlm(f,stats[5])
+        writedlm(f,stats[6])
+        writedlm(f,[waic[1] waic[2]])
+    close(f)
+    f = open("test" * data.gene * txtstr)
+        y=readdlm(f)
+        # x=read(f,Float64)
+    close(f)
+    return y
+end
+
 function run_mh(data,model,options,nchains)
     sd = run_chains(data,model,options,nchains)
     chain = extract_chain(sd)
@@ -77,23 +94,40 @@ function metropolis_hastings(data,model,options)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
+"""
+proposal(param,cv)
+return proposal distribution specified by location and scale
 
+proposal(d,cv)
+return rand(d) and proposal distribution for cv (vector or covariance)
+
+initial_proposal(model)
+return parameters to be fitted and an initial proposal distribution
+
+"""
 function initial_proposal(model)
     param = model.rates[model.fittedparam]
     d=proposal(param,model.proposal)
-    return param,product_distribution(d)
+    return param,d
 end
 function proposal(d::Product,cv::Vector)
     param = rand(d)
-    dt = proposal(param,cv)
-    return param, product_distribution(dt)
+    return param, proposal(param,cv)
 end
-function proposal(param,cv)
+function proposal(param,cv::Vector)
     d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
     for i in eachindex(param)
         push!(d,truncated(Normal(param[i],cv[i]*param[i]),0.,1000.))
     end
-    return d
+    product_distribution(d)
+end
+function proposal(d::MultivariateDistribution,cv::Matrix)
+    param = rand(d)
+    return param, proposal(param,cv)
+end
+function proposal(param,cv::Matrix)
+    c = (2.4)^2 / length(param)
+    return MvLogNormal(log.(param),c*cv)
 end
 
 """
@@ -135,17 +169,20 @@ function mhstep(predictions,param,ll,prior,d,model,data,temp)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
     #
-    # println(ll," ",llt)
-    # println(ll + prior - llt - priort)
-    if rand() < exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt)
+    # println(logpdf(dt,param)," ",logpdf(d,paramt))
+    # println(exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt,temp))
+    if rand() < exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt,temp)
         return 1,predictionst,paramt,llt,priort,dt
     else
         return 0,predictions,param,ll,prior,d
     end
 end
-
-function mhfactor(param,d,paramt,dt)
-    exp(logpdf(dt,param)-logpdf(d,paramt)) #pdf(dt,r)/pdf(d,rt)
+"""
+mhfactor(param,d,paramt,dt)
+Metropolis-Hastings correction factor for asymmetric proposal distribution
+"""
+function mhfactor(param,d,paramt,dt,temp)
+    exp((logpdf(dt,param)-logpdf(d,paramt))/temp) #pdf(dt,param)/pdf(d,paramt)
 end
 
 """
@@ -201,22 +238,20 @@ function find_ml(fits)
     return fits[argmin(llml)].parml, llml[argmin(llml)]
 end
 
-
-
 function compute_stats(fit::Fit)
     meanparam = mean(fit.param,dims=2)
     stdparam = std(fit.param,dims=2)
     corparam = cor(fit.param')
+    covparam = cov(fit.param')
+    covlogparam = cov(log.(fit.param'))
     medparam = median(fit.param,dims=2)
     madparam = mad(fit.param[1,:],normalize=false)
     qparam = Array{Array,1}(undef,size(fit.param,1))
     for i in eachindex(fit.param[:,1])
         qparam[i] = quantile(fit.param[i,:],[.025;.5;.975])
     end
-    return meanparam,stdparam,medparam,madparam,corparam,qparam
+    return meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam
 end
-
-
 
 function rhat()
 
