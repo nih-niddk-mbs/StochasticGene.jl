@@ -41,7 +41,8 @@ function write_results(file::String,x)
 end
 
 function write_results(stats,waic,data,model)
-    f = open("test" * data.gene * txtstr,"w")
+    f = open("results" * data.gene * txtstr,"w")
+        writedlm(f,model.nalleles)
         writedlm(f,stats[1]')
         writedlm(f,stats[2]')
         writedlm(f,stats[3]')
@@ -50,7 +51,7 @@ function write_results(stats,waic,data,model)
         writedlm(f,stats[6])
         writedlm(f,[waic[1] waic[2]])
     close(f)
-    f = open("test" * data.gene * txtstr)
+    f = open("results" * data.gene * txtstr)
         y=readdlm(f)
         # x=read(f,Float64)
     close(f)
@@ -171,7 +172,7 @@ function mhstep(predictions,param,ll,prior,d,model,data,temp)
     #
     # println(logpdf(dt,param)," ",logpdf(d,paramt))
     # println(exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt,temp))
-    if rand() < exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt,temp)
+    if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
         return 1,predictionst,paramt,llt,priort,dt
     else
         return 0,predictions,param,ll,prior,d
@@ -181,9 +182,7 @@ end
 mhfactor(param,d,paramt,dt)
 Metropolis-Hastings correction factor for asymmetric proposal distribution
 """
-function mhfactor(param,d,paramt,dt,temp)
-    exp((logpdf(dt,param)-logpdf(d,paramt))/temp) #pdf(dt,param)/pdf(d,paramt)
-end
+mhfactor(param,d,paramt,dt) = logpdf(dt,param)-logpdf(d,paramt) #pdf(dt,param)/pdf(d,paramt)
 
 """
 computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}

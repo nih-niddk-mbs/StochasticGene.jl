@@ -239,16 +239,16 @@ function transitiontelegraph(r,nhist)
 	return S
 end
 
-function marginalize(p,n,nhist)
-	mhist = zeros(nhist)
-	nT = n+1
-	# Marginalize over G states
-	for m in 1:nhist
-		i = (m-1)*nT
-		mhist[m] = sum(p[i+1:i+nT])
-	end
-	return mhist
-end
+# function marginalize(p,n,nhist)
+# 	mhist = zeros(nhist)
+# 	nT = n+1
+# 	# Marginalize over G states
+# 	for m in 1:nhist
+# 		i = (m-1)*nT
+# 		mhist[m] = sum(p[i+1:i+nT])
+# 	end
+# 	return mhist
+# end
 
 function transientMaster(t::Float64,n::Int,P0,Mvals::Vector,Mvects::Matrix)
 	Lambda = Diagonal(exp.(Mvals*t))

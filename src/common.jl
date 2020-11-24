@@ -114,6 +114,10 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Stocha
     method::MethodType
 end
 
+function write_model(model)
+
+
+end
 
 """
 Abstract Option types for fitting methods

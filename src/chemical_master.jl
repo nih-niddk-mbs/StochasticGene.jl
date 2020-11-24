@@ -113,13 +113,11 @@ steady_state(r,n,nhist,nalleles)
 Steady State of mRNA in G (telelgraph) model
 """
 function steady_state(r,lossfactor,n,nhist,nalleles)
-    mhist = steady_state(r,n,nhist,nalleles)
+    mhist = steady_state(r,n,nhist_loss(nhist,lossfactor),nalleles)
     noise_convolve(mhist,lossfactor,nhist)
 end
 
 function steady_state(r,n,nhist,nalleles)
-    mu = r[2*n+1]/r[2*n+2]
-    nhist = max(nhist,round(Int,mu + 3*sqrt(mu)))
     P = steady_state_full(r,n,nhist)
     mhist = marginalize(P,n,nhist)
     allele_convolve(mhist,nalleles)
@@ -129,6 +127,9 @@ function steady_state_full(r,n,nhist)
     M = Mat(r,n,nhist)
     normalized_nullspace(M)
 end
+
+nhist_loss(nhist,lossfactor) = round(Int,nhist/lossfactor)
+
 """
 Mat(r,n,nhist)
 Transition rate matrix of G model
@@ -150,13 +151,26 @@ transient(t,n::Int,nhist::Int,nalleles::Int,P0,Mvals,Mvects)
 Compute mRNA pmf of GM model at time t given initial condition P0
 and eigenvalues and eigenvectors of model transition rate matrix
 """
-function transient(t,r,lossfactor,n,nhist,nalleles,P0)
-    mhist = transient(t,r,n,nhist,nalleles,P0)
+function transient(t,r,lossfactor::Float64,n,nhist,nalleles,P0::Vector)
+    mhist = transient(t,r,n,nalleles,P0)
     noise_convolve(mhist,lossfactor,nhist)
+end
+function transient(t::Float64,r,n,nalleles,P0::Vector)
+    P = transient(t,r,n,P0)
+    mhist = marginalize(P,n)
+    allele_convolve(mhist,nalleles)
+end
+function transient(t::Float64,r,n,P0::Vector)
+    nhist = Int(length(P0)/(n+1)) - 2
+    M = Mat(r,n,nhist)
+    Mvals,Mvects = eig_decompose(M)
+    weights = solve_vector(Mvects,P0)
+    time_evolve(t,Mvals,Mvects,weights)
 end
 
 function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
-    M = Mat(r,n,nhist)
+    nhistl = Int(length(P0)/(n+1)) - 2
+    M = Mat(r,n,nhistl)
     Mvals,Mvects = eig_decompose(M)
     weights = solve_vector(Mvects,P0)
     P=time_evolve(t,Mvals,Mvects,weights)
@@ -167,20 +181,32 @@ function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
     end
     return mhist
 end
-function transient(t::Float64,r,n,nhist,nalleles,P0::Vector)
-    M = Mat(r,n,nhist)
-    Mvals,Mvects = eig_decompose(M)
-    weights = solve_vector(Mvects,P0)
-    P=time_evolve(t,Mvals,Mvects,weights)
-    mhist = marginalize(P,n,nhist)
-    allele_convolve(mhist,nalleles)
+"""
+time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
+First passage time solution for ON and OFF dwell time distributions
+"""
+function time_evolve(t::Float64,vals::Vector,vects::Matrix,weights::Vector)
+    n = length(vals)
+    S = zeros(n)
+    for j = 1:n
+        for i = 1:n
+            S[j] += real(weights[i]*vects[j,i]*exp.(vals[i]*t))
+        end
+    end
+    return S
 end
-
-function transient(t::Float64,r,n,nhist,P0::Vector)
-    M = Mat(r,n,nhist)
-    Mvals,Mvects = eig_decompose(M)
-    TAweights = solve_vector(Mvects,P0)
-    time_evolve(t,Mvals,Mvects,TAweights)
+function time_evolve(t::Vector,vals::Vector,vects::Matrix,weights::Vector)
+    ntime = length(t)
+    n = length(vals)
+    S = Array{Float64,2}(undef,ntime,n)
+    for j = 1:n
+        Sj = zeros(ntime)
+        for i = 1:n
+            Sj += real(weights[i]*vects[j,i]*exp.(vals[i]*t))
+        end
+        S[:,j]=Sj
+    end
+    return S
 end
 
 function f!(du,u,p,t)
@@ -204,15 +230,16 @@ end
 Solve using DifferentialEquations
 """
 function transientODE(t,r,lossfactor,n,nhist,nalleles,P0)
-    mhist = transientODE(t,r,n,nhist,nalleles,P0)
+    mhist = transientODE(t,r,n,nalleles,P0)
     noise_convolve(mhist,lossfactor,nhist)
 end
-function transientODE(t,r,n,nhist,nalleles,P0)
-    sol = transientODE(t,r,n,nhist,P0)
-    mhist = marginalize(sol.u[end],n,nhist)
+function transientODE(t,r,n,nalleles,P0)
+    sol = transientODE(t,r,n,P0)
+    mhist = marginalize(sol.u[end],n)
     allele_convolve(mhist,nalleles)
 end
-function transientODE(t,r,n,nhist,P0)
+function transientODE(t,r,n,P0)
+    nhist = Int(length(P0)/(n+1)) - 2
 	p = [r;n;nhist]
 	tspan = (0.,t)
 	prob = ODEProblem(f!,P0,tspan,p)
@@ -229,33 +256,7 @@ function noise_convolve(mhist,lossfactor,nhist)
     end
     return p
 end
-"""
-time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
-First passage time solution for ON and OFF dwell time distributions
-"""
-function time_evolve(t::Vector,vals::Vector,vects::Matrix,weights::Vector)
-    ntime = length(t)
-    n = length(vals)
-    S = Array{Float64,2}(undef,ntime,n)
-    for j = 1:n
-        Sj = zeros(ntime)
-        for i = 1:n
-            Sj += real(weights[i]*vects[j,i]*exp.(vals[i]*t))
-        end
-        S[:,j]=Sj
-    end
-    return S
-end
-function time_evolve(t::Float64,vals::Vector,vects::Matrix,weights::Vector)
-    n = length(vals)
-    S = zeros(n)
-    for j = 1:n
-        for i = 1:n
-            S[j] += real(weights[i]*vects[j,i]*exp.(vals[i]*t))
-        end
-    end
-    return S
-end
+
 
 """
 solve_vector(A::Matrix,b::vector)
@@ -472,4 +473,9 @@ function marginalize(p,n,nhist)
         mhist[m] = sum(p[i+1:i+nT])
     end
     return mhist
+end
+
+function marginalize(p,n)
+    nhist = Int(length(p)/(n+1)) - 2
+    marginalize(p,n,nhist)
 end
