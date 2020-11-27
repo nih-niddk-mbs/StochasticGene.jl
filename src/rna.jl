@@ -9,9 +9,9 @@ single molecule FISH (smFISH) is treated as loss less
 """
 Fit transient G model to time dependent data
 """
-function rna_transient(nsets,control,treatment,time,gene::String,r::Vector,decayrate::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=1000.,method::Int=1,annealsteps=0,warmupsteps=0,loss=1)
+function rna_transient(nsets,control,treatment,time,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=1000.,method::Int=1,annealsteps=0,warmupsteps=0)
     data = data_rna(control,treatment,time,gene)
-    model = model_rna(r,G,nalleles,nsets,cv,loss,fittedparam,decayrate,method)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
@@ -19,10 +19,10 @@ end
 """
 Fit G model to steady state data
 """
-function rna_steadystate(control::String,gene::String,r::Vector,decayrate::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=1,annealsteps=0,warmupsteps=0,loss=1)
+function rna_steadystate(control::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=1,annealsteps=0,warmupsteps=0)
     data = data_rna(control,gene)
     nsets = 1
-    model = model_rna(r,G,nalleles,nsets,cv,loss,fittedparam,decayrate)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
@@ -35,18 +35,6 @@ function data_rna(control::String,treatment::String,time,gene::String)
     h[2] = readRNA_scrna(treatment * gene * txtstr)
     TransientRNAData(gene,[length(h[1]);length(h[2])],time,h)
 end
-# function data_rna(control::Array,treatment::Array,time,gene::String)
-#     if length(control) == length(treatment)
-#         for i in eachindex(control)
-#             h = Array{Array,1}(undef,2)
-#             h[1] = readRNA_rna(control[i] * gene * txtstr)
-#             h[2] = readRNA_rna(treatment[i] * gene * txtstr)
-#         end
-#         TransientRNAData(gene,[length(h[1]);length(h[2])],time,h)
-#     else
-#         throw("control and treatment have different length")
-#     end
-# end
 function data_rna(control::String,gene::String)
     h = readRNA_scrna(control * gene * txtstr)
     RNAData(gene,length(h),h)
@@ -54,18 +42,24 @@ end
 """
 Load model structure
 """
-function model_rna(r::Vector,G::Int,nalleles,nsets,propcv,loss,fittedparam,decayrate=log(2)/(4 *60),method=1)
-        if length(r) == 2*G * nsets + loss
-            rm,rcv = setpriorrate(G,nsets,decayrate)
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,lossprior,method=1)
+        if typeof(propcv) == Float64
+            propcv = propcv*ones(length(fittedparam))
+        end
+        if length(r) == 2*G * nsets + 1
+            rm,rcv = setpriorrate(G,nsets,decayprior,lossprior)
             d = priorLogNormal(rm[fittedparam],rcv[fittedparam])
-            if typeof(propcv) == Float64
-                propcv = propcv*ones(length(fittedparam))
-            end
             return GMLossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+        elseif length(r) == 2*G*nsets
+            rm,rcv = setpriorrate(G,nsets,decayprior)
+            d = priorLogNormal(rm[fittedparam],rcv[fittedparam])
+            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
         else
             throw("rates have wrong length")
         end
+        nothing
 end
+
 """
 select all parameters to be fitted except decay rates
 lossfactor is last parameter in loss models
@@ -128,6 +122,17 @@ end
 function setpriorrate(G)
 Set prior distribution for mean and cv of rates
 """
+function setpriorrate(G,nsets,decayrate,lossrate)
+    r0 = [.05*ones(2*(G-1));.4;decayrate]
+    rc = [ones(2*(G-1));.1;0.2]
+    rm = r0
+    rcv = rc
+    for i in 2:nsets
+        rm = vcat(rm,r0)
+        rcv = vcat(rcv,rc)
+    end
+    return [rm;.1],[rcv;.025]
+end
 function setpriorrate(G,nsets,decayrate)
     r0 = [.05*ones(2*(G-1));.4;decayrate]
     rc = [ones(2*(G-1));.1;0.2]
@@ -199,7 +204,7 @@ readRNA(filename::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct mRNA count per cell histogram array of a gene
 """
 # Construct mRNA count/cell histogram for a gene in filename
-function readRNA_scrna(filename::String,yield::Float64=.9999999,nhistmax::Int=1000)
+function readRNA_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
     if isfile(filename) && filesize(filename) > 0
         x = readdlm(filename)[:,1]
         x = round.(Int,x)
@@ -220,7 +225,7 @@ end
 readRNA(control::String,treatment::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct 2D array of mRNA count per cell histograms for control and treatment of a gene
 """
-function readRNA_scrna(control::String,treatment::String,yield::Float64=.9999,nhistmax::Int=1000)
+function readRNA_scrna(control::String,treatment::String,yield::Float64=.95,nhistmax::Int=1000)
     x = readRNA_scrna(control)[:,1]
     y = readRNA_scrna(treatment)[:,1]
     n = min(length(x),length(y))
@@ -253,7 +258,7 @@ function readRNAFISH_scrna(scRNAfolder::String,FISHfolder::String,genein::String
         end
         xr /= length(FISH)
         xr = round.(Int,xr)
-        x[r] = truncate_histogram(xr,.9999,1000)
+        x[r] = truncate_histogram(xr,.99,1000)
     end
     l = min(length(x[1]),length(x[2]))
     data[2] = x[1][1:l] + x[2][1:l]
