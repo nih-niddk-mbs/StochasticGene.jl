@@ -34,8 +34,8 @@ function data_genetrap(gene)
 end
 
 function model_genetrap(infolder::String,rinchar::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),method=0,Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
-    rm,rcv = setpriorrate(G,R,gene,Gprior,Sprior,Rcv)
-    d = priordistributionLogNormal(rm,rcv,G,R)
+    rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
+    d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
     r = read_rates(infolder,rinchar,gene,"$G$R",type)[:,1]
     if r == 0
         r = rm
@@ -129,7 +129,7 @@ end
 setpriorrate(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
 Set prior distribution for mean and cv of rates
 """
-function setpriorrate(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
+function prior_rates_genetrap(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
     n = G-1
     rm = [fill(Gprior[1],2*n);2000/(genelength[gene]-MS2end[gene]);fill(2000/MS2end[gene]*R,R);fill(Sprior[1], R);log(2.)/(60 .* halflife[gene])]
     rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], R);Rcv]
@@ -140,7 +140,7 @@ end
 priordistributionLogNormal(r,cv,G,R)
 LogNormal Prior distribution
 """
-function priordistributionLogNormal(r,cv,G,R)
+function priordistributionLogNormal_genetrap(r,cv,G,R)
     sigma = sigmalognormal(cv)
     d = []
     j = 1
@@ -167,7 +167,7 @@ function priordistributionLogNormal(r,cv,G,R)
     return d
 end
 
-function priordistributionGamma(rm,cv,G,R)
+function priordistributionGamma_genetrap(rm,cv,G,R)
     n = G-1
     zet = R
     d = []

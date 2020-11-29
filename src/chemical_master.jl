@@ -5,27 +5,53 @@ Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 """
 function offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+    # gammap,gamman = get_gamma(r,n)
+    # nu = get_nu(r,n,nr)
+    # eta = get_eta(r,n,nr)
+    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+    T,TA,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
     SA=ontimeCDF(t,r,n,nr,TA,pss)
     SI=offtimeCDF(t,r,n,nr,TI,pss)
-    PI = diff(SI)
-    PI /= sum(PI)*(t[2]-t[1])
-    PA = diff(SA)
-    PA /= sum(PA)*(t[2]-t[1])
-    return PI,PA
+    # PI = diff(SI)
+    # PI /= sum(PI)*(t[2]-t[1])
+    # PA = diff(SA)
+    # PA /= sum(PA)*(t[2]-t[1])
+    # return PI,PA
+    return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
-function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
+    # gammap,gamman = get_gamma(r,n)
+    # nu = get_nu(r,n,nr)
+    # eta = get_eta(r,n,nr)
+    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+    T,_,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,r,n,nr,TA,pss)
-    return SA
+    SI=offtimeCDF(t,r,n,nr,TI,pss)
+    pdf_from_cdf(t,SI)
+    # PI = diff(SI)
+    # PI /= sum(PI)*(t[2]-t[1])
+    # PA = diff(SA)
+    # PA /= sum(PA)*(t[2]-t[1])
+    # return PI,PA
+end
+
+function pdf_from_cdf(t,S)
+    P = diff(S)
+    P/(sum(P)*(t[2]-t[1]))
+end
+"""
+onCDF(t::Vector,r::Vector,n::Int,nr::Int)
+
+"""
+function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
+    # gammap,gamman = get_gamma(r,n)
+    # nu = get_nu(r,n,nr)
+    # eta = get_eta(r,n,nr)
+    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+    T,TA,TI = mat_GSR(r,n,nr)
+    pss = normalized_nullspace(T)
+    ontimeCDF(t,r,n,nr,TA,pss)
 end
 """
 ontimeCDF(tin::Vector,n::Int,nr::Int,rin::Vector,TA::Matrix,pss::Vector)
@@ -39,9 +65,10 @@ weighted by steady state distribution (i.e. solving a first passage time problem
 function ontimeCDF(tin::Vector,rin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector)
     t = [tin ; tin[end] + tin[2]-tin[1]] #add a time point so that diff() gives original length
     SAinit = init_prob(pss,n,nr)
-    TAvals,TAvects = eig_decompose(TA)
-    TAweights = solve_vector(TAvects,SAinit)
-    SA = time_evolve(t,TAvals,TAvects,TAweights)  # Probability vector for each state
+    SA = time_evolve(t,TA,SAinit)
+    # TAvals,TAvects = eig_decompose(TA)
+    # TAweights = solve_vector(TAvects,SAinit)
+    # SA = time_evolve(t,TAvals,TAvects,TAweights)  # Probability vector for each state
     accumulate(SA,n,nr)  # accumulated prob into OFF states
 end
 function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector)
@@ -50,9 +77,10 @@ function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector)
     TI = TI[nonzerosI,nonzerosI]
     nI = length(nonzerosI)
     SIinit = init_prob(pss,r,n,nr,nonzerosI)
-    TIvals,TIvects = eig_decompose(TI)
-    TIweights = solve_vector(TIvects,SIinit)
-    SI = time_evolve(t,TIvals,TIvects,TIweights)
+    SI = time_evolve(t,TI,SIinit)
+    # TIvals,TIvects = eig_decompose(TI)
+    # TIweights = solve_vector(TIvects,SIinit)
+    # SI = time_evolve(t,TIvals,TIvects,TIweights)
     accumulate(SI,n,nr,nonzerosI) # accumulated prob into ON states
 end
 """
@@ -77,7 +105,7 @@ function steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
     nu = get_nu(r,n,nr)
     T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
     P = initial_pmf(T,nu[end],n,nr,nhist)
-    mhist=steady_state(nhist,nu,P,T,B)
+    mhist=steady_state(nhist,P,T,B)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
 
@@ -87,7 +115,7 @@ Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
 """
-function steady_state(nhist::Int,ejectrate,P,T,B,tol = 1e-6)
+function steady_state(nhist::Int,P::Vector,T::Matrix,B::Matrix,tol = 1e-6)
     total = size(P,2)
     steps = 0
     err = 1.
@@ -112,7 +140,7 @@ end
 steady_state(r,n,nhist,nalleles)
 Steady State of mRNA in G (telelgraph) model
 """
-function steady_state(r,lossfactor,n,nhist,nalleles)
+function steady_state(r::Vector,lossfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     mhist = steady_state(r,n,nhist_loss(nhist,lossfactor),nalleles)
     noise_convolve(mhist,lossfactor,nhist)
 end
@@ -124,17 +152,28 @@ function steady_state(r,n,nhist,nalleles)
 end
 
 function steady_state_full(r,n,nhist)
-    M = Mat(r,n,nhist)
+    M = mat_GM(r,n,nhist)
     normalized_nullspace(M)
 end
 
 nhist_loss(nhist,lossfactor) = round(Int,nhist/lossfactor)
 
 """
-Mat(r,n,nhist)
-Transition rate matrix of G model
+mat(r,n,nr,nhist)
+Transition rate matrices for GSR model
 """
-function Mat(r,n,nhist)
+function mat_GSR(r,n,nr)
+    gammap,gamman = get_gamma(r,n)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+    transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+end
+
+"""
+mat_GM(r,n,nhist)
+Transition rate matrix of GM model
+"""
+function mat_GM(r,n,nhist)
     gammap,gamman = get_gamma(r,n)
     transition_rate_mat(n,gammap,gamman, r[2*n+1],r[2*n+2],nhist)
 end
@@ -162,18 +201,19 @@ function transient(t::Float64,r,n,nalleles,P0::Vector)
 end
 function transient(t::Float64,r,n,P0::Vector)
     nhist = Int(length(P0)/(n+1)) - 2
-    M = Mat(r,n,nhist)
-    Mvals,Mvects = eig_decompose(M)
-    weights = solve_vector(Mvects,P0)
-    time_evolve(t,Mvals,Mvects,weights)
+    M = mat_GM(r,n,nhist)
+    time_evolve(t,M,P0)
+    # Mvals,Mvects = eig_decompose(M)
+    # weights = solve_vector(Mvects,P0)
+    # time_evolve(t,Mvals,Mvects,weights)
 end
-
 function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
     nhistl = Int(length(P0)/(n+1)) - 2
-    M = Mat(r,n,nhistl)
-    Mvals,Mvects = eig_decompose(M)
-    weights = solve_vector(Mvects,P0)
-    P=time_evolve(t,Mvals,Mvects,weights)
+    M = mat(r,n,nhistl)
+    P=time_evolve(t,M,P0)
+    # Mvals,Mvects = eig_decompose(M)
+    # weights = solve_vector(Mvects,P0)
+    # P=time_evolve(t,Mvals,Mvects,weights)
     mhist = Array{Float64,2}(undef,nhist,length(t))
     for i in 1:size(P,1)
         mh = marginalize(P[i,:],n,nhist)
@@ -182,8 +222,17 @@ function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
     return mhist
 end
 """
+time_evolve(t,T::Matrix,Sinit::Vector)
+Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
+"""
+function time_evolve(t,T::Matrix,Sinit::Vector)
+    Tvals,Tvects = eig_decompose(T)
+    Tweights = solve_vector(Tvects,Sinit)
+    time_evolve(t,Tvals,Tvects,Tweights)
+end
+"""
 time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
-First passage time solution for ON and OFF dwell time distributions
+
 """
 function time_evolve(t::Float64,vals::Vector,vects::Matrix,weights::Vector)
     n = length(vals)
@@ -208,24 +257,6 @@ function time_evolve(t::Vector,vals::Vector,vects::Matrix,weights::Vector)
     end
     return S
 end
-
-function f!(du,u,p,t)
-	r = p[1:end-2]
-    n = Int(p[end-1])
-    nhist = Int(p[end])
-    M = Mat(r,n,nhist)
-    for i in eachindex(du)
-        du[i] = M[i,:]'*u[:]
-    end
-end
-
-function f(u,p,t)
-	r = p[1:end-2]
-    n = Int(p[end-1])
-    nhist = Int(p[end])
-    M = Mat(r,n,nhist)
-    M*u
-end
 """
 Solve using DifferentialEquations
 """
@@ -234,22 +265,42 @@ function transientODE(t,r,lossfactor,n,nhist,nalleles,P0)
     noise_convolve(mhist,lossfactor,nhist)
 end
 function transientODE(t,r,n,nalleles,P0)
-    sol = transientODE(t,r,n,P0)
+    sol = time_evolve_ODE(t,r,n,P0)
     mhist = marginalize(sol.u[end],n)
     allele_convolve(mhist,nalleles)
 end
-function transientODE(t,r,n,P0)
+function time_evolve_ODE(t,r,n,P0)
     nhist = Int(length(P0)/(n+1)) - 2
 	p = [r;n;nhist]
 	tspan = (0.,t)
 	prob = ODEProblem(f!,P0,tspan,p)
 	solve(prob,saveat=t)
 end
+function f!(du,u,p,t)
+	r = p[1:end-2]
+    n = Int(p[end-1])
+    nhist = Int(p[end])
+    M = mat_GM(r,n,nhist)
+    for i in eachindex(du)
+        du[i] = M[i,:]'*u[:]
+    end
+end
+# function f(u,p,t)
+# 	r = p[1:end-2]
+#     n = Int(p[end-1])
+#     nhist = Int(p[end])
+#     M = mat_GM(r,n,nhist)
+#     M*u
+# end
 
+"""
+noise_convolve(mhist,lossfactor,nhist)
+
+"""
 function noise_convolve(mhist,lossfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
-        d = Poisson(lossfactor*m)
+        d = Poisson(lossfactor*(m-1))
         for c in 1:nhist
             p[c] += mhist[m]*pdf(d,c-1)
         end
@@ -432,7 +483,6 @@ accumulate(SA::Matrix,n,nr)
 Sum over all probability vectors accumulated into OFF states
 """
 function accumulate(SA::Matrix,n,nr)
-
     SAj = zeros(size(SA)[1])
     for i=1:n+1, z=1:3^nr
         zdigits = digits(z-1,base=3,pad=nr)
