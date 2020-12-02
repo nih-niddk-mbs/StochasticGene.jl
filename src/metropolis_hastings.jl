@@ -1,4 +1,6 @@
-
+"""
+Structure for MH options
+"""
 struct MHOptions <: Options
     samplesteps::Int64
     annealsteps::Int64
@@ -6,7 +8,9 @@ struct MHOptions <: Options
     maxtime::Float64
     temp::Float64
 end
-
+"""
+Structure for MH results
+"""
 struct Fit <: Results
     param::Array
     ll::Array
@@ -24,22 +28,41 @@ metropolis_hastings(param,data,model,options)
 
 Metropolis-Hastings MCMC algorithm
 r = parameter array
-model, data, and options are struct
+model, data, and options are structures
 
 stochastic kinetic transcription models
-Data can include ON and OFF MS2/PP7 reporter time distributions from live cell recordings
-smRNA FISH data, and burst correlations between alleles
+Data can include ON and OFF MS2/PP7 reporter time distributions from live cell recordings,
+scRNA or FISH mRNA data, and burst correlations between alleles
 """
-
+function metropolis_hastings(data,model,options)
+    param,d = initial_proposal(model)
+    ll,predictions = loglikelihood(param,data,model)
+    # if options.annealsteps > 0
+    #     anneal()
+    # end
+    if options.warmupsteps > 0
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime)
+    else
+        parml = copy(param)
+        llml = ll
+        proposalcv = model.proposal
+    end
+    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),options.maxtime)
+    waic = compute_waic(fit.ppd,fit.pwaic,data)
+    return fit, waic
+end
 """
-run_mhparallel(data,model,options,nchains)
+write_results(file::String,x)
 """
 function write_results(file::String,x)
     f = open(file,"w")
     writedlm(f,x)
     close(f)
 end
+"""
+write_results(stats,waic,data,model)
 
+"""
 function write_results(stats,waic,data,model)
     f = open("results" * data.gene * txtstr,"w")
         writedlm(f,model.nalleles)
@@ -58,6 +81,20 @@ function write_results(stats,waic,data,model)
     return y
 end
 
+"""
+run_mh(data,model,options)
+
+"""
+function run_mh(data,model,options)
+    fit,waic = metropolis_hastings(data,model,options)
+    stats = compute_stats(fit)
+    # write_results(fit,model)
+    return fit, stats, waic, (fit.parml,fit.llml)
+end
+"""
+run_mh(data,model,options,nchains)
+
+"""
 function run_mh(data,model,options,nchains)
     sd = run_chains(data,model,options,nchains)
     chain = extract_chain(sd)
@@ -66,14 +103,10 @@ function run_mh(data,model,options,nchains)
     parml = find_ml(fits)
     return fits,stats,waic,parml
 end
+"""
+run_chains(data,model,options,nchains)
 
-function run_mh(data,model,options)
-    fit,waic = metropolis_hastings(data,model,options)
-    stats = compute_stats(fit)
-    # write_results(fit,model)
-    return fit, stats, waic, (fit.parml,fit.llml)
-end
-
+"""
 function run_chains(data,model,options,nchains)
     sd = Array{Future,1}(undef,nchains)
     for chain in 1:nchains
@@ -82,26 +115,7 @@ function run_chains(data,model,options,nchains)
     return sd
 end
 
-function metropolis_hastings(data,model,options)
-    param,d = initial_proposal(model)
-    ll,predictions = loglikelihood(param,data,model)
-    # if options.annealsteps > 0
-    #     anneal()
-    # end
-    # if options.warmupsteps > 0
-    #     warmup()
-    # end
-    fit=sample(predictions,param,param,ll,ll,d,data,model,options.samplesteps,options.temp,time(),options.maxtime)
-    waic = compute_waic(fit.ppd,fit.pwaic,data)
-    return fit, waic
-end
 """
-proposal(param,cv)
-return proposal distribution specified by location and scale
-
-proposal(d,cv)
-return rand(d) and proposal distribution for cv (vector or covariance)
-
 initial_proposal(model)
 return parameters to be fitted and an initial proposal distribution
 
@@ -111,10 +125,24 @@ function initial_proposal(model)
     d=proposal(param,model.proposal)
     return param,d
 end
+"""
+proposal(d,cv)
+return rand(d) and proposal distribution for cv (vector or covariance)
+
+"""
+function proposal(d::MultivariateDistribution,cv::Matrix)
+    param = rand(d)
+    return param, proposal(param,cv)
+end
 function proposal(d::Product,cv::Vector)
     param = rand(d)
     return param, proposal(param,cv)
 end
+"""
+proposal(param,cv)
+return proposal distribution specified by location and scale
+
+"""
 function proposal(param,cv::Vector)
     d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
     for i in eachindex(param)
@@ -122,10 +150,7 @@ function proposal(param,cv::Vector)
     end
     product_distribution(d)
 end
-function proposal(d::MultivariateDistribution,cv::Matrix)
-    param = rand(d)
-    return param, proposal(param,cv)
-end
+
 function proposal(param,cv::Matrix)
     c = (2.4)^2 / length(param)
     return MvLogNormal(log.(param),c*cv)
@@ -135,24 +160,22 @@ end
 sample(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
 """
-function sample(predictions,param,parml,ll,llml,d,data,model,samplesteps,temp,t1,maxtime)
+function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     llout = Array{Float64,1}(undef,samplesteps)
     prior = logprior(param,model)
-    priorml = prior
     pwaic = (0,log.(max.(predictions,eps(Float64))),zeros(length(predictions)))
     ppd = zeros(length(predictions))
     step = 0
     accepttotal = 0
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
-        accept,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,model,data,temp)
+        accept,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
         accepttotal += accept
         pwaic = update_waic(ppd,pwaic,predictions)
         if ll < llml
             llml = ll
             parml = copy(param)
-            priorml = prior
         end
         parout[:,step] = param
         llout[step] = ll
@@ -160,18 +183,39 @@ function sample(predictions,param,parml,ll,llml,d,data,model,samplesteps,temp,t1
     pwaic = step > 1 ? pwaic[3]/(step -1) :  pwaic[3]
     ppd /= step
     Fit(parout[:,1:step],llout[1:step],parml,llml,ppd,pwaic,prior,accepttotal,step)
-    # return (r=parout[:,1:step],ll=llout[1:step],parml=parml,llml=llml,ppd=ppd,pwaic=pwaic,prior=prior,accept=accepttotal,total=step)
 end
+"""
+warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
+
+"""
+function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    parout = Array{Float64,2}(undef,length(param),samplesteps)
+    prior = logprior(param,model)
+    step = 0
+    while  step < samplesteps && time() - t1 < maxtime
+        step += 1
+        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        if ll < llml
+            llml = ll
+            parml = copy(param)
+        end
+        parout[:,step] = param
+    end
+    covlogparam = cov(log.(parout[:,1:step]'))
+    if isposdef(covlogparam)
+        proposalcv = covlogparam
+    end
+    return param,parml,ll,llml,d,proposalcv,predictions
+end
+
 """
 mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
 """
-function mhstep(predictions,param,ll,prior,d,model,data,temp)
-    paramt,dt = proposal(d,model.proposal)
+function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+    paramt,dt = proposal(d,proposalcv)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
-    #
-    # println(logpdf(dt,param)," ",logpdf(d,paramt))
-    # println(exp((ll + prior - llt - priort)/temp) * mhfactor(param,d,paramt,dt,temp))
+
     if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
         return 1,predictionst,paramt,llt,priort,dt
     else
@@ -194,12 +238,18 @@ function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
     pwaic = hist'*pwaic
     return -2*(lppd-pwaic), 2*se
 end
+"""
+update_waic(ppd,pwaic,predictions)
 
+"""
 function update_waic(ppd,pwaic,predictions)
     ppd .+= predictions
     var_update(pwaic,log.(max.(predictions,eps(Float64))))
 end
+"""
+extract_chain(sdspawn)
 
+"""
 function extract_chain(sdspawn)
     chain = Array{Tuple,1}(undef,length(sdspawn))
     for i in eachindex(sdspawn)
@@ -207,7 +257,10 @@ function extract_chain(sdspawn)
     end
     return chain
 end
+"""
+combine_chains(chain)
 
+"""
 function combine_chains(chain)
     fits = Array{Fit,1}(undef,length(chain))
     stats = Array{Tuple,1}(undef,length(chain))
@@ -220,6 +273,9 @@ function combine_chains(chain)
     return fits,stats, waics
 end
 
+"""
+combine_waic(waics)
+"""
 function combine_waic(waics)
     waic = Array{Float64,2}(undef,length(waics),2)
     for i in eachindex(waics)
@@ -228,7 +284,10 @@ function combine_waic(waics)
     end
     return mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
 end
+"""
+find_ml(fits)
 
+"""
 function find_ml(fits)
     llml = Array{Float64,1}(undef,length(fits))
     for i in eachindex(fits)
@@ -236,7 +295,10 @@ function find_ml(fits)
     end
     return fits[argmin(llml)].parml, llml[argmin(llml)]
 end
+"""
+compute_stats(fit::Fit)
 
+"""
 function compute_stats(fit::Fit)
     meanparam = mean(fit.param,dims=2)
     stdparam = std(fit.param,dims=2)
@@ -252,6 +314,9 @@ function compute_stats(fit::Fit)
     return meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam
 end
 
+"""
+
+"""
 function rhat()
 
 
@@ -278,29 +343,4 @@ end
 function anneal()
 
 end
-
-function warmup(param,rml,ll,llml,d,cv2,model,data,temp,t1,maxtime,totalsteps,predictions)
-
-    post(param,rml,ll,llml,d,cv2,model,data,temp,predictions)
-
-    waic = WAIC(predictions,log.(predictions),0.)
-    sigma = log.(1+model.cv)
-    step = 0
-    while time() - t1 < maxtime && step < totalsteps
-        step += 1
-        accept += mhstep!(param,rml,ll,llml,d,sigma,model,data,temp,predictions)
-        waicupdate!(waic,predictions)
-    end
-    return waic
-
-end
-
-function post(param,rml,ll,llml,d,sigma,predictions,model,data,temp)
-    paramt,dt = proposal(d,sigma)
-    priort = logprior(paramt,model)
-    llt,predictionst = loglikelihood(paramt,model,data)
-    MHfactor = pdf(dt,param)/pdf(d,paramt)
-    exp((ll - llt)/temp - priort + prior) * MHfactor
-end
-
 """

@@ -7,9 +7,10 @@ single molecule FISH (smFISH) is treated as loss less
 """
 
 """
+rna_transient(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
 Fit transient G model to time dependent data
 """
-function rna_transient(nsets,control,treatment,time,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=1000.,method::Int=1,annealsteps=0,warmupsteps=0)
+function rna_transient(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna(control,treatment,time,gene)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
@@ -17,29 +18,31 @@ function rna_transient(nsets,control,treatment,time,gene::String,r::Vector,decay
 end
 
 """
+rna_steadystate(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
 Fit G model to steady state data
 """
-function rna_steadystate(control::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=1,annealsteps=0,warmupsteps=0)
-    data = data_rna(control,gene)
-    nsets = 1
+function rna_steadystate(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+    data = data_rna(file,gene)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 """
+data_rna(control::String,treatment::String,time,gene::String)
 Load data structure
 """
 function data_rna(control::String,treatment::String,time,gene::String)
     h = Array{Array,1}(undef,2)
-    h[1] = readRNA_scrna(control * gene * txtstr)
-    h[2] = readRNA_scrna(treatment * gene * txtstr)
+    h[1] = readRNA_scrna(joinpath(control, gene * txtstr))
+    h[2] = readRNA_scrna(joinpath(treatment, gene * txtstr))
     TransientRNAData(gene,[length(h[1]);length(h[2])],time,h)
 end
-function data_rna(control::String,gene::String)
-    h = readRNA_scrna(control * gene * txtstr)
+function data_rna(path::String,gene::String)
+    h = readRNA_scrna(joinpath(path , gene * txtstr))
     RNAData(gene,length(h),h)
 end
 """
+model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,lossprior,method=1)
 Load model structure
 """
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,lossprior,method=1)
@@ -61,6 +64,7 @@ function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam:
 end
 
 """
+fittedparam_rna(G,nsets,loss)
 select all parameters to be fitted except decay rates
 lossfactor is last parameter in loss models
 """
@@ -85,6 +89,7 @@ function fittedparam_rna(G,nsets)
     return fp
 end
 """
+get_rates(param,model::AbstractGMmodel)
 replace fitted rates with new values and return
 """
 function get_rates(param,model::AbstractGMmodel)
@@ -94,6 +99,7 @@ function get_rates(param,model::AbstractGMmodel)
 end
 
 """
+logprior(param,model::AbstractGMmodel)
 compute log of the prior
 """
 function logprior(param,model::AbstractGMmodel)
@@ -145,6 +151,7 @@ function setpriorrate(G,nsets,decayrate)
     return [rm;.1],[rcv;.025]
 end
 """
+likelihoodfn(param,data,model)
 model likelihood
 """
 function likelihoodfn(param,data::RNAData,model::GMmodel)
@@ -165,6 +172,7 @@ function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
     return [h1;h2]
 end
 """
+likelihoodtuple(param,data::TransientRNAData,model::GMLossmodel)
 tuple of model likelihoods for each set
 
 """
@@ -198,12 +206,10 @@ end
 #     return h1, h2
 # end
 
-
 """
 readRNA(filename::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct mRNA count per cell histogram array of a gene
 """
-# Construct mRNA count/cell histogram for a gene in filename
 function readRNA_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
     if isfile(filename) && filesize(filename) > 0
         x = readdlm(filename)[:,1]
@@ -265,6 +271,23 @@ function readRNAFISH_scrna(scRNAfolder::String,FISHfolder::String,genein::String
     return data
 end
 """
+readFISH(scRNAfolder::String,FISHfolder::String,genein::String,cond::String)
+Create a 2D data array of mRNA count/cell histograms for FISH and scRNA for same gene
+"""
+function readFISH_scrna(path::String,gene::String,threshold=.99)
+    folder = joinpath(path,"rep1" * "/" * gene)
+    xr = zeros(1000)
+    for (root,dirs,files) in walkdir(folder)
+        for file in files
+            x1 = readdlm(joinpath(root,file))[:,1]
+            lx = length(x1)
+            xr[1:min(lx,1000)] += x1[1:min(lx,1000)]
+        end
+    end
+    truncate_histogram(xr,threshold,1000)
+end
+"""
+read_rates_scrna(infile,rinchar,inpath)
 read in saved rates
 """
 function read_rates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
