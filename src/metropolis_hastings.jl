@@ -314,13 +314,6 @@ function compute_stats(fit::Fit)
     return meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam
 end
 
-"""
-
-"""
-function rhat()
-
-
-end
 
 """
 loglikelihood(param,data,model)
@@ -342,5 +335,8 @@ end
 """
 function anneal()
 
-end
+"""
+
+"""
+function rhat()
 """

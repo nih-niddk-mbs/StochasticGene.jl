@@ -25,6 +25,13 @@ struct TransientRNAData{nType,tType,hType} <: HistogramData
     time::tType
     histRNA::hType
 end
+struct RNAMixedData <: HistogramData
+    gene::String
+    nRNA::Int
+    type::Array
+    time::Array
+    histRNA::Array
+end
 struct LiveCellData <: HistogramData
     gene::String
     bins::Array
@@ -69,6 +76,16 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
 end
 
 struct GMLossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+end
+
+struct GMMixedmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType

@@ -5,37 +5,22 @@ Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 """
 function offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
-    # gammap,gamman = get_gamma(r,n)
-    # nu = get_nu(r,n,nr)
-    # eta = get_eta(r,n,nr)
-    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
     T,TA,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
     SA=ontimeCDF(t,r,n,nr,TA,pss)
     SI=offtimeCDF(t,r,n,nr,TI,pss)
-    # PI = diff(SI)
-    # PI /= sum(PI)*(t[2]-t[1])
-    # PA = diff(SA)
-    # PA /= sum(PA)*(t[2]-t[1])
-    # return PI,PA
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
-    # gammap,gamman = get_gamma(r,n)
-    # nu = get_nu(r,n,nr)
-    # eta = get_eta(r,n,nr)
-    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
     T,_,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
     SI=offtimeCDF(t,r,n,nr,TI,pss)
     pdf_from_cdf(t,SI)
-    # PI = diff(SI)
-    # PI /= sum(PI)*(t[2]-t[1])
-    # PA = diff(SA)
-    # PA /= sum(PA)*(t[2]-t[1])
-    # return PI,PA
 end
 
+"""
+pdf_from_cdf(t,S)
+"""
 function pdf_from_cdf(t,S)
     P = diff(S)
     P/(sum(P)*(t[2]-t[1]))
@@ -45,10 +30,6 @@ onCDF(t::Vector,r::Vector,n::Int,nr::Int)
 
 """
 function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
-    # gammap,gamman = get_gamma(r,n)
-    # nu = get_nu(r,n,nr)
-    # eta = get_eta(r,n,nr)
-    # T,TA,TI = transition_rate_mat(n,nr,gammap,gamman,nu,eta)
     T,TA,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
     ontimeCDF(t,r,n,nr,TA,pss)
@@ -66,9 +47,6 @@ function ontimeCDF(tin::Vector,rin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector
     t = [tin ; tin[end] + tin[2]-tin[1]] #add a time point so that diff() gives original length
     SAinit = init_prob(pss,n,nr)
     SA = time_evolve(t,TA,SAinit)
-    # TAvals,TAvects = eig_decompose(TA)
-    # TAweights = solve_vector(TAvects,SAinit)
-    # SA = time_evolve(t,TAvals,TAvects,TAweights)  # Probability vector for each state
     accumulate(SA,n,nr)  # accumulated prob into OFF states
 end
 function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector)
@@ -78,9 +56,6 @@ function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector)
     nI = length(nonzerosI)
     SIinit = init_prob(pss,r,n,nr,nonzerosI)
     SI = time_evolve(t,TI,SIinit)
-    # TIvals,TIvects = eig_decompose(TI)
-    # TIweights = solve_vector(TIvects,SIinit)
-    # SI = time_evolve(t,TIvals,TIvects,TIweights)
     accumulate(SI,n,nr,nonzerosI) # accumulated prob into ON states
 end
 """
@@ -115,12 +90,12 @@ Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
 """
-function steady_state(nhist::Int,P::Vector,T::Matrix,B::Matrix,tol = 1e-6)
+function steady_state(nhist::Int,P::Vector,T::Matrix,B::Matrix,tol = 1e-6,stepmax=1000)
     total = size(P,2)
     steps = 0
     err = 1.
     A = T - B
-    while err > tol && steps < 1000
+    while err > tol && steps < stepmax
         P0 = copy(P)
         P[:,1] = try -A\P[:,2]
         catch
@@ -155,7 +130,9 @@ function steady_state_full(r,n,nhist)
     M = mat_GM(r,n,nhist)
     normalized_nullspace(M)
 end
-
+"""
+nhist_loss(nhist,lossfactor)
+"""
 nhist_loss(nhist,lossfactor) = round(Int,nhist/lossfactor)
 
 """
@@ -185,6 +162,7 @@ with initial condition P0
 """
 
 """
+transient(t,r,lossfactor,n,nhist,nalleles,P0::Vector)
 transient(t,n::Int,nhist::Int,nalleles::Int,P0,Mvals,Mvects)
 
 Compute mRNA pmf of GM model at time t given initial condition P0
@@ -258,7 +236,7 @@ function time_evolve(t::Vector,vals::Vector,vects::Matrix,weights::Vector)
     return S
 end
 """
-Solve using DifferentialEquations
+Solve transient problem using DifferentialEquations.jl
 """
 function transientODE(t,r,lossfactor,n,nhist,nalleles,P0)
     mhist = transientODE(t,r,n,nalleles,P0)
