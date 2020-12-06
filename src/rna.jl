@@ -8,7 +8,7 @@ single molecule FISH (smFISH) is treated as loss less
 
 """
 rna_transient(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-Fit transient G model to time dependent data
+Fit transient G model to time dependent mRNA data
 """
 function transient_rna(control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna([control;treatment],time,gene)
@@ -16,15 +16,15 @@ function transient_rna(control::String,treatment::String,time::Float64,gene::Str
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
-function transient_rna(path,time,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+function transient_rna(path,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna(path,time,gene)
-    model = model_rna(r,G,nalleles,length(path),cv,fittedparam,decayprior,lossprior,method)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 function transient_fish(path,time,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna(path,time,gene,true)
-    model = model_rna(r,G,nalleles,length(path),cv,fittedparam,decayprior,method)
+    model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
@@ -32,15 +32,15 @@ end
 rna_steadystate(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
 Fit G model to steady state data
 """
-function steadystate_rna(path,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+function steadystate_rna(path,gene::String,nsets,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
     data = data_rna(path,gene)
-    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,lossprior,0)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
-function steadystate_rna(path,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-    data = data_rna(path,gene)
-    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior)
+function steadystate_rna(path,gene::String,nsets,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+    data = data_rna(path,gene,true)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,0)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
@@ -50,16 +50,16 @@ data_rna(path,time,gene)
 Load data structure
 """
 function data_rna(path,time,gene::String,fish::Bool=false)
-    length,h = histograms_rna(path,gene,fish)
-    TransientRNAData(gene,length,time,h)
+    len,h = histograms_rna(path,gene,fish)
+    TransientRNAData(gene,len,time,h)
 end
 function data_rna(path,gene::String,fish::Bool=false)
-    length,h = histograms_rna(path,gene,fish)
-    RNAData(gene,length(h),h)
+    len,h = histograms_rna(path,gene,fish)
+    RNAData(gene,len,h)
 end
 """
 histograms_rna(path,gene)
-Load data structure
+prepare mRNA histograms
 """
 function histograms_rna(path::Array,gene::String,fish::Bool)
     n = length(path)
@@ -78,10 +78,6 @@ function histograms_rna(path::String,gene::String,fish::Bool)
     end
     return length(h),h
 end
-"""
-model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,lossprior,method=1)
-Load model structure
-"""
 
 """
 model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,lossprior,method)
@@ -254,26 +250,68 @@ function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
     h1,h2 = likelihoodtuple(param,data,model)
     return [h1;h2]
 end
+function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
+    h = likelihoodarray(param,data,model)
+    hconcat = Array{Float64,1}(undef,0)
+    for h in h
+        hconcat = vcat(hconcat,h)
+    end
+    return hconcat
+end
 """
 likelihoodtuple(param,data::TransientRNAData,model::GMLossmodel)
 tuple of model likelihoods for each set
 
 """
-function likelihoodtuple(param,data::TransientRNAData,model::GMLossmodel)
-    r = get_rates(param,model)
-    lossfactor = r[end]
-    n = model.G-1
-    # nRNA = data.nRNA[1] > data.nRNA[2] ? data.nRNA[1] : data.nRNA[2]
+# function likelihoodtuple(param,data::TransientRNAData,model::GMLossmodel)
+#     r = get_rates(param,model)
+#     lossfactor = r[end]
+#     n = model.G-1
+#     # nRNA = data.nRNA[1] > data.nRNA[2] ? data.nRNA[1] : data.nRNA[2]
+#     nRNA = data.nRNA
+#     h0 = steady_state_full(r[1:2*n+2],n,nhist_loss(nRNA[1],lossfactor))
+#     if model.method == 1
+#         h2 = transientODE(data.time,r[2*n+3:4*n+4],lossfactor,n,model.nalleles,h0)
+#     else
+#         h2 = transient(data.time,r[2*n+3:4*n+4],lossfactor,n,model.nalleles,h0)
+#     end
+#     h1 = steady_state(r[1:2*n+2],lossfactor,n,nRNA[1],model.nalleles)
+#     # h2 = transi[ent(data.time,r[2*n+3:4*n+4],lossfactor,n,nRNA[2],model.nalleles,h0)
+#     return h1[1:nRNA[1]], h2[1:nRNA[2]]
+# end
+"""
+likelihoodarray(param,data,model::AbstractGmodel)
+
+Compute time dependent GM model likelihoods
+first set of parameters gives the initial histogram
+2nd set gives the new parameters at time 0
+data.histRNA holds array of histograms for time points given by data.time
+transient computes the time evolution of the histogram
+model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
+"""
+function likelihoodarray(param,data::TransientRNAData,model::GMLossmodel)
+    lossfactor = get_rates(param,model)[end]
+    h = likelihoodarray(param,data::TransientRNAData,model,maximum(data.nRNA))
+    noise_convolve!(h,lossfactor)
+    trim(h,data.nRNA)
+end
+function likelihoodarray(param,data::TransientRNAData,model::GMmodel)
+    h=likelihoodarray(param,data::TransientRNAData,model::GMmodel,maximum(data.nRNA))
+    trim(h,data.nRNA)
+end
+function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel,nRNAmax)
     nRNA = data.nRNA
-    h0 = steady_state_full(r[1:2*n+2],n,nhist_loss(nRNA[1],lossfactor))
-    if model.method == 1
-        h2 = transientODE(data.time,r[2*n+3:4*n+4],lossfactor,n,nRNA[2],model.nalleles,h0)
-    else
-        h2 = transient(data.time,r[2*n+3:4*n+4],lossfactor,n,nRNA[2],model.nalleles,h0)
+    r = get_rates(param,model)
+    G = model.G
+    h0 = steady_state_full(r[1:2*G],G-1,nRNAmax)
+    transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+end
+
+function trim(h::Array,nh::Array)
+    for i in eachindex(h)
+        h[i] = h[i][1:nh[i]]
     end
-    h1 = steady_state(r[1:2*n+2],lossfactor,n,nRNA[1],model.nalleles)
-    # h2 = transient(data.time,r[2*n+3:4*n+4],lossfactor,n,nRNA[2],model.nalleles,h0)
-    return h1, h2
+    return h
 end
 
 # function likelihoodtuple1(param,data::TransientRNAData,model::GMLossmodel)

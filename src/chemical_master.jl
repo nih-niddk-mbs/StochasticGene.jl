@@ -122,13 +122,17 @@ end
 
 function steady_state(r,n,nhist,nalleles)
     P = steady_state_full(r,n,nhist)
-    mhist = marginalize(P,n,nhist)
-    allele_convolve(mhist,nalleles)
+    steady_state_rna(P,n,nhist,nalleles)
 end
 
 function steady_state_full(r,n,nhist)
     M = mat_GM(r,n,nhist)
     normalized_nullspace(M)
+end
+
+function steady_state_rna(P,n,nhist,nalleles)
+    mhist = marginalize(P,n)
+    allele_convolve(mhist,nalleles)[1:nhist]
 end
 """
 nhist_loss(nhist,lossfactor)
@@ -168,9 +172,24 @@ transient(t,n::Int,nhist::Int,nalleles::Int,P0,Mvals,Mvects)
 Compute mRNA pmf of GM model at time t given initial condition P0
 and eigenvalues and eigenvectors of model transition rate matrix
 """
-function transient(t,r,lossfactor::Float64,n,nhist,nalleles,P0::Vector)
+function transient(t,r,lossfactor::Float64,n,nalleles,P0::Vector,method)
+    if method == 1
+        return transientODE(t,r,lossfactor,n,nalleles,P0)
+    else
+        return transient(t,r,lossfactor,n,nalleles,P0)
+    end
+end
+function transient(t,r,n,nalleles,P0::Vector,method)
+    if method == 1
+        return transientODE(t,r,n,nalleles,P0)
+    else
+        return transient(t,r,n,nalleles,P0)
+    end
+end
+
+function transient(t,r,lossfactor::Float64,n,nalleles,P0::Vector)
     mhist = transient(t,r,n,nalleles,P0)
-    noise_convolve(mhist,lossfactor,nhist)
+    noise_convolve(mhist,lossfactor)
 end
 function transient(t::Float64,r,n,nalleles,P0::Vector)
     P = transient(t,r,n,P0)
@@ -181,21 +200,15 @@ function transient(t::Float64,r,n,P0::Vector)
     nhist = Int(length(P0)/(n+1)) - 2
     M = mat_GM(r,n,nhist)
     time_evolve(t,M,P0)
-    # Mvals,Mvects = eig_decompose(M)
-    # weights = solve_vector(Mvects,P0)
-    # time_evolve(t,Mvals,Mvects,weights)
 end
-function transient(t::Vector,r,n,nhist,nalleles,P0::Vector)
-    nhistl = Int(length(P0)/(n+1)) - 2
-    M = mat(r,n,nhistl)
+function transient(t::Vector,r,n,nalleles,P0::Vector)
+    nhist = Int(length(P0)/(n+1)) - 2
+    M = mat_GM(r,n,nhist)
     P=time_evolve(t,M,P0)
-    # Mvals,Mvects = eig_decompose(M)
-    # weights = solve_vector(Mvects,P0)
-    # P=time_evolve(t,Mvals,Mvects,weights)
-    mhist = Array{Float64,2}(undef,nhist,length(t))
+    mhist = Array{Array,1}(undef,length(t))
     for i in 1:size(P,1)
         mh = marginalize(P[i,:],n,nhist)
-        mhist[:,i]= allele_convolve(mh,nalleles)
+        mhist[i]= allele_convolve(mh,nalleles)
     end
     return mhist
 end
@@ -238,16 +251,32 @@ end
 """
 Solve transient problem using DifferentialEquations.jl
 """
-function transientODE(t,r,lossfactor,n,nhist,nalleles,P0)
+function transientODE(t,r,lossfactor::Float64,n,nalleles,P0::Vector)
     mhist = transientODE(t,r,n,nalleles,P0)
-    noise_convolve(mhist,lossfactor,nhist)
+    noise_convolve(mhist,lossfactor)
 end
-function transientODE(t,r,n,nalleles,P0)
+function transientODE(t::Float64,r,n,nalleles,P0::Vector)
     sol = time_evolve_ODE(t,r,n,P0)
     mhist = marginalize(sol.u[end],n)
     allele_convolve(mhist,nalleles)
 end
-function time_evolve_ODE(t,r,n,P0)
+function transientODE(t::Vector,r,n,nalleles,P0::Vector)
+    sol = time_evolve_ODE(t,r,n,P0)
+    mhist = Array{Array,1}(undef,length(sol.u))
+    for i in eachindex(sol.u)
+        mh = marginalize(sol.u[end],n)
+        mhist[i] = allele_convolve(mh,nalleles)
+    end
+    return mhist
+end
+function time_evolve_ODE(t::Vector,r,n,P0)
+    nhist = Int(length(P0)/(n+1)) - 2
+	p = [r;n;nhist]
+	tspan = (0.,t[end])
+	prob = ODEProblem(f!,P0,tspan,p)
+	solve(prob,saveat=t)
+end
+function time_evolve_ODE(t::Float64,r,n,P0)
     nhist = Int(length(P0)/(n+1)) - 2
 	p = [r;n;nhist]
 	tspan = (0.,t)
@@ -275,6 +304,11 @@ end
 noise_convolve(mhist,lossfactor,nhist)
 
 """
+function noise_convolve!(mhist,lossfactor)
+    for i in eachindex(mhist)
+        mhist[i] = noise_convolve(mhist[i],lossfactor,length(mhist[i]))
+    end
+end
 function noise_convolve(mhist,lossfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
@@ -285,7 +319,6 @@ function noise_convolve(mhist,lossfactor,nhist)
     end
     return p
 end
-
 
 """
 solve_vector(A::Matrix,b::vector)

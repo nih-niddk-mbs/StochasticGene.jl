@@ -332,6 +332,10 @@ function crossentropy(predictions::Array{T1},data::Array{T2}) where {T1,T2}
     isfinite(lltot) ? -lltot : Inf
 end
 
+function hist_entropy(hist::Array{T}) where {T}
+    -hist' * (log.(max.(hist,eps(T))) .- log(sum(hist)))
+end
+
 """
 function anneal()
 
