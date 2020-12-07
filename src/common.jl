@@ -15,17 +15,20 @@ abstract type HistogramData <: ExperimentalData end
 Data structures
 """
 struct RNAData <: HistogramData
+    name::String
     gene::String
     nRNA::Int
     histRNA::Array
 end
 struct TransientRNAData{nType,tType,hType} <: HistogramData
+    name::String
     gene::String
     nRNA::nType
     time::tType
     histRNA::hType
 end
 struct RNAMixedData <: HistogramData
+    name::String
     gene::String
     nRNA::Int
     type::Array
@@ -33,12 +36,14 @@ struct RNAMixedData <: HistogramData
     histRNA::Array
 end
 struct LiveCellData <: HistogramData
+    name::String
     gene::String
     bins::Array
     OFF::Array
     ON::Array
 end
 struct RNALiveCellData <: HistogramData
+    name::String
     gene::String
     bins::Array
     OFF::Array
@@ -47,6 +52,7 @@ struct RNALiveCellData <: HistogramData
     histRNA::Array
 end
 struct MultiRNALiveCellData <: HistogramData
+    name::String
     gene::String
     nRNA::Array
     histRNA::Tuple
@@ -60,6 +66,7 @@ Abstract model types
 """
 abstract type Model end
 abstract type StochasticGRmodel <: Model end
+abstract type AbstractGRMmodel <: StochasticGRmodel end
 abstract type AbstractGMmodel <: StochasticGRmodel end
 
 """
@@ -95,7 +102,7 @@ struct GMMixedmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abs
     method::MethodType
 end
 
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRmodel
+struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGRMmodel
     G::Int
     R::Int
     nalleles::Int
@@ -119,7 +126,7 @@ end
 # end
 
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: StochasticGRmodel
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGRMmodel
     G::Int
     R::Int
     nalleles::Int

@@ -67,7 +67,7 @@ end
 function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
     r = get_rates_genetrap(param,model)
     if model.method == 0
-        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R)
+        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
         if model.type == "off"
             histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
         else
@@ -82,6 +82,23 @@ function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
     end
     return modelOFF, modelON, histF
 end
+
+function likelihoodtuple(r,data::RNALiveCellData,model,method)
+    telegraph(data.bins,model.nRNA,n,nr,r,model.nalleles)
+end
+
+function likelihoodtuples(bins,nRNA,r,n,nr,nalleles,type)
+    if type == "off"
+        modelOFFt, modelONt, histFt = telegraphoff(bins,nRNA,r,n,nr,nalleles)
+        histF = steady_state_offpath(r,n,nr,nRNA,nalleles)
+    else
+        modelOFFt, modelONt, histFt = telegraph(bins,nRNA,r,n,nr,nalleles)
+        histF = steady_state(r,n,nr,nRNA,nalleles)
+    end
+    modelOFF, modelON = offonPDF(bins,r,n,nr)
+    return modelOFF,modelON,histF,modelOFFt,modelONt,histFt
+end
+
 
 function get_rates(params,model::GRSMmodel)
     r = copy(model.rates)
@@ -210,21 +227,6 @@ function datahistogram(data::RNALiveCellData)
     return [data.OFF;data.ON;data.histRNA]
 end
 
-function likelihoodtuple(r,data::RNALiveCellData,model,method)
-    telegraph(data.bins,model.nRNA,n,nr,r,model.nalleles)
-end
-
-function likelihoodtuples(bins,nRNA,r,n,nr,nalleles,type)
-    if type == "off"
-        modelOFFt, modelONt, histFt = telegraphoff(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state_offpath(r,n,nr,nRNA,nalleles)
-    else
-        modelOFFt, modelONt, histFt = telegraph(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state(r,n,nr,nRNA,nalleles)
-    end
-    modelOFF, modelON = offonPDF(bins,r,n,nr)
-    return modelOFF,modelON,histF,modelOFFt,modelONt,histFt
-end
 
 """
 Parameter information

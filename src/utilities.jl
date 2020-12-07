@@ -82,7 +82,6 @@ end
 truncatehistogram(x::Array{Int,1},yield::Float64,nhistmax::Int)
 """
 function truncate_histogram(x::Array,yield::Float64,nhistmax::Int)
-
     counts = sum(x)
     if counts > 0
         nhist = 1
@@ -99,8 +98,6 @@ function truncate_histogram(x::Array,yield::Float64,nhistmax::Int)
 end
 
 function pooled_variance()
-
-
 
 end
 

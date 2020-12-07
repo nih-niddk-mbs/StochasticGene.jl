@@ -4,19 +4,19 @@ offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
 Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 """
-function offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
+function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
     T,TA,TI = mat_GSR(r,n,nr)
     pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,r,n,nr,TA,pss)
-    SI=offtimeCDF(t,r,n,nr,TI,pss)
+    SA=ontimeCDF(t,r,n,nr,TA,pss,method)
+    SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
-function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
-    T,_,TI = mat_GSR(r,n,nr)
-    pss = normalized_nullspace(T)
-    SI=offtimeCDF(t,r,n,nr,TI,pss)
-    pdf_from_cdf(t,SI)
-end
+# function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
+#     T,_,TI = mat_GSR(r,n,nr)
+#     pss = normalized_nullspace(T)
+#     SI=offtimeCDF(t,r,n,nr,TI,pss)
+#     pdf_from_cdf(t,SI)
+# end
 
 """
 pdf_from_cdf(t,S)
@@ -29,11 +29,11 @@ end
 onCDF(t::Vector,r::Vector,n::Int,nr::Int)
 
 """
-function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
-    T,TA,TI = mat_GSR(r,n,nr)
-    pss = normalized_nullspace(T)
-    ontimeCDF(t,r,n,nr,TA,pss)
-end
+# function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
+#     T,TA,TI = mat_GSR(r,n,nr)
+#     pss = normalized_nullspace(T)
+#     ontimeCDF(t,r,n,nr,TA,pss)
+# end
 """
 ontimeCDF(tin::Vector,n::Int,nr::Int,rin::Vector,TA::Matrix,pss::Vector)
 offtimeCDF(tin::Vector,n::Int,nr::Int,r::Vector,TI::Matrix,pss::Vector)
@@ -43,19 +43,18 @@ Found by computing accumulated probability into OFF(ON) states
 where transitions out of OFF(ON) states are zeroed, starting from first instance of ON(OFF) state
 weighted by steady state distribution (i.e. solving a first passage time problem)x
 """
-function ontimeCDF(tin::Vector,rin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector)
+function ontimeCDF(tin::Vector,rin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector,method)
     t = [tin ; tin[end] + tin[2]-tin[1]] #add a time point so that diff() gives original length
     SAinit = init_prob(pss,n,nr)
-    SA = time_evolve(t,TA,SAinit)
+    SA = time_evolve(t,TA,SAinit,method)
     accumulate(SA,n,nr)  # accumulated prob into OFF states
 end
-function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector)
+function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector,method)
     t = [tin ; tin[end] + tin[2]-tin[1]]
     nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
     TI = TI[nonzerosI,nonzerosI]
-    nI = length(nonzerosI)
     SIinit = init_prob(pss,r,n,nr,nonzerosI)
-    SI = time_evolve(t,TI,SIinit)
+    SI = time_evolve(t,TI,SIinit,method)
     accumulate(SI,n,nr,nonzerosI) # accumulated prob into ON states
 end
 """
@@ -150,6 +149,13 @@ function mat_GSR(r,n,nr)
     transition_rate_mat(n,nr,gammap,gamman,nu,eta)
 end
 
+function mat_GSR_T(r,n,nr)
+    gammap,gamman = get_gamma(r,n)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+    transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
+end
+
 """
 mat_GM(r,n,nhist)
 Transition rate matrix of GM model
@@ -166,56 +172,50 @@ with initial condition P0
 """
 
 """
-transient(t,r,lossfactor,n,nhist,nalleles,P0::Vector)
-transient(t,n::Int,nhist::Int,nalleles::Int,P0,Mvals,Mvects)
+transient(t,r,lossfactor,n,nhist,nalleles,P0::Vector,method)
+transient(t,n,nhist,nalleles,P0,Mvals,Mvects)
 
 Compute mRNA pmf of GM model at time t given initial condition P0
 and eigenvalues and eigenvectors of model transition rate matrix
+method = 1 uses JuliaDifferentialEquations.jl
+method != 1 uses eigenvalue decomposition
 """
-function transient(t,r,lossfactor::Float64,n,nalleles,P0::Vector,method)
-    if method == 1
-        return transientODE(t,r,lossfactor,n,nalleles,P0)
-    else
-        return transient(t,r,lossfactor,n,nalleles,P0)
-    end
-end
-function transient(t,r,n,nalleles,P0::Vector,method)
-    if method == 1
-        return transientODE(t,r,n,nalleles,P0)
-    else
-        return transient(t,r,n,nalleles,P0)
-    end
-end
-
-function transient(t,r,lossfactor::Float64,n,nalleles,P0::Vector)
-    mhist = transient(t,r,n,nalleles,P0)
+function transient(t,r,lossfactor,n,nalleles,P0::Vector,method)
+    mhist = transient(t,r,n,nalleles,P0,method)
     noise_convolve(mhist,lossfactor)
 end
-function transient(t::Float64,r,n,nalleles,P0::Vector)
-    P = transient(t,r,n,P0)
-    mhist = marginalize(P,n)
-    allele_convolve(mhist,nalleles)
+function transient(t::Float64,r,n,nalleles,P0::Vector,method)
+    P = transient(t,r,n,P0,method)
+    mh = marginalize(P,n)
+    allele_convolve(mh,nalleles)
 end
-function transient(t::Float64,r,n,P0::Vector)
-    nhist = Int(length(P0)/(n+1)) - 2
-    M = mat_GM(r,n,nhist)
-    time_evolve(t,M,P0)
-end
-function transient(t::Vector,r,n,nalleles,P0::Vector)
-    nhist = Int(length(P0)/(n+1)) - 2
-    M = mat_GM(r,n,nhist)
-    P=time_evolve(t,M,P0)
+function transient(t::Vector,r,n,nalleles,P0::Vector,method)
+    P = transient(t,r,n,P0,method)
     mhist = Array{Array,1}(undef,length(t))
     for i in 1:size(P,1)
-        mh = marginalize(P[i,:],n,nhist)
+        mh = marginalize(P[i,:],n)
         mhist[i]= allele_convolve(mh,nalleles)
     end
     return mhist
 end
+function transient(t,r,n,P0::Vector,method)
+    nhist = Int(length(P0)/(n+1)) - 2
+    M = mat_GM(r,n,nhist)
+    time_evolve(t,M,P0)
+end
+
 """
 time_evolve(t,T::Matrix,Sinit::Vector)
 Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
+function time_evolve(t,T::Matrix,Sinit::Vector,method)
+    if method == 1
+        return time_evolve_Diff(t,M,P0)
+    else
+        return time_evolve(t,M,P0)
+    end
+end
+
 function time_evolve(t,T::Matrix,Sinit::Vector)
     Tvals,Tvects = eig_decompose(T)
     Tweights = solve_vector(Tvects,Sinit)
@@ -251,54 +251,16 @@ end
 """
 Solve transient problem using DifferentialEquations.jl
 """
-function transientODE(t,r,lossfactor::Float64,n,nalleles,P0::Vector)
-    mhist = transientODE(t,r,n,nalleles,P0)
-    noise_convolve(mhist,lossfactor)
+function time_evolve_Diff(t::Vector,M::Matrix,P0)
+    global M_global = copy(M)
+    tspan = (0.,t[end])
+    prob = ODEProblem(f,P0,tspan)
+    sol = solve(prob,saveat=t)
+    return sol'
 end
-function transientODE(t::Float64,r,n,nalleles,P0::Vector)
-    sol = time_evolve_ODE(t,r,n,P0)
-    mhist = marginalize(sol.u[end],n)
-    allele_convolve(mhist,nalleles)
-end
-function transientODE(t::Vector,r,n,nalleles,P0::Vector)
-    sol = time_evolve_ODE(t,r,n,P0)
-    mhist = Array{Array,1}(undef,length(sol.u))
-    for i in eachindex(sol.u)
-        mh = marginalize(sol.u[end],n)
-        mhist[i] = allele_convolve(mh,nalleles)
-    end
-    return mhist
-end
-function time_evolve_ODE(t::Vector,r,n,P0)
-    nhist = Int(length(P0)/(n+1)) - 2
-	p = [r;n;nhist]
-	tspan = (0.,t[end])
-	prob = ODEProblem(f!,P0,tspan,p)
-	solve(prob,saveat=t)
-end
-function time_evolve_ODE(t::Float64,r,n,P0)
-    nhist = Int(length(P0)/(n+1)) - 2
-	p = [r;n;nhist]
-	tspan = (0.,t)
-	prob = ODEProblem(f!,P0,tspan,p)
-	solve(prob,saveat=t)
-end
-function f!(du,u,p,t)
-	r = p[1:end-2]
-    n = Int(p[end-1])
-    nhist = Int(p[end])
-    M = mat_GM(r,n,nhist)
-    for i in eachindex(du)
-        du[i] = M[i,:]'*u[:]
-    end
-end
-# function f(u,p,t)
-# 	r = p[1:end-2]
-#     n = Int(p[end-1])
-#     nhist = Int(p[end])
-#     M = mat_GM(r,n,nhist)
-#     M*u
-# end
+
+f(u,p,t) = M_global*u
+
 
 """
 noise_convolve(mhist,lossfactor,nhist)
