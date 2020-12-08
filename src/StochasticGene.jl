@@ -13,7 +13,6 @@ using LinearAlgebra
 using PyPlot
 using SparseArrays
 using DifferentialEquations
-using JLD2
 
 
 export
@@ -52,6 +51,7 @@ export
 
 # Type system
 include("common.jl")
+
 # commonly used functions
 include("utilities.jl")
 
@@ -70,6 +70,8 @@ include("ClassicTelegraph.jl")
 
 # functions specific for Gene Trap experiments of Wan et al.
 include("geneTrap.jl")
+
+# functions for scRNA and FISH experiments
 include("rna.jl")
 
 

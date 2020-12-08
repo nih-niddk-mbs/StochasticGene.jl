@@ -393,7 +393,7 @@ end
 """
 write_results(file::String,x)
 """
-function write_all(path::String,fit,stats,waic,data,model)
+function write_all(path::String,fit,stats,waic,data,model::StochasticGRmodel)
     if ~isdir(path)
         mkpath(path)
     end
@@ -412,7 +412,7 @@ mean
 median
 last accepted
 """
-function write_rates(file::String,fit,stats,model)
+function write_rates(file::String,fit::Fit,stats,model)
     f = open(file,"w")
     writedlm(f,[get_rates(fit.parml,model)],',')
     writedlm(f,[get_rates(stats.meanparam,model)],',')
@@ -423,7 +423,7 @@ end
 """
 write_measures(file,fit,waic,model)
 """
-function write_measures(file::String,fit,waic)
+function write_measures(file::String,fit::Fit,waic)
     f = open(file,"w")
     writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
     writedlm(f,[fit.accept fit.total])
@@ -433,7 +433,7 @@ end
 write_param_stats(stats,waic,data,model)
 
 """
-function write_param_stats(file,stats)
+function write_param_stats(file,stats::Stats)
     # file=joinpath(path,"param_stats" * data.gene * txtstr)
     f = open(file,"w")
     writedlm(f,stats.meanparam')
