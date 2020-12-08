@@ -97,9 +97,9 @@ function truncate_histogram(x::Array,yield::Float64,nhistmax::Int)
     end
 end
 
-function pooled_variance()
-
-end
+pooled_mean(means,counts) = counts'*means/sum(counts)
+pooled_variance(vars,counts) = (counts .- 1)'*vars/sum(counts .- 1)
+pooled_std(std,counts) = sqrt(pooled_variance(std.^2,counts))
 
 """
 ternary(x)

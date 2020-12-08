@@ -201,18 +201,18 @@ end
 function transient(t,r,n,P0::Vector,method)
     nhist = Int(length(P0)/(n+1)) - 2
     M = mat_GM(r,n,nhist)
-    time_evolve(t,M,P0)
+    time_evolve(t,M,P0,method)
 end
 
 """
 time_evolve(t,T::Matrix,Sinit::Vector)
 Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
-function time_evolve(t,T::Matrix,Sinit::Vector,method)
+function time_evolve(t,T::Matrix,S0::Vector,method)
     if method == 1
-        return time_evolve_Diff(t,M,P0)
+        return time_evolve_Diff(t,T,S0)
     else
-        return time_evolve(t,M,P0)
+        return time_evolve(t,T,S0)
     end
 end
 
@@ -251,7 +251,7 @@ end
 """
 Solve transient problem using DifferentialEquations.jl
 """
-function time_evolve_Diff(t::Vector,M::Matrix,P0)
+function time_evolve_Diff(t,M::Matrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(f,P0,tspan)

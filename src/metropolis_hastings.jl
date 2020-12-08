@@ -22,6 +22,7 @@ struct Fit <: Results
     accept::Int
     total::Int
 end
+
 """
 Structure for parameter statistics results
 """
@@ -47,9 +48,8 @@ model and data must have a likelihoodfn function
 """
 function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
-    stats = compute_stats(fit)
-    # write_results(fit,model)
-    return fit, stats, waic, (fit.parml,fit.llml)
+    stats = compute_stats(fit.param)
+    return fit, stats, waic
 end
 """
 run_mh(data,model,options,nchains)
@@ -58,10 +58,21 @@ run_mh(data,model,options,nchains)
 function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions,nchains)
     sd = run_chains(data,model,options,nchains)
     chain = extract_chain(sd)
-    fits,stats,waics = combine_chains(chain)
-    waic = combine_waic(waics)
-    parml = find_ml(fits)
-    return fits,stats,waic,parml
+    waic = pooled_waic(chain)
+    fit = merge_fit(chain)
+    stats = compute_stats(fit.param)
+    return fit, stats, waic
+end
+"""
+run_chains(data,model,options,nchains)
+
+"""
+function run_chains(data,model,options,nchains)
+    sd = Array{Future,1}(undef,nchains)
+    for chain in 1:nchains
+        sd[chain] = @spawn metropolis_hastings(data,model,options)
+    end
+    return sd
 end
 
 """
@@ -92,18 +103,24 @@ function metropolis_hastings(data,model,options)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
-
 """
-run_chains(data,model,options,nchains)
+computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
 
+Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
 """
-function run_chains(data,model,options,nchains)
-    sd = Array{Future,1}(undef,nchains)
-    for chain in 1:nchains
-        sd[chain] = @spawn metropolis_hastings(data,model,options)
-    end
-    return sd
+function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
+    hist = datahistogram(data)
+    se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
+    lppd = hist'*log.(max.(ppd,eps(T)))
+    pwaic = hist'*pwaic
+    return -2*(lppd-pwaic), 2*se
 end
+"""
+aic(fit)
+
+AIC
+"""
+aic(fit) = 2*length(fit.parml) + 2*fit.llml
 
 """
 initial_proposal(model)
@@ -151,23 +168,23 @@ sample(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxt
 
 """
 function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
-    parout = Array{Float64,2}(undef,length(param),samplesteps)
     llout = Array{Float64,1}(undef,samplesteps)
-    prior = logprior(param,model)
     pwaic = (0,log.(max.(predictions,eps(Float64))),zeros(length(predictions)))
     ppd = zeros(length(predictions))
-    step = 0
     accepttotal = 0
+    parout = Array{Float64,2}(undef,length(param),samplesteps)
+    prior = logprior(param,model)
+    step = 0
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
         accept,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
-        accepttotal += accept
-        pwaic = update_waic(ppd,pwaic,predictions)
         if ll < llml
             llml,parml = ll,param
         end
         parout[:,step] = param
         llout[step] = ll
+        accepttotal += accept
+        pwaic = update_waic(ppd,pwaic,predictions)
     end
     pwaic = step > 1 ? pwaic[3]/(step -1) :  pwaic[3]
     ppd /= step
@@ -203,7 +220,6 @@ function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
     paramt,dt = proposal(d,proposalcv)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
-
     if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
         return 1,predictionst,paramt,llt,priort,dt
     else
@@ -215,7 +231,6 @@ mhfactor(param,d,paramt,dt)
 Metropolis-Hastings correction factor for asymmetric proposal distribution
 """
 mhfactor(param,d,paramt,dt) = logpdf(dt,param)-logpdf(d,paramt) #pdf(dt,param)/pdf(d,paramt)
-
 
 """
 update_waic(ppd,pwaic,predictions)
@@ -238,53 +253,95 @@ function extract_chain(sdspawn)
     return chain
 end
 """
-combine_chains(chain)
-collate results from multiple metropolis_hastings chains
+collate_fit(chain)
+collate fits from multiple metropolis_hastings chains
+into and array of Fit structures
 
 """
-function combine_chains(chain)
+function collate_fit(chain)
     fits = Array{Fit,1}(undef,length(chain))
-    stats = Array{Tuple,1}(undef,length(chain))
-    waics = Array{Tuple,1}(undef,length(chain))
     for i in eachindex(chain)
         fits[i] = chain[i][1]
-        stats[i] = compute_stats(chain[i][1])
-        waics[i] = chain[i][2]
     end
-    return fits,stats,waics
+    return fits
 end
-
 """
-combine_waic(waics)
-transform array of array in to a 2D array for
-waic and sd of waic
+collate_waic(chain)
+collate waic results from multiple chains
+into a 2D array
 """
-function combine_waic(waics)
-    waic = Array{Float64,2}(undef,length(waics),2)
-    for i in eachindex(waics)
-        waic[i,1] = waics[i][1]
-        waic[i,2] = waics[i][2]
+function collate_waic(chain)
+    waic = Array{Float64,2}(undef,length(chain),3)
+    for i in eachindex(chain)
+        waic[i,1] = chain[i][2][1]
+        waic[i,2] = chain[i][2][2]
+        waic[i,3] = chain[i][1].total
     end
-    return mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
+    return waic
+    # mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
 end
-"""
-computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
-
-Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
-"""
-function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
-    hist = datahistogram(data)
-    se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
-    lppd = hist'*log.(max.(ppd,eps(T)))
-    pwaic = hist'*pwaic
-    return -2*(lppd-pwaic), 2*se
+function pooled_waic(chain)
+    waic = collate_waic(chain)
+    return pooled_mean(waic[:,1],waic[:,3]), pooled_std(waic[:,2],waic[:,3])
 end
-"""
-aic(fit)
 
-AIC
+function merge_param(fits::Vector)
+    param = fits[1].param
+    for i in 2:length(fits)
+        param = [param fits[i].param]
+    end
+    return param
+end
+function merge_ll(fits::Vector)
+    ll = fits[1].ll
+    for i in 2:length(fits)
+        ll = [ll; fits[i].ll]
+    end
+    return ll
+end
+
+merge_fit(chain::Array{Tuple,1}) = merge_fit(collate_fit(chain))
+
+function merge_fit(fits::Array{Fit,1})
+    param = merge_param(fits)
+    ll = merge_ll(fits)
+    parml,llml = find_ml(fits)
+    ppd = fits[1].ppd
+    pwaic = fits[1].pwaic
+    prior = fits[1].prior
+    accept = fits[1].accept
+    total = fits[1].total
+    for i in 2:length(fits)
+        accept += fits[i].accept
+        total += fits[i].total
+        prior += fits[i].prior
+        ppd += fits[i].ppd
+        pwaic += fits[i].pwaic
+    end
+    Fit(param,ll,parml,llml,ppd/length(fits),pwaic/length(fits),prior/length(fits),accept,total)
+end
+
 """
-aic(fit) = 2*length(fit.parml) + 2*fit.llml
+compute_stats(fit::Fit)
+
+Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
+"""
+function compute_stats(param::Array{Float64,2})
+    meanparam = mean(param,dims=2)
+    stdparam = std(param,dims=2)
+    corparam = cor(param')
+    covparam = cov(param')
+    covlogparam = cov(log.(param'))
+    medparam = median(param,dims=2)
+    np = size(param,1)
+    madparam = Array{Float64,1}(undef,np)
+    qparam = Array{Array,1}(undef,np)
+    for i in 1:np
+        madparam[i] = mad(param[i,:],normalize=false)
+        qparam[i] = quantile(param[i,:],[.025;.5;.975])
+    end
+    Stats(meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam)
+end
 
 """
 find_ml(fits)
@@ -297,29 +354,6 @@ function find_ml(fits::Array)
     end
     return fits[argmin(llml)].parml, llml[argmin(llml)]
 end
-
-"""
-compute_stats(fit::Fit)
-
-Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
-"""
-function compute_stats(fit::Fit)
-    meanparam = mean(fit.param,dims=2)
-    stdparam = std(fit.param,dims=2)
-    corparam = cor(fit.param')
-    covparam = cov(fit.param')
-    covlogparam = cov(log.(fit.param'))
-    medparam = median(fit.param,dims=2)
-    np = size(fit.param,1)
-    madparam = Array{Float64,1}(undef,np)
-    qparam = Array{Array,1}(undef,np)
-    for i in 1:np
-        madparam[i] = mad(fit.param[i,:],normalize=false)
-        qparam[i] = quantile(fit.param[i,:],[.025;.5;.975])
-    end
-    Stats(meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam)
-end
-
 
 """
 loglikelihood(param,data,model)
@@ -352,7 +386,7 @@ end
 function hist_entropy(hist::Array{Array,1})
     l = 0
     for h in hist
-        l +=-h' * (log.(max.(h,eps(Float64))) .- log(sum(h)))
+        l +=hist_entropy(h)
     end
     return l
 end
@@ -371,12 +405,19 @@ function write_all(path::String,fit,stats,waic,data,model)
 end
 """
 write_rates(file::String,fit)
+
+Write rate parameters, rows in order are
+maximum likelihood
+mean
+median
+last accepted
 """
 function write_rates(file::String,fit,stats,model)
     f = open(file,"w")
     writedlm(f,[get_rates(fit.parml,model)],',')
     writedlm(f,[get_rates(stats.meanparam,model)],',')
     writedlm(f,[get_rates(stats.medparam,model)],',')
+    writedlm(f,[get_rates(fit.param[:,end],model)],',')
     close(f)
 end
 """
@@ -385,8 +426,8 @@ write_measures(file,fit,waic,model)
 function write_measures(file::String,fit,waic)
     f = open(file,"w")
     writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
+    writedlm(f,[fit.accept fit.total])
     close(f)
-
 end
 """
 write_param_stats(stats,waic,data,model)
@@ -395,7 +436,6 @@ write_param_stats(stats,waic,data,model)
 function write_param_stats(file,stats)
     # file=joinpath(path,"param_stats" * data.gene * txtstr)
     f = open(file,"w")
-    # writedlm(f,[model.G model.nalleles])
     writedlm(f,stats.meanparam')
     writedlm(f,stats.stdparam')
     writedlm(f,stats.medparam')
@@ -410,6 +450,20 @@ function write_param_stats(file,stats)
     # close(f)
     # return y
 end
+"""
+read_rates(file::String,type::Int)
+
+type
+1       maximum likelihood
+2       mean
+3       median
+4       last value of previous run
+"""
+function read_rates(file::String,type)
+    rates = read_rates(file)
+    rates[type,:]
+end
+read_rates(file::String) = readdlm(file,',')
 
 """
 function anneal()

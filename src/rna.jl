@@ -21,6 +21,7 @@ end
 datahistogram(data::RNAData) = data.histRNA
 """
 logprior(param,model::AbstractGMmodel)
+
 compute log of the prior
 """
 function logprior(param,model::AbstractGMmodel)
