@@ -149,3 +149,44 @@ Abstract Option types for fitting methods
 abstract type Options end
 
 abstract type Results end
+
+
+# Functions for saving and loading data and models
+
+"""
+write_log(file,datafile,data,model)
+write all information necessary for rerunning
+"""
+function save_data(file::String,data::TransientRNAData)
+    f = open(file,"w")
+    writedlm(f, [typeof(data)])
+    writedlm(f,[data.name])
+    writedlm(f,[data.gene])
+    writedlm(f,[data.nRNA])
+    writedlm(f,[data.time])
+    writedlm(f,[data.histRNA])
+    close(f)
+end
+
+
+function load_data(file::String,model::AbstractGMmodel)
+
+
+end
+
+function save_model(file::String,model::AbstractGMmodel)
+    f = open(file,"w")
+    write(f, model.G)
+    writedlm(f,model.nalleles)
+    writedlm(f,model.ratepriors)
+    writedlm(f,model.proposal)
+    writedlm(f,model.fittedparam)
+    writedlm(f,model.method)
+    close(f)
+
+end
+
+function load_model(file::String,model::AbstractGRMmodel)
+
+
+end

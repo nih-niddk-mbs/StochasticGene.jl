@@ -434,7 +434,6 @@ write_param_stats(stats,waic,data,model)
 
 """
 function write_param_stats(file,stats::Stats)
-    # file=joinpath(path,"param_stats" * data.gene * txtstr)
     f = open(file,"w")
     writedlm(f,stats.meanparam')
     writedlm(f,stats.stdparam')
@@ -444,12 +443,8 @@ function write_param_stats(file,stats::Stats)
     writedlm(f,stats.covparam)
     writedlm(f,stats.covlogparam)
     close(f)
-    # f = open("results" * data.gene * txtstr)
-    # y=readdlm(f)
-    # # x=read(f,Float64)
-    # close(f)
-    # return y
 end
+
 """
 read_rates(file::String,type::Int)
 
