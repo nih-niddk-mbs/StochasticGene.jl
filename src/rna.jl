@@ -41,16 +41,16 @@ function likelihoodfn(param,data::RNAData,model::GMmodel)
     n = model.G-1
     steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
 end
-function likelihoodfn(param,data::RNAData,model::GMLossmodel)
+function likelihoodfn(param,data::RNAData,model::GMlossmodel)
     r = get_rates(param,model)
     lossfactor = r[end]
     n = model.G-1
     steady_state(r[1:2*n+2],lossfactor,n,data.nRNA,model.nalleles)
 end
-function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
-    h1,h2 = likelihoodtuple(param,data,model)
-    return [h1;h2]
-end
+# function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
+#     h1,h2 = likelihoodtuple(param,data,model)
+#     return [h1;h2]
+# end
 function likelihoodfn(param,data::TransientRNAData,model::AbstractGMmodel)
     h = likelihoodarray(param,data,model)
     hconcat = Array{Float64,1}(undef,0)
@@ -79,9 +79,23 @@ function transient_rna(path,name::String,time,gene::String,nsets::Int,r::Vector,
 end
 function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna(path,name,time,gene,true)
+    model,options = transient_fish(r,decayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
+    return data,model,options
+end
+function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+    data = data_rna(path,name,time,gene,true)
+    model,options = transient_fish(r,decayprior,delayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
+    return data,model,options
+end
+function transient_fish(r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
-    return data,model,options
+    return model,options
+end
+function transient_fish(r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+    model = model_delay_rna(r,G,nalleles,2,cv,fittedparam,decayprior,delayprior)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    return model,options
 end
 """
 steadystate_rna(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,lossprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
@@ -143,13 +157,30 @@ Load model structure
 """
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,lossprior,method)
     propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r::Vector,G::Int,nsets::Int,decayprior::Float64,fittedparam::Array,lossprior::Float64)
-    GMLossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    d = prior_rna(r,G,nsets,decayprior,fittedparam,lossprior)
+    GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
 end
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,method)
     propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r::Vector,G::Int,nsets::Int,decayprior::Float64,fittedparam::Array)
+    d = prior_rna(r,G::Int,nsets,decayprior,fittedparam)
     GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+end
+function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,delayprior)
+    propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,decayprior,fittedparam,delayprior)
+    GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G,nalleles,r,d,propcv,fittedparam,1)
+end
+function rescale_rate_rna(r,G,decayrate::Float64)
+    rnew = copy(r)
+    if mod(length(r),2*G) == 0
+        rnew *= decayrate/r[2*G]
+    else
+        stride = fld(length(r),fld(length(r),2*G))
+        for i in 0:stride:length(r)-1
+            rnew[i+1:i+2*G] *= decayrate/r[2*G]
+        end
+    end
+    return rnew
 end
 
 """
@@ -255,7 +286,7 @@ Set prior distribution for mean and cv of rates
 """
 function setpriorrate(G,nsets,decayrate,lossrate)
     rm,rcv = setpriorrate(G,nsets,decayrate)
-    return [rm;.1],[rcv;.025]
+    return [rm;lossrate],[rcv;.1]
 end
 function setpriorrate(G,nsets,decayrate)
     r0 = [.05*ones(2*(G-1));.4;decayrate]
@@ -280,22 +311,29 @@ data.histRNA holds array of histograms for time points given by data.time
 transient computes the time evolution of the histogram
 model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
 """
-function likelihoodarray(param,data::TransientRNAData,model::GMLossmodel)
+function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
     lossfactor = get_rates(param,model)[end]
     h = likelihoodarray(param,data::TransientRNAData,model,maximum(data.nRNA))
     noise_convolve!(h,lossfactor)
     trim(h,data.nRNA)
 end
-function likelihoodarray(param,data::TransientRNAData,model::GMmodel)
-    h=likelihoodarray(param,data::TransientRNAData,model::GMmodel,maximum(data.nRNA))
-    trim(h,data.nRNA)
-end
-function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel,nRNAmax)
-    nRNA = data.nRNA
+function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel)
     r = get_rates(param,model)
     G = model.G
-    h0 = steady_state_full(r[1:2*G],G-1,nRNAmax)
-    transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+    h0 = initial_distribution(param,r,G,model,maximum(data.nRNA))
+    h = transient(r,G,data.time,model,h0)
+    trim(h,data.nRNA)
+end
+
+function transient(r::Vector,G::Int,times::Vector,model::GMmodel,h0::Vector)
+    transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+end
+function transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector)
+    transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
+end
+
+function initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax)
+    steady_state_full(r[1:2*G],G-1,nRNAmax)
 end
 
 function trim(h::Array,nh::Array)
@@ -391,35 +429,56 @@ end
 read_rates_scrna(infile,rinchar,inpath)
 read in saved rates
 """
-function read_rates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
-    infile = inpath * infile
-    if isfile(infile) && ~isempty(read(infile))
-        readdlm(infile)[:,1]
-    else
-        return 0
+# function read_rates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
+#     infile = inpath * infile
+#     if isfile(infile) && ~isempty(read(infile))
+#         readdlm(infile)[:,1]
+#     else
+#         return 0
+#     end
+# end
+#
+# function read_rates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
+#     if rinchar == "rml" || rinchar == "rlast"
+#         rskip = 1
+#         rstart = 1
+#     elseif rinchar == "rmean"
+#         rskip = 2
+#         rstart = 1
+#     elseif rinchar == "rquant"
+#         rskip = 3
+#         rstart = 2
+#     end
+#     if isfile(infile) && ~isempty(read(infile))
+#         rall = readdlm(infile)
+#         rind = findfirst(rall[:,1] .== gene)
+#         if ~isnothing(rind)
+#             return convert(Array{Float64,1},rall[rind,rstart:rskip:end])
+#         else
+#             return 0
+#         end
+#     else
+#         return 0
+#     end
+# end
+
+function plot_histograms(gene,datapaths,modelfile,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
+    r = read_rates(modelfile,1)
+    data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
+    r = read_rates(modelfile,1)
+    h=likelihoodarray(r[fittedparam],data,model)
+    figure(gene)
+    for i in eachindex(h)
+        plot(h[i])
+        plot(data.histRNA[i]/sum(data.histRNA[i]))
     end
 end
 
-function read_rates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
-    if rinchar == "rml" || rinchar == "rlast"
-        rskip = 1
-        rstart = 1
-    elseif rinchar == "rmean"
-        rskip = 2
-        rstart = 1
-    elseif rinchar == "rquant"
-        rskip = 3
-        rstart = 2
-    end
-    if isfile(infile) && ~isempty(read(infile))
-        rall = readdlm(infile)
-        rind = findfirst(rall[:,1] .== gene)
-        if ~isnothing(rind)
-            return convert(Array{Float64,1},rall[rind,rstart:rskip:end])
-        else
-            return 0
-        end
-    else
-        return 0
+function plot_histograms(data,model)
+    h=likelihoodarray(model.rates[model.fittedparam],data,model)
+    figure(data.gene)
+    for i in eachindex(h)
+        plot(h[i])
+        plot(data.histRNA[i]/sum(data.histRNA[i]))
     end
 end
