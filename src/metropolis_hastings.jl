@@ -95,7 +95,7 @@ function metropolis_hastings(data,model,options)
     if options.warmupsteps > 0
         param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime)
     else
-        parml = copy(param)
+        parml = param
         llml = ll
         proposalcv = model.proposal
     end
@@ -371,8 +371,8 @@ crossentropy(predictions::Array{T},data::Array{T}) where {T}
 
 compute crosscentropy between data histogram and likelilhood
 """
-function crossentropy(predictions::Array{T1},data::Array{T2}) where {T1,T2}
-    lltot = data' * log.(max.(predictions,eps(T1)))
+function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
+    lltot = hist' * log.(max.(predictions,eps(T1)))
     isfinite(lltot) ? -lltot : Inf
 end
 """
@@ -390,6 +390,18 @@ function hist_entropy(hist::Array{Array,1})
     end
     return l
 end
+"""
+deviance(predictions,data)
+deviance(fit,data,model)
+
+Deviance
+"""
+deviance(predictions,data) = 2*(crossentropy(predictions,datahistogram(data)) - hist_entropy(data.histRNA))
+function deviance(fit::Fit,data,model)
+    h=StochasticGene.likelihoodfn(fit.parml,data,model)
+    deviance(h,data)
+end
+
 """
 write_results(file::String,x)
 """
