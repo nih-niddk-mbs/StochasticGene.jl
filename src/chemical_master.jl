@@ -156,6 +156,13 @@ function mat_GSR_T(r,n,nr)
     transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
 end
 
+function get_rates_GSR(r,n,nr)
+    gammap,gamman = get_gamma(r,n)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+    return gammap,gamman,nu,eta
+end
+
 """
 mat_GM(r,n,nhist)
 Transition rate matrix of GM model
@@ -204,22 +211,33 @@ function transient(t,r,n,P0::Vector,method)
     time_evolve(t,M,P0,method)
 end
 
+function transient_delay(t::Vector,r0::Vector,r1::Vector,delay::Float64,n::Int,nalleles,P0::Vector)
+    P = time_evolve_delay(t,r0,r1,delay,n,P0)
+    mhist = Array{Array,1}(undef,length(t))
+    for i in 1:size(P,1)
+        mh = marginalize(P[i,1:end-1],n)
+        mhist[i]= allele_convolve(mh,nalleles)
+    end
+    return mhist
+end
+
+
 """
-time_evolve(t,T::Matrix,Sinit::Vector)
+time_evolve(t,M::Matrix,Sinit::Vector)
 Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
-function time_evolve(t,T::Matrix,S0::Vector,method)
+function time_evolve(t,M::Matrix,S0::Vector,method)
     if method == 1
-        return time_evolve_Diff(t,T,S0)
+        return time_evolve_Diff(t,M,S0)
     else
-        return time_evolve(t,T,S0)
+        return time_evolve(t,M,S0)
     end
 end
 
-function time_evolve(t,T::Matrix,Sinit::Vector)
-    Tvals,Tvects = eig_decompose(T)
-    Tweights = solve_vector(Tvects,Sinit)
-    time_evolve(t,Tvals,Tvects,Tweights)
+function time_evolve(t,M::Matrix,Sinit::Vector)
+    vals,vects = eig_decompose(M)
+    weights = solve_vector(vects,Sinit)
+    time_evolve(t,valsTvects,weights)
 end
 """
 time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
@@ -254,12 +272,34 @@ Solve transient problem using DifferentialEquations.jl
 function time_evolve_Diff(t,M::Matrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
-    prob = ODEProblem(f,P0,tspan)
+    prob = ODEProblem(fglobal,P0,tspan)
     sol = solve(prob,saveat=t)
     return sol'
 end
 
-f(u,p,t) = M_global*u
+fglobal(u,p,t) = M_global*u
+
+function time_evolve_delay(t,r0,r1,delay,n,P0)
+    tspan = (0.,t[end])
+    nhist = Int(length(P0)/(n+1)) - 2
+    p  = [r0;r1;delay;n;nhist]
+    P0 = [P0;1.]
+    prob = ODEProblem(fdelay!,P0,tspan,p)
+    sol = solve(prob,saveat=t)
+    return sol'
+end
+
+function fdelay!(du,u,p,t)
+    n = Int(p[end-1])
+    nhist = Int(p[end])
+    delay = p[end-3]
+    r0 = p[1:2*(n+1)]
+    r1 = p[2*(n+1)+1:4*(n+1)]
+    r = r0*u[end] + (1-u[end])*r1
+    M = mat_GM(r,n,nhist)
+    du[1:end-1] = M*u[1:end-1]
+    du[end] = -delay*u[end]
+end
 
 
 """

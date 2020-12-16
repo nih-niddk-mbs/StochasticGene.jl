@@ -82,7 +82,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
     method::MethodType
 end
 
-struct GMLossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -92,7 +92,17 @@ struct GMLossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abst
     method::MethodType
 end
 
-struct GMMixedmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+struct GMlossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+end
+
+struct GMmixedmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
