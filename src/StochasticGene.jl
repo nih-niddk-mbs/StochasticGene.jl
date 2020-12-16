@@ -69,7 +69,7 @@ include("transition_rate_matrices.jl")
 include("ClassicTelegraph.jl")
 
 # functions specific for Gene Trap experiments of Wan et al.
-include("geneTrap.jl")
+include("genetrap.jl")
 
 # functions for scRNA and FISH experiments
 include("rna.jl")
