@@ -16,9 +16,6 @@ const models = [21;22;23;34;35;31;32;33;34;35]
 const datapath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis"
 const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
-function write_results(fit,model::GRSMmodel)
-    println(fit[1].llml)
-end
 
 function genetrap(infolder::String,rinchar::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,annealsteps=0,warmupsteps=0,temp=1)
     data = data_genetrap(gene)
