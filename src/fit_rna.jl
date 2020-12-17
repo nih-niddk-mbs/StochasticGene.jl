@@ -40,7 +40,7 @@ function fit_rna()
     method = 1
 
     println(gene," ",G)
-    data,model,options = StochasticGene.transient_fish(datafiles,name,times,gene,rMYC,decayprior,delayprior,G,nalleles,fitted,cv,maxtime,samplesteps,temp,method,warmupsteps);
+    data,model,options = StochasticGene.transient_fish(datafiles,runname,times,gene,rMYC,decayprior,delayprior,G,nalleles,fitted,cv,maxtime,samplesteps,temp,method,warmupsteps);
 
     nchains = nworkers()
     @time fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
