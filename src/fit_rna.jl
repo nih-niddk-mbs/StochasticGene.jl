@@ -10,7 +10,7 @@ function fit_rna()
 
     # Paths
     root = "/home/carsonc/scrna/"
-    root = "/Users/carsonc/Box/scrna"
+    # root = "/Users/carsonc/Box/scrna"
     resultfolder = "2020-12-17"
     datafolder = "smRNA_FISH_HCT_7timepoints"
     ratefolder = "2020-12-16/rates_IAA_FISH_Transient_Delay_Myc_3_2.txt"
