@@ -413,8 +413,8 @@ read_fish(path,gene,threshold)
 Read in FISH data from 7timepoint type folders
 
 """
-function read_fish(path::String,gene::String,threshold=.99)
-    folder = joinpath(path,"rep1" * "/" * gene)
+function read_fish(path::String,gene::String,rep::String,threshold::Float64)
+    folder = joinpath(path,rep * "/" * gene)
     xr = zeros(1000)
     for (root,dirs,files) in walkdir(folder)
         for file in files
@@ -425,6 +425,12 @@ function read_fish(path::String,gene::String,threshold=.99)
     end
     truncate_histogram(xr,threshold,1000)
 end
+function read_fish(path::String,gene::String,threshold::Float64=.99)
+    x1 = read_fish(path,gene,"rep1",threshold)
+    x2 = read_fish(path,gene,"rep2",threshold)
+    combine_histogram(x1,x2)
+end
+
 """
 read_rates_scrna(infile,rinchar,inpath)
 read in saved rates
