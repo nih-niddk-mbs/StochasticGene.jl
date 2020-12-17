@@ -93,7 +93,7 @@ function metropolis_hastings(data,model,options)
     #     anneal()
     # end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime)
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.warmupsteps/options.samplesteps)
     else
         parml = param
         llml = ll
