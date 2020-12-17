@@ -1,1 +1,1 @@
-julia -p 32 fitscript.jl
+julia -p 16 fitscript.jl
