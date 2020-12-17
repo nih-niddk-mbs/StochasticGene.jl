@@ -457,6 +457,11 @@ function write_param_stats(file,stats::Stats)
     close(f)
 end
 
+function read_covlogparam(file)
+    in = readdlm(file)
+    in[end-size(in)[2]+1:end,1:size(in)[2]]
+end
+
 """
 read_rates(file::String,type::Int)
 
