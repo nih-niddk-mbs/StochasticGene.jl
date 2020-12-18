@@ -35,7 +35,7 @@ function fit_rna()
     G = 3
     nalleles = 2
     cv = StochasticGene.read_covlogparam(paramfile)
-    if ~isposdef(cv)
+    if ~StochasticGene.isposdef(cv)
         cv = .01
     end
     fitted = [7;8;9;10;11;13]
