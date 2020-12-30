@@ -33,7 +33,7 @@ end
 function model_genetrap(infolder::String,rinchar::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),method=0,Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
     d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
-    r = read_rates(infolder,rinchar,gene,"$G$R",type)[:,1]
+    r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)[:,1]
     if r == 0
         r = rm
     end
@@ -300,7 +300,7 @@ function readFISH_genetrap(gene,Clone=true)
 end
 
 """
-read_rates(infolder::String,rinchar::String,gene::String,model::String,type::String)
+read_rates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
 Read in initial rates from previous runs
 """
 function read_rates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)

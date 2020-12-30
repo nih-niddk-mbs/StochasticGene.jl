@@ -11,29 +11,30 @@ Base for data in the form of a distribution
 """
 abstract type HistogramData <: ExperimentalData end
 
+abstract type AbstractRNAData{hType} <: HistogramData end
+
 """
 Data structures
 """
-struct RNAData <: HistogramData
+struct RNAData{nType,hType} <: AbstractRNAData{hType}
     name::String
     gene::String
-    nRNA::Int
-    histRNA::Array
+    nRNA::nType
+    histRNA::hType
 end
-struct TransientRNAData{nType,tType,hType} <: HistogramData
+struct TransientRNAData{nType,tType,hType} <: AbstractRNAData{hType}
     name::String
     gene::String
     nRNA::nType
     time::tType
     histRNA::hType
 end
-struct RNAMixedData <: HistogramData
+struct RNAMixedData{hType} <: AbstractRNAData{hType}
     name::String
     gene::String
-    nRNA::Int
-    type::Array
-    time::Array
-    histRNA::Array
+    nRNA::Array
+    fish::Array{Bool,1}
+    histRNA::hType
 end
 struct LiveCellData <: HistogramData
     name::String
@@ -73,6 +74,16 @@ abstract type AbstractGMmodel <: StochasticGRmodel end
 Model structures
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+end
+
+struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType

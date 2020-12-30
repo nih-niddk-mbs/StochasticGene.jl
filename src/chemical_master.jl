@@ -114,9 +114,9 @@ end
 steady_state(r,n,nhist,nalleles)
 Steady State of mRNA in G (telelgraph) model
 """
-function steady_state(r::Vector,lossfactor::Float64,n::Int,nhist::Int,nalleles::Int)
-    mhist = steady_state(r,n,nhist_loss(nhist,lossfactor),nalleles)
-    noise_convolve(mhist,lossfactor,nhist)
+function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
+    mhist = steady_state(r,n,nhist_loss(nhist,yieldfactor),nalleles)
+    technical_loss(mhist,yieldfactor,nhist)
 end
 
 function steady_state(r,n,nhist,nalleles)
@@ -134,9 +134,9 @@ function steady_state_rna(P,n,nhist,nalleles)
     allele_convolve(mhist,nalleles)[1:nhist]
 end
 """
-nhist_loss(nhist,lossfactor)
+nhist_loss(nhist,yieldfactor)
 """
-nhist_loss(nhist,lossfactor) = round(Int,nhist/lossfactor)
+nhist_loss(nhist,yieldfactor) = round(Int,nhist/yieldfactor)
 
 """
 mat(r,n,nr,nhist)
@@ -179,7 +179,7 @@ with initial condition P0
 """
 
 """
-transient(t,r,lossfactor,n,nhist,nalleles,P0::Vector,method)
+transient(t,r,yieldfactor,n,nhist,nalleles,P0::Vector,method)
 transient(t,n,nhist,nalleles,P0,Mvals,Mvects)
 
 Compute mRNA pmf of GM model at time t given initial condition P0
@@ -187,9 +187,9 @@ and eigenvalues and eigenvectors of model transition rate matrix
 method = 1 uses JuliaDifferentialEquations.jl
 method != 1 uses eigenvalue decomposition
 """
-function transient(t,r,lossfactor,n,nalleles,P0::Vector,method)
+function transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
     mhist = transient(t,r,n,nalleles,P0,method)
-    noise_convolve(mhist,lossfactor)
+    technical_loss(mhist,yieldfactor)
 end
 function transient(t::Float64,r,n,nalleles,P0::Vector,method)
     P = transient(t,r,n,P0,method)
@@ -303,23 +303,51 @@ end
 
 
 """
-noise_convolve(mhist,lossfactor,nhist)
+technical_loss(mhist,yieldfactor,nhist)
 
 """
-function noise_convolve!(mhist,lossfactor)
+function technical_loss!(mhist,yieldfactor)
     for i in eachindex(mhist)
-        mhist[i] = noise_convolve(mhist[i],lossfactor,length(mhist[i]))
+        mhist[i] = technical_loss(mhist[i],yieldfactor,length(mhist[i]))
     end
 end
-function noise_convolve(mhist,lossfactor,nhist)
+function technical_loss_poisson(mhist,yieldfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
-        d = Poisson(lossfactor*(m-1))
+        d = Poisson(yieldfactor*(m-1))
         for c in 1:nhist
             p[c] += mhist[m]*pdf(d,c-1)
         end
     end
-    return p
+    normalize_histogram(p)
+end
+function technical_loss(mhist,yieldfactor,nhist)
+    p = zeros(nhist)
+    for m in eachindex(mhist)
+        d = Binomial(m-1,clamp(yieldfactor,0.,1.))
+        for c in 1:nhist
+            p[c] += mhist[m]*pdf(d,c-1)
+        end
+    end
+    normalize_histogram(p)
+end
+
+function additive_noise(mhist,noise,nhist)
+    p = zeros(nhist)
+    d = Poisson(noise)
+    for m in 1:nhist
+        for n in 1:m
+            p[m] += mhist[n]*pdf(d,m-n)
+        end
+    end
+    normalize_histogram(p)
+end
+
+normalize_histogram(hist) = hist/sum(hist)
+
+function threshold_noise(mhist,noise,yieldfactor,nhist)
+    h = additive_noise(mhist,noise,nhist)
+    technical_loss(h,yieldfactor,nhist)
 end
 
 """
