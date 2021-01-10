@@ -48,7 +48,11 @@ model and data must have a likelihoodfn function
 """
 function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
-    stats = compute_stats(fit.param)
+    if options.samplesteps > 0
+        stats = compute_stats(fit.param)
+    else
+        stats = 0
+    end
     return fit, stats, waic
 end
 """
@@ -104,65 +108,27 @@ function metropolis_hastings(data,model,options)
     return fit, waic
 end
 """
-computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
-
-Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
-"""
-function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
-    hist = datahistogram(data)
-    se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
-    lppd = hist'*log.(max.(ppd,eps(T)))
-    pwaic = hist'*pwaic
-    return -2*(lppd-pwaic), 2*se
-end
-"""
-aic(fit)
-
-AIC
-"""
-aic(fit) = 2*length(fit.parml) + 2*fit.llml
+warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
 """
-initial_proposal(model)
-return parameters to be fitted and an initial proposal distribution
-
-"""
-function initial_proposal(model)
-    param = model.rates[model.fittedparam]
-    d=proposal(param,model.proposal)
-    return param,d
-end
-"""
-proposal(d,cv)
-return rand(d) and proposal distribution for cv (vector or covariance)
-
-"""
-function proposal(d::MultivariateDistribution,cv::Matrix)
-    param = rand(d)
-    return param, proposal(param,cv)
-end
-function proposal(d::Product,cv::Vector)
-    param = rand(d)
-    return param, proposal(param,cv)
-end
-"""
-proposal(param,cv)
-return proposal distribution specified by location and scale
-
-"""
-function proposal(param,cv::Vector)
-    d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
-    for i in eachindex(param)
-        push!(d,truncated(Normal(param[i],cv[i]*param[i]),0.,1000.))
+function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    parout = Array{Float64,2}(undef,length(param),samplesteps)
+    prior = logprior(param,model)
+    step = 0
+    while  step < samplesteps && time() - t1 < maxtime
+        step += 1
+        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        if ll < llml
+            llml,parml = ll,param
+        end
+        parout[:,step] = param
     end
-    product_distribution(d)
+    covlogparam = cov(log.(parout[:,1:step]'))
+    if isposdef(covlogparam)
+        proposalcv = covlogparam
+    end
+    return param,parml,ll,llml,d,proposalcv,predictions
 end
-
-function proposal(param,cv::Matrix)
-    c = (2.4)^2 / length(param)
-    return MvLogNormal(log.(param),c*cv)
-end
-
 """
 sample(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
@@ -190,28 +156,6 @@ function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     ppd /= step
     Fit(parout[:,1:step],llout[1:step],parml,llml,ppd,pwaic,prior,accepttotal,step)
 end
-"""
-warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
-
-"""
-function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
-    parout = Array{Float64,2}(undef,length(param),samplesteps)
-    prior = logprior(param,model)
-    step = 0
-    while  step < samplesteps && time() - t1 < maxtime
-        step += 1
-        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
-        if ll < llml
-            llml,parml = ll,param
-        end
-        parout[:,step] = param
-    end
-    covlogparam = cov(log.(parout[:,1:step]'))
-    if isposdef(covlogparam)
-        proposalcv = covlogparam
-    end
-    return param,parml,ll,llml,d,proposalcv,predictions
-end
 
 """
 mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
@@ -226,6 +170,79 @@ function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
         return 0,predictions,param,ll,prior,d
     end
 end
+"""
+computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
+
+Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
+"""
+function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
+    hist = datahistogram(data)
+    se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
+    lppd = hist'*log.(max.(ppd,eps(T)))
+    pwaic = hist'*pwaic
+    return -2*(lppd-pwaic), 2*se
+end
+"""
+aic(fit)
+
+AIC
+"""
+aic(fit) = 2*length(fit.parml) + 2*fit.llml
+
+"""
+initial_proposal(model)
+return parameters to be fitted and an initial proposal distribution
+
+"""
+function initial_proposal(model)
+    param = get_param(model)
+    d=proposal(param,model.proposal)
+    return param,d
+end
+"""
+proposal(d,cv)
+return rand(d) and proposal distribution for cv (vector or covariance)
+
+"""
+function proposal(d::MultivariateDistribution,cv::Matrix)
+    param = rand(d)
+    return param, proposal(param,cv)
+end
+function proposal(d::Product,cv::Float64)
+    param = rand(d)
+    return param, proposal(param,cv)
+end
+"""
+proposal(param,cv)
+return proposal distribution specified by location and scale
+
+"""
+# function proposal(param,cv::Vector)
+#     d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
+#     for i in eachindex(param)
+#         push!(d,truncated(Normal(param[i],cv[i]*param[i]),0.,1000.))
+#     end
+#     product_distribution(d)
+# end
+function proposal(param,cv::Float64)
+    d = Vector{LogNormal{Float64}}(undef,0)
+    for i in eachindex(param)
+        push!(d,LogNormal(log(max(param[i],1e-10))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
+    end
+    product_distribution(d)
+end
+
+# function proposal(param,cv::Vector)
+#     c = (2.4)^2 / length(param)
+#     return MvNormal(param,.1)
+# end
+
+function proposal(param,cov::Matrix)
+    c = (2.4)^2 / length(param)
+    return MvLogNormal(log.(max.(param,1e-10)) - .5*c*diag(cov),c*cov)
+end
+
+
 """
 mhfactor(param,d,paramt,dt)
 Metropolis-Hastings correction factor for asymmetric proposal distribution
