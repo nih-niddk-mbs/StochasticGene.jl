@@ -89,7 +89,7 @@ Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
 """
-function steady_state(nhist::Int,P::Vector,T::Matrix,B::Matrix,tol = 1e-6,stepmax=1000)
+function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepmax=1000)
     total = size(P,2)
     steps = 0
     err = 1.
@@ -119,12 +119,12 @@ function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles:
     technical_loss(mhist,yieldfactor,nhist)
 end
 
-function steady_state(r,n,nhist,nalleles)
+function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
     P = steady_state_full(r,n,nhist)
     steady_state_rna(P,n,nhist,nalleles)
 end
 
-function steady_state_full(r,n,nhist)
+function steady_state_full(r::Vector,n::Int,nhist::Int)
     M = mat_GM(r,n,nhist)
     normalized_nullspace(M)
 end
@@ -228,7 +228,7 @@ Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
 function time_evolve(t,M::Matrix,S0::Vector,method)
     if method == 1
-        return time_evolve_Diff(t,M,S0)
+        return time_evolve_diff(t,M,S0)
     else
         return time_evolve(t,M,S0)
     end
@@ -237,7 +237,7 @@ end
 function time_evolve(t,M::Matrix,Sinit::Vector)
     vals,vects = eig_decompose(M)
     weights = solve_vector(vects,Sinit)
-    time_evolve(t,valsTvects,weights)
+    time_evolve(t,vals,vects,weights)
 end
 """
 time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
@@ -269,7 +269,7 @@ end
 """
 Solve transient problem using DifferentialEquations.jl
 """
-function time_evolve_Diff(t,M::Matrix,P0)
+function time_evolve_diff(t,M::Matrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(fglobal,P0,tspan)
@@ -523,7 +523,7 @@ end
 accumulate(SA::Matrix,n,nr)
 Sum over all probability vectors accumulated into OFF states
 """
-function accumulate(SA::Matrix,n,nr)
+function accumulate(SA,n,nr)
     SAj = zeros(size(SA)[1])
     for i=1:n+1, z=1:3^nr
         zdigits = digits(z-1,base=3,pad=nr)
@@ -538,7 +538,7 @@ end
 accumulate(SI::Matrix,n,nr,nonzeros)
 Sum over all probability vectors accumulated into ON states
 """
-function accumulate(SI::Matrix,n,nr,nonzeros)
+function accumulate(SI,n,nr,nonzeros)
     # Sum over all probability vectors accumulated into ON states
     SIj = zeros(size(SI)[1])
     for i=1:n+1, z=1:3^nr

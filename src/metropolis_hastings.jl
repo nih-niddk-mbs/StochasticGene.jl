@@ -208,7 +208,7 @@ function proposal(d::MultivariateDistribution,cv::Matrix)
     param = rand(d)
     return param, proposal(param,cv)
 end
-function proposal(d::Product,cv::Float64)
+function proposal(d::Product,cv)
     param = rand(d)
     return param, proposal(param,cv)
 end
@@ -224,7 +224,7 @@ return proposal distribution specified by location and scale
 #     end
 #     product_distribution(d)
 # end
-function proposal(param,cv::Float64)
+function proposal(param::Vector,cv::Float64)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
         push!(d,LogNormal(log(max(param[i],1e-10))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
@@ -232,12 +232,15 @@ function proposal(param,cv::Float64)
     product_distribution(d)
 end
 
-# function proposal(param,cv::Vector)
-#     c = (2.4)^2 / length(param)
-#     return MvNormal(param,.1)
-# end
+function proposal(param::Vector,cv::Vector)
+    d = Vector{LogNormal{Float64}}(undef,0)
+    for i in eachindex(param)
+        push!(d,LogNormal(log(max(param[i],1e-10))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
+    end
+    product_distribution(d)
+end
 
-function proposal(param,cov::Matrix)
+function proposal(param::Vector,cov::Matrix)
     c = (2.4)^2 / length(param)
     return MvLogNormal(log.(max.(param,1e-10)) - .5*c*diag(cov),c*cov)
 end

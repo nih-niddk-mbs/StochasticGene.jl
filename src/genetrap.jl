@@ -17,27 +17,34 @@ const datapath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis"
 const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
 
-function genetrap(infolder::String,rinchar::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,annealsteps=0,warmupsteps=0,temp=1)
-    data = data_genetrap(gene)
-    model = model_genetrap(infolder,rinchar,gene,G,R,nalleles,type)
+function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,annealsteps=0,warmupsteps=0)
+    r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)
+    println(r)
+    genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,annealsteps,warmupsteps)
+end
+
+function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,annealsteps=0,warmupsteps=0)
+    data = data_genetrap(label,gene)
+    model = model_genetrap(r,gene,G,R,nalleles,type,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 
-function data_genetrap(gene)
+function data_genetrap(label,gene)
     LC = readLCPDF_genetrap(gene)
     histFISH = readFISH_genetrap(gene)
-    RNALiveCellData(gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
+    RNALiveCellData(label,gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
 end
 
-function model_genetrap(infolder::String,rinchar::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),method=0,Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
+function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
     d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
-    r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)[:,1]
     if r == 0
         r = rm
+    else
+        r = r[:,1]
     end
-     GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
+    GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
     # GRSMmodel(G,R,nalleles,type,r,d,prop,fittedparam,method)
 end
 
@@ -62,8 +69,8 @@ function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
 end
 
 function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
-    r = get_rates_genetrap(param,model)
-    if model.method == 0
+    r = get_rates(param,model)
+    if model.method < 2
         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
         if model.type == "off"
             histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
@@ -99,10 +106,10 @@ end
 
 function get_rates(params,model::GRSMmodel)
     r = copy(model.rates)
-    r[model.fittedparams] = params
+    r[model.fittedparam] = params
     return r
 end
-
+get_param(model::AbstractGRMmodel) = model.rates[model.fittedparam]
 
 """
 logprior(x,model::GRSModel)
