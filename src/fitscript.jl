@@ -2,6 +2,8 @@
 #
 # using Dates
 
-include("fit_rna.jl")
+include("fit_rna_T120.jl")
 
-fit_rna()
+gene = ARGS[1]
+
+fit_rna(gene)
