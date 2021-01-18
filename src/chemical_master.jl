@@ -66,8 +66,11 @@ function steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::In
     r = copy(rin)
     nu = get_nu(r,n,nr)
     eta = get_eta(r,n,nr)
-    r[end] /= survival_fraction(nu,eta,nr)
-    steady_state(r,n,nr,nhist,nalleles)
+    # r[end] /= survival_fraction(nu,eta,nr)
+    yieldfactor = survival_fraction(nu,eta,nr)
+    println(yieldfactor)
+    mhist=steady_state(r,n,nr,nhist,nalleles)
+    technical_loss(mhist,yieldfactor,nhist)
 end
 """
 steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
@@ -273,7 +276,7 @@ function time_evolve_diff(t,M::Matrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(fglobal,P0,tspan)
-    sol = solve(prob,saveat=t)
+    sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
     return sol'
 end
 
@@ -432,6 +435,22 @@ function survival_fraction(nu,eta,nr)
     end
     return pd
 end
+
+function reparametrize(r,n)
+    gammaf,gammb = get_gamma(r,n)
+    alpha = Vector{Float64}(undef,n)
+    alpha[1] = 1
+    for i in 2:n
+        alpha[i] = alpha[i-1] * gammaf[i]/gammab[i]
+    end
+    return alpha
+end
+
+function invert_parameter(alpha,n)
+
+
+end
+
 """
 normalized_nullspace(M::AbstractMatrix)
 Compute the normalized null space of a nxn matrix

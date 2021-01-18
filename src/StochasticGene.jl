@@ -13,6 +13,7 @@ using LinearAlgebra
 using PyPlot
 using SparseArrays
 using DifferentialEquations
+using LSODA
 
 
 export

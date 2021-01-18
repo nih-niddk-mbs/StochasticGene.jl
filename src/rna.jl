@@ -11,6 +11,7 @@ single molecule FISH (smFISH) is treated as loss less
 datahistogram(data)
 Return the RNA histogram data as one vector
 """
+datahistogram(data::RNAData) = data.histRNA
 function datahistogram(data::AbstractRNAData{Array{Array,1}})
 # function datahistogram(data::TransientRNAData)
     v = data.histRNA[1]
@@ -177,13 +178,13 @@ steadystate_rna(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float
 Fit G model to steady state data
 """
 function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-    data = data_rna(path,name,gene)
+    data = data_rna(path,name,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,0)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-    data = data_rna(path,name,gene,true)
+    data = data_rna(path,name,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,0)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
@@ -240,7 +241,7 @@ function histograms_rna(path::String,gene::String,fish::Bool)
     if fish
         h = read_fish(path,gene,.98)
     else
-        h = read_scrna(path,.999)
+        h = read_scrna(path,.99)
     end
     return length(h),h
 end
@@ -339,8 +340,8 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
     return [rm;yieldfactor],[rcv;.1]
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
-    r0 = [.01*ones(2*(G-1));.06;decayrate]
-    rc = [ones(2*(G-1));.1;0.05]
+    r0 = [.01*ones(2*(G-1));1.5;decayrate]
+    rc = [ones(2*(G-1));.25;0.05]
     rm = r0
     rcv = rc
     for i in 2:nsets
@@ -553,6 +554,19 @@ function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
         plot(h[i])
         plot(normalize_histogram(data.histRNA[i]))
     end
+    return h
+end
+
+function plot_histogram(data::RNALiveCellData,model)
+    h=likelihoodtuple(get_param(model),data,model)
+    figure(data.gene)
+    plot(h[1])
+    plot(normalize_histogram(data.OFF))
+    plot(h[2])
+    plot(normalize_histogram(data.ON))
+    figure("FISH")
+    plot(h[3])
+    plot(normalize_histogram(data.histRNA))
     return h
 end
 

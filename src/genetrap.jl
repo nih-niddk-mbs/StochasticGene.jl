@@ -17,22 +17,22 @@ const datapath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis"
 const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
 
-function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,annealsteps=0,warmupsteps=0)
+function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,annealsteps=0,warmupsteps=0)
     r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)
     println(r)
-    genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,annealsteps,warmupsteps)
+    genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
 end
 
-function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,annealsteps=0,warmupsteps=0)
-    data = data_genetrap(label,gene)
+function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,annealsteps=0,warmupsteps=0)
+    data = data_genetrap(label,gene,tempfish)
     model = model_genetrap(r,gene,G,R,nalleles,type,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 
-function data_genetrap(label,gene)
+function data_genetrap(label,gene,tempfish=1.)
     LC = readLCPDF_genetrap(gene)
-    histFISH = readFISH_genetrap(gene)
+    histFISH = readFISH_genetrap(gene,tempfish)
     RNALiveCellData(label,gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
 end
 
@@ -272,12 +272,12 @@ end
 """
 Read and assemble smFISH data
 """
-function readFISH_genetrap(gene,Clone=true)
+function readFISH_genetrap(gene,temp=1.,clone=true)
     countfile="$datapath/counts/total_counts.csv"
     fishfile="$datapath/Fish_4_Genes/$(gene)_steady_state_mRNA.csv"
     wttext = "WT_"
     clonetext = "_clone"
-    if Clone
+    if clone
         col = 3
     else
         col = 2
@@ -285,7 +285,7 @@ function readFISH_genetrap(gene,Clone=true)
     # Get total RNA counts
     if isfile(countfile)
         countsdata = readdlm(countfile,',')[:,:]
-        if Clone
+        if clone
             counts=(countsdata[findall(uppercase("$(gene)$clonetext") .== uppercase.(countsdata[:,1])),2])[1]
         else
             counts=(countsdata[findall("$wttext$(gene)" .== countsdata[:,1]),2])[1]
@@ -293,6 +293,7 @@ function readFISH_genetrap(gene,Clone=true)
     else
         counts = 2000
     end
+    counts /= temp
     # Get smFISH RNA histograms
     if isfile(fishfile)
         x = readdlm(fishfile,',')[3:end,col]
