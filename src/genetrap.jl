@@ -17,13 +17,13 @@ const datapath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis"
 const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
 
-function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,annealsteps=0,warmupsteps=0)
+function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
     r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)
     println(r)
     genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
 end
 
-function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,annealsteps=0,warmupsteps=0)
+function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
     data = data_genetrap(label,gene,tempfish)
     model = model_genetrap(r,gene,G,R,nalleles,type,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
