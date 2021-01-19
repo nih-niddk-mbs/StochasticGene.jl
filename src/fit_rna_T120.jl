@@ -21,7 +21,7 @@ function fit_rna(gene,cond,nchains)
     # Paths
     root = "/home/carsonc/scrna/"
     # root = "/Users/carsonc/Box/scrna"
-    resultfolder = "Results/2021-01-17"
+    resultfolder = "Results/2021-01-19"
 
     datafolder = "data/datanew/T120"
     datapath = joinpath(root,datafolder)

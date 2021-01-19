@@ -496,7 +496,8 @@ function read_scrna(filename::String,threshold::Float64=.98,nhistmax::Int=1000)
         end
         return dataFISH
     else
-        return Array{Int,1}(undef,0)
+        throw("data file not found")
+        # return Array{Int,1}(undef,0)
     end
 end
 
