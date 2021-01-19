@@ -23,9 +23,9 @@ function fit_rna(gene,cond,nchains)
     # root = "/Users/carsonc/Box/scrna"
     resultfolder = "Results/2021-01-17"
 
-    datafolder = "data/data_all/T120" * cond
+    datafolder = "data/datanew/T120"
     datapath = joinpath(root,datafolder)
-    datafile = joinpath(datapath,gene * ".txt")
+    datafile = joinpath(datapath,gene * "_" * cond * ".txt")
 
     decayrate = decay(root,gene)
     nalleles = alleles(root,gene)
@@ -35,9 +35,9 @@ function fit_rna(gene,cond,nchains)
 
     # Metropolis-Hastings parameters
     maxtime = 3600*2.
-    maxtime = 60.
-    samplesteps = 1000000
-    warmupsteps = 100000
+    # maxtime = 10.
+    samplesteps = 100000
+    warmupsteps = 10000
     temp = 40.
 
     infolder = "Results/2020-12-17"

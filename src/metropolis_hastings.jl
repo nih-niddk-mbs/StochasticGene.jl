@@ -93,17 +93,18 @@ scRNA or FISH mRNA data, and burst correlations between alleles
 function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
+    totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
     # if options.annealsteps > 0
     #     anneal()
     # end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.warmupsteps/options.samplesteps)
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.warmupsteps/totalsteps)
     else
         parml = param
         llml = ll
         proposalcv = model.proposal
     end
-    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),options.maxtime)
+    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),options.maxtime*options.samplesteps/totalsteps)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
@@ -126,6 +127,7 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     covlogparam = cov(log.(parout[:,1:step]'))
     if isposdef(covlogparam)
         proposalcv = covlogparam
+        d=proposal(param,model.proposal)
     end
     return param,parml,ll,llml,d,proposalcv,predictions
 end
