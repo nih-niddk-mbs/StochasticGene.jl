@@ -1,4 +1,4 @@
-@everywhere include("StochasticGene.jl")
+@everywhere include("/home/carsonc/StochasticGene/src/StochasticGene.jl")
 
 using Dates
 using DelimitedFiles
