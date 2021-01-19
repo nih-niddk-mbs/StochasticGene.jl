@@ -2,7 +2,7 @@
 #
 # using Dates
 
-include("fit_rna_T120.jl")
+include("/home/carsonc/StochasticGene/src/fit_rna_T120.jl")
 
 gene = ARGS[1]
 
