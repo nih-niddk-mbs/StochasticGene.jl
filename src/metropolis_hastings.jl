@@ -433,7 +433,7 @@ function write_all(path::String,fit,stats,waic,data,model::StochasticGRmodel)
     end
     name = "_$(data.name)" * "_$(data.gene)" * "_$(model.G)" * "_$(model.nalleles)" * txtstr
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
-    write_measures(joinpath(path,"measures" * name),fit,waic)
+    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model))
     write_param_stats(joinpath(path,"param_stats" * name),stats)
 
 end
@@ -457,9 +457,10 @@ end
 """
 write_measures(file,fit,waic,model)
 """
-function write_measures(file::String,fit::Fit,waic)
+function write_measures(file::String,fit::Fit,waic,dev)
     f = open(file,"w")
     writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
+    writedlm(f,dev)
     writedlm(f,[fit.accept fit.total])
     close(f)
 end

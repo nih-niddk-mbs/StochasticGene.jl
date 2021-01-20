@@ -40,7 +40,7 @@ function fit_rna(gene,cond,nchains)
     warmupsteps = 10000
     temp = 40.
 
-    infolder = "Results/2020-12-17"
+    infolder = "Results/2021-01-19"
     filelabel = label * cond * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
     ratefile = "rates" * filelabel
     paramfile = "param_stats" * filelabel

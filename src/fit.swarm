@@ -23,6 +23,5 @@ julia -p	8	fitscript.jl	FAM46A
 julia -p	8	fitscript.jl	SPRY4
 julia -p	8	fitscript.jl	EIF1AD
 julia -p	8	fitscript.jl	PARD6B
-julia -p	8	fitscript.jl	MIR24-2
 julia -p	8	fitscript.jl	IRF2BP2
 julia -p	8	fitscript.jl	JUN
