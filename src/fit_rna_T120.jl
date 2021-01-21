@@ -34,9 +34,9 @@ function fit_rna(gene,cond,nchains)
     fittedparam = [1,2,3,5]
 
     # Metropolis-Hastings parameters
-    maxtime = 3600*2.
+    maxtime = 3600*6.
     # maxtime = 10.
-    samplesteps = 100000
+    samplesteps = 1000000
     warmupsteps = 10000
     temp = 10.
 
