@@ -5,7 +5,7 @@ using DelimitedFiles
 
 
 function fit_rna(gene)
-    nchains = div(nworkers(),2)
+    nchains = nworkers()
     #Model parameters
     fit_rna(gene,"AUXIN",nchains)
     fit_rna(gene,"DMSO",nchains)
