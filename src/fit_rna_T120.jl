@@ -31,14 +31,14 @@ function fit_rna(gene,cond,nchains)
     nalleles = alleles(root,gene)
     yieldprior = .1
 
-    fittedparam = [1,2,3,5]
+    fittedparam = [5]
 
     # Metropolis-Hastings parameters
-    maxtime = 3600*6.
+    maxtime = 1800.
     # maxtime = 10.
     samplesteps = 1000000
-    warmupsteps = 10000
-    temp = 10.
+    warmupsteps = 0
+    temp = 20.
 
     infolder = "Results/2021-01-19"
     filelabel = label * cond * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
