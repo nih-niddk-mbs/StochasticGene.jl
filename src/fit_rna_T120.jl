@@ -31,7 +31,7 @@ function fit_rna(gene,cond,nchains)
     nalleles = alleles(root,gene)
     yieldprior = .1
 
-    fittedparam = [5]
+    fittedparam = [1,2]
 
     # Metropolis-Hastings parameters
     maxtime = 1800.
