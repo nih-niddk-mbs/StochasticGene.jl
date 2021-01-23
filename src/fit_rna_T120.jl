@@ -38,7 +38,7 @@ function fit_rna(gene,cond,nchains)
     # maxtime = 10.
     samplesteps = 2000000
     warmupsteps = 20000
-    temp = 10.
+    temp = 50.
 
     infolder = "Results/2021-01-19"
     filelabel = label * cond * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
