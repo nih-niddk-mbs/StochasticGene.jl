@@ -56,7 +56,11 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     if isfile(ratefile)
         r = StochasticGene.read_rates(ratefile,1)
     else
-        r = [0.015,0.015,1.5,decayrate,0.1]
+        if G == 2
+            r = [0.015,0.015,1.5,decayrate,0.1]
+        else
+            r = [0.015,.2,.2,0.015,1.5,decayrate,0.1]
+        end
     end
     if isfile(paramfile)
         cv = StochasticGene.read_covlogparam(paramfile)
