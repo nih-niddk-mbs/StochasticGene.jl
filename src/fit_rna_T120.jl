@@ -10,7 +10,7 @@ function fit_rna(gene,G=2)
     if G == 3
         fittedparam = [1,2,3,4,5,7]
     else
-        fittedparam = [1,2,3,4,5,7]
+        fittedparam = [1,2,3,5]
     end
     #Model parameters
     fit_rna(gene,"AUXIN",nchains,G,fittedparam)
