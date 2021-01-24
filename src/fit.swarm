@@ -1,27 +1,27 @@
-julia -p	8	fitscript.jl	ADM
-julia -p	8	fitscript.jl	RND3
-julia -p	8	fitscript.jl	BDNF
-julia -p	8	fitscript.jl	ZFP36L1
-julia -p	8	fitscript.jl	KLF6
-julia -p	8	fitscript.jl	DUSP6
-julia -p	8	fitscript.jl	FOXC1
-julia -p	8	fitscript.jl	HES1
-julia -p	8	fitscript.jl	MYC
-julia -p	8	fitscript.jl	GADD45B
-julia -p	8	fitscript.jl	SOX9
-julia -p	8	fitscript.jl	KLF10
-julia -p	8	fitscript.jl	ZNF165
-julia -p	8	fitscript.jl	IER2
-julia -p	8	fitscript.jl	TRIB1
-julia -p	8	fitscript.jl	PLK2
-julia -p	8	fitscript.jl	PHLDA1
-julia -p	8	fitscript.jl	ZBTB43
-julia -p	8	fitscript.jl	DNMBP
-julia -p	8	fitscript.jl	ZNF281
-julia -p	8	fitscript.jl	TIPARP
-julia -p	8	fitscript.jl	FAM46A
-julia -p	8	fitscript.jl	SPRY4
-julia -p	8	fitscript.jl	EIF1AD
-julia -p	8	fitscript.jl	PARD6B
-julia -p	8	fitscript.jl	IRF2BP2
-julia -p	8	fitscript.jl	JUN
+julia -p	8	fitscript.jl	ADM	3
+julia -p	8	fitscript.jl	RND3	3
+julia -p	8	fitscript.jl	BDNF	3
+julia -p	8	fitscript.jl	ZFP36L1	3
+julia -p	8	fitscript.jl	KLF6	3
+julia -p	8	fitscript.jl	DUSP6	3
+julia -p	8	fitscript.jl	FOXC1	3
+julia -p	8	fitscript.jl	HES1	3
+julia -p	8	fitscript.jl	MYC	3
+julia -p	8	fitscript.jl	GADD45B	3
+julia -p	8	fitscript.jl	SOX9	3
+julia -p	8	fitscript.jl	KLF10	3
+julia -p	8	fitscript.jl	ZNF165	3
+julia -p	8	fitscript.jl	IER2	3
+julia -p	8	fitscript.jl	TRIB1	3
+julia -p	8	fitscript.jl	PLK2	3
+julia -p	8	fitscript.jl	PHLDA1	3
+julia -p	8	fitscript.jl	ZBTB43	3
+julia -p	8	fitscript.jl	DNMBP	3
+julia -p	8	fitscript.jl	ZNF281	3
+julia -p	8	fitscript.jl	TIPARP	3
+julia -p	8	fitscript.jl	FAM46A	3
+julia -p	8	fitscript.jl	SPRY4	3
+julia -p	8	fitscript.jl	EIF1AD	3
+julia -p	8	fitscript.jl	PARD6B	3
+julia -p	8	fitscript.jl	IRF2BP2	3
+julia -p	8	fitscript.jl	JUN	3

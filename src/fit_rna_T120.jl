@@ -4,17 +4,23 @@ using Dates
 using DelimitedFiles
 
 
-function fit_rna(gene)
+function fit_rna(gene,G=2)
     nchains = nworkers()
+
+    if G == 2
+        fittedparam = [1,2,3,5]
+    if G == 3
+        fittedparam = [1,2,3,4,5,7]
+    end
     #Model parameters
-    fit_rna(gene,"AUXIN",nchains)
-    fit_rna(gene,"DMSO",nchains)
+    fit_rna(gene,"AUXIN",nchains,G,fittedparam)
+    fit_rna(gene,"DMSO",nchains,G,fittedparam)
 end
 
-function fit_rna(gene,cond,nchains)
+function fit_rna(gene,cond,nchains,G,fittedparam)
     println(now())
 
-    G = 2
+    # G = 2
 
     label = "scRNA_T120_ss_" * cond
 
@@ -31,12 +37,12 @@ function fit_rna(gene,cond,nchains)
     nalleles = alleles(root,gene)
     yieldprior = .1
 
-    fittedparam = [1,2,3,5]
+    # fittedparam = [1,2,3,5]
 
     # Metropolis-Hastings parameters
-    maxtime = 3600 * 5.
+    maxtime = 3600 * 4.
     # maxtime = 10.
-    samplesteps = 2000000
+    samplesteps = 4000000
     warmupsteps = 20000
     temp = 50.
 
