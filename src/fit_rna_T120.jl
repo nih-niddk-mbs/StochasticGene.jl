@@ -7,9 +7,9 @@ using DelimitedFiles
 function fit_rna(gene,G=2)
     nchains = nworkers()
 
-    if G == 2
-        fittedparam = [1,2,3,5]
     if G == 3
+        fittedparam = [1,2,3,4,5,7]
+    else
         fittedparam = [1,2,3,4,5,7]
     end
     #Model parameters
