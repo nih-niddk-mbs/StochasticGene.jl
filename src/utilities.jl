@@ -122,6 +122,52 @@ sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 KL(x,y) = sum(x .* (log.(max.(x,eps(Float64))) - log.(max.(y,eps(Float64)))))
 
+
+function trim(h::Array,nh::Array)
+    for i in eachindex(h)
+        h[i] = h[i][1:nh[i]]
+    end
+    return h
+end
+
+"""
+productLogNormal(r,cv,G,R)
+LogNormal Prior product distribution
+"""
+function productLogNormal(param,cv)
+    sigma = sigmalognormal(cv)
+    d = []
+    for i in eachindex(param)
+        push!(d,Distributions.LogNormal(log(param[i]),sigma[i]))
+    end
+    return d
+end
+
+
+"""
+Parameter information
+"""
+function num_rates(G,R)
+    n = G - 1
+    2*n + 2*R + 2
+end
+function Grange(G)
+    n = G - 1
+    1 : 2*n
+end
+function initiation(G)
+    n = G - 1
+    2*n + 1
+end
+function Rrange(G,R)
+    n = G - 1
+    2*n + 2 : 2*n + R + 1
+end
+function Srange(G,R)
+    n = G - 1
+    2*n + R + 2 : 2*n + 2*R + 1
+end
+
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
 #     for x in data1, y in data2

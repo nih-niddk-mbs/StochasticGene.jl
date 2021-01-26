@@ -18,7 +18,7 @@ const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
 
 function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
-    r = read_rates_genetrap(infolder,rinchar,gene,"$G$R",type)
+    r = readrates_genetrap(infolder,rinchar,gene,"$G$R",type)
     println(r)
     genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
 end
@@ -46,104 +46,6 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,
     end
     GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
     # GRSMmodel(G,R,nalleles,type,r,d,prop,fittedparam,method)
-end
-
-"""
-likelihoodfn(r,data::RNALiveCellData,model::GRSMmodel)
-called by loglikelihood in metropolis_hastings.jl
-"""
-# function likelihoodfn(param,data::RNALiveCellData,model::GRSMmodel)
-function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel,method)
-    pdftuple = likelihoodtuple(param,data,model)
-    pdfvector = Array{Float64,1}(undef,0)
-    for p in pdftuple
-        vcat(pdfvector,p)
-    end
-    return pdfvector
-end
-
-# function likelihoodfn(param,data::RNALiveCellData,model::GRSMmodel)
-function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
-    modelOFF, modelON, histF = likelihoodtuple(param,data,model)
-    return [modelOFF;modelON;histF]
-end
-
-function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
-    r = get_rates(param,model)
-    if model.method < 2
-        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
-        if model.type == "off"
-            histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-        else
-            histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
-        end
-    else
-        if model.type == "off"
-            modelOFF,modelON,histF = telegraphoff(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
-        else
-            modelOFF,modelON,histF = telegraph(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
-        end
-    end
-    return modelOFF, modelON, histF
-end
-
-function likelihoodtuple(r,data::RNALiveCellData,model,method)
-    telegraph(data.bins,model.nRNA,n,nr,r,model.nalleles)
-end
-
-function likelihoodtuples(bins,nRNA,r,n,nr,nalleles,type)
-    if type == "off"
-        modelOFFt, modelONt, histFt = telegraphoff(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state_offpath(r,n,nr,nRNA,nalleles)
-    else
-        modelOFFt, modelONt, histFt = telegraph(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state(r,n,nr,nRNA,nalleles)
-    end
-    modelOFF, modelON = offonPDF(bins,r,n,nr)
-    return modelOFF,modelON,histF,modelOFFt,modelONt,histFt
-end
-
-
-function get_rates(params,model::GRSMmodel)
-    r = copy(model.rates)
-    r[model.fittedparam] = params
-    return r
-end
-get_param(model::AbstractGRMmodel) = model.rates[model.fittedparam]
-
-"""
-logprior(x,model::GRSModel)
-Compute log prior using distributions in Model.rateprior
-called by mhstep() in metropolis_hastings.jl
-"""
-function logprior(param,model::GRSMmodel)
-    r = get_rates(param,model)
-    d = model.rateprior
-    G = model.G
-    R = model.R
-    p=0
-    j = 1
-    #  G rates
-    for i in Grange(G)
-        p -= logpdf(d[j],r[i])
-        j += 1
-    end
-    # initiation rate
-    i = initiation(G)
-    p -= logpdf(d[j],r[i])
-    j += 1
-    # sum of R Steps rates are bounded by length of insertion site to end of gene, i.e sum of reciprocal rates is bounded
-    t = sum(1 ./ r[Rrange(G,R)])
-    p -= logpdf(d[j],1/t)
-    j += 1
-    # priors for splice rates
-    rs = 0
-    for i in Srange(G,R)
-        rs += r[i]
-        p -= logpdf(d[j],rs)
-        j += 1
-    end
-    return p
 end
 
 """
@@ -227,34 +129,7 @@ function priordistributionGamma_genetrap(rm,cv,G,R)
     return d
 end
 
-function datahistogram(data::RNALiveCellData)
-    return [data.OFF;data.ON;data.histRNA]
-end
 
-
-"""
-Parameter information
-"""
-function num_rates(G,R)
-    n = G - 1
-    2*n + 2*R + 2
-end
-function Grange(G)
-    n = G - 1
-    1 : 2*n
-end
-function initiation(G)
-    n = G - 1
-    2*n + 1
-end
-function Rrange(G,R)
-    n = G - 1
-    2*n + 2 : 2*n + R + 1
-end
-function Srange(G,R)
-    n = G - 1
-    2*n + R + 2 : 2*n + 2*R + 1
-end
 """
 Read in dwell time PDF
 """
@@ -308,10 +183,10 @@ function readFISH_genetrap(gene,temp=1.,clone=true)
 end
 
 """
-read_rates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
+readrates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
 Read in initial rates from previous runs
 """
-function read_rates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
+function readrates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
     if rinchar == "rml" || rinchar == "rlast"
         rskip = 1
         rstart = 1

@@ -29,7 +29,7 @@ function fit_rna()
     times = [0.;30.;120.]
 
     #Model parameters
-    rMYC = StochasticGene.read_rates(ratefile,1)
+    rMYC = StochasticGene.readrates(ratefile,1)
     decayprior = log(2)/(halflife*60)
     delayprior = .05
     G = 3
@@ -54,7 +54,7 @@ function fit_rna()
     @time fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
 
     writefile = joinpath(root,resultfolder)
-    StochasticGene.write_all(writefile,fit,stats,waic,data,model)
+    StochasticGene.writeall(writefile,fit,stats,waic,data,model)
 
     println(fit.accept," ",fit.total)
     println(now())

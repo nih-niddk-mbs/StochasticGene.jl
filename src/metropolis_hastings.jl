@@ -425,9 +425,87 @@ function deviance(fit::Fit,data,model)
 end
 
 """
+function anneal()
+
+"""
+
+"""
+function rhat()
+"""
+
+### Files for saving and reading mh results
+
+function extractparts(file::String)
+    file = split(file,".")[1]
+    split(file,"_")
+end
+
+function getgene(file::String)
+    v = extractparts(file)
+    getgene(v)
+end
+
+getgene(v) = v[end-2]
+
+getG(v) = v[end-1]
+
+function makestring(v)
+    s = ""
+    for i in v
+        s *= i
+    end
+    return s
+end
+
+function assemble_rates(folder::String,cond::String,G::String,append::String = ".csv")
+    files = getfiles(folder,"rates",cond,G)
+    label = split(files[1],cond)[1]
+    outfile = joinpath(folder,label * cond * "_G" * G * append)
+    f = open(outfile,"w")
+    for file in files
+        gene = getgene(file)
+        target = joinpath(folder, file)
+        r = readrates(target,1)
+        writedlm(f,[gene r'],',')
+    end
+    close(f)
+end
+
+function assemble_measures(folder::String,cond::String,G::String,append::String = ".csv")
+    files = getfiles(folder,"measures",cond,G)
+    label = split(files[1],cond)[1]
+    outfile = joinpath(folder,label * cond * "_G" * G * append)
+    f = open(outfile,"w")
+    for file in files
+        gene = getgene(file)
+        target = joinpath(folder, file)
+        r = readmeasures(target)
+        writedlm(f,[gene r],',')
+    end
+    close(f)
+end
+
+function getfiles(folder::String,label::String,cond::String,G::String)
+    allfiles = readdir(folder)
+    files = Array{String,1}(undef,0)
+    for file in allfiles
+        if occursin(label,file) && occursin(cond,file)
+            v = extractparts(file)
+            if getG(v) == G
+                push!(files,file)
+            end
+        end
+    end
+    return files
+end
+
+
+"""
 write_results(file::String,x)
 """
-function write_all(path::String,fit,stats,waic,data,model::StochasticGRmodel)
+
+
+function writeall(path::String,fit,stats,waic,data,model::StochasticGRmodel)
     if ~isdir(path)
         mkpath(path)
     end
@@ -455,7 +533,7 @@ function write_rates(file::String,fit::Fit,stats,model)
     close(f)
 end
 """
-write_measures(file,fit,waic,model)
+write_measures(file,fit,waic,dev)
 """
 function write_measures(file::String,fit::Fit,waic,dev)
     f = open(file,"w")
@@ -486,8 +564,18 @@ function read_covlogparam(file)
     in[end-size(in)[2]+1:end,1:size(in)[2]]
 end
 
+readdeviance(file::String) = readrow(file,2)
+
+readwaic(file::String) = readrow(file,1)
+
+function readmeasures(file::String)
+    d = readdeviance(file)
+    w = readwaic(file)'
+    [d[1] w]
+end
+
 """
-read_rates(file::String,type::Int)
+readrates(file::String,type::Int)
 
 type
 1       maximum likelihood
@@ -495,17 +583,11 @@ type
 3       median
 4       last value of previous run
 """
-function read_rates(file::String,type)
-    rates = read_rates(file)
-    rates[type,:]
+
+# readrates(file::String) = readdlm(file,',')
+readrates(file::String,type::Int) = readrow(file,type)
+
+function readrow(file::String,row)
+    contents = readdlm(file,',')
+    contents[row,:]
 end
-read_rates(file::String) = readdlm(file,',')
-
-"""
-function anneal()
-
-"""
-
-"""
-function rhat()
-"""

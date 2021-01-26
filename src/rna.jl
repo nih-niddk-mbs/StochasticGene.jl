@@ -6,124 +6,6 @@ For single cell RNA (scRNA) technical noise is included as a yieldfactor
 single molecule FISH (smFISH) is treated as loss less
 """
 
-# Functions necessary for metropolis_hastings.jl
-"""
-datahistogram(data)
-Return the RNA histogram data as one vector
-"""
-datahistogram(data::RNAData) = data.histRNA
-function datahistogram(data::AbstractRNAData{Array{Array,1}})
-# function datahistogram(data::TransientRNAData)
-    v = data.histRNA[1]
-    for i in 2:length(data.histRNA)
-        v = vcat(v,data.histRNA[i])
-    end
-    return v
-end
-datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
-"""
-logprior(param,model::AbstractGMmodel)
-
-compute log of the prior
-"""
-function logprior(param,model::AbstractGMmodel)
-    d = model.rateprior
-    p=0
-    for i in eachindex(d)
-        p -= logpdf(d[i],param[i])
-    end
-    return p
-end
-"""
-likelihoodfn(param,data,model)
-model likelihoodfn
-"""
-function likelihoodfn(param,data::RNAData,model::GMmodel)
-    r = get_rates(param,model)
-    n = model.G-1
-    steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
-end
-function likelihoodfn(param,data::RNAData,model::GMlossmodel)
-    r = get_rates(param,model)
-    yieldfactor = r[end]
-    n = model.G-1
-    steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
-end
-function likelihoodfn(param,data::AbstractRNAData{Array{Array,1}},model::AbstractGMmodel)
-    h = likelihoodarray(param,data,model)
-    hconcat = Array{Float64,1}(undef,0)
-    for h in h
-        hconcat = vcat(hconcat,h)
-    end
-    return hconcat
-end
-
-######
-"""
-likelihoodarray(param,data,model::AbstractGmodel)
-
-Compute time dependent GM model likelihoods
-first set of parameters gives the initial histogram
-2nd set gives the new parameters at time 0
-data.histRNA holds array of histograms for time points given by data.time
-transient computes the time evolution of the histogram
-model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
-"""
-function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
-    yieldfactor = get_rates(param,model)[end]
-    h = likelihoodarray(param,data::TransientRNAData,model,maximum(data.nRNA))
-    technical_loss!(h,yieldfactor)
-    trim(h,data.nRNA)
-end
-function likelihoodarray(param,data::TransientRNAData,model,maxdata)
-    r = get_rates(param,model)
-    G = model.G
-    h0 = initial_distribution(param,r,G,model,maxdata)
-    transient(r,G,data.time,model,h0)
-end
-function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel)
-    h=likelihoodarray(param,data,model,maximum(data.nRNA))
-    # r = get_rates(param,model)
-    # G = model.G
-    # h0 = initial_distribution(param,r,G,model,maximum(data.nRNA))
-    # h = transient(r,G,data.time,model,h0)
-    trim(h,data.nRNA)
-end
-function likelihoodarray(param,data::RNAData,model::GMmultimodel)
-    r = get_rates(param,model)
-    G = model.G
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-    for i in eachindex(data.nRNA)
-        g = steady_state(r[1:2*G],G-1,data.nRNA[i],model.nalleles)
-        h[i] = threshold_noise(g,r[2*G+1],r[2*G+1+i],data.nRNA[i])
-    end
-    return h
-end
-function likelihoodarray(param,data::RNAMixedData,model::AbstractGMmodel)
-    r = get_rates(param,model)
-    G = model.G
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-    j = 1
-    for i in eachindex(data.fish)
-        g = steady_state(r[1:2*G],G-1,maximum(data.nRNA),model.nalleles)
-        if data.fish[i]
-            h[i] = threshold_noise(g,r[2*G+j],r[2*G+j+1],data.nRNA[i])
-            j += 2
-        else
-            h[i] = technical_loss(g,r[2*G+j],data.nRNA[i])
-            j += 1
-        end
-    end
-    return h
-end
-
-function testmodel(model,nhist)
-    G = model.G
-    r = model.rates
-    g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
-    g2 = telegraph(G-1,r[1:2*G],10000000,1e-5,nhist,model.nalleles)
-    return g1,g2
-end
 
 # Load data, model, and option structures
 """
@@ -288,11 +170,7 @@ function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fitted
 end
 
 
-"""
-proposal_cv_rna(propcv)
-set propcv to a vector or matrix
-"""
-proposal_cv_rna(cv) = typeof(cv) == Float64 ? propcv*ones(length(fittedparam)) : propcv
+
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
 compute prior distribution
@@ -302,7 +180,7 @@ r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical nois
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,yieldprior::Float64)
         if length(r) == 2*G * nsets + 1
             rm,rcv = setpriorrate(G,nsets,decayprior,yieldprior)
-            return priorLogNormal(rm[fittedparam],rcv[fittedparam])
+            return productLogNormal(rm[fittedparam],rcv[fittedparam])
         else
             throw("rates have wrong length")
         end
@@ -310,7 +188,7 @@ end
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64)
         if length(r) == 2*G*nsets
             rm,rcv = setpriorrate(G,nsets,decayprior)
-            return priorLogNormal(rm[fittedparam],rcv[fittedparam])
+            return productLogNormal(rm[fittedparam],rcv[fittedparam])
         else
             throw("rates have wrong length")
         end
@@ -326,7 +204,7 @@ r[2G + 1 + 1:length(noisepriors)] = remaining fraction after thresholding (i.e. 
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,noisepriors::Array)
         if length(r) == 2*G * nsets + length(noisepriors)
             rm,rcv = setpriorrate(G,nsets,decayprior,noisepriors)
-            return priorLogNormal(rm[fittedparam],rcv[fittedparam])
+            return productLogNormal(rm[fittedparam],rcv[fittedparam])
         else
             throw("rates have wrong length")
         end
@@ -359,11 +237,12 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
     end
     return rm,rcv
 end
-
 """
 proposal_cv_rna(propcv)
 set propcv to a vector or matrix
 """
+proposal_cv_rna(cv) = typeof(cv) == Float64 ? propcv*ones(length(fittedparam)) : propcv
+
 proposal_cv_rna(propcv,fittedparam) = typeof(propcv) == Float64 ? propcv*ones(length(fittedparam)) : propcv
 
 """
@@ -390,44 +269,8 @@ function fittedparam_rna(G,nsets)
     end
     return fp
 end
-"""
-get_rates(param,model::AbstractGMmodel)
-replace fitted rates with new values and return
-"""
-function get_rates(param,model::AbstractGMmodel)
-    r = copy(model.rates)
-    r[model.fittedparam] = param
-    return r
-end
-"""
-get_rates(param,model::GMrescaledmodel)
-
-gammas are scaled by nu
-"""
-function get_rates(param,model::GMrescaledmodel)
-    r = copy(model.rates)
-    n = 2*model.G - 1
-    nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
-    r[1:n-1] /= r[n]
-    r[model.fittedparam] = param
-    r[1:n-1] *= nu
-    if r[2*model.G + 3] > 1
-        r[2*model.G + 3] = 1
-    end
-    return r
-end
-"""
-get_param(model::GMrescaledmodel)
 
 
-"""
-function get_param(model::GMrescaledmodel)
-    r = copy(model.rates)
-    n = 2*model.G - 1
-    r[1:n-1] /= r[n]
-    r[model.fittedparam]
-end
-get_param(model::AbstractGMmodel) = model.rates[model.fittedparam]
 """
 rescale_rate_rna(r,G,decayrate::Float64)
 
@@ -447,38 +290,7 @@ function rescale_rate_rna(r,G,decayrate::Float64)
     return rnew
 end
 
-"""
-priorLogNormal(r,cv,G,R)
-LogNormal Prior distribution
-"""
-function priorLogNormal(param,cv)
-    sigma = sigmalognormal(cv)
-    d = []
-    for i in eachindex(param)
-        push!(d,Distributions.LogNormal(log(param[i]),sigma[i]))
-    end
-    return d
-end
 
-
-
-function transient(r::Vector,G::Int,times::Vector,model::GMmodel,h0::Vector)
-    transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
-end
-function transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector)
-    transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
-end
-
-function initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax)
-    steady_state_full(r[1:2*G],G-1,nRNAmax)
-end
-
-function trim(h::Array,nh::Array)
-    for i in eachindex(h)
-        h[i] = h[i][1:nh[i]]
-    end
-    return h
-end
 
 # Read in data and construct histograms
 """
@@ -530,15 +342,15 @@ end
 
 
 """
-plot_histogram()
+plot_histogram_rna()
 
 functions to plot data and model predicted histograms
 
 """
-function plot_histogram(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
-    r = read_rates(modelfile,1)
+function plot_histogram_rna(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
+    r = readrates(modelfile,1)
     data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
-    r = read_rates(modelfile,1)
+    r = readrates(modelfile,1)
     h=likelihoodarray(r[fittedparam],data,model)
     figure(gene)
     for i in eachindex(h)
@@ -548,38 +360,7 @@ function plot_histogram(gene::String,datapaths::Array,modelfile::String,time=[0.
     return h
 end
 
-function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
-    h=likelihoodarray(get_param(model),data,model)
-    figure(data.gene)
-    for i in eachindex(h)
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-    end
-    return h
-end
-
-function plot_histogram(data::RNALiveCellData,model)
-    h=likelihoodtuple(get_param(model),data,model)
-    figure(data.gene)
-    plot(h[1])
-    plot(normalize_histogram(data.OFF))
-    plot(h[2])
-    plot(normalize_histogram(data.ON))
-    figure("FISH")
-    plot(h[3])
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
-function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
-    h=likelihoodfn(get_param(model),data,model)
-    figure(data.gene)
-    plot(h)
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
-function plot_histogram(r::Array,n,nhist,nalleles)
+function plot_histogram_rna(r::Array,n,nhist,nalleles)
     h = steady_state(r,n,nhist,nalleles)
     plot(h)
     return h
@@ -615,10 +396,10 @@ Create a 2D data array of mRNA count/cell histograms for FISH and scRNA for same
 #     return data
 # end
 """
-read_rates_srna(infile,rinchar,inpath)
+readrates_srna(infile,rinchar,inpath)
 read in saved rates
 """
-# function read_rates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
+# function readrates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
 #     infile = inpath * infile
 #     if isfile(infile) && ~isempty(read(infile))
 #         readdlm(infile)[:,1]
@@ -627,7 +408,7 @@ read in saved rates
 #     end
 # end
 #
-# function read_rates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
+# function readrates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
 #     if rinchar == "rml" || rinchar == "rlast"
 #         rskip = 1
 #         rstart = 1

@@ -54,7 +54,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     paramfile = joinpath(root, joinpath(infolder,paramfile))
 
     if isfile(ratefile)
-        r = StochasticGene.read_rates(ratefile,1)
+        r = StochasticGene.readrates(ratefile,1)
     else
         if G == 2
             r = [0.015,0.015,1.5,decayrate,0.1]
@@ -80,7 +80,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     @time fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
 
     writefile = joinpath(root,resultfolder)
-    StochasticGene.write_all(writefile,fit,stats,waic,data,model)
+    StochasticGene.writeall(writefile,fit,stats,waic,data,model)
 
     println(fit.accept," ",fit.total)
     println(now())
