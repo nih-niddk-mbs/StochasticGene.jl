@@ -42,8 +42,9 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     # Metropolis-Hastings parameters
     maxtime = 3600 * 4.
     # maxtime = 10.
-    samplesteps = 4000000
-    warmupsteps = 40000
+    samplesteps = 100000
+    warmupsteps = 100000
+    annealsteps = 100000
     temp = 50.
 
     infolder = "Results/2021-01-19"
@@ -75,7 +76,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     println(r)
 
     println(gene," ",G)
-    data,model,options = StochasticGene.steadystate_rna(datafile,label,gene,1,r,decayrate,yieldprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,warmupsteps)
+    data,model,options = StochasticGene.steadystate_rna(datafile,label,gene,1,r,decayrate,yieldprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,warmupsteps,annealsteps)
 
     @time fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
 
