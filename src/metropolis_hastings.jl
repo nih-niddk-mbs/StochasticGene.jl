@@ -94,20 +94,48 @@ function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
-    # if options.annealsteps > 0
-    #     anneal()
-    # end
+    if options.annealsteps > 0
+        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.annealsteps/totalsteps)
+    else
+        temp = options.temp
+    end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.warmupsteps/totalsteps)
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime*options.warmupsteps/totalsteps)
     else
         parml = param
         llml = ll
         proposalcv = model.proposal
     end
-    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),options.maxtime*options.samplesteps/totalsteps)
+    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,temp,time(),options.maxtime*options.samplesteps/totalsteps)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
+"""
+function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+
+"""
+function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    parout = Array{Float64,2}(undef,length(param),samplesteps)
+    prior = logprior(param,model)
+    step = 0
+    annealrate = 3/samplesteps
+    anneal = 1 - annealrate  # annealing rate with time constant of samplesteps/3
+
+    while  step < samplesteps && time() - t1 < maxtime
+        step += 1
+        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        if ll < llml
+            llml,parml = ll,param
+        end
+        parout[:,step] = param
+        temp = anneal * temp + annealrate
+    end
+    return param,parml,ll,llml,predictions,temp
+end
+"""
+function rhat()
+"""
+
 """
 warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
@@ -424,14 +452,7 @@ function deviance(fit::Fit,data,model)
     deviance(h,data)
 end
 
-"""
-function anneal()
 
-"""
-
-"""
-function rhat()
-"""
 
 ### Files for saving and reading mh results
 
@@ -457,6 +478,13 @@ function makestring(v)
     return s
 end
 
+function assemble_all(folder::String,cond::Vector=["DMSO","AUXIN"],G::Vector=["2","3"],append::String = ".csv")
+    for c in cond, g in G
+        assemble_rates(folder,c,g,append)
+        assemble_measures(folder,c,g,append)
+    end
+end
+
 function assemble_rates(folder::String,cond::String,G::String,append::String = ".csv")
     files = getfiles(folder,"rates",cond,G)
     label = split(files[1],cond)[1]
@@ -465,7 +493,7 @@ function assemble_rates(folder::String,cond::String,G::String,append::String = "
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
-        r = readrates(target,1)
+        r = readrates(target)
         writedlm(f,[gene r'],',')
     end
     close(f)
@@ -538,8 +566,8 @@ write_measures(file,fit,waic,dev)
 function write_measures(file::String,fit::Fit,waic,dev)
     f = open(file,"w")
     writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
-    writedlm(f,dev)
-    writedlm(f,[fit.accept fit.total])
+    writedlm(f,dev,',')
+    writedlm(f,[fit.accept fit.total],',')
     close(f)
 end
 """
@@ -568,10 +596,16 @@ readdeviance(file::String) = readrow(file,2)
 
 readwaic(file::String) = readrow(file,1)
 
+function readaccept(file::String)
+    a = parse.(Float64,readrow(file,3))
+    a[1]/a[2]
+end
+
 function readmeasures(file::String)
     d = readdeviance(file)
     w = readwaic(file)'
-    [d[1] w]
+    a = readaccept(file)
+    [d[1] w a]
 end
 
 """
@@ -584,7 +618,7 @@ type
 4       last value of previous run
 """
 
-# readrates(file::String) = readdlm(file,',')
+readrates(file::String) = readrates(file,1)
 readrates(file::String,type::Int) = readrow(file,type)
 
 function readrow(file::String,row)
