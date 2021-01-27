@@ -597,7 +597,7 @@ readdeviance(file::String) = readrow(file,2)
 readwaic(file::String) = readrow(file,1)
 
 function readaccept(file::String)
-    a = parse.(Float64,readrow(file,3))
+    a = readrow(file,3)
     a[1]/a[2]
 end
 
