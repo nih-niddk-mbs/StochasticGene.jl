@@ -43,7 +43,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     maxtime = 3600 * 5.
     # maxtime = 10.
     samplesteps = 100000
-    warmupsteps = 100000
+    warmupsteps = 50000
     annealsteps = 100000
     temp = 1000.
 
