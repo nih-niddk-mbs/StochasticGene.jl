@@ -350,7 +350,6 @@ functions to plot data and model predicted histograms
 function plot_histogram_rna(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
     r = readrates(modelfile,1)
     data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
-    r = readrates(modelfile,1)
     h=likelihoodarray(r[fittedparam],data,model)
     figure(gene)
     for i in eachindex(h)
@@ -360,11 +359,32 @@ function plot_histogram_rna(gene::String,datapaths::Array,modelfile::String,time
     return h
 end
 
-function plot_histogram_rna(r::Array,n,nhist,nalleles)
-    h = steady_state(r,n,nhist,nalleles)
-    plot(h)
-    return h
+function plot_histogram_rna(gene,cond,G,nalleles)
+    datapath = scRNApath(gene,cond)
+    h = read_scrna(datapath,.99)
+    ratepath = ratepath_Gmodel(gene,cond,G,nalleles)
+    println(ratepath)
+    r = readrates(ratepath)
+    println(r)
+    plot(steady_state(r[1:2*G],r[end],G-1,length(h),nalleles))
+    plot(normalize_histogram(h))
 end
+
+function scRNApath(gene,cond,folder = "data/datanew/T120",root= "/Users/carsonc/Box/scrna/")
+    datapath = joinpath(root,folder)
+    joinpath(datapath,gene * "_" * cond * ".txt")
+end
+
+function ratepath_Gmodel(gene::String,cond::String,G,nalleles,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
+    path_Gmodel("rates",gene,G,nalleles,label * cond,folder,root)
+end
+
+function path_Gmodel(type,gene::String,G::Int,nalleles,label,folder,root)
+    filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
+    ratefile = type * "_" * filelabel
+    joinpath(root, joinpath(folder,ratefile))
+end
+
 
 """
 read_fish_scrna(scRNAfolder::String,FISHfolder::String,genein::String,cond::String)

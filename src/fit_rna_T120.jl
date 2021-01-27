@@ -40,7 +40,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     # fittedparam = [1,2,3,5]
 
     # Metropolis-Hastings parameters
-    maxtime = 3600 * 4.
+    maxtime = 3600 * 5.
     # maxtime = 10.
     samplesteps = 100000
     warmupsteps = 50000
@@ -48,11 +48,16 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     temp = 1000.
 
     infolder = "Results/2021-01-19"
-    filelabel = label * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
-    ratefile = "rates" * filelabel
-    paramfile = "param_stats" * filelabel
-    ratefile = joinpath(root, joinpath(infolder,ratefile))
-    paramfile = joinpath(root, joinpath(infolder,paramfile))
+
+    # filelabel = label * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
+    # ratefile = "rates_" * filelabel
+    # paramfile = "param_stats" * filelabel
+    # ratefile = joinpath(root, joinpath(infolder,ratefile))
+    # paramfile = joinpath(root, joinpath(infolder,paramfile))
+
+
+    ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,label,infolder,root)
+    paramfile = StochasticGene.path_Gmodel("param_stats",gene,G,nalleles,label,infolder,root)
 
     if isfile(ratefile)
         r = StochasticGene.readrates(ratefile,1)
