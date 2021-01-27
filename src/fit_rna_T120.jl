@@ -30,8 +30,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     datafolder = "data/datanew/T120"
     resultfolder = "Results/2021-01-19"
 
-
-    datafile = scRNApath(gene,cond,datafolder,root)
+    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
 
     decayrate = decay(root,gene)
     nalleles = alleles(root,gene)
@@ -40,7 +39,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     # fittedparam = [1,2,3,5]
 
     # Metropolis-Hastings parameters
-    maxtime = 3600 * 5.
+    maxtime = 3600 
     # maxtime = 10.
     samplesteps = 100000
     warmupsteps = 50000
