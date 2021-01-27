@@ -27,11 +27,11 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     # Paths
     root = "/home/carsonc/scrna/"
     # root = "/Users/carsonc/Box/scrna"
+    datafolder = "data/datanew/T120"
     resultfolder = "Results/2021-01-19"
 
-    datafolder = "data/datanew/T120"
-    datapath = joinpath(root,datafolder)
-    datafile = joinpath(datapath,gene * "_" * cond * ".txt")
+
+    datafile = scRNApath(gene,cond,datafolder,root)
 
     decayrate = decay(root,gene)
     nalleles = alleles(root,gene)
@@ -48,7 +48,7 @@ function fit_rna(gene,cond,nchains,G,fittedparam)
     temp = 1000.
 
     infolder = "Results/2021-01-19"
-    filelabel = label * cond * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
+    filelabel = label * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
     ratefile = "rates" * filelabel
     paramfile = "param_stats" * filelabel
     ratefile = joinpath(root, joinpath(infolder,ratefile))
