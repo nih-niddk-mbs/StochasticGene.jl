@@ -15,6 +15,8 @@ abstract type AbstractRNAData{hType} <: HistogramData end
 
 """
 Data structures
+
+Do not use underscore "_" in name
 """
 struct RNAData{nType,hType} <: AbstractRNAData{hType}
     name::String

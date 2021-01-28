@@ -576,20 +576,21 @@ write_param_stats(stats,waic,data,model)
 """
 function write_param_stats(file,stats::Stats)
     f = open(file,"w")
-    writedlm(f,stats.meanparam')
-    writedlm(f,stats.stdparam')
-    writedlm(f,stats.medparam')
-    writedlm(f,stats.madparam')
-    writedlm(f,stats.qparam)
-    writedlm(f,stats.corparam)
-    writedlm(f,stats.covparam)
-    writedlm(f,stats.covlogparam)
+    writedlm(f,stats.meanparam',',')
+    writedlm(f,stats.stdparam',',')
+    writedlm(f,stats.medparam',',')
+    writedlm(f,stats.madparam',',')
+    writedlm(f,stats.qparam,',')
+    writedlm(f,stats.corparam,',')
+    writedlm(f,stats.covparam,',')
+    writedlm(f,stats.covlogparam,',')
     close(f)
 end
 
 function read_covlogparam(file)
-    in = readdlm(file)
-    in[end-size(in)[2]+1:end,1:size(in)[2]]
+    in = readdlm(file,',')
+    n = sum(in[end,:].!="")
+    in[end-n+1:end,1:n]
 end
 
 readdeviance(file::String) = readrow(file,2)

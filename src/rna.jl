@@ -173,7 +173,7 @@ end
 
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
-compute prior distribution
+prepare prior distribution
 r[mod(1:2*G,nsets)] = rates for each model set  (i.e. rates for each set are stacked)
 r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical noise)
 """
@@ -369,6 +369,8 @@ function plot_histogram_rna(gene,cond,G,nalleles)
     plot(steady_state(r[1:2*G],r[end],G-1,length(h),nalleles))
     plot(normalize_histogram(h))
 end
+
+# functions to build paths to data and results
 
 function scRNApath(gene,cond,folder = "data/datanew/T120",root= "/Users/carsonc/Box/scrna/")
     datapath = joinpath(root,folder)
