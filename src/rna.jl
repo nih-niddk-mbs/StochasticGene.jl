@@ -218,8 +218,8 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
     return [rm;yieldfactor],[rcv;.5]
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
-    r0 = [.01*ones(2*(G-1));1.5;decayrate]
-    rc = [ones(2*(G-1));.25;0.05]
+    r0 = [.01*ones(2*(G-1));.5;decayrate]
+    rc = [ones(2*(G-1));1.;0.05]
     rm = r0
     rcv = rc
     for i in 2:nsets

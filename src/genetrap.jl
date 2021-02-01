@@ -12,30 +12,38 @@ const genes = ["CANX";"DNAJC5";"ERRFI1";"KPNB1";"MYH9";"Rab7a";"RHOA";"RPAP3";"S
 const genelength = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);("RHOA", 52948);("KPNB1", 33730);("MYH9", 106741);("DNAJC5", 40930);("CANX", 32710);("Rab7a", 88663);("RPAP3", 44130)])
 const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
 const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
-const models = [21;22;23;34;35;31;32;33;34;35]
-const datapath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis"
-const resultpath = "/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/Results"
 
+"""
+genetrap
 
-function genetrap(infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
-    r = readrates_genetrap(infolder,rinchar,gene,"$G$R",type)
+Load data, model and option structures for metropolis-hastings fit
+root is the folder containing data and results
+
+"""
+function genetrap(root::String,infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
+    r = readrates_genetrap(root,infolder,rinchar,gene,"$G$R",type)
     println(r)
-    genetrap(r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
+    genetrap(root,r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
 end
 
-function genetrap(r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
-    data = data_genetrap(label,gene,tempfish)
+function genetrap(root,r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
+    data = data_genetrap(root,label,gene,tempfish)
     model = model_genetrap(r,gene,G,R,nalleles,type,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
 end
 
-function data_genetrap(label,gene,tempfish=1.)
-    LC = readLCPDF_genetrap(gene)
-    histFISH = readFISH_genetrap(gene,tempfish)
+function data_genetrap(root,label,gene,tempfish=1.)
+    LC = readLCPDF_genetrap(root,gene)
+    histFISH = readFISH_genetrap(root,gene,tempfish)
     RNALiveCellData(label,gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
 end
 
+"""
+model_genetrap
+
+load model structure
+"""
 function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,10.),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
     d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
@@ -60,7 +68,8 @@ function prior_rates_genetrap(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
 end
 
 """
-priordistributionLogNormal(r,cv,G,R)
+priordistributionLogNormal_genetrap(r,cv,G,R)
+
 LogNormal Prior distribution
 """
 function priordistributionLogNormal_genetrap(r,cv,G,R)
@@ -90,6 +99,11 @@ function priordistributionLogNormal_genetrap(r,cv,G,R)
     return d
 end
 
+"""
+priordistributionGamma_genetrap(r,cv,G,R)
+
+Gamma Prior distribution
+"""
 function priordistributionGamma_genetrap(rm,cv,G,R)
     n = G-1
     zet = R
@@ -131,10 +145,12 @@ end
 
 
 """
+readLCPDF_genetrap(root,gene)
+
 Read in dwell time PDF
 """
-function readLCPDF_genetrap(gene)
-    infile = "$datapath/DwellTimePDF/$(gene)_PDF.csv"
+function readLCPDF_genetrap(root,gene)
+    infile = joinpath(root,"DwellTimePDF/$(gene)_PDF.csv")
     if isfile(infile)
         LC = readdlm(infile,',')
         x = truncate_histogram(LC[:,2],.999,1000)
@@ -145,11 +161,13 @@ function readLCPDF_genetrap(gene)
 end
 
 """
+readFISH_genetrap(root,gene,temp=1.,clone=true)
+
 Read and assemble smFISH data
 """
-function readFISH_genetrap(gene,temp=1.,clone=true)
-    countfile="$datapath/counts/total_counts.csv"
-    fishfile="$datapath/Fish_4_Genes/$(gene)_steady_state_mRNA.csv"
+function readFISH_genetrap(root,gene,temp=1.,clone=true)
+    countfile = joinpath(root,"counts/total_counts.csv")
+    fishfile=joinpath(root,"Fish_4_Genes/$(gene)_steady_state_mRNA.csv")
     wttext = "WT_"
     clonetext = "_clone"
     if clone
@@ -184,9 +202,10 @@ end
 
 """
 readrates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
+
 Read in initial rates from previous runs
 """
-function readrates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
+function readrates_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
     if rinchar == "rml" || rinchar == "rlast"
         rskip = 1
         rstart = 1
@@ -197,15 +216,29 @@ function readrates_genetrap(infolder::String,rinchar::String,gene::String,model:
         rskip = 3
         rstart = 2
     end
-    infile = "$resultpath/$infolder/$(gene)/$rinchar$model$type$txtstr"
+    # infile = "$resultpath/$infolder/$(gene)/$rinchar$model$type$txtstr"
+    infile = getratefolder_genetrap(root,infolder,richar,gene,model,type)
+    print(gene," ",model," ",type)
+    readrates_genetrap(infile,rstart,rskip)
+end
+
+function readrates_genetrap(infile::String,rstart::Int,rskip::Int)
     if isfile(infile) && ~isempty(read(infile))
         r = readdlm(infile)
         r = r[:,rstart:rskip:end]
-        println(gene," ",model," ",type)
+        println("")
         return r
     else
-        println(gene," ",model," ",type," no prior")
+        println(" no prior")
         return 0
     end
     nothing
+end
+
+function getratefolder_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
+    results = joinpath(root,"Results/")
+    infolder = joinpath(infolder,gene)
+    infolder = joinpath(infolder,rinchar * model * type* txtstr)
+    joinpath(results,infolder)
+
 end
