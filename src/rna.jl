@@ -215,7 +215,7 @@ Set prior distribution for mean and cv of rates
 """
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
     rm,rcv = setpriorrate(G,nsets,decayrate)
-    return [rm;yieldfactor],[rcv;.5]
+    return [rm;yieldfactor],[rcv;1.]
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
     r0 = [.01*ones(2*(G-1));.5;decayrate]
@@ -359,10 +359,10 @@ function plot_histogram_rna(gene::String,datapaths::Array,modelfile::String,time
     return h
 end
 
-function plot_histogram_rna(gene,cond,G,nalleles)
+function plot_histogram_rna(gene,cond,G,nalleles,label,folder,root)
     datapath = scRNApath(gene,cond)
     h = read_scrna(datapath,.99)
-    ratepath = ratepath_Gmodel(gene,cond,G,nalleles)
+    ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
     println(ratepath)
     r = readrates(ratepath)
     println(r)
