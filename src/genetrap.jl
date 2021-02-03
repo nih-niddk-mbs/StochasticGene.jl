@@ -217,7 +217,7 @@ function readrates_genetrap(root::String,infolder::String,rinchar::String,gene::
         rstart = 2
     end
     # infile = "$resultpath/$infolder/$(gene)/$rinchar$model$type$txtstr"
-    infile = getratefolder_genetrap(root,infolder,richar,gene,model,type)
+    infile = getratefolder_genetrap(root,infolder,rinchar,gene,model,type)
     print(gene," ",model," ",type)
     readrates_genetrap(infile,rstart,rskip)
 end

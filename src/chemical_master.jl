@@ -68,7 +68,6 @@ function steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::In
     eta = get_eta(r,n,nr)
     # r[end] /= survival_fraction(nu,eta,nr)
     yieldfactor = survival_fraction(nu,eta,nr)
-    println(yieldfactor)
     mhist=steady_state(r,n,nr,nhist,nalleles)
     technical_loss(mhist,yieldfactor,nhist)
 end

@@ -531,9 +531,18 @@ end
 """
 write_results(file::String,x)
 """
+function writeall(path::String,fit,stats,waic,data,model::AbstractGRMmodel)
+    if ~isdir(path)
+        mkpath(path)
+    end
+    name = "_$(data.name)" * "_$(data.gene)" * "_$(model.G)"* "$(model.R)" * "_$(model.nalleles)" * txtstr
+    write_rates(joinpath(path,"rates" * name ),fit,stats,model)
+    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model))
+    write_param_stats(joinpath(path,"param_stats" * name),stats)
 
+end
 
-function writeall(path::String,fit,stats,waic,data,model::StochasticGRmodel)
+function writeall(path::String,fit,stats,waic,data,model::AbstractGMmodel)
     if ~isdir(path)
         mkpath(path)
     end

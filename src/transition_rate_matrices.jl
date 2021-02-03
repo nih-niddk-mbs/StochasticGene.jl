@@ -141,9 +141,7 @@ returns T
 function transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base=3)
 	# G state transition matrix for GR and GRS models
 	nA = (n+1)*base^nr
-	# Declare Transition matrices
 	T = zeros(nA,nA)
-	# Generate TA, TI, and T matrix
 	# R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
 	for a = 0 : n+1 :nA-1
 		# a = (n+1)*w
@@ -180,12 +178,12 @@ transtion matrices TA and TI for GRS Master equation given matrix T
 returns T, TA, and TI
 """
 function transition_rate_mat(T::Matrix,n,nr)
-    # standard GR intron reporter model
+
     nA = (n+1)*3^nr
-    # Declare Transition matrices
+
     TA = zeros(nA,nA)
     TI = zeros(nA,nA)
-    # Generate TA, TI, and T matrix
+
     # R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
     for w=1:3^nr,ip=1:n+1,z=1:3^nr,i=1:n+1
         a = i + (n+1)*(z-1)
@@ -205,7 +203,7 @@ transtion matrix T for GRS Master equation
 returns T
 """
 function transition_rate_mat_T(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-	# standard GR intron reporter model
+
 	T = transition_rate_mat_G(n,nr,gammap,gamman)
 	for w=1:3^nr,z=1:3^nr
 		zdigits = digits(z-1,base=3,pad=nr)

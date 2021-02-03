@@ -69,8 +69,9 @@ Abstract model types
 """
 abstract type Model end
 abstract type StochasticGRmodel <: Model end
-abstract type AbstractGRMmodel <: StochasticGRmodel end
 abstract type AbstractGMmodel <: StochasticGRmodel end
+abstract type AbstractGRMmodel <: StochasticGRmodel end
+
 
 """
 Model structures
@@ -145,19 +146,6 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstrac
     fittedparam::ParamType
     method::MethodType
 end
-
-# struct GRSMmodel <: StochasticGRModel
-#     G::Int
-#     R::Int
-#     nalleles::Int
-#     type::String
-#     rates::Vector
-#     rateprior::Vector
-#     proposal::Vector
-#     fittedparam::Vector
-#     method::Int
-# end
-
 
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGRMmodel
     G::Int
@@ -505,6 +493,73 @@ function teststeadystatemodel(model::AbstractGMmodel,nhist)
     return g1,g2
 end
 
+
+"""
+residenceprob_G(model)
+residenceprob_G(r)
+
+Residence probability of G states
+given by exact steady state solution
+of master equation
+
+"""
+residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
+function residenceprob_G(r::Vector,n::Int)
+    Gss = Array{Float64,2}(undef,1,n+1)
+    Gss[1,1] = 1.
+    for k in 1:n
+        Gss[1,k+1] = Gss[1,k]*r[2*k-1]/r[2*k]
+    end
+    Gss ./= sum(Gss)
+end
+"""
+splicesiteusage()
+
+splice site usage probability is the probabilty of ejection times
+the probability of not ejection prior to that point
+"""
+splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates,model.G-1,model.R)
+function splicesiteusage(r::Vector,n::Int,nr::Int)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+	ssf = zeros(nr)
+	survival = 1
+	for j in 1:nr
+		ssf[j] = eta[j]/(nu[j+1]+eta[j])*survival
+		survival *= nu[j+1]/(nu[j+1]+eta[j])
+	end
+	return ssf
+end
+
+"""
+burstsize(n,nr,r)
+Burst size distribution of GRS  model
+for total pre-mRNA occupancy and
+unspliced (visible) occupancy
+obtained by marginalizing over conditional steady state distribution
+"""
+burstsize(model::GRSMmodel) = burstsize(model.G-1,model.R,model.rates)
+function burstsize(n::Int,nr::Int,r::Vector)
+    T =  mat_GSR_T(r,n,nr)
+    pss = normalized_nullspace(T)
+	Rss = zeros(nr)
+	Rssvisible = zeros(nr)
+	ssf = zeros(nr)
+	asum = 0
+	for w=1:nr
+		for i = 1:n+1, z = 1:3^nr
+			zdigits = digits(z-1,base=3,pad=nr)
+			a = i + (n+1)*(z-1)
+			if sum(zdigits .== 2) == w
+				Rssvisible[w] += pss[a]
+			end
+			if sum(zdigits .> 0) == w
+				Rss[w] += pss[a]
+			end
+		end
+	end
+	Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
+end
 
 # Functions for saving and loading data and models
 
