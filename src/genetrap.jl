@@ -35,7 +35,11 @@ end
 
 function data_genetrap(root,label,gene,tempfish=1.)
     LC = readLCPDF_genetrap(root,gene)
-    histFISH = readFISH_genetrap(root,gene,tempfish)
+    if tempfish == 0
+        histFISH = readFISH_genetrap(root,gene,div(sum(LC.ON+LC.OFF),2))
+    else
+        histFISH = readFISH_genetrap(root,gene,tempfish)
+    end
     RNALiveCellData(label,gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
 end
 
@@ -165,28 +169,14 @@ readFISH_genetrap(root,gene,temp=1.,clone=true)
 
 Read and assemble smFISH data
 """
-function readFISH_genetrap(root,gene,temp=1.,clone=true)
-    countfile = joinpath(root,"counts/total_counts.csv")
+function readFISH_genetrap(root::String,gene::String,temp::Float=1.,clone=true)
+    counts = countsFISH_genetrap(root,gene,x,counts,clone)
+    readFISH_genetrap(root,gene,div(counts,temp),clone)
+end
+
+function readFISH_genetrap(root::String,gene::String,counts::Int,clone=true)
     fishfile=joinpath(root,"Fish_4_Genes/$(gene)_steady_state_mRNA.csv")
-    wttext = "WT_"
-    clonetext = "_clone"
-    if clone
-        col = 3
-    else
-        col = 2
-    end
-    # Get total RNA counts
-    if isfile(countfile)
-        countsdata = readdlm(countfile,',')[:,:]
-        if clone
-            counts=(countsdata[findall(uppercase("$(gene)$clonetext") .== uppercase.(countsdata[:,1])),2])[1]
-        else
-            counts=(countsdata[findall("$wttext$(gene)" .== countsdata[:,1]),2])[1]
-        end
-    else
-        counts = 2000
-    end
-    counts /= temp
+    col = clone ? 3 : 2
     # Get smFISH RNA histograms
     if isfile(fishfile)
         x = readdlm(fishfile,',')[3:end,col]
@@ -198,6 +188,28 @@ function readFISH_genetrap(root,gene,temp=1.,clone=true)
         println("No smFISH data for gene: ", gene)
     end
     nothing
+end
+
+"""
+countsFISH_genetrap(root,gene,x,counts,clone=true)
+
+read in smFISH counts
+"""
+function countsFISH_genetrap(root,gene,x,clone=true)
+    countfile = joinpath(root,"counts/total_counts.csv")
+    wttext = "WT_"
+    clonetext = "_clone"
+    if isfile(countfile)
+        countsdata = readdlm(countfile,',')[:,:]
+        if clone
+            counts=(countsdata[findall(uppercase("$(gene)$clonetext") .== uppercase.(countsdata[:,1])),2])[1]
+        else
+            counts=(countsdata[findall("$wttext$(gene)" .== countsdata[:,1]),2])[1]
+        end
+    else
+        counts = 1000
+    end
+    return counts
 end
 
 """
