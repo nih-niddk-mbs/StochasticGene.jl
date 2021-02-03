@@ -14,11 +14,13 @@ const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA"
 const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
 
 """
-genetrap
+genetrap()
 
 Load data, model and option structures for metropolis-hastings fit
 root is the folder containing data and results
 
+FISH counts is divided by tempfish to adjust relative weights of data
+set tempfish = 0 to equalize FISH and live cell counts
 """
 function genetrap(root::String,infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
     r = readrates_genetrap(root,infolder,rinchar,gene,"$G$R",type)
@@ -35,8 +37,11 @@ end
 
 function data_genetrap(root,label,gene,tempfish=1.)
     LC = readLCPDF_genetrap(root,gene)
+    println(tempfish)
     if tempfish == 0
-        histFISH = readFISH_genetrap(root,gene,div(sum(LC.ON+LC.OFF),2))
+        counts = Int(div(sum(LC[:,2]+LC[:,3]),2))
+        # set FISH counts to mean of live cell counts
+        histFISH = readFISH_genetrap(root,gene,counts)
     else
         histFISH = readFISH_genetrap(root,gene,tempfish)
     end
@@ -169,9 +174,9 @@ readFISH_genetrap(root,gene,temp=1.,clone=true)
 
 Read and assemble smFISH data
 """
-function readFISH_genetrap(root::String,gene::String,temp::Float=1.,clone=true)
-    counts = countsFISH_genetrap(root,gene,x,counts,clone)
-    readFISH_genetrap(root,gene,div(counts,temp),clone)
+function readFISH_genetrap(root::String,gene::String,temp::Float64=1.,clone=true)
+    counts = countsFISH_genetrap(root,gene,clone)
+    readFISH_genetrap(root,gene,Int(div(counts,temp)),clone)
 end
 
 function readFISH_genetrap(root::String,gene::String,counts::Int,clone=true)
@@ -195,7 +200,7 @@ countsFISH_genetrap(root,gene,x,counts,clone=true)
 
 read in smFISH counts
 """
-function countsFISH_genetrap(root,gene,x,clone=true)
+function countsFISH_genetrap(root,gene,clone=true)
     countfile = joinpath(root,"counts/total_counts.csv")
     wttext = "WT_"
     clonetext = "_clone"

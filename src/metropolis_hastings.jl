@@ -446,9 +446,14 @@ deviance(fit,data,model)
 
 Deviance
 """
-deviance(predictions,data) = 2*(crossentropy(predictions,datahistogram(data)) - hist_entropy(data.histRNA))
+deviance(predictions,data) = 2*(crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
 function deviance(fit::Fit,data,model)
-    h=StochasticGene.likelihoodfn(fit.parml,data,model)
+    h=likelihoodfn(fit.parml,data,model)
+    deviance(h,data)
+end
+
+function deviance(data,model::StochasticGRmodel)
+    h = likelihoodfn(model.rates[model.fittedparam],data,model)
     deviance(h,data)
 end
 
