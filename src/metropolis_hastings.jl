@@ -483,17 +483,17 @@ function makestring(v)
     return s
 end
 
-function assemble_all(folder::String,cond::Vector=["DMSO","AUXIN"],G::Vector=["2","3"],append::String = ".csv")
-    for c in cond, g in G
+function assemble_all(folder::String,cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv")
+    for c in cond, g in model
         assemble_rates(folder,c,g,append)
         assemble_measures(folder,c,g,append)
     end
 end
 
-function assemble_rates(folder::String,cond::String,G::String,append::String = ".csv")
-    files = getfiles(folder,"rates",cond,G)
+function assemble_rates(folder::String,cond::String,model::String,append::String = ".csv")
+    files = getfiles(folder,"rates",cond,model)
     label = split(files[1],cond)[1]
-    outfile = joinpath(folder,label * cond * "_G" * G * append)
+    outfile = joinpath(folder,label * cond * "_" * model * append)
     f = open(outfile,"w")
     for file in files
         gene = getgene(file)
@@ -504,10 +504,10 @@ function assemble_rates(folder::String,cond::String,G::String,append::String = "
     close(f)
 end
 
-function assemble_measures(folder::String,cond::String,G::String,append::String = ".csv")
-    files = getfiles(folder,"measures",cond,G)
+function assemble_measures(folder::String,cond::String,model::String,append::String = ".csv")
+    files = getfiles(folder,"measures",cond,model)
     label = split(files[1],cond)[1]
-    outfile = joinpath(folder,label * cond * "_G" * G * append)
+    outfile = joinpath(folder,label * cond * "_" * model * append)
     f = open(outfile,"w")
     for file in files
         gene = getgene(file)
@@ -518,13 +518,13 @@ function assemble_measures(folder::String,cond::String,G::String,append::String 
     close(f)
 end
 
-function getfiles(folder::String,label::String,cond::String,G::String)
+function getfiles(folder::String,label::String,cond::String,model::String)
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
         if occursin(label,file) && occursin(cond,file)
             v = extractparts(file)
-            if getG(v) == G
+            if getG(v) == model
                 push!(files,file)
             end
         end

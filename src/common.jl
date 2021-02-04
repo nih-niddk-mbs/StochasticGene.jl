@@ -503,6 +503,18 @@ given by exact steady state solution
 of master equation
 
 """
+function residenceprob_G(file::String,G)
+    r = readdlm(file,',')
+    m = size(r)[1]
+    p = Array{Any,2}(undef,m,G+1)
+    n = G-1
+    for i in 1:m
+        p[i,1] = r[i,1]
+        p[i,2:end] = residenceprob_G(r[i,2:2*n+1],n)
+    end
+    return p
+end
+
 residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
 function residenceprob_G(r::Vector,n::Int)
     Gss = Array{Float64,2}(undef,1,n+1)

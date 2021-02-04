@@ -326,12 +326,13 @@ function read_fish(path::String,cond::String,threshold::Float64=.98)
             if occursin(cond,target) && occursin("cellular",target)
                 println(target)
                 x1 = readdlm(target)[:,1]
+                x1 = truncate_histogram(x1,threshold,1000)
                 lx = length(x1)
                 xr[1:min(lx,1000)] += x1[1:min(lx,1000)]
             end
         end
     end
-    truncate_histogram(xr,threshold,1000)
+    return xr
 end
 
 function read_fish(path1::String,cond1::String,path2::String,cond2::String,threshold::Float64=.98)

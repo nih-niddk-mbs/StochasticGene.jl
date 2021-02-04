@@ -275,7 +275,8 @@ function time_evolve_diff(t,M::Matrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(fglobal,P0,tspan)
-    sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
+    # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
+    sol = solve(prob,saveat=t, lsoda())
     return sol'
 end
 

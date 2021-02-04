@@ -40,12 +40,13 @@ function data_genetrap(root,label,gene,tempfish=1.)
     println(tempfish)
     if tempfish == 0
         counts = Int(div(sum(LC[:,2]+LC[:,3]),2))
+        println(counts)
         # set FISH counts to mean of live cell counts
         histFISH = readFISH_genetrap(root,gene,counts)
     else
         histFISH = readFISH_genetrap(root,gene,tempfish)
     end
-    RNALiveCellData(label,gene,LC[:,1],LC[:,2],LC[:,3],length(histFISH),histFISH)
+    RNALiveCellData(label,gene,LC[:,1],LC[:,3],LC[:,2],length(histFISH),histFISH)
 end
 
 """
@@ -186,9 +187,10 @@ function readFISH_genetrap(root::String,gene::String,counts::Int,clone=true)
     if isfile(fishfile)
         x = readdlm(fishfile,',')[3:end,col]
         x = x[x .!= ""]
+        x = truncate_histogram(x,.99,1000)
         x /= sum(x)
         x *= counts
-        return truncate_histogram(x,.99,1000)
+        return x
     else
         println("No smFISH data for gene: ", gene)
     end
@@ -233,6 +235,7 @@ function readrates_genetrap(root::String,infolder::String,rinchar::String,gene::
         rskip = 3
         rstart = 2
     end
+
     # infile = "$resultpath/$infolder/$(gene)/$rinchar$model$type$txtstr"
     infile = getratefolder_genetrap(root,infolder,rinchar,gene,model,type)
     print(gene," ",model," ",type)
