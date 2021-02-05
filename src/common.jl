@@ -178,7 +178,7 @@ abstract type Results end
 datahistogram(data)
 Return the RNA histogram data as one vector
 """
-datahistogram(data::RNAData) = data.histRNA
+# datahistogram(data::RNAData) = data.histRNA
 function datahistogram(data::AbstractRNAData{Array{Array,1}})
 # function datahistogram(data::TransientRNAData)
     v = data.histRNA[1]
@@ -188,11 +188,11 @@ function datahistogram(data::AbstractRNAData{Array{Array,1}})
     return v
 end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
+datahistogram(data::RNALiveCellData) = [data.OFF;data.ON;data.histRNA]
 
 
-function datahistogram(data::RNALiveCellData)
-    return [data.OFF;data.ON;data.histRNA]
-end
+datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
+datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF);normalize_histogram(data.ON);normalize_histogram(data.histRNA)]
 
 
 

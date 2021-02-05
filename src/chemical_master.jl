@@ -346,7 +346,6 @@ function additive_noise(mhist,noise,nhist)
     normalize_histogram(p)
 end
 
-normalize_histogram(hist) = hist/sum(hist)
 
 function threshold_noise(mhist,noise,yieldfactor,nhist)
     h = additive_noise(mhist,noise,nhist)

@@ -428,10 +428,10 @@ end
 """
 hist_entropy(hist)
 
-Compute entropy of an unnormalized histogram
+Compute entropy of a normalized histogram
 """
 function hist_entropy(hist::Array{Float64,1})
-    -hist' * (log.(max.(hist,eps(Float64))) .- log(sum(hist)))
+    -hist' * (log.(max.(hist,eps(Float64))))
 end
 function hist_entropy(hist::Array{Array,1})
     l = 0
@@ -446,7 +446,8 @@ deviance(fit,data,model)
 
 Deviance
 """
-deviance(predictions,data) = 2*(crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
+deviance(predictions::Array,data) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
+# (crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
 function deviance(fit::Fit,data,model)
     h=likelihoodfn(fit.parml,data,model)
     deviance(h,data)

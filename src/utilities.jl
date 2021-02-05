@@ -38,6 +38,8 @@ function nonzero_rows(T)
     return nonzeros
 end
 
+normalize_histogram(hist) = hist/sum(hist)
+
 
 """
 var_update(vartuple, newValue)
