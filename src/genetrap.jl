@@ -37,7 +37,6 @@ end
 
 function data_genetrap(root,label,gene,tempfish=1.)
     LC = readLCPDF_genetrap(root,gene)
-    println(tempfish)
     if tempfish == 0
         counts = Int(div(sum(LC[:,2]+LC[:,3]),2))
         println(counts)
