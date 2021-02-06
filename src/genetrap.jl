@@ -54,7 +54,7 @@ model_genetrap
 
 load model structure
 """
-function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.05*ones(2*(G-1));1e-4;1e-4*ones(R);.05*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.25),Rcv=1e-2)
+function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.0016*ones(2*(G-1));1e-8;0.0016*ones(R);.0025*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.25),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
     d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
     if r == 0

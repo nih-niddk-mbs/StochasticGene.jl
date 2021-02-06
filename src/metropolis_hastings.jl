@@ -533,31 +533,41 @@ function getfiles(folder::String,label::String,cond::String,model::String)
     return files
 end
 
+"""
+path_model(type::String,label::String,gene::String,model::String,nalleles,folder,root)
+
+"""
+function path_model(type::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,folder,root)
+    file = type * filename(label,gene,G,R,nalleles)
+    joinpath(root, joinpath(folder,file))
+end
+function path_model(type::String,label::String,gene::String,G::Int,nalleles::Int,folder,root)
+    file = type * filename(label,gene,G,nalleles)
+    joinpath(root, joinpath(folder,file))
+end
+
+filename(data,model::AbstractGRMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
+filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,model.nalleles)
+
+filename(label::String,gene::String,G::Int,R::Int,nalleles::Int) = filename(label,gene,"$G"*"$R","$(nalleles)")
+filename(label::String,gene,G::Int,nalleles::Int) = filename(label,gene,"$G","$(nalleles)")
+filename(label::String,gene::String,model::String,nalleles::String) = label  * "_" * gene *  "_" * model * "_" * nalleles * txtstr
+
 
 """
 write_results(file::String,x)
 """
-function writeall(path::String,fit,stats,waic,data,model::AbstractGRMmodel)
+function writeall(path::String,fit,stats,waic,data,model::StochasticGRmodel)
     if ~isdir(path)
         mkpath(path)
     end
-    name = "_$(data.name)" * "_$(data.gene)" * "_$(model.G)"* "$(model.R)" * "_$(model.nalleles)" * txtstr
+    name = filename(data,model)
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
     write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model))
     write_param_stats(joinpath(path,"param_stats" * name),stats)
 
 end
 
-function writeall(path::String,fit,stats,waic,data,model::AbstractGMmodel)
-    if ~isdir(path)
-        mkpath(path)
-    end
-    name = "_$(data.name)" * "_$(data.gene)" * "_$(model.G)" * "_$(model.nalleles)" * txtstr
-    write_rates(joinpath(path,"rates" * name ),fit,stats,model)
-    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model))
-    write_param_stats(joinpath(path,"param_stats" * name),stats)
-
-end
 """
 write_rates(file::String,fit)
 

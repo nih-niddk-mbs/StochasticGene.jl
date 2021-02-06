@@ -215,11 +215,11 @@ Set prior distribution for mean and cv of rates
 """
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
     rm,rcv = setpriorrate(G,nsets,decayrate)
-    return [rm;yieldfactor],[rcv;1.]
+    return [rm;yieldfactor],[rcv;.25]
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
-    r0 = [.01*ones(2*(G-1));.5;decayrate]
-    rc = [ones(2*(G-1));1.;0.05]
+    r0 = [.01*ones(2*(G-1));.1;decayrate]
+    rc = [.25*ones(2*(G-1));.1;0.01]
     rm = r0
     rcv = rc
     for i in 2:nsets
@@ -233,7 +233,7 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
     rm,rcv = setpriorrate(G,nsets,decayrate)
     for nm in noisepriors
         rm = vcat(rm,nm)
-        rcv = vcat(rcv,.5)
+        rcv = vcat(rcv,.25)
     end
     return rm,rcv
 end
@@ -378,11 +378,11 @@ function scRNApath(gene,cond,folder = "data/datanew/T120",root= "/Users/carsonc/
     joinpath(datapath,gene * "_" * cond * ".txt")
 end
 
-function ratepath_Gmodel(gene::String,cond::String,G,nalleles,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
-    path_Gmodel("rates",gene,G,nalleles,label * cond,folder,root)
+function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
+    path_model("rates",label * cond,gene,"$G",nalleles,folder,root)
 end
 
-function path_Gmodel(type,gene::String,G::Int,nalleles,label,folder,root)
+function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
     filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
     ratefile = type * "_" * filelabel
     joinpath(root, joinpath(folder,ratefile))
