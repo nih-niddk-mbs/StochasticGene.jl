@@ -255,7 +255,7 @@ function readrates_genetrap(infile::String,rstart::Int,rskip::Int)
 end
 
 function getratefolder_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
-    results = joinpath(root,"Results/")
+    results = joinpath(root,"Results")
     infolder = joinpath(infolder,gene)
     infolder = joinpath(infolder,rinchar * model * type* txtstr)
     joinpath(results,infolder)

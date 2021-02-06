@@ -379,7 +379,7 @@ function scRNApath(gene,cond,folder = "data/datanew/T120",root= "/Users/carsonc/
 end
 
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
-    path_model("rates",label * cond,gene,"$G",nalleles,folder,root)
+    path_model("rates_",label * cond,gene,"$G",nalleles,folder,root)
 end
 
 function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)

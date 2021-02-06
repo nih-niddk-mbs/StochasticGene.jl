@@ -551,7 +551,7 @@ filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,mod
 
 filename(label::String,gene::String,G::Int,R::Int,nalleles::Int) = filename(label,gene,"$G"*"$R","$(nalleles)")
 filename(label::String,gene,G::Int,nalleles::Int) = filename(label,gene,"$G","$(nalleles)")
-filename(label::String,gene::String,model::String,nalleles::String) = label  * "_" * gene *  "_" * model * "_" * nalleles * txtstr
+filename(label::String,gene::String,model::String,nalleles::String) = "_" * label  * "_" * gene *  "_" * model * "_" * nalleles * txtstr
 
 
 """
