@@ -178,9 +178,14 @@ r[mod(1:2*G,nsets)] = rates for each model set  (i.e. rates for each set are sta
 r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical noise)
 """
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,yieldprior::Float64)
-        if length(r) == 2*G * nsets + 1
+        ind = 2*G * nsets + 1
+        if length(r) == ind
             rm,rcv = setpriorrate(G,nsets,decayprior,yieldprior)
-            return productLogNormal(rm[fittedparam],rcv[fittedparam])
+            if in(ind,fittedparam)
+                return productLogNormalBeta(rm[fittedparam],rcv[fittedparam],findfirst(ind.==fittedparam))
+            else
+                return productLogNormal(rm[fittedparam],rcv[fittedparam])
+            end
         else
             throw("rates have wrong length")
         end

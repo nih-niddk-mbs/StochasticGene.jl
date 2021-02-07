@@ -53,7 +53,7 @@ model_genetrap
 
 load model structure
 """
-function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.0016*ones(2*(G-1));1e-8;0.0016*ones(R);.0025*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.25),Rcv=1e-2)
+function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.02*ones(2*(G-1));1e-3;1e-3*ones(R);.02*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.25),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
     d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
     if r == 0
@@ -257,7 +257,7 @@ end
 function getratefolder_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
     results = joinpath(root,"Results")
     infolder = joinpath(infolder,gene)
-    infolder = joinpath(infolder,rinchar * model * type* txtstr)
+    infolder = joinpath(infolder,rinchar * model * type * txtstr)
     joinpath(results,infolder)
 
 end

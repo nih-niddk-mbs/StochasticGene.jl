@@ -116,11 +116,6 @@ function ternary(x::Vector)
     nr = length(x)
     x' * 3 .^ collect(0:nr-1)
 end
-"""
-sigmalognormal(cv)
-compute LogNormal sigma parameter given desired coefficient of variation
-"""
-sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 KL(x,y) = sum(x .* (log.(max.(x,eps(Float64))) - log.(max.(y,eps(Float64)))))
 
@@ -133,7 +128,13 @@ function trim(h::Array,nh::Array)
 end
 
 """
-productLogNormal(r,cv,G,R)
+sigmalognormal(cv)
+compute LogNormal sigma parameter given desired coefficient of variation
+"""
+sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
+
+"""
+productLogNormal(param,cv)
 LogNormal Prior product distribution
 """
 function productLogNormal(param,cv)
@@ -145,7 +146,27 @@ function productLogNormal(param,cv)
     return d
 end
 
+function productLogNormalBeta(param,cv,ind)
+    if ind == 1
+        d = [setBeta(param[ind],cv[ind])]
+    else
+        barind = 1:ind-1
+        d = productLogNormal(param[barind],cv[barind])
+        push!(d,setBeta(param[ind],cv[ind]))
+    end
+    return d
+end
 
+function setBeta(m,cv)
+    cv2 = cv^2
+    fac = (1-m)/cv2/m - 1
+    if fac <= 0.
+        fac = 2/m
+    end
+    alpha = m*fac
+    beta = (1-m)*fac
+    Beta(alpha,beta)
+end
 """
 Parameter information
 """
