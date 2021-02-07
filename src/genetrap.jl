@@ -55,7 +55,8 @@ load model structure
 """
 function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.02*ones(2*(G-1));1e-3;1e-3*ones(R);.02*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.25),Rcv=1e-2)
     rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
-    d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
+    # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
+    d = priordistributionGamma_genetrap(rm,rcv,G,R)
     if r == 0
         r = rm
     else
