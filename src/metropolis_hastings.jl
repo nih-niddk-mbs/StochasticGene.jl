@@ -257,7 +257,7 @@ return proposal distribution specified by location and scale
 function proposal(param::Vector,cv::Float64)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],1e-10))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
+        push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
     end
     product_distribution(d)
 end
@@ -265,14 +265,14 @@ end
 function proposal(param::Vector,cv::Vector)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],1e-10))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
+        push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
     end
     product_distribution(d)
 end
 
 function proposal(param::Vector,cov::Matrix)
     c = (2.4)^2 / length(param)
-    return MvLogNormal(log.(max.(param,1e-10)) - .5*c*diag(cov),c*cov)
+    return MvLogNormal(log.(max.(param,1e-100)) - .5*c*diag(cov),c*cov)
 end
 
 
