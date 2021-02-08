@@ -169,31 +169,29 @@ function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fitted
     GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G,nalleles,r,d,propcv,fittedparam,1)
 end
 
-
-
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
 prepare prior distribution
 r[mod(1:2*G,nsets)] = rates for each model set  (i.e. rates for each set are stacked)
 r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical noise)
 """
-function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,yieldprior::Float64)
+function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,yieldprior::Float64,f=Gamma)
         ind = 2*G * nsets + 1
         if length(r) == ind
             rm,rcv = setpriorrate(G,nsets,decayprior,yieldprior)
             if in(ind,fittedparam)
-                return productLogNormalBeta(rm[fittedparam],rcv[fittedparam],findfirst(ind.==fittedparam))
+                return distributionBeta_array(rm[fittedparam],rcv[fittedparam],findfirst(ind.==fittedparam),f)
             else
-                return productLogNormal(rm[fittedparam],rcv[fittedparam])
+                return distribution_array(rm[fittedparam],rcv[fittedparam],f)
             end
         else
             throw("rates have wrong length")
         end
 end
-function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64)
+function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,f=Gamma)
         if length(r) == 2*G*nsets
             rm,rcv = setpriorrate(G,nsets,decayprior)
-            return productLogNormal(rm[fittedparam],rcv[fittedparam])
+            return distribution_array(rm[fittedparam],rcv[fittedparam],f)
         else
             throw("rates have wrong length")
         end
@@ -209,7 +207,7 @@ r[2G + 1 + 1:length(noisepriors)] = remaining fraction after thresholding (i.e. 
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,noisepriors::Array)
         if length(r) == 2*G * nsets + length(noisepriors)
             rm,rcv = setpriorrate(G,nsets,decayprior,noisepriors)
-            return productLogNormal(rm[fittedparam],rcv[fittedparam])
+            return distribution_array(rm[fittedparam],rcv[fittedparam])
         else
             throw("rates have wrong length")
         end

@@ -109,7 +109,7 @@ pooled_variance(vars,counts) = (counts .- 1)'*vars/sum(counts .- 1)
 pooled_std(std,counts) = sqrt(pooled_variance(std.^2,counts))
 
 """
-ternary(x)
+ternary(x::Vector)
 convert digits of base 3 number to base 10
 """
 function ternary(x::Vector)
@@ -128,36 +128,56 @@ function trim(h::Array,nh::Array)
 end
 
 """
-sigmalognormal(cv)
-compute LogNormal sigma parameter given desired coefficient of variation
+LogNormal_array(param,cv)
+Prior distribution arrays
 """
-sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
+LogNormal_array(param,cv) = distributionarray(param,cv,LogNormal)
+Gamma_array(param,cv) = distributionarray(param,cv,Gamma)
 
-"""
-productLogNormal(param,cv)
-LogNormal Prior product distribution
-"""
-function productLogNormal(param,cv)
-    sigma = sigmalognormal(cv)
-    d = []
-    for i in eachindex(param)
-        push!(d,Distributions.LogNormal(log(param[i]),sigma[i]))
-    end
-    return d
-end
-
-function productLogNormalBeta(param,cv,ind)
+function LogNormalBeta_array(param,cv,ind)
     if ind == 1
         d = [setBeta(param[ind],cv[ind])]
     else
         barind = 1:ind-1
-        d = productLogNormal(param[barind],cv[barind])
+        d = LogNormalarray(param[barind],cv[barind])
         push!(d,setBeta(param[ind],cv[ind]))
     end
     return d
 end
+"""
+distribution_array(param,cv,dist)
 
-function setBeta(m,cv)
+fill an array with dist(param,cv)
+"""
+
+function distributionBeta_array(param::Vector,cv::Vector,ind::Int,dist=LogNormal)
+    if ind == 1
+        d = [Beta_meancv(param[ind],cv[ind])]
+    else
+        barind = 1:ind-1
+        d = distribution_array(param[barind],cv[barind],dist)
+        push!(d,Beta_meancv(param[ind],cv[ind]))
+    end
+    return d
+end
+function distribution_array(param::Vector,cv,dist=LogNormal)
+    d = []
+    for i in eachindex(param)
+        push!(d,dist(param[i],cv[i]))
+    end
+    return d
+end
+
+"""
+Gamma_meancv(mean,cv)
+LogNormal_meancv(mean,cv)
+Beta_meancv(mean,cv)
+
+Reparameterized distributions to mean and coefficient of variation arguments
+"""
+Gamma_meancv(mean,cv) = Gamma(1/cv^2,mean * cv^2)
+LogNormal_meancv(mean,cv) = LogNormal(mulognormal(mean,cv), sigmalognormal(cv))
+function Beta_meancv(m,cv)
     cv2 = cv^2
     fac = (1-m)/cv2/m - 1
     if fac <= 0.
@@ -167,6 +187,18 @@ function setBeta(m,cv)
     beta = (1-m)*fac
     Beta(alpha,beta)
 end
+"""
+sigmalognormal(cv)
+mulognormal(mean,cv)
+
+compute LogNormal mu and sigma parameters
+given desired mean and coefficient of variation
+"""
+sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
+
+mulognormal(mean,cv) = log.(mean) - .5*log.(1 .+ cv .^ 2)
+
+
 """
 Parameter information
 """
