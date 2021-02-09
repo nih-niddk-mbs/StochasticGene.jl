@@ -484,17 +484,17 @@ function makestring(v)
     return s
 end
 
-function assemble_all(folder::String,cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv")
-    for c in cond, g in model
-        assemble_rates(folder,c,g,append)
-        assemble_measures(folder,c,g,append)
+function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv")
+    for l in label, c in cond, g in model
+        assemble_rates(folder,l,c,g,append)
+        assemble_measures(folder,l,c,g,append)
     end
 end
 
-function assemble_rates(folder::String,cond::String,model::String,append::String = ".csv")
-    files = getfiles(folder,"rates",cond,model)
-    label = split(files[1],cond)[1]
-    outfile = joinpath(folder,label * cond * "_" * model * append)
+function assemble_rates(folder::String,label::String,cond::String,model::String,append::String = ".csv")
+    files = getfiles(folder,"rates",label,cond,model)
+    # label = split(files[1],cond)[1]
+    outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     for file in files
         gene = getgene(file)
@@ -505,10 +505,10 @@ function assemble_rates(folder::String,cond::String,model::String,append::String
     close(f)
 end
 
-function assemble_measures(folder::String,cond::String,model::String,append::String = ".csv")
-    files = getfiles(folder,"measures",cond,model)
-    label = split(files[1],cond)[1]
-    outfile = joinpath(folder,label * cond * "_" * model * append)
+function assemble_measures(folder::String,label::String,cond::String,model::String,append::String = ".csv")
+    files = getfiles(folder,"measures",label,cond,model)
+    # label = split(files[1],cond)[1]
+    outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     for file in files
         gene = getgene(file)
@@ -519,11 +519,11 @@ function assemble_measures(folder::String,cond::String,model::String,append::Str
     close(f)
 end
 
-function getfiles(folder::String,label::String,cond::String,model::String)
+function getfiles(folder::String,type::String,label::String,cond::String,model::String)
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
-        if occursin(label,file) && occursin(cond,file)
+        if occursin(type,file) && occursin(label,file) && occursin(cond,file)
             v = extractparts(file)
             if getG(v) == model
                 push!(files,file)
