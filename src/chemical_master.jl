@@ -11,6 +11,13 @@ function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
+function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
+    T,TA,TI = mat_GSR(r,n,nr)
+    pss = normalized_nullspace(T)
+    SA=ontimeCDF(t,r,n,nr,TA,pss,method)
+    SI=offtimeCDF(t,r,n,nr,TI,pss,method)
+    return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
+end
 # function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
 #     T,_,TI = mat_GSR(r,n,nr)
 #     pss = normalized_nullspace(T)
@@ -84,7 +91,19 @@ function steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
     mhist=steady_state(nhist,P,T,B)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
-
+"""
+steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
+Steady state distribution of mRNA in GRM model (which is the same as GRSM model)
+"""
+function steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
+    r = rin/rin[end]
+    gammap,gamman = get_gamma(r,n)
+    nu = get_nu(r,n,nr)
+    T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
+    P = initial_pmf(T,nu[end],n,nr,nhist)
+    mhist=steady_state(nhist,P,T,B)
+    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
+end
 """
 steady_state(nhist::Int,nalleles::Int,ejectrate,P,T,B,tol = 1e-6)
 Iterative algorithm for computing null space of truncated transition rate matrix
