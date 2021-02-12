@@ -1,22 +1,23 @@
 """
 Transition rate matrices for G-R-S transcription model
 n+1 G states, nr R steps, and nr S sites
+returns T,B,TA,TI or M matrices
 """
 
 """
 transition_rate_mat(nu::Float64,nhist::Int)
-Full master equation transition rate matrix for (G=1)M (n=0) transcription model
+Full master equation transition rate matrix for (G=1) (n=0) transcription model
 (i.e. Poisson model)
-returns S
+returns M
 """
 function transition_rate_mat(nu::Float64,nhist::Int)
 	total = nhist + 2
-	S = zeros(total,total)
+	M = zeros(total,total)
 	for m=1:total,mp=1:total
-		S[m,mp] = nu *(m==mp+1) - nu*(m==mp) + (mp-1)*(m==mp-1) - (mp-1)*(m==mp)
+		M[m,mp] = nu *(m==mp+1) - nu*(m==mp) + (mp-1)*(m==mp-1) - (mp-1)*(m==mp)
 	end
-	S[end,end] += nu
-	return S
+	M[end,end] += nu
+	return M
 end
 
 """
@@ -177,21 +178,21 @@ transtion matrices TA and TI for GRS Master equation given matrix T
 (introns are spliced)
 returns T, TA, and TI
 """
-function transition_rate_mat(T::Matrix,n,nr)
+function transition_rate_mat(T::Matrix,n,nr,base=3)
 
-    nA = (n+1)*3^nr
+    nA = (n+1)*base^nr
 
     TA = zeros(nA,nA)
     TI = zeros(nA,nA)
 
     # R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
-    for w=1:3^nr,ip=1:n+1,z=1:3^nr,i=1:n+1
+    for w=1:base^nr,ip=1:n+1,z=1:base^nr,i=1:n+1
         a = i + (n+1)*(z-1)
         b = ip + (n+1)*(w-1)
-        zdigits = digits(z-1,base=3,pad=nr)
-        wdigits = digits(w-1,base=3,pad=nr)
-		TA[a,b] = T[a,b]*(any(wdigits.>1))
-		TI[a,b] = T[a,b]*(~any(wdigits.>1))
+        zdigits = digits(z-1,base=base,pad=nr)
+        wdigits = digits(w-1,base=base,pad=nr)
+		TA[a,b] = T[a,b]*(any(wdigits.> base-2))
+		TI[a,b] = T[a,b]*(~any(wdigits.> base-2))
     end
     return T,TA,TI
 end

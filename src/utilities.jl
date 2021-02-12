@@ -109,12 +109,22 @@ pooled_variance(vars,counts) = (counts .- 1)'*vars/sum(counts .- 1)
 pooled_std(std,counts) = sqrt(pooled_variance(std.^2,counts))
 
 """
-ternary(x::Vector)
+decimal(x::Vector)
 convert digits of base 3 number to base 10
 """
-function ternary(x::Vector)
+function decimal(x::Vector,base::Int=3)
     nr = length(x)
-    x' * 3 .^ collect(0:nr-1)
+    x' * base .^ collect(0:nr-1)
+end
+
+function findbase(l,n,nr)
+    if l == (n+1)*3^nr
+        return 3
+    elseif l == (n+1)*2^nr
+        return 2
+    else
+        throw("wrong length")
+    end
 end
 
 KL(x,y) = sum(x .* (log.(max.(x,eps(Float64))) - log.(max.(y,eps(Float64)))))

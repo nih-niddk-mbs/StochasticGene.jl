@@ -499,8 +499,8 @@ of all states with first R step not occupied)
 function init_prob(pss,n,nr)
     SAinit = zeros((n+1)*3^nr)
     for z=1:2^(nr-1)
-        aSAinit = (n+1) + (n+1)*ternary(vcat(2,digits(z-1,base=2,pad=nr-1)))
-        apss = (n+1) + (n+1)*ternary(vcat(0,digits(z-1,base=2,pad=nr-1)))
+        aSAinit = (n+1) + (n+1)*decimal(vcat(2,digits(z-1,base=2,pad=nr-1)))
+        apss = (n+1) + (n+1)*decimal(vcat(0,digits(z-1,base=2,pad=nr-1)))
         SAinit[aSAinit] = pss[apss]
     end
     SAinit / sum(SAinit)
@@ -518,19 +518,19 @@ function init_prob(pss,r,n,nr,nonzeros)
     # Start of OFF state by ejection
     for i in 1:n+1, z in 1:2^(nr-1)
         exons = digits(z-1,base=2,pad=nr-1)
-        ainit = i + (n+1)*ternary(vcat(exons,0))
-        apss = i + (n+1)*ternary(vcat(exons,2))
+        ainit = i + (n+1)*decimal(vcat(exons,0))
+        apss = i + (n+1)*decimal(vcat(exons,2))
         SIinit[ainit] += pss[apss]*nu[nr+1]
     end
     # Start of OFF state by splicing
     for i in 1:n+1, z in 1:2^(nr)
         exons = digits(z-1,base=2,pad=nr)
         intronindex = findall(exons.==1)
-        ainit = i + (n+1)*ternary(exons)
+        ainit = i + (n+1)*decimal(exons)
         for j in intronindex
             introns = copy(exons)
             introns[j] = 2
-            apss  = i + (n+1)*ternary(introns)
+            apss  = i + (n+1)*decimal(introns)
             SIinit[ainit] += pss[apss]*eta[j]
         end
     end
