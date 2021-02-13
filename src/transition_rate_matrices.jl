@@ -134,6 +134,50 @@ function transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Ve
 	return T, B
 end
 """
+transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector)
+transtion matrix for GR (marginalized over m) master equation
+returns T and B
+"""
+function transition_rate_mat_offeject(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
+	# standard GR intron reporter model
+	nT = (n+1)*2^nr
+	# Declare Transition matrices
+	T = transition_rate_mat_G(n,nr,gammap,gamman,2)
+	B = zeros(nT,nT)
+	# Generate T = A + B transition matrix and B transition matrix
+	# R states are a Base 2 number, e.g. 0100, means presence of polymerase at step 2, other steps are empty
+	for w=1:2^nr, z=1:2^nr, i=1:n+1
+		a = i + (n+1)*(z-1)
+		b = i + (n+1)*(w-1)
+		zdigits = digits(z-1,base=2,pad=nr)
+		wdigits = digits(w-1,base=2,pad=nr)
+		z1 = zdigits[1]
+		w1 = wdigits[1]
+		zr = zdigits[nr]
+		wr = wdigits[nr]
+		zbar1 = zdigits[2:nr]
+		wbar1 = wdigits[2:nr]
+		zbarr = zdigits[1:nr-1]
+		wbarr = wdigits[1:nr-1]
+		T[a,b] +=  nu[1]*(i==n+1)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
+		T[a,b] += nu[nr+1]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
+		T[a,b] += eta[nr]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
+		B[a,b] =  nu[nr+1]*((zbarr==wbarr)*(zr==0)*(wr==1))
+		for j = 1:nr-1
+			zbarj = zdigits[[1:j-1;j+2:nr]]
+			wbarj = wdigits[[1:j-1;j+2:nr]]
+			zbark = zdigits[[1:j-1;j+1:nr]]
+			wbark = wdigits[[1:j-1;j+1:nr]]
+			zj = zdigits[j]
+			zj1 = zdigits[j+1]
+			wj = wdigits[j]
+			wj1 = wdigits[j+1]
+			T[a,b] += nu[j+1]*((zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0))+ eta[j]*((zbark==wbark)*((zj==0)-(zj==1))*(wj==1))
+		end
+	end
+	return T, B
+end
+"""
 transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base=3)
 
 transition rate matrix for GR(S) model, base = 2 for GR and base = 3 for GRS
@@ -159,18 +203,28 @@ function transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base
 	return T
 end
 
-"""
-transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-
-transtion matrices for GRS Master equation
-(introns are spliced)
-returns T, TA, and TI
-"""
-function transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-	T = transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
-	transition_rate_mat(T,n,nr)
-end
-
+# """
+# transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
+#
+# transtion matrices for GRS Master equation
+# (introns are spliced)
+# returns T, TA, and TI
+# """
+# function transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
+# 	T = transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
+# 	transition_rate_mat(T,n,nr)
+# end
+# """
+# transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
+#
+# transtion matrices for GRS Master equation
+# (introns are spliced)
+# returns T, TA, and TI
+# """
+# function transition_rate_mat_offeject2(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
+# 	T,B = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
+# 	transition_rate_mat(T,n,nr)
+# end
 """
 transition_rate_mat(T,n::Int,nr::Int)
 
@@ -234,7 +288,7 @@ function transition_rate_mat_T(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::
 				zj1 = zdigits[j+1]
 				wj = wdigits[j]
 				wj1 = wdigits[j+1]
-				T[a,b]  +=  nu[j+1]*((zbarj==wbarj)*(((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)+((zj==0)*(zj1==2)-(zj==2)*(zj1==0))*(wj==2)*(wj1==0))) + eta[j]*((zbark==wbark)*((zj==1)-(zj==2))*(wj==2))
+				T[a,b] += nu[j+1]*((zbarj==wbarj)*(((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)+((zj==0)*(zj1==2)-(zj==2)*(zj1==0))*(wj==2)*(wj1==0))) + eta[j]*((zbark==wbark)*((zj==1)-(zj==2))*(wj==2))
 			end
 		end
 	end

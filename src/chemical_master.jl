@@ -5,14 +5,14 @@ Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 """
 function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
-    T,TA,TI = mat_GSR(r,n,nr)
+    T,TA,TI = mat_GSR_DT(r,n,nr)
     pss = normalized_nullspace(T)
     SA=ontimeCDF(t,r,n,nr,TA,pss,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
-    T,TA,TI = mat_GSR(r,n,nr)
+    T,TA,TI = mat_GSR_DT_offeject(r,n,nr)
     pss = normalized_nullspace(T)
     SA=ontimeCDF(t,r,n,nr,TA,pss,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
@@ -62,7 +62,7 @@ function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector,
     TI = TI[nonzerosI,nonzerosI]
     SIinit = init_prob(pss,r,n,nr,nonzerosI)
     SI = time_evolve(t,TI,SIinit,method)
-    accumulate(SI,n,nr,nonzerosI) # accumulated prob into ON states
+    accumulate(SI,n,nr,nonzerosI,length(pss)) # accumulated prob into ON states
 end
 """
 steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
@@ -99,7 +99,8 @@ function steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::I
     r = rin/rin[end]
     gammap,gamman = get_gamma(r,n)
     nu = get_nu(r,n,nr)
-    T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
+    eta = get_eta(r,n,nr)
+    T,B = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
     P = initial_pmf(T,nu[end],n,nr,nhist)
     mhist=steady_state(nhist,P,T,B)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
@@ -162,12 +163,21 @@ nhist_loss(nhist,yieldfactor) = round(Int,nhist/yieldfactor)
 """
 mat(r,n,nr,nhist)
 Transition rate matrices for GSR model
+return T,TA,TI
 """
-function mat_GSR(r,n,nr)
+function mat_GSR_DT(r,n,nr)
     gammap,gamman = get_gamma(r,n)
     nu = get_nu(r,n,nr)
     eta = get_eta(r,n,nr)
-    transition_rate_mat(n,nr,gammap,gamman,nu,eta)
+    T = transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
+    transition_rate_mat(T,n,nr)
+end
+function mat_GSR_DT_offeject(r,n,nr)
+    gammap,gamman = get_gamma(r,n)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+    T,_ = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
+    transition_rate_mat(T,n,nr,2)
 end
 
 function mat_GSR_T(r,n,nr)
@@ -436,9 +446,11 @@ Intron ejection rates at each R step
 """
 function get_eta(r,n,nr)
     eta = zeros(nr)
-    eta[1] = r[2*n + 1 + nr + 1]
-    for i = 2:nr
-        eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
+    if length(r) > 2*n + 2*nr
+        eta[1] = r[2*n + 1 + nr + 1]
+        for i = 2:nr
+            eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
+        end
     end
     return eta
 end
@@ -513,14 +525,25 @@ end
 init_prob(pss,n,nr)
 Initial condition for first passage time calculation of active (ON) state
 (Sum over all states with first R step occupied weighted by equilibrium state
-of all states with first R step not occupied)
+of all states with all R steps not occupied with reporters)
 """
 function init_prob(pss,n,nr)
-    SAinit = zeros((n+1)*3^nr)
-    for z=1:2^(nr-1)
-        aSAinit = (n+1) + (n+1)*decimal(vcat(2,digits(z-1,base=2,pad=nr-1)))
-        apss = (n+1) + (n+1)*decimal(vcat(0,digits(z-1,base=2,pad=nr-1)))
-        SAinit[aSAinit] = pss[apss]
+    l = length(pss)
+    base = findbase(l,n,nr)
+    SAinit = zeros(l)
+    if base == 3
+        for z=1:2^(nr-1)
+            aSAinit = (n+1) + (n+1)*decimal(vcat(2,digits(z-1,base=2,pad=nr-1)))
+            apss = (n+1) + (n+1)*decimal(vcat(0,digits(z-1,base=2,pad=nr-1)))
+            SAinit[aSAinit] = pss[apss]
+        end
+    else
+        for z=1:2^(nr-1)
+            aSAinit = (n+1) + (n+1)*decimal(vcat(1,zeros(Int,nr-1)))
+            apss = n+1
+            SAinit[aSAinit] = pss[apss]
+        end
+
     end
     SAinit / sum(SAinit)
 end
@@ -531,27 +554,49 @@ Initial condition for first passage time calculation of inactive (OFF) state
 of all states with a single R step intron not)
 """
 function init_prob(pss,r,n,nr,nonzeros)
-    SIinit = zeros((n+1)*3^nr)
+    l = length(pss)
+    base = findbase(l,n,nr)
+    SIinit = zeros(l)
     nu = get_nu(r,n,nr)
     eta = get_eta(r,n,nr)
-    # Start of OFF state by ejection
-    for i in 1:n+1, z in 1:2^(nr-1)
-        exons = digits(z-1,base=2,pad=nr-1)
-        ainit = i + (n+1)*decimal(vcat(exons,0))
-        apss = i + (n+1)*decimal(vcat(exons,2))
-        SIinit[ainit] += pss[apss]*nu[nr+1]
-    end
-    # Start of OFF state by splicing
-    for i in 1:n+1, z in 1:2^(nr)
-        exons = digits(z-1,base=2,pad=nr)
-        intronindex = findall(exons.==1)
-        ainit = i + (n+1)*decimal(exons)
-        for j in intronindex
-            introns = copy(exons)
-            introns[j] = 2
-            apss  = i + (n+1)*decimal(introns)
-            SIinit[ainit] += pss[apss]*eta[j]
+    if base == 3
+        # Start of OFF state by ejection
+        for i in 1:n+1, z in 1:2^(nr-1)
+            exons = digits(z-1,base=2,pad=nr-1)
+            ainit = i + (n+1)*decimal(vcat(exons,0))
+            apss = i + (n+1)*decimal(vcat(exons,2))
+            SIinit[ainit] += pss[apss]*nu[nr+1]
         end
+        # Start of OFF state by splicing
+        for i in 1:n+1, z in 1:2^(nr)
+            exons = digits(z-1,base=2,pad=nr)
+            intronindex = findall(exons.==1)
+            ainit = i + (n+1)*decimal(exons)
+            for j in intronindex
+                introns = copy(exons)
+                introns[j] = 2
+                apss  = i + (n+1)*decimal(introns)
+                SIinit[ainit] += pss[apss]*eta[j]
+            end
+        end
+    else
+        # Start of OFF state by ejection
+        for i in 1:n+1
+            ainit = i
+            apss = i + (n+1)*decimal(vcat(zeros(Int,nr-1),1),2)
+            SIinit[ainit] += pss[apss]*nu[nr+1]
+        end
+        # Start of OFF state by splicing
+        for i in 1:n+1
+            ainit = i
+            for j in 1:nr
+                introns = zeros(Int,nr)
+                introns[j] = 1
+                apss  = i + (n+1)*decimal(introns,2)
+                SIinit[ainit] += pss[apss]*eta[j]
+            end
+        end
+
     end
     SIinit = SIinit[nonzeros]
     SIinit/sum(SIinit)
@@ -561,10 +606,12 @@ accumulate(SA::Matrix,n,nr)
 Sum over all probability vectors accumulated into OFF states
 """
 function accumulate(SA,n,nr)
+    l,p = size(SA)
+    base = findbase(p,n,nr)
     SAj = zeros(size(SA)[1])
-    for i=1:n+1, z=1:3^nr
-        zdigits = digits(z-1,base=3,pad=nr)
-        if ~any(zdigits.>1)
+    for i=1:n+1, z=1:base^nr
+        zdigits = digits(z-1,base=base,pad=nr)
+        if ~any(zdigits.> base-2)
             a = i + (n+1)*(z-1)
             SAj += SA[:,a]
         end
@@ -575,12 +622,14 @@ end
 accumulate(SI::Matrix,n,nr,nonzeros)
 Sum over all probability vectors accumulated into ON states
 """
-function accumulate(SI,n,nr,nonzeros)
+function accumulate(SI,n,nr,nonzeros,p)
     # Sum over all probability vectors accumulated into ON states
+    l = size(SI)[1]
+    base = findbase(p,n,nr)
     SIj = zeros(size(SI)[1])
-    for i=1:n+1, z=1:3^nr
-        zdigits = digits(z-1,base=3,pad=nr)
-        if any(zdigits.>1)
+    for i=1:n+1, z=1:base^nr
+        zdigits = digits(z-1,base=base,pad=nr)
+        if any(zdigits.> base-2)
             a = i + (n+1)*(z-1)
             if a in nonzeros
                 SIj += SI[:,findfirst(a .== nonzeros)]

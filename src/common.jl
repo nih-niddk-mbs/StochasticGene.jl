@@ -221,14 +221,14 @@ function likelihoodfn(param,data::AbstractRNAData{Array{Array,1}},model::Abstrac
     end
     return hconcat
 end
-function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel,method)
-    pdftuple = likelihoodtuple(param,data,model)
-    pdfvector = Array{Float64,1}(undef,0)
-    for p in pdftuple
-        vcat(pdfvector,p)
-    end
-    return pdfvector
-end
+# function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel,method)
+#     pdftuple = likelihoodtuple(param,data,model)
+#     pdfvector = Array{Float64,1}(undef,0)
+#     for p in pdftuple
+#         vcat(pdfvector,p)
+#     end
+#     return pdfvector
+# end
 function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
     modelOFF, modelON, histF = likelihoodtuple(param,data,model)
     return [modelOFF;modelON;histF]
@@ -294,38 +294,53 @@ end
 
 function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
     r = get_rates(param,model)
-    if model.method < 2
+    if model.type == "offdecay"
         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
-        if model.type == "off"
-            histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-        else
-            histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
-        end
+        histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
+    elseif model.type == "offeject"
+        modelOFF, modelON = offonPDF_offeject(data.bins,r,model.G-1,model.R,model.method)
+        histF = steady_state_offeject(r,model.G-1,model.R,data.nRNA,model.nalleles)
     else
-        if model.type == "off"
-            modelOFF,modelON,histF = telegraphoff(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
-        else
-            modelOFF,modelON,histF = telegraph(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
-        end
+        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
+        histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
     end
     return modelOFF, modelON, histF
 end
 
-function likelihoodtuple(r,data::RNALiveCellData,model,method)
-    telegraph(data.bins,model.nRNA,n,nr,r,model.nalleles)
-end
+# function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
+#     r = get_rates(param,model)
+#     if model.method < 2
+#         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
+#         if model.type == "off"
+#             histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
+#         else
+#             histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
+#         end
+#     else
+#         if model.type == "off"
+#             modelOFF,modelON,histF = telegraphoff(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
+#         else
+#             modelOFF,modelON,histF = telegraph(data.bins,data.nRNA,r,model.G-1,model.R,model.nalleles)
+#         end
+#     end
+#     return modelOFF, modelON, histF
+# end
 
-function likelihoodtuples(bins,nRNA,r,n,nr,nalleles,type)
-    if type == "off"
-        modelOFFt, modelONt, histFt = telegraphoff(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state_offpath(r,n,nr,nRNA,nalleles)
-    else
-        modelOFFt, modelONt, histFt = telegraph(bins,nRNA,r,n,nr,nalleles)
-        histF = steady_state(r,n,nr,nRNA,nalleles)
-    end
-    modelOFF, modelON = offonPDF(bins,r,n,nr)
-    return modelOFF,modelON,histF,modelOFFt,modelONt,histFt
-end
+# function likelihoodtuple(r,data::RNALiveCellData,model,method)
+#     telegraph(data.bins,model.nRNA,n,nr,r,model.nalleles)
+# end
+#
+# function likelihoodtuples(bins,nRNA,r,n,nr,nalleles,type)
+#     if type == "off"
+#         modelOFFt, modelONt, histFt = telegraphoff(bins,nRNA,r,n,nr,nalleles)
+#         histF = steady_state_offpath(r,n,nr,nRNA,nalleles)
+#     else
+#         modelOFFt, modelONt, histFt = telegraph(bins,nRNA,r,n,nr,nalleles)
+#         histF = steady_state(r,n,nr,nRNA,nalleles)
+#     end
+#     modelOFF, modelON = offonPDF(bins,r,n,nr)
+#     return modelOFF,modelON,histF,modelOFFt,modelONt,histFt
+# end
 
 
 # Functions for transient chemical master solutions
