@@ -111,33 +111,54 @@ Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
 """
-function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepmax=1000)
+function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepmax=10000)
     total = size(P,2)
     steps = 0
     err = 1.
     A = T - B
     while err > tol && steps < stepmax
         P0 = copy(P)
-        P[:,1] = try -A\P[:,2]
-        catch
-            P[:,1] = (-A + UniformScaling(1e-18))\P[:,2]
-        end
+        P[:,1] = -A\P[:,2]
+        # P[:,1] = try -A\P[:,2]
+        # catch
+        #     P[:,1] = (-A + UniformScaling(1e-18))\P[:,2]
+        # end
         for m = 2:total-1
-            P[:,m] = @inbounds -(A - UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
+            P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
         end
-        P[:,total] = -(T - UniformScaling(total-1))\((B*P[:,total-1]))
+        P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
         P /=sum(P)
-        err = norm(P-P0,Inf)
+        # err = checkP(A,B,P,total)
+        err = norm((P-P0))
         steps += 1
     end
+    println(checkP(A,B,P,total))
+    println(err)
+    println(steps)
     sum(P,dims=1)   # marginalize over GR states
+end
+
+function checkP(A,B,P,total)
+    err = abs.(A*P[:,1])
+    for m = 2:total-1
+        err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
+    end
+    err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
+    println(err)
+    sum(err)/total
 end
 """
 steady_state(r,n,nhist,nalleles)
 Steady State of mRNA in G (telelgraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
-    mhist = steady_state(r,n,nhist_loss(nhist,yieldfactor),nalleles)
+    nh = nhist_loss(nhist,yieldfactor)
+    println(nh)
+    if nh > 5000
+        mhist = steady_state_fast(r,n,nh,nalleles)
+    else
+        mhist = steady_state(r,n,nh,nalleles)
+    end
     technical_loss(mhist,yieldfactor,nhist)
 end
 
@@ -154,6 +175,16 @@ end
 function steady_state_rna(P,n,nhist,nalleles)
     mhist = marginalize(P,n)
     allele_convolve(mhist,nalleles)[1:nhist]
+end
+
+function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
+    r = rin/rin[2*n+2]
+    gammap,gamman = get_gamma(r,n)
+    nu = r[2*n+1]
+    T,B = transition_rate_mat(n,gammap,gamman,nu)
+    P = initial_pmf(T,nu,n,nhist)
+    mhist=steady_state(nhist,P,T,B)
+    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
 """
 nhist_loss(nhist,yieldfactor)
@@ -229,6 +260,7 @@ function transient(t::Float64,r,n,nalleles,P0::Vector,method)
 end
 function transient(t::Vector,r,n,nalleles,P0::Vector,method)
     P = transient(t,r,n,P0,method)
+    P += abs.(rand(size(P)))
     mhist = Array{Array,1}(undef,length(t))
     for i in 1:size(P,1)
         mh = marginalize(P[i,:],n)
@@ -409,6 +441,13 @@ compute steady state pmf of GRM Master Equation
 function initial_pmf(T,ejectrate,n,nr,nhist)
     t0 = normalized_nullspace(T)
     ejectrate *= sum(t0[(n+1)*2^(nr-1)+1:end])
+    initial_pmf(t0,ejectrate,nhist)
+end
+function initial_pmf(T,ejectrate,n,nhist)
+    t0 = normalized_nullspace(T)
+    initial_pmf(t0,ejectrate,nhist)
+end
+function initial_pmf(t0,ejectrate,nhist)
     d = Poisson(ejectrate)
     nT = length(t0)
     total = nhist + 2

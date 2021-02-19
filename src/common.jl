@@ -511,13 +511,16 @@ end
 
 """
 residenceprob_G(model)
-residenceprob_G(r)
+residenceprob_G(r,n)
 
 Residence probability of G states
 given by exact steady state solution
 of master equation
 
 """
+
+residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
+
 function residenceprob_G(file::String,G)
     r = readdlm(file,',')
     m = size(r)[1]
@@ -530,7 +533,6 @@ function residenceprob_G(file::String,G)
     return p
 end
 
-residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
 function residenceprob_G(r::Vector,n::Int)
     Gss = Array{Float64,2}(undef,1,n+1)
     Gss[1,1] = 1.
