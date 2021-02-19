@@ -300,7 +300,7 @@ end
 read_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct mRNA count per cell histogram array of a gene
 """
-function read_scrna(filename::String,threshold::Float64=.98,nhistmax::Int=1000)
+function read_scrna(filename::String,threshold::Float64=.98,nhistmax::Int=300)
     if isfile(filename) && filesize(filename) > 0
         x = readdlm(filename)[:,1]
         x = truncate_histogram(x,threshold,nhistmax)
@@ -376,13 +376,13 @@ end
 
 # functions to build paths to data and results
 
-function scRNApath(gene,cond,folder = "data/datanew/T120",root= "/Users/carsonc/Box/scrna/")
+function scRNApath(gene,cond,folder = "data/HCT116_T0_T30_T120_Histograms/T120",root= "/Users/carsonc/Box/scrna/")
     datapath = joinpath(root,folder)
     joinpath(datapath,gene * "_" * cond * ".txt")
 end
 
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
-    path_model("rates_",label * cond,gene,"$G",nalleles,folder,root)
+    path_Gmodel("rates",gene,G,nalleles,label * cond,folder,root)
 end
 
 function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
@@ -391,69 +391,17 @@ function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder
     joinpath(root, joinpath(folder,ratefile))
 end
 
-
-"""
-read_fish_scrna(scRNAfolder::String,FISHfolder::String,genein::String,cond::String)
-Create a 2D data array of mRNA count/cell histograms for FISH and scRNA for same gene
-"""
-# function read_fish_scrna(scRNAfolder::String,FISHfolder::String,genein::String,cond::String)
-#     histfile = "/cellular RNA histogram.csv"
-#     data = Array{Array{Int,1},1}(undef,2)
-#     scRNAfile = scRNAfolder * genein * ".txt"
-#     data[1] = readRNA_scrna(scRNAfile)
-#     rep = ["rep1/","rep2/"]
-#     x = Array{Array{Float64,1},1}(undef,2)
-#     for r in eachindex(rep)
-#         repfolder = FISHfolder * genein * "/" * cond * "/" * rep[r]
-#         FISHfiles = readdir(repfolder)
-#         FISH = FISHfiles[.~occursin.(".",FISHfiles)]
-#         xr = zeros(1000)
-#         for folder in FISH
-#             x1 = readdlm(repfolder * folder * histfile)[:,1]
-#             lx = length(x1)
-#             xr[1:min(lx,1000)] += x1[1:min(lx,1000)]
-#         end
-#         xr /= length(FISH)
-#         xr = round.(Int,xr)
-#         x[r] = truncate_histogram(xr,.99,1000)
-#     end
-#     l = min(length(x[1]),length(x[2]))
-#     data[2] = x[1][1:l] + x[2][1:l]
-#     return data
-# end
-"""
-readrates_srna(infile,rinchar,inpath)
-read in saved rates
-"""
-# function readrates_scrna(infile::String,rinchar::String,inpath="/Users/carsonc/Box/scrna/Results/")
-#     infile = inpath * infile
-#     if isfile(infile) && ~isempty(read(infile))
-#         readdlm(infile)[:,1]
-#     else
-#         return 0
-#     end
-# end
-#
-# function readrates_scrna(infile::String,rinchar::String,gene::String,inpath="/Users/carsonc/Box/scrna/Results/")
-#     if rinchar == "rml" || rinchar == "rlast"
-#         rskip = 1
-#         rstart = 1
-#     elseif rinchar == "rmean"
-#         rskip = 2
-#         rstart = 1
-#     elseif rinchar == "rquant"
-#         rskip = 3
-#         rstart = 2
-#     end
-#     if isfile(infile) && ~isempty(read(infile))
-#         rall = readdlm(infile)
-#         rind = findfirst(rall[:,1] .== gene)
-#         if ~isnothing(rind)
-#             return convert(Array{Float64,1},rall[rind,rstart:rskip:end])
-#         else
-#             return 0
-#         end
-#     else
-#         return 0
-#     end
-# end
+function rna_stats(genes,conds)
+    h = Vector{Vector}(undef,2)
+    z = Vector{Float64}(undef,0)
+    for gene in genes
+        for i in eachindex(conds)
+            datapath = scRNApath(gene,conds[i])
+            h[i] = read_scrna(datapath,.99)
+        end
+        # push!(z,tstat_2sample(h[1],h[2]))
+        # push!(z,2*(mean_histogram(h[1])-mean_histogram(h[2]))/(mean_histogram(h[1])+mean_histogram(h[2])))
+        push!(z,(mean_histogram(h[1])-mean_histogram(h[2]))/(mean_histogram(h[1])))
+    end
+    z
+end

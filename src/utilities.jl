@@ -233,6 +233,14 @@ function Srange(G,R)
     2*n + R + 2 : 2*n + 2*R + 1
 end
 
+mean_histogram(x) = (collect(1:length(x)) .- 1)' * x/sum(x)
+m2_histogram(x) = ((collect(1:length(x)) .- 1).^2)' * x/sum(x)
+function var_histogram(x)
+    m2_histogram(x) - mean_histogram(x)^2
+end
+# mean_histogram(x) = ((collect(length(x)) .- 1)' * x)/sum(x)
+tstat_2sample(x1,x2) = (mean_histogram(x1) - mean_histogram(x2))/(sqrt(var_histogram(x1)/length(x1) + var_histogram(x2)/length(x2)))
+
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
 #     for x in data1, y in data2
