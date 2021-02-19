@@ -128,13 +128,9 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepma
         end
         P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
         P /=sum(P)
-        # err = checkP(A,B,P,total)
         err = norm((P-P0))
         steps += 1
     end
-    println(checkP(A,B,P,total))
-    println(err)
-    println(steps)
     sum(P,dims=1)   # marginalize over GR states
 end
 
@@ -153,7 +149,6 @@ Steady State of mRNA in G (telelgraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     nh = nhist_loss(nhist,yieldfactor)
-    println(nh)
     if nh > 5000
         mhist = steady_state_fast(r,n,nh,nalleles)
     else
