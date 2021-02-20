@@ -119,16 +119,18 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepma
     while err > tol && steps < stepmax
         P0 = copy(P)
         P[:,1] = -A\P[:,2]
+        P /=sum(P)
         # P[:,1] = try -A\P[:,2]
         # catch
         #     P[:,1] = (-A + UniformScaling(1e-18))\P[:,2]
         # end
         for m = 2:total-1
             P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
+            P /=sum(P)
         end
         P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
         P /=sum(P)
-        err = norm((P-P0))
+        err = norm((P-P0),Inf)
         steps += 1
     end
     sum(P,dims=1)   # marginalize over GR states
@@ -140,7 +142,6 @@ function checkP(A,B,P,total)
         err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
     end
     err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
-    println(err)
     sum(err)/total
 end
 """
@@ -149,7 +150,7 @@ Steady State of mRNA in G (telelgraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     nh = nhist_loss(nhist,yieldfactor)
-    if nh > 5000
+    if nh > 1000
         mhist = steady_state_fast(r,n,nh,nalleles)
     else
         mhist = steady_state(r,n,nh,nalleles)
