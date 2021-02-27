@@ -124,6 +124,9 @@ function histograms_rna(path::String,gene::String,fish::Bool)
         h = read_fish(path,gene,.98)
     else
         h = read_scrna(path,.99)
+        if length(h) == 0
+            throw("data not found")
+        end
     end
     return length(h),h
 end
@@ -311,8 +314,8 @@ function read_scrna(filename::String,threshold::Float64=.98,nhistmax::Int=300)
         end
         return dataFISH
     else
-        throw("data file not found")
-        # return Array{Int,1}(undef,0)
+        # println("data file not found")
+        return Array{Int,1}(undef,0)
     end
 end
 
@@ -391,17 +394,23 @@ function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder
     joinpath(root, joinpath(folder,ratefile))
 end
 
-function rna_stats(genes,conds)
-    h = Vector{Vector}(undef,2)
+function stats_rna(genes::Vector,conds::Vector,folder)
     z = Vector{Float64}(undef,0)
     for gene in genes
-        for i in eachindex(conds)
-            datapath = scRNApath(gene,conds[i])
-            h[i] = read_scrna(datapath,.99)
-        end
-        # push!(z,tstat_2sample(h[1],h[2]))
-        # push!(z,2*(mean_histogram(h[1])-mean_histogram(h[2]))/(mean_histogram(h[1])+mean_histogram(h[2])))
-        push!(z,(mean_histogram(h[1])-mean_histogram(h[2]))/(mean_histogram(h[1])))
+        push!(z,expression_rna(gene,conds,folder))
     end
     z
+end
+
+function expression_rna(gene,conds::Vector,folder,threshold=.99)
+    h = Vector{Vector}(undef,2)
+    for i in eachindex(conds)
+        datapath = scRNApath(gene,conds[i],folder)
+        h[i] = read_scrna(datapath,threshold)
+    end
+    if length(h[1]) > 0
+        return delta_2sample(h[1],h[2])
+    else
+        return 0
+    end
 end

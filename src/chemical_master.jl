@@ -18,12 +18,6 @@ function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
-# function offPDF(t::Vector,r::Vector,n::Int,nr::Int)
-#     T,_,TI = mat_GSR(r,n,nr)
-#     pss = normalized_nullspace(T)
-#     SI=offtimeCDF(t,r,n,nr,TI,pss)
-#     pdf_from_cdf(t,SI)
-# end
 
 """
 pdf_from_cdf(t,S)
@@ -32,15 +26,7 @@ function pdf_from_cdf(t,S)
     P = diff(S)
     P/(sum(P)*(t[2]-t[1]))
 end
-"""
-onCDF(t::Vector,r::Vector,n::Int,nr::Int)
 
-"""
-# function onCDF(t::Vector,r::Vector,n::Int,nr::Int)
-#     T,TA,TI = mat_GSR(r,n,nr)
-#     pss = normalized_nullspace(T)
-#     ontimeCDF(t,r,n,nr,TA,pss)
-# end
 """
 ontimeCDF(tin::Vector,n::Int,nr::Int,rin::Vector,TA::Matrix,pss::Vector)
 offtimeCDF(tin::Vector,n::Int,nr::Int,r::Vector,TI::Matrix,pss::Vector)
@@ -89,6 +75,7 @@ function steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
     T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
     P = initial_pmf(T,nu[end],n,nr,nhist)
     mhist=steady_state(nhist,P,T,B)
+    mhist = marginalize(mhist)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
 """
@@ -103,6 +90,7 @@ function steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::I
     T,B = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
     P = initial_pmf(T,nu[end],n,nr,nhist)
     mhist=steady_state(nhist,P,T,B)
+    mhist = marginalize(mhist)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
 """
@@ -111,7 +99,7 @@ Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
 """
-function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepmax=10000)
+function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
     total = size(P,2)
     steps = 0
     err = 1.
@@ -119,21 +107,19 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-6,stepma
     while err > tol && steps < stepmax
         P0 = copy(P)
         P[:,1] = -A\P[:,2]
-        P /=sum(P)
         # P[:,1] = try -A\P[:,2]
         # catch
         #     P[:,1] = (-A + UniformScaling(1e-18))\P[:,2]
         # end
         for m = 2:total-1
             P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
-            P /=sum(P)
         end
         P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
         P /=sum(P)
-        err = norm((P-P0),Inf)
+        err = norm((P-P0))
         steps += 1
     end
-    sum(P,dims=1)   # marginalize over GR states
+    return P  # marginalize over GR states with marginalize(P) = sum(P,dims=1)
 end
 
 function checkP(A,B,P,total)
@@ -164,8 +150,13 @@ function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
 end
 
 function steady_state_full(r::Vector,n::Int,nhist::Int)
-    M = mat_GM(r,n,nhist)
-    normalized_nullspace(M)
+    if nhist > 1000
+        mhist = steady_state_fast(r,n,nh,nalleles)
+        return mhist[1:end]
+    else
+        M = mat_GM(r,n,nhist)
+        return normalized_nullspace(M)
+    end
 end
 
 function steady_state_rna(P,n,nhist,nalleles)
@@ -180,6 +171,7 @@ function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
     T,B = transition_rate_mat(n,gammap,gamman,nu)
     P = initial_pmf(T,nu,n,nhist)
     mhist=steady_state(nhist,P,T,B)
+    mhist = marginalize(mhist)
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
 """
@@ -402,7 +394,6 @@ function additive_noise(mhist,noise,nhist)
     end
     normalize_histogram(p)
 end
-
 
 function threshold_noise(mhist,noise,yieldfactor,nhist)
     h = additive_noise(mhist,noise,nhist)
@@ -674,10 +665,13 @@ function accumulate(SI,n,nr,nonzeros,p)
     return SIj
 end
 """
-marginalize(p,n,nhist)
+marginalize(p::Vector,n,nhist)
+marginalize(p::Vector,n)
+marginalize(P::Matrix)
+
 Marginalize over G states
 """
-function marginalize(p,n,nhist)
+function marginalize(p::Vector,n,nhist)
     mhist = zeros(nhist)
     nT = n+1
     for m in 1:nhist
@@ -687,7 +681,9 @@ function marginalize(p,n,nhist)
     return mhist
 end
 
-function marginalize(p,n)
+function marginalize(p::Vector,n)
     nhist = Int(length(p)/(n+1)) - 2
     marginalize(p,n,nhist)
 end
+
+marginalize(P::Matrix) = sum(P,dims=1)

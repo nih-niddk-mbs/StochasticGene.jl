@@ -241,6 +241,8 @@ end
 # mean_histogram(x) = ((collect(length(x)) .- 1)' * x)/sum(x)
 tstat_2sample(x1,x2) = (mean_histogram(x1) - mean_histogram(x2))/(sqrt(var_histogram(x1)/length(x1) + var_histogram(x2)/length(x2)))
 
+delta_2sample(x1,x2) = (mean_histogram(x1)-mean_histogram(x2))/mean_histogram(x1)
+
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
 #     for x in data1, y in data2
