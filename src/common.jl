@@ -168,9 +168,7 @@ end
 Abstract Option types for fitting methods
 """
 abstract type Options end
-
 abstract type Results end
-
 
 # Model and Data dependent functions
 
@@ -190,11 +188,8 @@ end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
 datahistogram(data::RNALiveCellData) = [data.OFF;data.ON;data.histRNA]
 
-
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF);normalize_histogram(data.ON);normalize_histogram(data.histRNA)]
-
-
 
 #### Model likelihoods   ####
 
@@ -236,6 +231,10 @@ data.histRNA holds array of histograms for time points given by data.time
 transient computes the time evolution of the histogram
 model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
 """
+function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel)
+    h=likelihoodarray(param,data,model,maximum(data.nRNA))
+    trim(h,data.nRNA)
+end
 function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
     yieldfactor = get_rates(param,model)[end]
     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
@@ -248,10 +247,6 @@ function likelihoodarray(param,data::TransientRNAData,model,maxdata)
     G = model.G
     h0 = initial_distribution(param,r,G,model,maxdata)
     transient(r,G,data.time,model,h0)
-end
-function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel)
-    h=likelihoodarray(param,data,model,maximum(data.nRNA))
-    trim(h,data.nRNA)
 end
 function likelihoodarray(param,data::RNAData,model::GMmultimodel)
     r = get_rates(param,model)
@@ -298,17 +293,11 @@ end
 
 # Functions for transient chemical master solutions
 
-function transient(r::Vector,G::Int,times::Vector,model::GMmodel,h0::Vector)
-    transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
-end
-function transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector)
-    transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
-end
+transient(r::Vector,G::Int,times::Vector,model::AbstractGMmodel,h0::Vector) = transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
 
-function initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax)
-    nh = nhist_loss(nhist,yieldfactor)
-    steady_state_full(r[1:2*G],G-1,nRNAmax)
-end
+transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector) = transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
+
+initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax) = steady_state_full(r[1:2*G],G-1,nRNAmax)
 
 
 """

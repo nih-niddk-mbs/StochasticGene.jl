@@ -107,10 +107,6 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepma
     while err > tol && steps < stepmax
         P0 = copy(P)
         P[:,1] = -A\P[:,2]
-        # P[:,1] = try -A\P[:,2]
-        # catch
-        #     P[:,1] = (-A + UniformScaling(1e-18))\P[:,2]
-        # end
         for m = 2:total-1
             P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
         end
@@ -248,7 +244,7 @@ function transient(t::Float64,r,n,nalleles,P0::Vector,method)
 end
 function transient(t::Vector,r,n,nalleles,P0::Vector,method)
     P = transient(t,r,n,P0,method)
-    P += abs.(rand(size(P)))
+    # P += abs.(rand(size(P)))
     mhist = Array{Array,1}(undef,length(t))
     for i in 1:size(P,1)
         mh = marginalize(P[i,:],n)

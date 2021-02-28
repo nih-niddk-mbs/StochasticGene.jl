@@ -12,14 +12,9 @@ single molecule FISH (smFISH) is treated as loss less
 transient_rna(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
 Fit transient G model to time dependent mRNA data
 """
-function transient_rna(control::String,treatment::String,name::String,time::Float64,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-    data = data_rna([control;treatment],name,time,gene)
-    model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,yieldprior,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
-    return data,model,options
-end
+
 function transient_rna(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-    data = data_rna(path,name,time,gene)
+    data = data_rna(path,name,time,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
     return data,model,options
@@ -115,7 +110,7 @@ function histograms_rna(path::Array,gene::String,fish::Bool)
     h = Array{Array,1}(undef,n)
     lengths = Array{Int,1}(undef,n)
     for i in eachindex(path)
-        lengths[i], h[i] = histograms_rna(path[i],gene,fish[i])
+        lengths[i], h[i] = histograms_rna(path[i],gene,fish)
     end
     return lengths,h
 end
