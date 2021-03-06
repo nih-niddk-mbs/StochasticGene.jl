@@ -298,7 +298,7 @@ end
 read_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct mRNA count per cell histogram array of a gene
 """
-function read_scrna(filename::String,threshold::Float64=.98,nhistmax::Int=300)
+function read_scrna(filename::String,threshold::Float64=.99,nhistmax::Int=300)
     if isfile(filename) && filesize(filename) > 0
         x = readdlm(filename)[:,1]
         x = truncate_histogram(x,threshold,nhistmax)
@@ -349,6 +349,13 @@ plot_histogram_rna()
 functions to plot data and model predicted histograms
 
 """
+function plot_histogram_rna(gene::String,cond::String,datapath::String)
+    file = joinpath(datapath,gene * "_" * cond * ".txt")
+    h = read_scrna(file)
+    plot(normalize_histogram(h))
+    return h
+end
+
 function plot_histogram_rna(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
     r = readrates(modelfile,1)
     data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
@@ -374,12 +381,10 @@ end
 
 # functions to build paths to data and results
 
-function scRNApath(gene,cond,folder = "data/HCT116_T0_T30_T120_Histograms/T120",root= "/Users/carsonc/Box/scrna/")
-    datapath = joinpath(root,folder)
-    joinpath(datapath,gene * "_" * cond * ".txt")
-end
+scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
 
-function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label="scRNA_T120_ss_",folder="Results/2021-01-19" ,root="/Users/carsonc/Box/scrna/")
+
+function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
     path_Gmodel("rates",gene,G,nalleles,label * cond,folder,root)
 end
 
@@ -389,10 +394,10 @@ function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder
     joinpath(root, joinpath(folder,ratefile))
 end
 
-function stats_rna(genes::Vector,conds::Vector,folder)
+function stats_rna(genes::Vector,conds::Vector,datapath)
     z = Vector{Float64}(undef,0)
     for gene in genes
-        push!(z,expression_rna(gene,conds,folder))
+        push!(z,expression_rna(gene,conds,datapath))
     end
     z
 end
@@ -404,7 +409,7 @@ function expression_rna(gene,conds::Vector,folder,threshold=.99)
         h[i] = read_scrna(datapath,threshold)
     end
     if length(h[1]) > 0
-        return delta_2sample(h[1],h[2])
+        return log_2sample(h[1],h[2])
     else
         return 0
     end

@@ -190,6 +190,7 @@ datahistogram(data::RNALiveCellData) = [data.OFF;data.ON;data.histRNA]
 
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF);normalize_histogram(data.ON);normalize_histogram(data.histRNA)]
+datapdf(data::AbstractRNAData{Array{Array,1}}) = normalize_histogram(datahistogram(data))
 
 #### Model likelihoods   ####
 

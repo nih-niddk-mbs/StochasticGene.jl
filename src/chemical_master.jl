@@ -128,7 +128,7 @@ function checkP(A,B,P,total)
 end
 """
 steady_state(r,n,nhist,nalleles)
-Steady State of mRNA in G (telelgraph) model
+Steady State of mRNA in G (telegraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     nh = nhist_loss(nhist,yieldfactor)
@@ -144,7 +144,10 @@ function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
     P = steady_state_full(r,n,nhist)
     steady_state_rna(P,n,nhist,nalleles)
 end
-
+"""
+steady_state_full(r::Vector,n::Int,nhist::Int)
+Steady State of full G (telegraph) model
+"""
 function steady_state_full(r::Vector,n::Int,nhist::Int)
     if nhist > 1000
         mhist = steady_state_fast(r,n,nh,nalleles)
@@ -154,12 +157,19 @@ function steady_state_full(r::Vector,n::Int,nhist::Int)
         return normalized_nullspace(M)
     end
 end
-
+"""
+steady_state_rna(P,n,nhist,nalleles)
+Steady State of G model accounting for number of alleles
+"""
 function steady_state_rna(P,n,nhist,nalleles)
     mhist = marginalize(P,n)
     allele_convolve(mhist,nalleles)[1:nhist]
 end
-
+"""
+steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
+Steady State of G model accounting for number of alleles
+using iterative block algorithm (may not converge to correct solution)
+"""
 function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
     r = rin/rin[2*n+2]
     gammap,gamman = get_gamma(r,n)
@@ -172,6 +182,8 @@ function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
 end
 """
 nhist_loss(nhist,yieldfactor)
+
+Compute length of pre-loss histogram
 """
 nhist_loss(nhist,yieldfactor) = round(Int,nhist/yieldfactor)
 
@@ -314,6 +326,8 @@ function time_evolve(t::Vector,vals::Vector,vects::Matrix,weights::Vector)
     return S
 end
 """
+time_evolve_diff(t,M::Matrix,P0)
+
 Solve transient problem using DifferentialEquations.jl
 """
 function time_evolve_diff(t,M::Matrix,P0)
@@ -351,24 +365,20 @@ end
 
 
 """
-technical_loss(mhist,yieldfactor,nhist)
+technical_loss(mhist,yieldfactor)
 
+Reduce counts due to technical loss
 """
 function technical_loss!(mhist,yieldfactor)
     for i in eachindex(mhist)
         mhist[i] = technical_loss(mhist[i],yieldfactor,length(mhist[i]))
     end
 end
-function technical_loss_poisson(mhist,yieldfactor,nhist)
-    p = zeros(nhist)
-    for m in eachindex(mhist)
-        d = Poisson(yieldfactor*(m-1))
-        for c in 1:nhist
-            p[c] += mhist[m]*pdf(d,c-1)
-        end
-    end
-    normalize_histogram(p)
-end
+"""
+technical_loss(mhist,yieldfactor,nhist)
+
+Reduce counts due to technical loss using Binomial sampling
+"""
 function technical_loss(mhist,yieldfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
@@ -379,7 +389,27 @@ function technical_loss(mhist,yieldfactor,nhist)
     end
     normalize_histogram(p)
 end
+"""
+technical_loss_poisson(mhist,yieldfactor,nhist)
 
+Reduce counts due to technical loss using Poisson sampling
+"""
+function technical_loss_poisson(mhist,yieldfactor,nhist)
+    p = zeros(nhist)
+    for m in eachindex(mhist)
+        d = Poisson(yieldfactor*(m-1))
+        for c in 1:nhist
+            p[c] += mhist[m]*pdf(d,c-1)
+        end
+    end
+    normalize_histogram(p)
+end
+
+"""
+additive_noise(mhist,noise,nhist)
+
+Add Poisson noise to histogram
+"""
 function additive_noise(mhist,noise,nhist)
     p = zeros(nhist)
     d = Poisson(noise)
@@ -390,7 +420,12 @@ function additive_noise(mhist,noise,nhist)
     end
     normalize_histogram(p)
 end
+"""
+threshold_noise(mhist,noise,yieldfactor,nhist)
 
+Add Poisson noise to histogram then reduce counts due to technical loss
+
+"""
 function threshold_noise(mhist,noise,yieldfactor,nhist)
     h = additive_noise(mhist,noise,nhist)
     technical_loss(h,yieldfactor,nhist)

@@ -116,7 +116,10 @@ function decimal(x::Vector,base::Int=3)
     nr = length(x)
     x' * base .^ collect(0:nr-1)
 end
-
+"""
+findbase(l,n,nr)
+Find the number of G states for transition rate matrix of size l
+"""
 function findbase(l,n,nr)
     if l == (n+1)*3^nr
         return 3
@@ -127,9 +130,17 @@ function findbase(l,n,nr)
     end
 end
 
+"""
+KL(x,y)
+
+Kullback-Leibler distance
+"""
 KL(x,y) = sum(x .* (log.(max.(x,eps(Float64))) - log.(max.(y,eps(Float64)))))
 
+"""
+trim(h::Array,nh::Array)
 
+"""
 function trim(h::Array,nh::Array)
     for i in eachindex(h)
         h[i] = h[i][1:nh[i]]
@@ -210,7 +221,7 @@ mulognormal(mean,cv) = log.(mean) - .5*log.(1 .+ cv .^ 2)
 
 
 """
-Parameter information
+Parameter information for GR models
 """
 function num_rates(G,R)
     n = G - 1
@@ -241,7 +252,9 @@ end
 # mean_histogram(x) = ((collect(length(x)) .- 1)' * x)/sum(x)
 tstat_2sample(x1,x2) = (mean_histogram(x1) - mean_histogram(x2))/(sqrt(var_histogram(x1)/length(x1) + var_histogram(x2)/length(x2)))
 
-delta_2sample(x1,x2) = (mean_histogram(x1)-mean_histogram(x2))/mean_histogram(x1)
+log_2sample(x1,x2) = log(mean_histogram(x1)) - log(mean_histogram(x2))
+delta_2sample(x1,x2) = mean_histogram(x1)-mean_histogram(x2)
+delta_2frac(x1,x2) = delta_2sample(x1,x2)/mean_histogram(x1)
 
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
