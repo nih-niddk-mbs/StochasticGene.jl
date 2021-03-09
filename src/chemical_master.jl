@@ -383,7 +383,7 @@ function technical_loss(mhist,yieldfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
         d = Binomial(m-1,clamp(yieldfactor,0.,1.))
-        for c in 1:m+1
+        for c in 1:nhist
             p[c] += mhist[m]*pdf(d,c-1)
         end
     end
