@@ -7,7 +7,7 @@ Takes difference of ON and OFF time CDF to produce PDF
 function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
     T,TA,TI = mat_GSR_DT(r,n,nr)
     pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,r,n,nr,TA,pss,method)
+    SA=ontimeCDF(t,n,nr,TA,pss,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
@@ -36,7 +36,7 @@ Found by computing accumulated probability into OFF(ON) states
 where transitions out of OFF(ON) states are zeroed, starting from first instance of ON(OFF) state
 weighted by steady state distribution (i.e. solving a first passage time problem)x
 """
-function ontimeCDF(tin::Vector,rin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector,method)
+function ontimeCDF(tin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector,method)
     t = [tin ; tin[end] + tin[2]-tin[1]] #add a time point so that diff() gives original length
     SAinit = init_prob(pss,n,nr)
     SA = time_evolve(t,TA,SAinit,method)
@@ -383,7 +383,7 @@ function technical_loss(mhist,yieldfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
         d = Binomial(m-1,clamp(yieldfactor,0.,1.))
-        for c in 1:nhist
+        for c in 1:m
             p[c] += mhist[m]*pdf(d,c-1)
         end
     end

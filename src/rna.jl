@@ -298,7 +298,7 @@ end
 read_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
 Construct mRNA count per cell histogram array of a gene
 """
-function read_scrna(filename::String,threshold::Float64=.99,nhistmax::Int=300)
+function read_scrna(filename::String,threshold::Float64=.99,nhistmax::Int=500)
     if isfile(filename) && filesize(filename) > 0
         x = readdlm(filename)[:,1]
         x = truncate_histogram(x,threshold,nhistmax)
@@ -396,10 +396,15 @@ end
 
 function stats_rna(genes::Vector,conds::Vector,datapath)
     z = Vector{Float64}(undef,0)
+    h1 = Vector{Float64}(undef,0)
+    h2 = Vector{Float64}(undef,0)
     for gene in genes
-        push!(z,expression_rna(gene,conds,datapath))
+        t,m1,m2 = expression_rna(gene,conds,datapath)
+        push!(z,t)
+        push!(h1,m2)
+        push!(h2,m1)
     end
-    z
+    return z,h1,h2
 end
 
 function expression_rna(gene,conds::Vector,folder,threshold=.99)
@@ -408,9 +413,9 @@ function expression_rna(gene,conds::Vector,folder,threshold=.99)
         datapath = scRNApath(gene,conds[i],folder)
         h[i] = read_scrna(datapath,threshold)
     end
-    if length(h[1]) > 0
-        return log_2sample(h[1],h[2])
+    if length(h[1]) > 0 && length(h[1]) > 0
+        return log_2sample(h[1],h[2]), mean_histogram(h[1]), mean_histogram(h[2])
     else
-        return 0
+        return 0,0,0
     end
 end
