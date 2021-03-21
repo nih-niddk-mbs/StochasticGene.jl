@@ -65,9 +65,9 @@ include("chemical_master.jl")
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_matrices.jl")
 
-# Probability distributions by exact and direct simulation of stochastic models using Gillespie algorithms
-# include("gillespie.jl")
+# Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
 include("ClassicTelegraph.jl")
+include("simulator.jl")
 
 # functions specific for Gene Trap experiments of Wan et al.
 include("genetrap.jl")
