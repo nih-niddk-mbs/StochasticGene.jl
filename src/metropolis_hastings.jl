@@ -523,10 +523,13 @@ function getfiles(folder::String,type::String,label::String,cond::String,model::
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
-        if occursin(type,file) && occursin(label,file) && occursin(cond,file)
-            v = extractparts(file)
-            if getG(v) == model
-                push!(files,file)
+        if occursin(type,file) && occursin(label,file)
+            file1 = String(split(file,label)[2])
+            if occursin(cond,file1)
+                v = extractparts(file)
+                if getG(v) == model
+                    push!(files,file)
+                end
             end
         end
     end
