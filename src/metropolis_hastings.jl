@@ -189,6 +189,8 @@ end
 
 """
 mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
+
+ll is negative log likelihood
 """
 function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
     paramt,dt = proposal(d,proposalcv)
