@@ -465,8 +465,11 @@ of master equation
 
 residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
 
-function residenceprob_G(file::String,G)
-    r = readdlm(file,',')
+function residenceprob_G(file::String,G,header=false)
+    r = readdlm(file,',',header=header)
+    if header
+        r = r[1]
+    end
     m = size(r)[1]
     p = Array{Any,2}(undef,m,G+1)
     n = G-1
