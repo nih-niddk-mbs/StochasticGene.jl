@@ -315,7 +315,15 @@ end
 function get_rates(params,model::GRSMmodel)
     r = copy(model.rates)
     r[model.fittedparam] = params
-    return r
+    setr(r,model)
+end
+
+function setr(r,model::GRSMmodel)
+    n = model.G-1
+    nr = model.R
+    eta = geteta(r,n,nr)
+    r[2*n + 1 + nr + 1:2*n + 1 + nr + nr] = eta
+    r
 end
 
 """

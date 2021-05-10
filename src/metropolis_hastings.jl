@@ -486,18 +486,24 @@ function makestring(v)
     return s
 end
 
-function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv")
+function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false)
     for l in label, c in cond, g in model
-        assemble_rates(folder,l,c,g,append)
-        assemble_measures(folder,l,c,g,append)
+        assemble_rates(folder,l,c,g,append,header)
+        assemble_measures(folder,l,c,g,append,header)
+        assemble_stats("mean",folder,l,c,g,append,header)
     end
 end
 
-function assemble_rates(folder::String,label::String,cond::String,model::String,append::String = ".csv")
+function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool)
     files = getfiles(folder,"rates",label,cond,model)
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
+    if header
+        writedlm(f,ratelabels(model,false),',')
+        # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
+    end
+
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
@@ -507,19 +513,62 @@ function assemble_rates(folder::String,label::String,cond::String,model::String,
     close(f)
 end
 
-function assemble_measures(folder::String,label::String,cond::String,model::String,append::String = ".csv")
+function assemble_measures(folder::String,label::String,cond::String,model::String,append::String,header::Bool)
     files = getfiles(folder,"measures",label,cond,model)
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
+    if header
+        writedlm(f,["Gene" "Deviance" "WAIC" "WAIC" "SD" "AIC"],',')
+    end
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
         r = readmeasures(target)
-        writedlm(f,[gene r],',')
+        writedlm(f,[gene r[1,[1;2;end-2;end-1;end]]'],',')
     end
     close(f)
 end
+
+function assemble_stats(stattype,folder::String,label::String,cond::String,model::String,append::String,header::Bool)
+    files = getfiles(folder,"stats",label,cond,model)
+    # label = split(files[1],cond)[1]
+    outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
+    f = open(outfile,"w")
+    if header
+        writedlm(f,ratelabels(model,true),',')
+        # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
+    end
+    for file in files
+        gene = getgene(file)
+        target = joinpath(folder, file)
+        r = readstats(target,stattype)
+        writedlm(f,[gene r'],',')
+    end
+    close(f)
+end
+
+function ratelabels(model,sd::Bool)
+    n = parse(Int,model)
+    if sd
+        if n == 3
+            return ["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield" "sd"]
+        elseif n == 2
+            return ["Gene" "rate01" "sd" "rate10" "sd" "eject" "sd" "yield" "sd"]
+        else
+            return []
+        end
+    else
+        if n == 3
+            return ["Gene" "rate01" "rate10" "rate12" "rate21" "eject" "decay" "yield"]
+        elseif n == 2
+            return ["Gene" "rate01" "rate10" "eject" "decay" "yield"]
+        else
+            return []
+        end
+    end
+end
+
 
 function getfiles(folder::String,type::String,label::String,cond::String,model::String)
     allfiles = readdir(folder)
@@ -637,6 +686,20 @@ function readmeasures(file::String)
     w = readwaic(file)'
     a = readaccept(file)
     [d[1] w a]
+end
+
+function readstats(file::String,stat)
+    if stat == "mean"
+        m = readmean(file::String)
+        return reshape(m,length(m),1)
+    else
+        return 0
+    end
+end
+
+function readmean(file::String)
+    m = readrow(file,[1,2])
+    reshape(m,length(m),1)
 end
 
 """
