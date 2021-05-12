@@ -424,7 +424,11 @@ crossentropy(predictions::Array{T},data::Array{T}) where {T}
 compute crosscentropy between data histogram and likelilhood
 """
 function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
-    lltot = hist' * log.(max.(predictions,eps(T1)))
+    if minimum(predictions) > -0.0001
+        lltot = hist' * log.(max.(predictions,eps(T1)))
+    else
+        lltot = Inf
+    end
     isfinite(lltot) ? -lltot : Inf
 end
 """
@@ -448,18 +452,21 @@ deviance(fit,data,model)
 
 Deviance
 """
-deviance(predictions::Array,data) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
+# deviance(predictions::Array,data::HistogramData) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
+deviance(predictions::Array,data::HistogramData) = deviance(predictions,datahistogram(data))
+
 # (crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
-function deviance(fit::Fit,data,model)
+function deviance(fit::Fit,data::HistogramData,model)
     h=likelihoodfn(fit.parml,data,model)
     deviance(h,data)
 end
 
-function deviance(data,model::StochasticGRmodel)
+function deviance(data::HistogramData,model::StochasticGRmodel)
     h = likelihoodfn(model.rates[model.fittedparam],data,model)
     deviance(h,data)
 end
 
+deviance(predictions::Array,hist::Array,pdf::Array) = 2*hist'*(log.(max.(normalize_histogram(hist),eps(Float64)))-log.(max.(predictions,eps(Float64))))
 
 
 ### Files for saving and reading mh results
