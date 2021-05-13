@@ -466,7 +466,7 @@ function deviance(data::HistogramData,model::StochasticGRmodel)
     deviance(h,data)
 end
 
-deviance(predictions::Array,hist::Array,pdf::Array) = 2*hist'*(log.(max.(normalize_histogram(hist),eps(Float64)))-log.(max.(predictions,eps(Float64))))
+deviance(predictions::Array,hist::Array) = 2*hist'*(log.(normalize_histogram(max.(hist,eps(Float64))))-log.(normalize_histogram(max.(predictions,eps(Float64)))))
 
 
 ### Files for saving and reading mh results
