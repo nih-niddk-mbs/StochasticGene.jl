@@ -437,7 +437,7 @@ hist_entropy(hist)
 Compute entropy of a normalized histogram
 """
 function hist_entropy(hist::Array{Float64,1})
-    -hist' * (log.(max.(normalize_histogram(hist,eps(Float64)))))
+    -hist' * (log.(normalize_histogram(max.(hist,eps(Float64)))))
 end
 function hist_entropy(hist::Array{Array,1})
     l = 0
