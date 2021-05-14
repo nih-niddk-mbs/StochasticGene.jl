@@ -424,13 +424,17 @@ crossentropy(predictions::Array{T},data::Array{T}) where {T}
 compute crosscentropy between data histogram and likelilhood
 """
 function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
-    if minimum(predictions) > -0.00000001
         lltot = hist' * log.(normalize_histogram(max.(predictions,eps(T1))))
-        return isfinite(lltot) ? -lltot : Inf
-    else
-        return Inf
-    end
+        isfinite(lltot) ? -lltot : Inf
 end
+# function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
+#     if minimum(predictions) > -0.00000001
+#         lltot = hist' * log.(normalize_histogram(max.(predictions,eps(T1))))
+#         return isfinite(lltot) ? -lltot : Inf
+#     else
+#         return Inf
+#     end
+# end
 """
 hist_entropy(hist)
 
