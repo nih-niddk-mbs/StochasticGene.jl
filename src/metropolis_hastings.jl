@@ -425,7 +425,7 @@ compute crosscentropy between data histogram and likelilhood
 """
 function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
     if minimum(predictions) > -0.00000001
-        lltot = hist' * log.(max.(predictions,eps(T1)))
+        lltot = hist' * log.(normalize_histogram(max.(predictions,eps(T1))))
         return isfinite(lltot) ? -lltot : Inf
     else
         return Inf
@@ -437,7 +437,7 @@ hist_entropy(hist)
 Compute entropy of a normalized histogram
 """
 function hist_entropy(hist::Array{Float64,1})
-    -hist' * (log.(max.(hist,eps(Float64))))
+    -hist' * (log.(max.(normalize_histogram(hist,eps(Float64)))))
 end
 function hist_entropy(hist::Array{Array,1})
     l = 0
@@ -526,13 +526,13 @@ function assemble_measures(folder::String,label::String,cond::String,model::Stri
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     if header
-        writedlm(f,["Gene" "Deviance" "WAIC" "WAIC" "SD" "AIC"],',')
+        writedlm(f,["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance"],',')
     end
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
         r = readmeasures(target)
-        writedlm(f,[gene r[1,[1;2;end-2;end-1;end]]'],',')
+        writedlm(f,[gene r],',')
     end
     close(f)
 end
@@ -690,9 +690,9 @@ end
 
 function readmeasures(file::String)
     d = readdeviance(file)
-    w = readwaic(file)'
+    w = readwaic(file)
     a = readaccept(file)
-    [d[1] w a]
+    [d[1] w[1] w[7] w[8] w[9] a]
 end
 
 function readstats(file::String,stat)
