@@ -278,6 +278,7 @@ function proposal(param::Vector,cov::Matrix)
         return MvLogNormal(log.(max.(param,1e-100)) - .5*c*diag(cov),c*cov)
     else
         return MvLogNormal(log.(max.(param,1e-100)) - .5*c*diag(cov),c*diag(sqrt.(abs.(cov))))
+    end
 end
 
 
