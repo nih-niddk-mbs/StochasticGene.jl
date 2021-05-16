@@ -16,7 +16,7 @@ Fit transient G model to time dependent mRNA data
 function transient_rna(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     data = data_rna(path,name,time,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return data,model,options
 end
 function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
@@ -31,12 +31,12 @@ function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior
 end
 function transient_fish(r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return model,options
 end
 function transient_fish(r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     model = model_delay_rna(r,G,nalleles,2,cv,fittedparam,decayprior,delayprior)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return model,options
 end
 function transient_rnafish(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
@@ -46,7 +46,7 @@ function transient_rnafish(path,name::String,time,gene::String,nsets::Int,r::Vec
 end
 function transient_rnafish(r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return model,options
 end
 
@@ -57,19 +57,19 @@ Fit G model to steady state data
 function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
     data = data_rna(path,name,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,0)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return data,model,options
 end
 function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
     data = data_rna(path,name,gene,false)
     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,0)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return data,model,options
 end
 function steadystate_rnafish(path,name::String,gene::String,fish::Array,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,method=1,warmupsteps=0,annealsteps=0)
     data = data_rna(path,name,gene,fish)
     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return data,model,options
 end
 function thresholds_fish(path,name::String,gene::String,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
@@ -79,7 +79,7 @@ function thresholds_fish(path,name::String,gene::String,r::Vector,decayprior::Fl
 end
 function thresholds_fish(r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,0)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
     return model,options
 end
 
