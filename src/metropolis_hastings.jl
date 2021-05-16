@@ -7,6 +7,7 @@ struct MHOptions <: Options
     warmupsteps::Int64
     maxtime::Float64
     temp::Float64
+    tempanneal::Float64
 end
 """
 Structure for MH results
@@ -95,7 +96,7 @@ function metropolis_hastings(data,model,options)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
     if options.annealsteps > 0
-        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.annealsteps/totalsteps)
+        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
     else
         temp = options.temp
     end
@@ -114,7 +115,7 @@ end
 function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
 """
-function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,tempanneal,t1,maxtime)
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     prior = logprior(param,model)
     step = 0
@@ -123,12 +124,12 @@ function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
 
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
-        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,tempanneal)
         if ll < llml
             llml,parml = ll,param
         end
         parout[:,step] = param
-        temp = anneal * temp + annealrate
+        tempanneal = anneal * tempanneal + annealrate * temp
     end
     return param,parml,ll,llml,predictions,temp
 end

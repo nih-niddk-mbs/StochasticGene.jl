@@ -374,14 +374,11 @@ function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,root)
     ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
     println(ratepath)
     r = readrates(ratepath)
-    println(r)
-    println(h)
     hn = normalize_histogram(h)
-    println(length(h))
     m  = steady_state(r[1:2*G],r[end],G-1,length(h),nalleles)
     plot(m)
     plot(hn)
-    return h,m,deviance(m,h,hn)
+    return r,hn,m,deviance(m,h)
 end
 
 # functions to build paths to data and results
