@@ -132,9 +132,6 @@ function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     end
     return param,parml,ll,llml,predictions,temp
 end
-"""
-function rhat()
-"""
 
 """
 warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
@@ -160,7 +157,7 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     return param,parml,ll,llml,d,proposalcv,predictions
 end
 """
-sample(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
+sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
 """
 function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
