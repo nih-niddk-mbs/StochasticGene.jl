@@ -274,7 +274,7 @@ function proposal(param::Vector,cov::Matrix)
     if isposdef(c*cov)
         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*cov)
     else
-        return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*diag(sqrt.(abs.(cov))))
+        return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),sqrt.(abs.(diag(c*cov))))
     end
 end
 
