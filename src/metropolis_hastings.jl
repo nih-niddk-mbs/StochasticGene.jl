@@ -96,7 +96,7 @@ function metropolis_hastings(data,model,options)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
     if options.annealsteps > 0
-        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
+        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
     else
         temp = options.temp
     end
@@ -121,7 +121,6 @@ function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     step = 0
     annealrate = 3/samplesteps
     anneal = 1 - annealrate  # annealing rate with time constant of samplesteps/3
-
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
         _,predictions,param,ll,prior = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,tempanneal)
