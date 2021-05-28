@@ -462,7 +462,7 @@ end
 
 
 """
-residenceprob_G(model)
+residenceprob_G(file,G,header)
 residenceprob_G(r,n)
 
 Residence probability of G states
@@ -471,13 +471,16 @@ of master equation
 
 """
 
-residenceprob_G(model::AbstractGMmodel)=resprob_G(model.rates,model.G-1)
-
-function residenceprob_G(file::String,G,header=false)
+function get_all_rates(file::String,header::Bool)
     r = readdlm(file,',',header=header)
     if header
         r = r[1]
     end
+    return r
+end
+
+function residenceprob_G(file::String,G,header=false)
+    r = get_all_rates(file,header)
     m = size(r)[1]
     p = Array{Any,2}(undef,m,G+1)
     n = G-1
@@ -488,6 +491,17 @@ function residenceprob_G(file::String,G,header=false)
     return p
 end
 
+function write_residency_G(fileout::String,filein::String,G,header)
+    rates = get_all_rates(filein,header)
+    n = G-1
+    f = open(fileout,"w")
+    writedlm(f,["gene" collect(0:n)'],',')
+    for r in eachrow(rates)
+        writedlm(f,[r[1] residenceprob_G(r[2:2*n+1],n)],',')
+    end
+    close(f)
+end
+
 function residenceprob_G(r::Vector,n::Int)
     Gss = Array{Float64,2}(undef,1,n+1)
     Gss[1,1] = 1.
@@ -496,6 +510,7 @@ function residenceprob_G(r::Vector,n::Int)
     end
     Gss ./= sum(Gss)
 end
+
 """
 splicesiteusage()
 

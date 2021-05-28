@@ -61,12 +61,16 @@ run_mh(data,model,options,nchains)
 
 """
 function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions,nchains)
-    sd = run_chains(data,model,options,nchains)
-    chain = extract_chain(sd)
-    waic = pooled_waic(chain)
-    fit = merge_fit(chain)
-    stats = compute_stats(fit.param)
-    return fit, stats, waic
+    if nchains == 1
+        return run_mh(data,model,options)
+    else
+        sd = run_chains(data,model,options,nchains)
+        chain = extract_chain(sd)
+        waic = pooled_waic(chain)
+        fit = merge_fit(chain)
+        stats = compute_stats(fit.param)
+        return fit, stats, waic
+    end
 end
 """
 run_chains(data,model,options,nchains)
