@@ -531,7 +531,7 @@ function assemble_measures(folder::String,label::String,cond::String,model::Stri
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     if header
-        writedlm(f,["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance"],',')
+        writedlm(f,["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature"],',')
     end
     for file in files
         gene = getgene(file)
@@ -623,13 +623,13 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 """
 write_results(file::String,x)
 """
-function writeall(path::String,fit,stats,waic,data,model::StochasticGRmodel)
+function writeall(path::String,fit,stats,waic,data,temp,model::StochasticGRmodel)
     if ~isdir(path)
         mkpath(path)
     end
     name = filename(data,model)
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
-    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model))
+    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model),temp)
     write_param_stats(joinpath(path,"param_stats" * name),stats)
 
 end
@@ -654,11 +654,12 @@ end
 """
 write_measures(file,fit,waic,dev)
 """
-function write_measures(file::String,fit::Fit,waic,dev)
+function write_measures(file::String,fit::Fit,waic,dev,temp)
     f = open(file,"w")
     writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
     writedlm(f,dev,',')
     writedlm(f,[fit.accept fit.total],',')
+    writedlm(f,temp,',')
     close(f)
 end
 """
@@ -684,6 +685,16 @@ function read_covlogparam(file)
     in[end-n+1:end,1:n]
 end
 
+
+
+function readmeasures(file::String)
+    d = readdeviance(file)
+    w = readwaic(file)
+    a = readaccept(file)
+    t = readtemp(file)
+    [d[1] w[1] w[7] w[8] w[9] a t]
+end
+
 readdeviance(file::String) = readrow(file,2)
 
 readwaic(file::String) = readrow(file,1)
@@ -693,12 +704,7 @@ function readaccept(file::String)
     a[1]/a[2]
 end
 
-function readmeasures(file::String)
-    d = readdeviance(file)
-    w = readwaic(file)
-    a = readaccept(file)
-    [d[1] w[1] w[7] w[8] w[9] a]
-end
+readtemp(file::String) = readrow(file,4)
 
 function readstats(file::String,stat)
     if stat == "mean"
