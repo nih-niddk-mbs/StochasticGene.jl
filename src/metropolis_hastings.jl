@@ -689,14 +689,12 @@ function read_covlogparam(file)
     in[end-n+1:end,1:n]
 end
 
-
-
 function readmeasures(file::String)
     d = readdeviance(file)
     w = readwaic(file)
     a = readaccept(file)
     t = readtemp(file)
-    [d[1] w[1] w[7] w[8] w[9] a t]
+    [d[1] w[1] w[7] w[8] w[9] a t[1]]
 end
 
 readdeviance(file::String) = readrow(file,2)
