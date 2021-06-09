@@ -554,6 +554,7 @@ function normalized_nullspace(M::AbstractMatrix)
     for i in 1:m-1
         p[m-i] = -R[m-i,m-i+1:end]'*p[m-i+1:end]/R[m-i,m-i]
     end
+    p = abs.(p)
     p /= sum(p);
     return F.P*p
     # else
