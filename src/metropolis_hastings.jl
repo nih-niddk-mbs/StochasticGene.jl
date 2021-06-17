@@ -99,7 +99,6 @@ function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
-    println("Initial ll: ",ll)
     if options.annealsteps > 0
         param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
     else
