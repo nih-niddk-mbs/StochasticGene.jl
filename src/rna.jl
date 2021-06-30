@@ -385,7 +385,11 @@ end
 
 function scRNApath(gene::String,cond::String,datapath::String,root::String)
     datapath = joinpath(root,datapath)
-    joinpath(datapath,gene * "_" * cond * ".txt")
+    if cond ==""
+        joinpath(datapath,gene * ".txt")
+    else
+        joinpath(datapath,gene * "_" * cond * ".txt")
+    end
 end
 
 scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
