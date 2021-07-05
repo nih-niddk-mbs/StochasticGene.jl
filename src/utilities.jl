@@ -255,6 +255,15 @@ log_2sample(x1,x2) = log(mean_histogram(x1)) - log(mean_histogram(x2))
 delta_2sample(x1,x2) = mean_histogram(x1)-mean_histogram(x2)
 delta_2frac(x1,x2) = delta_2sample(x1,x2)/mean_histogram(x1)
 
+function mediansmooth(xin,window)
+    x = copy(xin)
+    halfwin = div(window-1,2)
+    for i in 1:length(x)-window+1
+        x[i+halfwin] = median(x[i:i+window-1])
+    end
+    x
+end
+
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
 #     for x in data1, y in data2

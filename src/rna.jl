@@ -378,14 +378,14 @@ function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,root)
     m  = steady_state(r[1:2*G],r[end],G-1,length(h),nalleles)
     plot(m)
     plot(hn)
-    return r,hn,m,deviance(m,h)
+    return r,hn,m,deviance(m,h),deviance(m,mediansmooth(h,3))
 end
 
 # functions to build paths to data and results
 
 function scRNApath(gene::String,cond::String,datapath::String,root::String)
     datapath = joinpath(root,datapath)
-    if cond ==""
+    if cond == ""
         joinpath(datapath,gene * ".txt")
     else
         joinpath(datapath,gene * "_" * cond * ".txt")
