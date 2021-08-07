@@ -304,7 +304,7 @@ update tau matrix for mRNA ejection
 function eject!(tau,reaction,t,m,r,nallele)
 	m += 1
 	tau[reaction,nallele] = -log(rand())/r[reaction] + t
-	set_decay!(tau,reaction,t,m)
+	set_decay!(tau,reaction,t,m,r)
 end
 
 function eject!(tau,state,reaction,t,m,r,n,nr,nallele)
@@ -316,7 +316,7 @@ function eject!(tau,state,reaction,t,m,r,n,nr,nallele)
 	elseif state[nr-1,nallele]
 		tau[reaction-1,nallele] = -log(rand())/(r[reaction-1])+ t
 	end
-	set_decay!(tau,reaction,t,m)
+	set_decay!(tau,reaction,t,m,r)
 end
 function eject1!(tau,state,reaction,taudecay,t,m,r,n,nr,nallele)
 	m += 1
@@ -337,7 +337,7 @@ update tau matrix for decay rate
 
 """
 
-function set_decay!(tau,reaction,t,m)
+function set_decay!(tau,reaction,t,m,r)
 	if m == 1
 		tau[reaction+1,1] = -log(rand())/(r[reaction+1])+ t
 	else
@@ -347,7 +347,7 @@ function set_decay!(tau,reaction,t,m)
 end
 function set_decay(taudecay,t,m)
 	if m == 1
-		return -log(rand())/(r[end])+ t
+		return -log(rand())/(taudecay)+ t
 	else
 		return (m-1)/m*(taudecay - t) + t
 	end

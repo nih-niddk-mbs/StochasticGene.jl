@@ -3,6 +3,7 @@ offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
 
 Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
+method = 1 uses DifferentialEquations.jl
 """
 function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
     T,TA,TI = mat_GSR_DT(r,n,nr)
@@ -18,6 +19,7 @@ function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
+
 
 """
 pdf_from_cdf(t,S)
@@ -50,6 +52,15 @@ function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector,
     SI = time_evolve(t,TI,SIinit,method)
     accumulate(SI,n,nr,nonzerosI,length(pss)) # accumulated prob into ON states
 end
+function offtimeCDF(tin::Vector,r::Vector,n::Int,TI::Matrix,method)
+    t = [tin ; tin[end] + tin[2]-tin[1]]
+    SIinit = zeros(n+1)
+    SIinit[n] = 1.
+    SI = time_evolve(t,TI,SIinit,method)
+    return SI[:,end]
+end
+
+
 """
 steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
 GRS model where mRNA decay rate is accelerated to account for nonviability of off-pathway pre-mRNA
@@ -149,7 +160,7 @@ steady_state_full(r::Vector,n::Int,nhist::Int)
 Steady State of full G (telegraph) model
 """
 function steady_state_full(r::Vector,n::Int,nhist::Int)
-    if nhist > 1000
+    if nhist > 2000
         mhist = steady_state_fast(r,n,nh,nalleles)
         return mhist[1:end]
     else
@@ -206,14 +217,22 @@ function mat_GSR_DT_offeject(r,n,nr)
     T,_ = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
     transition_rate_mat(T,n,nr,2)
 end
-
+function mat_G_DT(r,n)
+    gammap,gamman = get_gamma(r,n)
+    T = transition_rate_mat(n,gammap,gamman)
+    transition_rate_mat(T,n)
+end
 function mat_GSR_T(r,n,nr)
     gammap,gamman = get_gamma(r,n)
     nu = get_nu(r,n,nr)
     eta = get_eta(r,n,nr)
     transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
 end
-
+"""
+get_rates_GSR(r,n,nr)
+Convert rates in r to parameters used in the Transition rate matrices for GSR model
+return gammap,gamman,nu,eta
+"""
 function get_rates_GSR(r,n,nr)
     gammap,gamman = get_gamma(r,n)
     nu = get_nu(r,n,nr)
@@ -658,6 +677,11 @@ function init_prob(pss,r,n,nr,nonzeros)
     end
     SIinit = SIinit[nonzeros]
     SIinit/sum(SIinit)
+end
+function init_prob(pss,r,n)
+
+
+
 end
 """
 accumulate(SA::Matrix,n,nr)
