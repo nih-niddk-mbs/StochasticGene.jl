@@ -47,10 +47,47 @@ transition rate matrices for G model
 returns T and B
 """
 function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
+	B = transition_rate_mat(n,nu)
+	T = transition_rate_mat(n,gammap,gamman)
+	return T, B
+end
+# function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
+#     nT = n+1
+# 	T = zeros(nT,nT)
+# 	B = zeros(nT,nT)
+# 	T[1,1] = -(gamman[1]+gammap[2])
+# 	T[1,2] = gamman[2]
+# 	for i=2:nT-1
+# 		# T[i,ip] =  gammap[i]*(ip==i-1) - (gamman[i]+gammap[i+1])*(ip==i) + gamman[i+1]*(ip==i+1)
+# 		T[i,i-1] = gammap[i]
+# 		T[i,i] = -(gamman[i]+gammap[i+1])
+# 		T[i,i+1] = gamman[i+1]
+# 	end
+# 	T[nT,nT-1] = gammap[nT]
+# 	T[nT,nT] = -(gamman[nT]+gammap[nT+1])
+# 	B[nT,nT] = nu
+# 	return T, B
+# end
+"""
+transition_rate_mat(n::Int,nu::Float64)
+B matrix for G model
+returns B
+"""
+function transition_rate_mat(n::Int,nu::Float64)
+    nT = n+1
+	B = zeros(nT,nT)
+	B[nT,nT] = nu
+	return B
+end
+"""
+transition_rate_mat(n::Int,gammap::Vector,gamman::Vector)
+G state transition rate matrix for G model (Telegraph model state transitions)
+returns T
+"""
+function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector)
     nT = n+1
 	T = zeros(nT,nT)
-	B = zeros(nT,nT)
-	T[1,1] = -(gamman[1]+gammap[2])
+	T[1,1] = -gammap[2]
 	T[1,2] = gamman[2]
 	for i=2:nT-1
 		# T[i,ip] =  gammap[i]*(ip==i-1) - (gamman[i]+gammap[i+1])*(ip==i) + gamman[i+1]*(ip==i+1)
@@ -59,9 +96,24 @@ function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
 		T[i,i+1] = gamman[i+1]
 	end
 	T[nT,nT-1] = gammap[nT]
-	T[nT,nT] = -(gamman[nT]+gammap[nT+1])
-	B[nT,nT] = nu
-	return T, B
+	T[nT,nT] = -gamman[nT]
+	return T
+end
+"""
+transition_rate_mat(T,n::Int)
+
+transtion matrices TA and TI for n-state telegraph model given matrix T
+Treat G state n+1 as the ON state
+returns T, TA, and TI
+"""
+function transition_rate_mat(T::Matrix,n)
+    nT = (n+1)
+    TI = copy(T)
+	TI[nT,nT] = 0.
+	TI[nT-1,nT] = 0.
+    TA = zeros(nT,nT)
+	TA[nT,nT] = T[nT,nT]
+    return T,TA,TI
 end
 """
 transition_rate_mat(n::Int,T::Matrix,B::Matrix,nu::Float64,mu::Float64,nhist::Int)
@@ -183,7 +235,7 @@ transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base=3)
 transition rate matrix for GR(S) model, base = 2 for GR and base = 3 for GRS
 returns T
 """
-function transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base=3)
+function transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base::Int=3)
 	# G state transition matrix for GR and GRS models
 	nA = (n+1)*base^nr
 	T = zeros(nA,nA)
@@ -233,12 +285,9 @@ transtion matrices TA and TI for GRS Master equation given matrix T
 returns T, TA, and TI
 """
 function transition_rate_mat(T::Matrix,n,nr,base=3)
-
     nA = (n+1)*base^nr
-
     TA = zeros(nA,nA)
     TI = zeros(nA,nA)
-
     # R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
     for w=1:base^nr,ip=1:n+1,z=1:base^nr,i=1:n+1
         a = i + (n+1)*(z-1)
