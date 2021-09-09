@@ -106,6 +106,16 @@ struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abs
     method::MethodType
 end
 
+struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+end
+
 struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
     nalleles::Int
@@ -249,6 +259,12 @@ function likelihoodarray(param,data::TransientRNAData,model,maxdata)
     h0 = initial_distribution(param,r,G,model,maxdata)
     transient(r,G,data.time,model,h0)
 end
+function likelihoodarray(param,data::TransientRNAData,model::GMtransientmodel,maxdata)
+    r = get_rates(param,model)
+    G = model.G
+    h0 = initial_distribution(param,r,G,model,maxdata)
+    transient(r,G,data.time,model,h0)
+end
 function likelihoodarray(param,data::RNAData,model::GMmultimodel)
     r = get_rates(param,model)
     G = model.G
@@ -312,19 +328,13 @@ function get_rates(param,model::AbstractGMmodel)
 end
 
 
-function get_rates(params,model::GRSMmodel)
+function get_rates(param,model::GRSMmodel)
     r = copy(model.rates)
-    r[model.fittedparam] = params
+    r[model.fittedparam] = param
     setr(r,model)
 end
 
-function setr(r,model::GRSMmodel)
-    n = model.G-1
-    nr = model.R
-    eta = geteta(r,n,nr)
-    r[2*n + 1 + nr + 1:2*n + 1 + nr + nr] = eta
-    r
-end
+get_rates(param,model::GMtransientmodel) = param[1:2*model.G]
 
 """
 get_rates(param,model::GMrescaledmodel)
@@ -358,7 +368,17 @@ function get_param(model::GMrescaledmodel)
     r[model.fittedparam]
 end
 
+"""
+setr(r,model)
 
+"""
+function setr(r,model::GRSMmodel)
+    n = model.G-1
+    nr = model.R
+    eta = geteta(r,n,nr)
+    r[2*n + 1 + nr + 1:2*n + 1 + nr + nr] = eta
+    r
+end
 """
 logprior(param,model::AbstractGMmodel)
 
