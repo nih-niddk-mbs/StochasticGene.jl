@@ -15,15 +15,15 @@ function fit_rna(nchains,gene::String,cond::String,G::Int,maxtime::Float64,infol
         end
     else
         if G == 3
-            fittedparam = 7 .+ [1,2,3,4,5,7]
+            fittedparam = [1,2,3,4,5,7,8,9,10,11,13]
         else
-            fittedparam = 5 .+ [1,2,3,5]
+            fittedparam = [1,2,3,5,6,7,9]
         end
     end
 
-    @time fit_rna(nchains,gene,cond,G,maxtime,fittedparam,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,params,root)
+    fit_rna(nchains,gene,cond,G,maxtime,fittedparam,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,params,root)
 
-end
+    end
 
 function fit_rna(nchains::Int,gene::String,cond::String,G::Int,maxtime::Float64,fittedparam::Vector,infolder::String,resultfolder,datafolder,inlabel,label,nsets::Int,runcycle::Bool,params::Tuple,root)
     if cond == "null"
@@ -35,7 +35,7 @@ function fit_rna(nchains::Int,gene::String,cond::String,G::Int,maxtime::Float64,
     else
         sets =["T0","T30","T120"]
         datafile =[]
-        fittedparam .+= 2*G
+        # fittedparam .+= 2*G
         for set in sets
             folder = joinpath(datafolder,set)
             datafile = vcat(datafile,StochasticGene.scRNApath(gene,cond,folder,root))
@@ -117,20 +117,42 @@ function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldpri
     return r
 end
 
-function getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets,root)
-
-
-
+function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root)
+    if nsets == 1
+        return getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,root)
+    else
+        ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
+        if isfile(ratefile)
+            r = StochasticGene.readrates(ratefile,1)
+            r[end] = clamp(r[end],eps(Float64),1-eps(Float64))
+            if length(r) == 2*G*nsets + 1
+                println(r)
+                return r
+            end
+        else
+            println("No prior")
+            if G == 2
+                r = [0.015,0.015,0.5,.01,1.]*decayrate/.01
+                r[end] = .1
+            else
+                r = [0.015,.2,.2,0.015,1.5,.01,1.]*decayrate/.01
+                r[end] = .1
+            end
+        end
+        r = [r[1:end-1];r]
+        println(r)
+        return r
+    end
 end
 
-function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets,root)
+function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,root)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
-
     if isfile(ratefile)
         r = StochasticGene.readrates(ratefile,1)
         r[1:2*G] *= decayrate/r[2*G]
         r[2*G+1] = clamp(r[2*G+1],eps(Float64),1-eps(Float64))
     else
+        println("No prior")
         if G == 2
             r = [0.015,0.015,0.5,.01,1.]*decayrate/.01
             r[end] = .1
@@ -139,12 +161,8 @@ function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets,root
             r[end] = .1
         end
     end
-    if nsets == 2
-        r = [r[1:2*G];r[1:2*G];r[2*G+1]]
-    end
     println(r)
     return r
-
 end
 
 function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)

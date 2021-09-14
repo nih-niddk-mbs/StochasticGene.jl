@@ -249,22 +249,18 @@ end
 function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
     yieldfactor = get_rates(param,model)[end]
     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
-    h = likelihoodarray(param,data::TransientRNAData,model,nh)
-    technical_loss!(h,yieldfactor)
+    h = likelihoodarray(param,data::TransientRNAData,model,yieldfactor,nh)
+    # technical_loss!(h,yieldfactor)
     trim(h,data.nRNA)
 end
-function likelihoodarray(param,data::TransientRNAData,model,maxdata)
+function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)
     r = get_rates(param,model)
     G = model.G
-    h0 = initial_distribution(param,r,G,model,maxdata)
-    transient(r,G,data.time,model,h0)
+    h0 = initial_distribution(param,r[1:2*G],G,model,maxdata)
+    transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
+    # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
-function likelihoodarray(param,data::TransientRNAData,model::GMtransientmodel,maxdata)
-    r = get_rates(param,model)
-    G = model.G
-    h0 = initial_distribution(param,r,G,model,maxdata)
-    transient(r,G,data.time,model,h0)
-end
+
 function likelihoodarray(param,data::RNAData,model::GMmultimodel)
     r = get_rates(param,model)
     G = model.G
@@ -310,11 +306,11 @@ end
 
 # Functions for transient chemical master solutions
 
-transient(r::Vector,G::Int,times::Vector,model::AbstractGMmodel,h0::Vector) = transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+# transient(r::Vector,G::Int,times::Vector,model::AbstractGMmodel,h0::Vector) = transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+#
+# transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector) = transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
 
-transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector) = transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
-
-initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax) = steady_state_full(r[1:2*G],G-1,nRNAmax)
+initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax) = steady_state_full(r,G-1,nRNAmax)
 
 
 """

@@ -160,9 +160,8 @@ steady_state_full(r::Vector,n::Int,nhist::Int)
 Steady State of full G (telegraph) model
 """
 function steady_state_full(r::Vector,n::Int,nhist::Int)
-    if nhist > 2000
-        mhist = steady_state_fast(r,n,nh,nalleles)
-        return mhist[1:end]
+    if nhist > 4000
+        return steady_state_fast(r,n,nhist)
     else
         M = mat_GM(r,n,nhist)
         return normalized_nullspace(M)
@@ -182,14 +181,22 @@ Steady State of G model accounting for number of alleles
 using iterative block algorithm (may not converge to correct solution)
 """
 function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
+    # r = rin/rin[2*n+2]
+    # gammap,gamman = get_gamma(r,n)
+    # nu = r[2*n+1]
+    # T,B = transition_rate_mat(n,gammap,gamman,nu)
+    # P = initial_pmf(T,nu,n,nhist)
+    # mhist=steady_state(nhist,P,T,B)
+    mhist = marginalize(steady_state_fast(rin,n,nhist))
+    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
+end
+function steady_state_fast(rin::Vector,n::Int,nhist::Int)
     r = rin/rin[2*n+2]
     gammap,gamman = get_gamma(r,n)
     nu = r[2*n+1]
     T,B = transition_rate_mat(n,gammap,gamman,nu)
     P = initial_pmf(T,nu,n,nhist)
-    mhist=steady_state(nhist,P,T,B)
-    mhist = marginalize(mhist)
-    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
+    steady_state(nhist,P,T,B)
 end
 """
 nhist_loss(nhist,yieldfactor)
@@ -266,7 +273,8 @@ method != 1 uses eigenvalue decomposition
 """
 function transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
     mhist = transient(t,r,n,nalleles,P0,method)
-    technical_loss(mhist,yieldfactor)
+    technical_loss!(mhist,yieldfactor)
+    return mhist
 end
 function transient(t::Float64,r,n,nalleles,P0::Vector,method)
     P = transient(t,r,n,P0,method)
