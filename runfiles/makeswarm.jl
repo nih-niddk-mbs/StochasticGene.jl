@@ -1,5 +1,8 @@
 using DelimitedFiles
 
+genelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "T120", "NR4A2", "JUN", "GEM"]
+
+
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
 
