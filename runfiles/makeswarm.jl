@@ -1,113 +1,21 @@
+# Functions for creating batch files to run on NIH Biowulf super computer
+
 using DelimitedFiles
 
-transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "T120", "NR4A2", "JUN", "GEM"]
+transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
 
-fix(folder) = writeruns(fixruns(findjobs(folder)))
 
 
-function findjobs(folder)
-    files = readdir(folder)
-    files = files[occursin.("swarm_",files)]
-    for (i,file) in enumerate(files)
-        files[i] = split(file,"_")[2]
-    end
-    unique(files)
-end
-
-function fixruns(jobs)
-    runlist = Vector{String}(undef,0)
-    for job in jobs
-        if occursin("FAILED",read(`jobhist $job`,String))
-            swarmfile = findswarm(job)
-            list = readdlm(swarmfile,',')
-            runs =  chomp(read(pipeline(`jobhist $job`, `grep FAILED`),String))
-            runs = split(runs,'\n')
-            println(job)
-            for run in runs
-                linenumber = parse(Int,split(split(run," ")[1],"_")[2])
-                a = String(list[linenumber+1])
-                println(a)
-                push!(runlist,a)
-            end
-        end
-    end
-    return runlist
-end
-
-function writeruns(runs)
-
-    f = open("fitfix.swarm","w")
-    for run in runs
-        writedlm(f,[run],quotes=false)
-    end
-    close(f)
-
-end
-
-function findswarm(job)
-    sc = "Swarm Command"
-    line = read(pipeline(`jobhist $job`, `grep $sc`),String)
-    list = split(line," ")
-    list[occursin.(".swarm",list)][1]
-end
-
-function collate(folders,type="rates_scRNA_T120")
-    genes = Vector{Vector}(undef,0)
-    for folder in folders
-        files = readdir(folder)
-        for file in files
-            if occursin(type,file)
-                contents=readdlm(file,',')
-                for row in eachrow(contents)
-                    row[1] .== genes
-                end
-            end
-        end
-    end
-end
-
-large_deviance(measurefile,threshold) = filter_gene(measurefile,"Deviance",threshold)
-
-function filter_gene(measurefile,measure,threshold)
-    genes = Vector{String}(undef,0)
-    measures,header = readdlm(measurefile,',',header=true)
-    println(length(measures[:,1]))
-    col = findfirst(header[1,:] .== measure)
-    for d in eachrow(measures)
-        if d[col] > threshold || isnan(d[col])
-            push!(genes,d[1])
-        end
-    end
-    println(length(genes))
-    return genes
-end
-
-function filter_gene_nan(measurefile,measure)
-    genes = Vector{String}(undef,0)
-    measures,header = readdlm(measurefile,',',header=true)
-    println(length(measures[:,1]))
-    col = findfirst(header[1,:] .== measure)
-    for d in eachrow(measures)
-        if isnan(d[col])
-            push!(genes,d[1])
-        end
-    end
-    println(length(genes))
-    return genes
-end
-
-
-function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
     genes = checkgenes(conds[1],datafolder,thresholdlow,thresholdhigh,root)
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,juliafile,nprocs,root)
 end
 
-function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
 
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
-    nsets = 1
     ngenes = length(genes)
     println(ngenes)
     println(runcycle)
@@ -270,4 +178,98 @@ function checkgenes(datafolder,root)
     end
     println(length(list))
     return list
+end
+
+fix(folder) = writeruns(fixruns(findjobs(folder)))
+
+
+function findjobs(folder)
+    files = readdir(folder)
+    files = files[occursin.("swarm_",files)]
+    for (i,file) in enumerate(files)
+        files[i] = split(file,"_")[2]
+    end
+    unique(files)
+end
+
+function fixruns(jobs)
+    runlist = Vector{String}(undef,0)
+    for job in jobs
+        if occursin("FAILED",read(`jobhist $job`,String))
+            swarmfile = findswarm(job)
+            list = readdlm(swarmfile,',')
+            runs =  chomp(read(pipeline(`jobhist $job`, `grep FAILED`),String))
+            runs = split(runs,'\n')
+            println(job)
+            for run in runs
+                linenumber = parse(Int,split(split(run," ")[1],"_")[2])
+                a = String(list[linenumber+1])
+                println(a)
+                push!(runlist,a)
+            end
+        end
+    end
+    return runlist
+end
+
+function writeruns(runs)
+
+    f = open("fitfix.swarm","w")
+    for run in runs
+        writedlm(f,[run],quotes=false)
+    end
+    close(f)
+
+end
+
+function findswarm(job)
+    sc = "Swarm Command"
+    line = read(pipeline(`jobhist $job`, `grep $sc`),String)
+    list = split(line," ")
+    list[occursin.(".swarm",list)][1]
+end
+
+function collate(folders,type="rates_scRNA_T120")
+    genes = Vector{Vector}(undef,0)
+    for folder in folders
+        files = readdir(folder)
+        for file in files
+            if occursin(type,file)
+                contents=readdlm(file,',')
+                for row in eachrow(contents)
+                    row[1] .== genes
+                end
+            end
+        end
+    end
+end
+
+large_deviance(measurefile,threshold) = filter_gene(measurefile,"Deviance",threshold)
+
+function filter_gene(measurefile,measure,threshold)
+    genes = Vector{String}(undef,0)
+    measures,header = readdlm(measurefile,',',header=true)
+    println(length(measures[:,1]))
+    col = findfirst(header[1,:] .== measure)
+    for d in eachrow(measures)
+        if d[col] > threshold || isnan(d[col])
+            push!(genes,d[1])
+        end
+    end
+    println(length(genes))
+    return genes
+end
+
+function filter_gene_nan(measurefile,measure)
+    genes = Vector{String}(undef,0)
+    measures,header = readdlm(measurefile,',',header=true)
+    println(length(measures[:,1]))
+    col = findfirst(header[1,:] .== measure)
+    for d in eachrow(measures)
+        if isnan(d[col])
+            push!(genes,d[1])
+        end
+    end
+    println(length(genes))
+    return genes
 end

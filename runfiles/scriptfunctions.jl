@@ -1,7 +1,7 @@
+# functions to run StochasticGene for Bayesian parameter estimation of stochastic Markov models of gene transcription
 
 using Dates
 using DelimitedFiles
-
 
 function fit_rna(nchains,gene::String,cond::String,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,sample::Int=40000,warmup=20000,anneal=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
