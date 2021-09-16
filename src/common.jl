@@ -256,7 +256,7 @@ end
 function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)
     r = get_rates(param,model)
     G = model.G
-    h0 = initial_distribution(param,r[1:2*G],G,model,maxdata)
+    h0 = steady_state_full(r[1:2*G],G-1,maxdata)
     transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
@@ -303,15 +303,6 @@ function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
     end
     return modelOFF, modelON, histF
 end
-
-# Functions for transient chemical master solutions
-
-# transient(r::Vector,G::Int,times::Vector,model::AbstractGMmodel,h0::Vector) = transient(times,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
-#
-# transient(r::Vector,G::Int,times::Vector,model::GMdelaymodel,h0::Vector) = transient_delay(times,r[1:2*G],r[2*G+1:4*G],r[end],G-1,model.nalleles,h0)
-
-initial_distribution(param,r,G::Int,model::AbstractGMmodel,nRNAmax) = steady_state_full(r,G-1,nRNAmax)
-
 
 """
 get_rates(param,model)
