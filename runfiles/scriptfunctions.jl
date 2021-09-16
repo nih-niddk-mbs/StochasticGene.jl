@@ -95,10 +95,12 @@ function make_fittedparam(G::Int,nsets)
     else
         if G == 3
             # fittedparam = [1,2,3,4,5,7,8,9,10,11,13]
-            fittedparam = [7,8,9,10,11,13]
+            # fittedparam = [7,8,9,10,11,13]
+            fittedparam = [7,8,9,10,11]
         else
             # fittedparam = [1,2,3,5,6,7,9]
-            fittedparam = [5,6,7,9]
+            # fittedparam = [5,6,7,9]
+            fittedparam = [5,6,7]
         end
     end
     return fittedparam
