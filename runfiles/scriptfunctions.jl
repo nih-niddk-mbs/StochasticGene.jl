@@ -139,6 +139,15 @@ function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldpri
     return r
 end
 
+function  assembler(ratefile1,ratefile2,newratefile)
+
+    r1 = StochasticGene.readrates(ratefile1,1)
+    r2 = StochasticGene.readrates(ratefile2,1)
+    r1[end] = clamp(r[end],eps(Float64),1-eps(Float64))
+    vcat(r1[1:end-1],r2[1:end-1],r1[end])
+    end
+
+
 function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root)
     if nsets == 1
         return getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,root)
