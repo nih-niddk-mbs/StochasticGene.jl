@@ -143,7 +143,7 @@ Steady State of mRNA in G (telegraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     nh = nhist_loss(nhist,yieldfactor)
-    if nh > 1000
+    if nh > 4000
         mhist = steady_state_fast(r,n,nh,nalleles)
     else
         mhist = steady_state(r,n,nh,nalleles)

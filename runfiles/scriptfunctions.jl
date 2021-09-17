@@ -143,9 +143,9 @@ function  assembler(ratefile1,ratefile2,newratefile)
 
     r1 = StochasticGene.readrates(ratefile1,1)
     r2 = StochasticGene.readrates(ratefile2,1)
-    r1[end] = clamp(r[end],eps(Float64),1-eps(Float64))
+    r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
     vcat(r1[1:end-1],r2[1:end-1],r1[end])
-    end
+end
 
 
 function  getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root)
