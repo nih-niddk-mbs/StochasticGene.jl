@@ -219,7 +219,7 @@ function likelihoodfn(param,data::RNAData,model::GMlossmodel)
     n = model.G-1
     steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
 end
-function likelihoodfn(param,data::AbstractRNAData{Array{Array,1}},model::AbstractGMmodel)
+function likelihoodfn(param,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <: Array, T2 <: Array}
     h = likelihoodarray(param,data,model)
     hconcat = Array{Float64,1}(undef,0)
     for h in h
@@ -251,6 +251,16 @@ function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
     h = likelihoodarray(param,data::TransientRNAData,model,yieldfactor,nh)
     # technical_loss!(h,yieldfactor)
+    trim(h,data.nRNA)
+end
+function likelihoodarray(param,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <: Array, T2 <: Array}
+    r = get_rates(param,model)
+    yieldfactor = r[end]
+    n = model.G-1
+    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+    for i in eachindex(data.nRNA)
+        h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],yieldfactor,n,data.nRNA[i],model.nalleles)
+    end
     trim(h,data.nRNA)
 end
 function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)

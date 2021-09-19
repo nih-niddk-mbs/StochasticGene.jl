@@ -394,7 +394,7 @@ function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,root)
     ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
     println(ratepath)
     r = readrates(ratepath)
-    m  = steady_state(r[1:2*G],r[end],G-1,length(h),nalleles)
+    m  = steady_state(r[1:2*G],r[end],G-1,length(hn),nalleles)
     plot(m)
     plot(hn)
     return r,hn,m,deviance(m,h),deviance(m,mediansmooth(h,3))
@@ -445,7 +445,7 @@ scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
 
 
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
-    path_Gmodel("rates",gene,G,nalleles,label * cond,folder,root)
+    path_Gmodel("rates",gene,G,nalleles,label * "_" * cond,folder,root)
 end
 
 function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)

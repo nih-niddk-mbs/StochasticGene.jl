@@ -36,7 +36,7 @@ function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,d
         for cond in conds
             sfile = swarmfile * "_" * cond * ".swarm"
             f = open(sfile,"w")
-            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,ånchains)
+            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
         end
     end
 end

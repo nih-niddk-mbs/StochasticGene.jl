@@ -143,11 +143,7 @@ Steady State of mRNA in G (telegraph) model
 """
 function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
     nh = nhist_loss(nhist,yieldfactor)
-    if nh > 4000
-        mhist = steady_state_fast(r,n,nh,nalleles)
-    else
-        mhist = steady_state(r,n,nh,nalleles)
-    end
+    mhist = steady_state(r,n,nh,nalleles)
     technical_loss(mhist,yieldfactor,nhist)
 end
 
@@ -160,7 +156,7 @@ steady_state_full(r::Vector,n::Int,nhist::Int)
 Steady State of full G (telegraph) model
 """
 function steady_state_full(r::Vector,n::Int,nhist::Int)
-    if nhist > 4000
+    if nhist > 4000 && n > 0
         return steady_state_fast(r,n,nhist)
     else
         M = mat_GM(r,n,nhist)
@@ -236,6 +232,19 @@ function mat_GSR_T(r,n,nr)
     transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
 end
 """
+mat_GM(r,n,nhist)
+Transition rate matrix of GM model
+"""
+function mat_GM(r,n,nhist)
+    if n == 0
+        nu = r[1]/r[2]
+        return transition_rate_mat(nu,nhist)
+    else
+        gammap,gamman = get_gamma(r,n)
+        return transition_rate_mat(n,gammap,gamman, r[2*n+1],r[2*n+2],nhist)
+    end
+end
+"""
 get_rates_GSR(r,n,nr)
 Convert rates in r to parameters used in the Transition rate matrices for GSR model
 return gammap,gamman,nu,eta
@@ -247,14 +256,7 @@ function get_rates_GSR(r,n,nr)
     return gammap,gamman,nu,eta
 end
 
-"""
-mat_GM(r,n,nhist)
-Transition rate matrix of GM model
-"""
-function mat_GM(r,n,nhist)
-    gammap,gamman = get_gamma(r,n)
-    transition_rate_mat(n,gammap,gamman, r[2*n+1],r[2*n+2],nhist)
-end
+
 """
 transient(ts::Vector,r,n,nhist,nalleles,P0)
 
