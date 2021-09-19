@@ -5,14 +5,12 @@ using DelimitedFiles
 transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
 
-
-
-function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,transient::Bool,juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
     genes = checkgenes(conds[1],datafolder,thresholdlow,thresholdhigh,root)
-    makeswarm(genes,G,infolder,swarmfile,inlabel,label,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,juliafile,nprocs,root)
+    makeswarm(genes,G,infolder,swarmfile,inlabel,label,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,transient,juliafile,nprocs,root)
 end
 
-function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,transient::Bool,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
 
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
@@ -31,47 +29,47 @@ function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,d
         for cond in conds
             for batch in eachindex(batches)
                 sfile = swarmfile * "_" * cond * "$batch" * ".swarm"
-                writegenes(sfile,batches[batch],nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,nchains)
+                writegenes(sfile,batches[batch],nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
             end
         end
     else
         for cond in conds
             sfile = swarmfile * "_" * cond * ".swarm"
             f = open(sfile,"w")
-            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,nchains)
+            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,ånchains)
         end
     end
 end
 
-function makeswarm(G::Int,infolder,swarmfile::String,dataname::String,datafolder::String,result::String,batchsize::Int=1000,maxtime = 3600. * 8,nchains = 8,runcycle::Bool=true,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
-    genes = checkgenes(datafolder,root)
-    makeswarm(genes,G,infolder,swarmfile,dataname,datafolder,result,batchsize,maxtime,nchains,runcycle,juliafile,nprocs::Int,root)
-end
-
-function makeswarm(genes,G::Int,infolder::String,swarmfile::String,dataname::String,datafolder::String,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool,juliafile::String="fitscript.jl",nprocs::Int=8,root::String="/home/carsonc/scrna/")
-
-    # genes = checkgenes(datafolder,root)
-    resultfolder = joinpath("Results",result)
-    infolder = joinpath("Results",infolder)
-    label = "scRNA_" * dataname * "_ss"
-    inlabel = "scRNA_" * dataname * "_ss"
-    nsets = 1
-
-    ngenes = length(genes)
-    println(ngenes)
-    println(runcycle)
-
-    if ngenes > batchsize
-        batches = getbatches(genes,ngenes,batchsize)
-        for batch in eachindex(batches)
-            sfile = swarmfile * "_" * "$batch" * ".swarm"
-            writegenes(sfile,batches[batch],nprocs,juliafile,"null",G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,nchains)
-        end
-    else
-        sfile = swarmfile * ".swarm"
-        writegenes(sfile,genes,nprocs,juliafile,"null",G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,nchains)
-    end
-end
+# function makeswarm(G::Int,infolder,swarmfile::String,dataname::String,datafolder::String,result::String,batchsize::Int=1000,maxtime = 3600. * 8,nchains = 8,runcycle::Bool=true,transient::Bool,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+#     genes = checkgenes(datafolder,root)
+#     makeswarm(genes,G,infolder,swarmfile,dataname,datafolder,result,batchsize,maxtime,nchains,runcycle,transient,juliafile,nprocs::Int,root)
+# end
+#
+# function makeswarm(genes,G::Int,infolder::String,swarmfile::String,dataname::String,datafolder::String,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool,transient::Bool,juliafile::String="fitscript.jl",nprocs::Int=8,root::String="/home/carsonc/scrna/")
+#
+#     # genes = checkgenes(datafolder,root)
+#     resultfolder = joinpath("Results",result)
+#     infolder = joinpath("Results",infolder)
+#     label = "scRNA_" * dataname * "_ss"
+#     inlabel = "scRNA_" * dataname * "_ss"
+#     nsets = 1
+#
+#     ngenes = length(genes)
+#     println(ngenes)
+#     println(runcycle)
+#
+#     if ngenes > batchsize
+#         batches = getbatches(genes,ngenes,batchsize)
+#         for batch in eachindex(batches)
+#             sfile = swarmfile * "_" * "$batch" * ".swarm"
+#             writegenes(sfile,batches[batch],nprocs,juliafile,"null",G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
+#         end
+#     else
+#         sfile = swarmfile * ".swarm"
+#         writegenes(sfile,genes,nprocs,juliafile,"null",G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
+#     end
+# end
 
 function getbatches(genes,ngenes,batchsize)
     nbatches = div(ngenes,batchsize)
@@ -84,11 +82,11 @@ function getbatches(genes,ngenes,batchsize)
     return batches
 end
 
-function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,nchains)
+function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
     f = open(sfile,"w")
 println(runcycle)
     for gene in genes
-        writedlm(f,["julia -p" nprocs juliafile gene cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle nchains])
+        writedlm(f,["julia -p" nprocs juliafile gene cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient nchains])
     end
     close(f)
 end
@@ -272,4 +270,54 @@ function filter_gene_nan(measurefile,measure)
     end
     println(length(genes))
     return genes
+end
+
+"""
+assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
+
+Combine rates from two separate fits into a single rate vector
+
+"""
+
+function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
+    files1 = getratefile(folder1,G,cond1)
+    files2 = getratefile(folder2,G,cond2)
+    for file1 in files1
+        gene = StochasticGene.getgene(file1)
+        file2 = getratefile(files2,gene)
+        name = replace(file1, cond1 => "JOINT")
+        outfile = joinpath(outfolder,name)
+        assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
+    end
+end
+
+function getratefile(files,gene)
+    files = files[occursin.("_"*gene*"_",files)][1]
+end
+
+function getratefile(folder,G,cond)
+    files = readdir(folder)
+    files = files[occursin.("rates_",files)]
+    files = files[occursin.("_"*cond*"_",files)]
+    files[occursin.("_"*G*"_",files)]
+end
+
+function getratefile(gene,G,folder,cond)
+    files = readdir(folder)
+    files = files[occursin.("rate",files)]
+    files = files[occursin.("_"*gene*"_",files)]
+    files = files[occursin.("_"*G*"_",files)]
+    files[occursin.(cond,files)]
+end
+
+
+
+function assemble_r(gene,G,folder1,folder2,cond1,cond2,outfolder)
+    file1 = getratefile(gene,G,folder1,cond1)[1]
+    file2 = getratefile(gene,G,folder2,cond2)[1]
+    name = replace(file1, cond1 => "JOINT")
+    println(name)
+    outfile = joinpath(outfolder,name)
+    println(outfile)
+    assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
 end
