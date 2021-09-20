@@ -6,7 +6,7 @@ using DelimitedFiles
 """
 fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=40000,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
-Fit steady state or transient GM model to RNA data for a single gene 
+Fit steady state or transient GM model to RNA data for a single gene
 
 Arguments:
 nchains = number of MCMC chains
@@ -204,8 +204,19 @@ function setr(G,decayrate,nsets,data)
     elseif G == 3
         r = [0.015,.2,.2,0.015,1.5,.01,1.]*decayrate/.01
     elseif G == 1
-        mu=StochasticGene.mean_histogram(data.histRNA)
-        r = [10*mu,1.,1.]*decayrate
+        if typeof(data.nRNA) <: Vector
+            r = Array{Float64,1}(undef,0)
+            for hist in data.histRNA
+                mu = StochasticGene.mean_histogram(hist)
+                r = vcat([10*mu,1.],r)
+            end
+            r *= decayrate
+            r = [r;1.]
+            nsets = 1
+        else
+            mu=StochasticGene.mean_histogram(data.histRNA)
+            r = [10*mu,1.,1.]*decayrate
+        end
     end
     if nsets > 1
         r = [r[1:end-1];r]
