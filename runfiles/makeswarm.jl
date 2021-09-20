@@ -283,7 +283,7 @@ function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
     for file1 in files1
-        gene = StochasticGene.getgene(files1)
+        gene = StochasticGene.getgene(file1)
         file2 = getratefile(files2,gene)
         outfile = joinpath(outfolder,file2)
         r1 = StochasticGene.readrates(joinpath(folder1,file1))
