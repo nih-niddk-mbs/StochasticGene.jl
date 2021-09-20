@@ -283,6 +283,9 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     if typeof(G) <: Number
         G = string(G)
     end
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
     for file1 in files1
@@ -300,9 +303,6 @@ function  assemble_r(ratefile1,ratefile2,outfile)
     r2 = StochasticGene.readrates(ratefile2)
     r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
     r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
-    if ~isdir(outfile)
-        mkpath(outfile)
-    end
     f = open(outfile,"w")
     writedlm(f,[r],',')
     close(f)
