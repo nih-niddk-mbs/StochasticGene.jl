@@ -7,7 +7,7 @@ transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERR
 
 function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,transient::Bool=false,juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
     genes = checkgenes(conds[1],datafolder,thresholdlow,thresholdhigh,root)
-    makeswarm(genes,G,infolder,swarmfile,inlabel,label,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,transient,juliafile,nprocs,root)
+    makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,transient,juliafile,nprocs,root)
 end
 
 function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,transient::Bool=false,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
