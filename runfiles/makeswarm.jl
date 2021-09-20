@@ -272,6 +272,30 @@ function filter_gene_nan(measurefile,measure)
     return genes
 end
 
+
+function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
+    if typeof(G) <: Number
+        G = string(G)
+    end
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
+    files1 = getratefile(folder1,G,cond1)
+    files2 = getratefile(folder2,G,cond2)
+    for file1 in files1
+        gene = StochasticGene.getgene(file1)
+        file2 = getratefile(files2,gene)
+        outfile = joinpath(outfolder,file2)
+        r1 = StochasticGene.readrates(ratefile1)
+        r2 = StochasticGene.readrates(ratefile2)
+        r2[end] = r1[end]
+        f = open(outfile,"w")
+        writedlm(f,[r2],',')
+        close(f)
+    end
+
+end
+
 """
 assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
 
