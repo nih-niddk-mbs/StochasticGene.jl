@@ -172,17 +172,6 @@ function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldpri
     return r
 end
 
-
-function  assemble_r(ratefile1,ratefile2,outfile)
-    r1 = StochasticGene.readrates(ratefile1)
-    r2 = StochasticGene.readrates(ratefile2)
-    r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
-    r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
-    f = open(outfile,"w")
-    writedlm(f,[r],',')
-    close(f)
-end
-
 function getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root,data)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
     if isfile(ratefile)

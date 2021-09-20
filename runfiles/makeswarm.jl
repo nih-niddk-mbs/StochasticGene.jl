@@ -291,6 +291,18 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     end
 end
 
+
+function  assemble_r(ratefile1,ratefile2,outfile)
+    r1 = StochasticGene.readrates(ratefile1)
+    r2 = StochasticGene.readrates(ratefile2)
+    r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
+    r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
+    f = open(outfile,"w")
+    writedlm(f,[r],',')
+    close(f)
+end
+
+
 function getratefile(files,gene)
     files = files[occursin.("_"*gene*"_",files)][1]
 end
