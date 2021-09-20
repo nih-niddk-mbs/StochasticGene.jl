@@ -280,6 +280,9 @@ Combine rates from two separate fits into a single rate vector
 """
 
 function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
+    if typeof(G) <: Number
+        G = string(G)
+    end
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
     for file1 in files1
