@@ -30,9 +30,22 @@ root = root folder of data and Results folders
 """
 # function fit_rna(nchains::Int,gene::String,G::Int,data::StochasticGene.HistogramData,maxtime::Float64,nsets,fittedparam,infolder,resultfolder,datafolder,inlabel,runcycle::Bool,params::Tuple,root)
 function fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fittedparam = make_fittedparam(G,nsets)
+    fit_rna(nchains,gene,fittedparam,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    nothing
+end
+
+function fit_rna(nchains::Int,gene::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fittedparam = parse.(Int,split(fittedparam,"_"))
+    fit_rna(nchains,gene,fittedparam,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    nothing
+end
+
+
+function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     datacond = string.(split(datacond,"_"))
-    fittedparam = make_fittedparam(G,nsets)
+
     if transient
         data = make_data(gene,datacond,datafolder,label,root,["T0","T30","T120"],[0.,30.,120.])
     else

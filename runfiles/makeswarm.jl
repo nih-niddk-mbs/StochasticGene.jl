@@ -5,12 +5,12 @@ using DelimitedFiles
 transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
 
-function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,thresholdlow,thresholdhigh,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 8,nchains::Int = 8,runcycle::Bool=true,transient::Bool=false,juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::Vector = ["DMSO","AUXIN"],result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",nprocs::Int=2,root="/home/carsonc/scrna/")
     genes = checkgenes(conds[1],datafolder,thresholdlow,thresholdhigh,root)
-    makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds,result,batchsize,maxtime,nchains,runcycle,transient,juliafile,nprocs,root)
+    makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,juliafile=juliafile,nprocs=nprocs,root=root)
 end
 
-function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String,conds::Vector,result::String,batchsize,maxtime,nchains::Int,runcycle::Bool=true,transient::Bool=false,juliafile::String="fitscript.jl",nprocs::Int=8,root="/home/carsonc/scrna/")
+function makeswarm(genes::Vector,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;conds::Vector=["DMSO"],result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",nprocs::Int=2,root="/home/carsonc/scrna/")
 
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
@@ -29,14 +29,14 @@ function makeswarm(genes,G::Int,infolder,swarmfile::String,inlabel,label,nsets,d
         for cond in conds
             for batch in eachindex(batches)
                 sfile = swarmfile * "_" * cond * "$batch" * ".swarm"
-                writegenes(sfile,batches[batch],nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
+                writegenes(sfile,batches[batch],nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam)
             end
         end
     else
         for cond in conds
             sfile = swarmfile * "_" * cond * ".swarm"
             f = open(sfile,"w")
-            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
+            writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam)
         end
     end
 end
@@ -82,11 +82,10 @@ function getbatches(genes,ngenes,batchsize)
     return batches
 end
 
-function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains)
+function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam)
     f = open(sfile,"w")
-println(runcycle)
     for gene in genes
-        writedlm(f,["julia -p" nprocs juliafile gene cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient nchains])
+        writedlm(f,["julia -p" nprocs juliafile gene cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient nchains fittedparam])
     end
     close(f)
 end
