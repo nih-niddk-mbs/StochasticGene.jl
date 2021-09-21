@@ -325,7 +325,7 @@ end
 function assemble_r(gene,G,folder1,folder2,cond1,cond2,outfolder)
     file1 = getratefile(gene,G,folder1,cond1)[1]
     file2 = getratefile(gene,G,folder2,cond2)[1]
-    name = replace(file1, cond1 => "JOINT")
+    name = replace(file1, cond1 => cond1 * "-" * cond2)
     println(name)
     outfile = joinpath(outfolder,name)
     println(outfile)
