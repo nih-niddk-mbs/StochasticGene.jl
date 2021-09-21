@@ -282,6 +282,9 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     end
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
+    if files2 == 0
+        files2 = files1
+    end
     for file1 in files1
         gene = StochasticGene.getgene(file1)
         file2 = getratefile(files2,gene)
@@ -304,7 +307,13 @@ end
 
 
 function getratefile(files,gene)
-    files = files[occursin.("_"*gene*"_",files)][1]
+    files = files[occursin.("_"*gene*"_",files)]
+    if length(files) > 0
+        return files
+    else
+        println(gene)
+        return 0.
+    end
 end
 
 function getratefile(folder,G,cond)
