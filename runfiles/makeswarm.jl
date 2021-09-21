@@ -6,9 +6,13 @@ transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERR
 
 
 function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
-
-    genes = checkgenes("DMSO",datafolder,thresholdlow,thresholdhigh,root)
-    makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,juliafile=juliafile,nprocs=nprocs,root=root)
+    if occursin.("-",conds)
+        cond = string.(split(conds,"-"))[1]
+    else
+        cond = conds
+    end
+    genes = checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root)
+    makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,juliafile=juliafile,root=root)
 end
 
 function makeswarm(genes::Vector,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
