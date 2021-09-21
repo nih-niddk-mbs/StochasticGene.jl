@@ -158,6 +158,7 @@ function make_data(gene::String,cond::Array,datafolder,label,root)
     for i in eachindex(cond)
         datafile[i] = StochasticGene.scRNApath(gene,cond[i],datafolder,root)
     end
+    println(datafile)
     StochasticGene.data_rna(datafile,label,gene,false)
 end
 
