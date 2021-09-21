@@ -502,15 +502,15 @@ function makestring(v)
     return s
 end
 
-function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false)
+function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false,type=2)
     for l in label, c in cond, g in model
-        assemble_rates(folder,l,c,g,append,header)
+        assemble_rates(folder,l,c,g,append,header,type)
         assemble_measures(folder,l,c,g,append,header)
         assemble_stats("mean",folder,l,c,g,append,header)
     end
 end
 
-function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool)
+function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type=2)
     files = getfiles(folder,"rates",label,cond,model)
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
@@ -523,7 +523,7 @@ function assemble_rates(folder::String,label::String,cond::String,model::String,
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
-        r = readrates(target)
+        r = readrates(target,type)
         writedlm(f,[gene r'],',')
     end
     close(f)
