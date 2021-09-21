@@ -26,6 +26,7 @@ annealsteps = in number of annealing steps
 temp = MCMC temperature
 tempanneal = starting temperature for annealing
 root = root folder of data and Results folders
+fittedparam = indices of parameters to be fit (input as string of ints separated by "-")
 
 """
 # function fit_rna(nchains::Int,gene::String,G::Int,data::StochasticGene.HistogramData,maxtime::Float64,nsets,fittedparam,infolder,resultfolder,datafolder,inlabel,runcycle::Bool,params::Tuple,root)
@@ -36,7 +37,7 @@ function fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,info
 end
 
 function fit_rna(nchains::Int,gene::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fittedparam = parse.(Int,split(fittedparam,"_"))
+    fittedparam = parse.(Int,split(fittedparam,"-"))
     fit_rna(nchains,gene,fittedparam,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
 end
@@ -44,7 +45,7 @@ end
 
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
-    datacond = string.(split(datacond,"_"))
+    datacond = string.(split(datacond,"-"))
 
     if transient
         data = make_data(gene,datacond,datafolder,label,root,["T0","T30","T120"],[0.,30.,120.])
