@@ -177,12 +177,6 @@ Steady State of G model accounting for number of alleles
 using iterative block algorithm (may not converge to correct solution)
 """
 function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
-    # r = rin/rin[2*n+2]
-    # gammap,gamman = get_gamma(r,n)
-    # nu = r[2*n+1]
-    # T,B = transition_rate_mat(n,gammap,gamman,nu)
-    # P = initial_pmf(T,nu,n,nhist)
-    # mhist=steady_state(nhist,P,T,B)
     mhist = marginalize(steady_state_fast(rin,n,nhist))
     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
 end
@@ -688,11 +682,11 @@ function init_prob(pss,r,n,nr,nonzeros)
     SIinit = SIinit[nonzeros]
     SIinit/sum(SIinit)
 end
+
 function init_prob(pss,r,n)
 
-
-
 end
+
 """
 accumulate(SA::Matrix,n,nr)
 Sum over all probability vectors accumulated into OFF states

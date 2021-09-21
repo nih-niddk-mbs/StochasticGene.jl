@@ -356,27 +356,6 @@ function plot_histogram_rna(gene::String,cond::String,datapath::String)
     return h
 end
 
-function plot_histogram_rna(data::TransientRNAData,model::AbstractGMmodel)
-    r = model.rates
-    h=StochasticGene.likelihoodarray(r[model.fittedparam],data,model)
-    for i in eachindex(h)
-        figure(data.gene *":T" * "$(data.time[i])")
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-    end
-    return h
-end
-
-function plot_histogram_rna(data::RNAData,model::AbstractGMmodel)
-    r = model.rates
-    h=StochasticGene.likelihoodfn(r[model.fittedparam],data,model)
-    figure(data.gene)
-    plot(h)
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
-
 function plot_histogram_fish(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
     r = readrates(modelfile,1)
     data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
@@ -423,14 +402,8 @@ function plot_transient_rna(gene,cond,G,nalleles,label,datafolders::Vector,folde
     return r,h
 end
 
-function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)
-    r = get_rates(param,model)
-    G = model.G
-    h0 = h0 = steady_state_full(r[1:2*G],G-1,maxdata)
-    transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
-    # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
-end
-# functions to build paths to data and results
+
+# functions to build paths to RNA/FISH data and results
 
 function scRNApath(gene::String,cond::String,datapath::String,root::String)
     datapath = joinpath(root,datapath)
