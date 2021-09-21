@@ -175,7 +175,7 @@ end
 function getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root,data)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
     if isfile(ratefile)
-        r = StochasticGene.readrates(ratefile,1)
+        r = StochasticGene.readrates(ratefile,2)
         r[end] = clamp(r[end],eps(Float64),1-eps(Float64))
         if length(r) == 2*G*nsets + 1
             println(r)

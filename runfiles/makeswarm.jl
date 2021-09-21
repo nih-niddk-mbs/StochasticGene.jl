@@ -323,8 +323,8 @@ end
 
 
 function  assemble_r(ratefile1,ratefile2,outfile)
-    r1 = StochasticGene.readrates(ratefile1)
-    r2 = StochasticGene.readrates(ratefile2)
+    r1 = StochasticGene.readrates(ratefile1,2)
+    r2 = StochasticGene.readrates(ratefile2,2)
     r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
     r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
     f = open(outfile,"w")
