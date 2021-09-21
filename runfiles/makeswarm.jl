@@ -309,7 +309,7 @@ end
 function getratefile(files,gene)
     files = files[occursin.("_"*gene*"_",files)]
     if length(files) > 0
-        return files
+        return files[1]
     else
         println(gene)
         return 0.
