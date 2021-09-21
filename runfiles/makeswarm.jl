@@ -282,12 +282,12 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     end
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
-    if files2 == 0
-        files2 = files1
-    end
     for file1 in files1
         gene = StochasticGene.getgene(file1)
         file2 = getratefile(files2,gene)
+        if file2 == 0
+            file2 = file1
+        end
         name = replace(file1, cond1 => cond1 * "-" * cond2)
         outfile = joinpath(outfolder,name)
         assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
