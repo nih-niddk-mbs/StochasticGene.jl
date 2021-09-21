@@ -314,7 +314,7 @@ function getratefile(files,gene)
         return files[1]
     else
         println(gene)
-        return 0.
+        return 0
     end
 end
 
