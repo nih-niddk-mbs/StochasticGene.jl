@@ -46,7 +46,7 @@ end
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     datacond = string.(split(datacond,"-"))
-    println(datacond)
+
     if transient
         data = make_data(gene,datacond,datafolder,label,root,["T0","T30","T120"],[0.,30.,120.])
     else
@@ -158,7 +158,6 @@ function make_data(gene::String,cond::Array,datafolder,label,root)
     for i in eachindex(cond)
         datafile[i] = StochasticGene.scRNApath(gene,cond[i],datafolder,root)
     end
-    println(datafile)
     StochasticGene.data_rna(datafile,label,gene,false)
 end
 
