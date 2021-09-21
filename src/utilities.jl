@@ -264,6 +264,155 @@ function mediansmooth(xin,window)
     x
 end
 
+"""
+plot_histogram()
+
+functions to plot data and model predicted histograms
+
+"""
+function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
+    h=likelihoodarray(get_param(model),data,model)
+    figure(data.gene)
+    for i in eachindex(h)
+        plot(h[i])
+        plot(normalize_histogram(data.histRNA[i]))
+    end
+    return h
+end
+function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
+    h=likelihoodfn(get_param(model),data,model)
+    figure(data.gene)
+    plot(h)
+    plot(normalize_histogram(data.histRNA))
+    return h
+end
+
+function plot_histogram(data::RNALiveCellData,model)
+    h=likelihoodtuple(get_param(model),data,model)
+    figure(data.gene)
+    plot(h[1])
+    plot(normalize_histogram(data.OFF))
+    plot(h[2])
+    plot(normalize_histogram(data.ON))
+    figure("FISH")
+    plot(h[3])
+    plot(normalize_histogram(data.histRNA))
+    return h
+end
+
+function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
+    r = model.rates
+    h=StochasticGene.likelihoodarray(r[model.fittedparam],data,model)
+    for i in eachindex(h)
+        figure(data.gene *":T" * "$(data.time[i])")
+        plot(h[i])
+        plot(normalize_histogram(data.histRNA[i]))
+    end
+    return h
+end
+
+function plot_histogram(data::RNAData,model::AbstractGMmodel)
+    r = model.rates
+    h=StochasticGene.likelihoodfn(r[model.fittedparam],data,model)
+    figure(data.gene)
+    plot(h)
+    plot(normalize_histogram(data.histRNA))
+    return h
+end
+
+"""
+residenceprob_G(file,G,header)
+residenceprob_G(r,n)
+
+Residence probability of G states
+given by exact steady state solution
+of master equation
+
+"""
+function residenceprob_G(file::String,G,header=false)
+    r = get_all_rates(file,header)
+    m = size(r)[1]
+    p = Array{Any,2}(undef,m,G+1)
+    n = G-1
+    for i in 1:m
+        p[i,1] = r[i,1]
+        p[i,2:end] = residenceprob_G(r[i,2:2*n+1],n)
+    end
+    return p
+end
+
+function residenceprob_G(r::Vector,n::Int)
+    Gss = Array{Float64,2}(undef,1,n+1)
+    Gss[1,1] = 1.
+    for k in 1:n
+        Gss[1,k+1] = Gss[1,k]*r[2*k-1]/r[2*k]
+    end
+    Gss ./= sum(Gss)
+end
+
+"""
+splicesiteusage()
+
+splice site usage probability is the probabilty of ejection times
+the probability of not ejection prior to that point
+"""
+splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates,model.G-1,model.R)
+function splicesiteusage(r::Vector,n::Int,nr::Int)
+    nu = get_nu(r,n,nr)
+    eta = get_eta(r,n,nr)
+	ssf = zeros(nr)
+	survival = 1
+	for j in 1:nr
+		ssf[j] = eta[j]/(nu[j+1]+eta[j])*survival
+		survival *= nu[j+1]/(nu[j+1]+eta[j])
+	end
+	return ssf
+end
+
+"""
+burstsize(n,nr,r)
+Burst size distribution of GRS  model
+for total pre-mRNA occupancy and
+unspliced (visible) occupancy
+obtained by marginalizing over conditional steady state distribution
+"""
+burstsize(model::GRSMmodel) = burstsize(model.G-1,model.R,model.rates)
+function burstsize(n::Int,nr::Int,r::Vector)
+    T =  mat_GSR_T(r,n,nr)
+    pss = normalized_nullspace(T)
+	Rss = zeros(nr)
+	Rssvisible = zeros(nr)
+	ssf = zeros(nr)
+	asum = 0
+	for w=1:nr
+		for i = 1:n+1, z = 1:3^nr
+			zdigits = digits(z-1,base=3,pad=nr)
+			a = i + (n+1)*(z-1)
+			if sum(zdigits .== 2) == w
+				Rssvisible[w] += pss[a]
+			end
+			if sum(zdigits .> 0) == w
+				Rss[w] += pss[a]
+			end
+		end
+	end
+	Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
+end
+
+"""
+teststeadystatemodel(model,nhist)
+
+Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
+
+"""
+function teststeadystatemodel(model::AbstractGMmodel,nhist)
+    G = model.G
+    r = model.rates
+    g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
+    g2 = telegraph(G-1,r[1:2*G],10000000,1e-5,nhist,model.nalleles)
+    return g1,g2
+end
+
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
 #     for x in data1, y in data2
