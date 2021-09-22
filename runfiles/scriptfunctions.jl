@@ -78,9 +78,26 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,m
     nothing
 end
 
-function initial_ll(param,data,model)
+function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,maxtime,temp,tempanneal)
+    options = StochasticGene.MHOptions(100,0,0,maxtime/10,temp,tempanneal)
+    model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
+    param,_ = StochasticGene.initial_proposal(model)
+    initial_ll(param,data,model,"pre-cycle ll:")
+    t0 = time()
+    while (time() - t0 < maxtime)
+        for fp in fittedparam
+            model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,[fp],decayrate,yieldprior,0)
+            fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
+            r = StochasticGene.get_rates(fit.parml,model)
+        end
+    end
+    return r
+end
+
+
+function initial_ll(param,data,model,message="initial ll:")
     ll,_ = StochasticGene.loglikelihood(param,data,model)
-    println("initial ll: ",ll)
+    println(message,ll)
 end
 
 function initialize(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
@@ -173,18 +190,6 @@ function make_data(gene::String,cond::String,datafolder,label,root,sets::Vector,
     StochasticGene.data_rna(datafile,label,times,gene,false)
 end
 
-function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,maxtime,temp,tempanneal)
-    options = StochasticGene.MHOptions(100,0,0,maxtime/10,temp,tempanneal)
-    t0 = time()
-    while (time() - t0 < maxtime)
-        for fp in fittedparam
-            model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,[fp],decayrate,yieldprior,0)
-            fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
-            r = StochasticGene.get_rates(fit.parml,model)
-        end
-    end
-    return r
-end
 
 function getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root,data)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
