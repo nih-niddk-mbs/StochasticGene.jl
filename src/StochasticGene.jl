@@ -53,14 +53,14 @@ export
 # Type system
 include("common.jl")
 
-# Input output functions
-include("io.jl")
-
 # commonly used functions
 include("utilities.jl")
 
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
+
+# Input output functions
+include("io.jl")
 
 # Chemical master equation solutions of stochastic models for likelihood functions in fitting algorithms
 include("chemical_master.jl")
