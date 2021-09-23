@@ -362,12 +362,10 @@ function offtime(gene::String,infile,n,method,root)
 
 end
 
-function write_moments(outfile,infile::String,cond,datafolder,root)
+function write_moments(outfile,genelist,cond,datafolder,root)
     f = open(outfile,"w")
-    contents,head = readdlm(infile,',',header=true)
     writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
-    for r in eachrow(contents)
-        gene = String(r[1])
+    for gene in genelist
         datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
         # data = StochasticGene.data_rna(datafile,label,gene,false)
         len,h = StochasticGene.histograms_rna(datafile,gene,false)
