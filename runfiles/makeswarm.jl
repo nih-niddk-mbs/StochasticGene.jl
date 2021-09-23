@@ -270,6 +270,16 @@ function scan_swarmfile(file)
     return genes
 end
 
+function scan_makefile(makefile,folder=".")
+    genes = Array{String,1}(undef,0)
+    joinpath(folder,makefile)
+    file = readdlm(makefile,'\t')
+    for line in eachrow(file)
+        push!(genes,line[4])
+    end
+    return genes
+end
+
 function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
     if typeof(G) <: Number
         G = string(G)
