@@ -267,13 +267,15 @@ function readrow(file::String,row)
     contents = readdlm(file,',')
     if typeof(size(contents,1)) <: Int
         if size(contents,1) >= row
-            contents[row,:]
-        end
+            return contents[row,:]
+        else
+            return contents[1,:]
+            println(contents[row,:])
+        end        
     else
-        contents[1,:]
+        return contents[1,:]
         println(contents[row,:])
     end
-    return contents
 end
 
 function write_residency_G(fileout::String,filein::String,G,header)
