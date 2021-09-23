@@ -244,7 +244,7 @@ end
 
 function get_missing_genes(genes,folder,type,label,cond,model)
     genes1=StochasticGene.getgenes(folder,type,label,cond,model)
-    setdiff(genes1,genes)
+    union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
 
 function scan_swarmfiles(jobid,folder=".")
