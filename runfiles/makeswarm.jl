@@ -270,10 +270,10 @@ function scan_swarmfile(file)
     return genes
 end
 
-function scan_makefile(makefile,folder=".")
+function scan_fitfile(file,folder=".")
     genes = Array{String,1}(undef,0)
-    joinpath(folder,makefile)
-    file = readdlm(makefile,'\t')
+    joinpath(folder,file)
+    file = readdlm(file,'\t')
     for line in eachrow(file)
         push!(genes,line[4])
     end
