@@ -265,11 +265,11 @@ readrates(file::String,type::Int) = readrow(file,type)
 
 function readrow(file::String,row)
     contents = readdlm(file,',')
-    println(typeof(contents))
-    if size(contents,1) >= row
+    if typeof(size(contents,1)) <: Int && size(contents,1) >= row
         contents[row,:]
     else
         contents[1,:]
+        println(contents[row,:])
     end
 end
 
