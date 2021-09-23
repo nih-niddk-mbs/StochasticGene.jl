@@ -265,12 +265,15 @@ readrates(file::String,type::Int) = readrow(file,type)
 
 function readrow(file::String,row)
     contents = readdlm(file,',')
-    if typeof(size(contents,1)) <: Int && size(contents,1) >= row
-        contents[row,:]
+    if typeof(size(contents,1)) <: Int
+        if size(contents,1) >= row
+            contents[row,:]
+        end
     else
         contents[1,:]
         println(contents[row,:])
     end
+    return contents
 end
 
 function write_residency_G(fileout::String,filein::String,G,header)
