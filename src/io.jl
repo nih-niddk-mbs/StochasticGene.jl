@@ -5,6 +5,16 @@ function extractparts(file::String)
     split(file,"_")
 end
 
+function getgenes(folder,type,label,cond,model)
+    genes = Array{String,1}(undef,0)
+    files = getfiles(folder,type,label,cond,model)
+    for file in files
+        push!(genes,getgene(file))
+
+    end
+    return genes
+end
+
 function getgene(file::String)
     v = extractparts(file)
     getgene(v)
@@ -265,17 +275,7 @@ readrates(file::String,type::Int) = readrow(file,type)
 
 function readrow(file::String,row)
     contents = readdlm(file,',')
-    if typeof(size(contents,1)) <: Int
-        if size(contents,1) >= row
-            return contents[row,:]
-        else
-            return contents[1,:]
-            println(contents[row,:])
-        end        
-    else
-        return contents[1,:]
-        println(contents[row,:])
-    end
+    contents[row,:]
 end
 
 function write_residency_G(fileout::String,filein::String,G,header)

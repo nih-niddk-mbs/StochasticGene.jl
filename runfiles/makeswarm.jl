@@ -242,6 +242,33 @@ function filter_gene_nan(measurefile,measure)
     return genes
 end
 
+function get_missing_genes(genes,folder,type,label,cond,model)
+    genes1=StochasticGene.getgenes(folder,type,label,cond,model)
+    setdiff(genes1,genes)
+end
+
+function scan_swarmfiles(jobid,folder=".")
+    if ~(typeof(jobid) <: String)
+        jobid = string(jobid)
+    end
+    genes = Array{String,1}(undef,0)
+    files = readdir(folder)
+    files = files[occursin.(jobid,files)]
+    for file in files
+        genes = vcat(genes,scan_swarmfile(file))
+    end
+    return genes
+end
+
+function scan_swarmfile(file)
+    genes = Array{String,1}(undef,0)
+    contents = readdlm(file,'\t')
+    lines = contents[occursin.("[\"",string.(contents))]
+    for line in lines
+        push!(genes,split.(string(line)," ")[1])
+    end
+    return genes
+end
 
 function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
     if typeof(G) <: Number
@@ -303,6 +330,9 @@ function  assemble_r(ratefile1,ratefile2,outfile)
     r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
     r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
     f = open(outfile,"w")
+    writedlm(f,[r],',')
+    writedlm(f,[r],',')
+    writedlm(f,[r],',')
     writedlm(f,[r],',')
     close(f)
 end
