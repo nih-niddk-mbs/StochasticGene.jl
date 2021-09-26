@@ -270,6 +270,15 @@ plot_histogram()
 functions to plot data and model predicted histograms
 
 """
+function plot_histogram(data::RNAData,model::GMlossmodel)
+    h=likelihoodarray(get_param(model),data,model)
+    for i in eachindex(h)
+        figure()
+        plot(h[i])
+        plot(normalize_histogram(data.histRNA[i]))
+    end
+    return h
+end
 function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
     h=likelihoodarray(get_param(model),data,model)
     figure(data.gene)

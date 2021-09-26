@@ -462,7 +462,7 @@ deviance(fit,data,model)
 Deviance
 """
 # deviance(predictions::Array,data::HistogramData) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
-deviance(predictions::Array,data::HistogramData) = deviance(predictions,datahistogram(data))
+deviance(predictions::Array,data::HistogramData) = deviance(predictions,datapdf(data))
 
 # (crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
 function deviance(fit::Fit,data::HistogramData,model)
@@ -475,4 +475,4 @@ function deviance(data::HistogramData,model::StochasticGRmodel)
     deviance(h,data)
 end
 
-deviance(predictions::Array,hist::Array) = 2*hist'*(log.(normalize_histogram(max.(hist,eps(Float64))))-log.(normalize_histogram(max.(predictions,eps(Float64)))))
+deviance(predictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,eps(Float64)))-log.(max.(predictions,eps(Float64))))

@@ -200,7 +200,15 @@ datahistogram(data::RNALiveCellData) = [data.OFF;data.ON;data.histRNA]
 
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF);normalize_histogram(data.ON);normalize_histogram(data.histRNA)]
-datapdf(data::AbstractRNAData{Array{Array,1}}) = normalize_histogram(datahistogram(data))
+# datapdf(data::AbstractRNAData{Array{Array,1}}) = normalize_histogram(datahistogram(data))
+function datapdf(data::AbstractRNAData{Array{Array,1}})
+# function datahistogram(data::TransientRNAData)
+    v = normalize_histogram(data.histRNA[1])
+    for i in 2:length(data.histRNA)
+        v = vcat(v,normalize_histogram(data.histRNA[i]))
+    end
+    return v
+end
 
 #### Model likelihoods   ####
 

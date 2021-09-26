@@ -30,7 +30,7 @@ fittedparam = indices of parameters to be fit (input as string of ints separated
 
 """
 # function fit_rna(nchains::Int,gene::String,G::Int,data::StochasticGene.HistogramData,maxtime::Float64,nsets,fittedparam,infolder,resultfolder,datafolder,inlabel,runcycle::Bool,params::Tuple,root)
-function fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+function fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = make_fittedparam(G,nsets)
     fit_rna(nchains,gene,fittedparam,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
@@ -59,7 +59,7 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,m
     end
     nalleles = alleles(root,gene)
     yieldprior = .1
-    r = getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets,root,data)
+    r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
     if runcycle
         maxtime /= 2
@@ -115,15 +115,22 @@ function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println("Deviance: ",StochasticGene.deviance(fit,data,model))
 end
 
-function transient_rna(nchains,gene::String,cond::String,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fittedparam = make_fittedparam(G,nsets)
+function transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     data = make_data(gene,cond,G,datafolder,label,nsets,root)
-    model = make_model(gene,G,fittedparam,inlabel,infolder,nsets,root)
+    model = make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data)
     param,_ = StochasticGene.initial_proposal(model)
     return param, data, model
 end
 
-function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root)
+function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    datacond = string.(split(cond,"-"))
+    data = make_data(gene,datacond,datafolder,label,root)
+    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
+function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data)
     decayrate = decay(root,gene)
     println(decayrate)
     if decayrate < 0
@@ -131,7 +138,7 @@ function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root)
     end
     nalleles = alleles(root,gene)
     yieldprior = .1
-    r = getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets,root)
+    r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
     model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
 end
@@ -191,7 +198,7 @@ function make_data(gene::String,cond::String,datafolder,label,root,sets::Vector,
 end
 
 
-function getr(gene,G,nalleles,decayrate,fittedparam,inlabel,infolder,nsets::Int,root,data)
+function getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets::Int,root,data)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
     println(ratefile)
     if isfile(ratefile)
