@@ -160,13 +160,34 @@ function findjobs(folder)
     unique(files)
 end
 
-function fixruns(jobs)
+# function fixruns(jobs)
+#     runlist = Vector{String}(undef,0)
+#     for job in jobs
+#         if occursin("FAILED",read(`jobhist $job`,String))
+#             swarmfile = findswarm(job)
+#             list = readdlm(swarmfile,',')
+#             runs =  chomp(read(pipeline(`jobhist $job`, `grep FAILED`),String))
+#             runs = split(runs,'\n')
+#             println(job)
+#             for run in runs
+#                 linenumber = parse(Int,split(split(run," ")[1],"_")[2])
+#                 a = String(list[linenumber+1])
+#                 println(a)
+#                 push!(runlist,a)
+#             end
+#         end
+#     end
+#     return runlist
+# end
+
+
+function fixruns(jobs,message="FAILED")
     runlist = Vector{String}(undef,0)
     for job in jobs
-        if occursin("FAILED",read(`jobhist $job`,String))
+        if occursin(message,read(`jobhist $job`,String))
             swarmfile = findswarm(job)
             list = readdlm(swarmfile,',')
-            runs =  chomp(read(pipeline(`jobhist $job`, `grep FAILED`),String))
+            runs =  chomp(read(pipeline(`jobhist $job`, `grep $message`),String))
             runs = split(runs,'\n')
             println(job)
             for run in runs
