@@ -201,9 +201,9 @@ function fixruns(jobs,message="FAILED")
     return runlist
 end
 
-function writeruns(runs)
+function writeruns(runs,outfile="fitfix.swarm")
 
-    f = open("fitfix.swarm","w")
+    f = open(outfile,"w")
     for run in runs
         writedlm(f,[run],quotes=false)
     end

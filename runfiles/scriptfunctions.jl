@@ -56,6 +56,8 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,m
     decayrate = decay(root,gene)
     if decayrate < 0
         throw("error")
+    else
+        println(decayrate)
     end
     nalleles = alleles(root,gene)
     yieldprior = .1
@@ -125,21 +127,23 @@ end
 function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
     datacond = string.(split(cond,"-"))
     data = make_data(gene,datacond,datafolder,label,root)
-    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data)
+    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data,false)
     param,_ = StochasticGene.initial_proposal(model)
     return param, data, model
 end
 
-function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data)
+function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = decay(root,gene)
-    println(decayrate)
-    if decayrate < 0
-        throw("error")
+    if verbose
+        println(decayrate)
+        if decayrate < 0
+            throw("error")
+        end
     end
     nalleles = alleles(root,gene)
     yieldprior = .1
-    r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
-    cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
+    r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data,verbose)
+    cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
     model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
 end
 
@@ -198,14 +202,18 @@ function make_data(gene::String,cond::String,datafolder,label,root,sets::Vector,
 end
 
 
-function getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets::Int,root,data)
+function getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets::Int,root,data,verbose=true)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
-    println(ratefile)
+    if verbose
+        println(ratefile)
+    end
     if isfile(ratefile)
         r = StochasticGene.readrates(ratefile,2)
         r[end] = clamp(r[end],eps(Float64),1-eps(Float64))
         if length(r) == 2*G*nsets + 1
-            println(r)
+            if verbose
+                println(r)
+            end
             return r
         end
     end
@@ -242,7 +250,7 @@ function setr(G,decayrate,nsets,data)
     return r
 end
 
-function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
+function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
     paramfile = StochasticGene.path_Gmodel("param_stats",gene,G,nalleles,inlabel,infolder,root)
     if isfile(paramfile)
         cv = StochasticGene.read_covlogparam(paramfile)
@@ -253,7 +261,9 @@ function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
     else
         cv = .02
     end
-    println(cv)
+    if verbose
+        println(cv)
+    end
     return cv
 end
 
@@ -262,7 +272,6 @@ function decay(root::String,gene,file="data/HCT116_all_cells_histograms_and_half
     if isfile(path)
         in = readdlm(path,',')
         a = in[findfirst(in[:,1] .== gene),col]
-        println(a)
         return decay(a)
     else
         println(gene," has no decay time")
@@ -286,7 +295,7 @@ function alleles(root,gene,file="data/HCT116_alleles_number.txt")
     in[findfirst(in[:,1] .== gene),3]
 end
 
-function fix_measures(resultfolder,measurefile,ratefile::String,cond,n,datafolder,root)
+function repair_measures(resultfolder,measurefile,ratefile::String,cond,n::Int,datafolder,root)
     front,back = split(measurefile,".")
     fix = front * "fix" * "." * back
     measurepath = joinpath(resultfolder,measurefile)
@@ -304,6 +313,23 @@ function fix_measures(resultfolder,measurefile,ratefile::String,cond,n,datafolde
         writedlm(f,[measures[i:i,:] d ll a],',')
     end
     close(f)
+end
+
+function repair_measures(outfile,file,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    contents,header = readdlm(file,',',header=true)
+    f = open(outfile,"w")
+    writedlm(f,[header],',')
+    for row in eachrow(contents)
+        row[3],row[6],row[2] = measures(string(row[1]),fittedparam,cond,G,folder,datafolder,label,nsets,root)
+        writedlm(f, [row],',')
+    end
+    close(f)
+end
+
+function measures(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    param,data,model = steadystate_rna(gene,fittedparam,cond,G,folder,datafolder,label,nsets,root)
+    ll = StochasticGene.loglikelihood(param,data,model)[1]
+    return ll, StochasticGene.aic(length(fittedparam),ll), StochasticGene.deviance(data,model)
 end
 
 function deviance(r,cond,n,datafolder,root)
@@ -331,6 +357,15 @@ function write_histograms(outfolder,ratefile::String,cond,n,datafolder,root)
         close(f)
     end
 end
+
+function histograms(r,cond,n,datafolder,root)
+    gene = String(r[1])
+    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
+    hd = StochasticGene.read_scrna(datafile)
+    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene))
+    return h,hd
+end
+
 
 function write_burst_stats(outfile,infile::String,n,root)
     f = open(outfile,"w")
@@ -382,20 +417,6 @@ function write_moments(outfile,genelist,cond,datafolder,root)
     close(f)
 end
 
-function histograms(r,cond,n,datafolder,root)
-    gene = String(r[1])
-    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
-    hd = StochasticGene.read_scrna(datafile)
-    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene))
-    return h,hd
-end
-
-
-function bestmodel(measures2,measures3)
-    m2,head = readdlm(infile,',',header=true)
-    m3,head = readdlm(infile,',',header=true)
-end
-
 function join_files(file1::String,file2::String,outfile::String,addlabel::Bool=true)
     contents1,head1 = readdlm(file1,',',header=true)   # model G=2
     contents2,head2 = readdlm(file2,',',header=true)   # model G=3
@@ -420,6 +441,55 @@ function join_files(file1::String,file2::String,outfile::String,addlabel::Bool=t
     close(f)
 end
 
+function join_files(models::Array,files::Array,outfile::String,addlabel::Bool=true)
+    m = length(files)
+    contents = Array{Array,1}(undef,m)
+    headers = Array{Array,1}(undef,m)
+    len = 0
+    for i in 1:m
+        contents[i],headers[i] = readdlm(files[i],',',header=true)
+        len += length(headers[i][2:end])
+    end
+    f = open(outfile,"w")
+    header = Array{String,1}(undef,0)
+    for i in 1:m
+        if addlabel
+            header = vcat(header,String.(headers[i][2:end]) .* "_G$(models[i])")
+        else
+            header = vcat(header,String.(headers[i][2:end]))
+        end
+    end
+    header = reshape(permutedims(header),(1,len))
+    header = hcat(headers[1][1],header)
+    println(header)
+    writedlm(f,header,',')
+    for row in 1:size(contents[1],1)
+        content = contents[1][row:row,2:end]
+        for i in 1:m-1
+            if contents[i][row,1] == contents[i+1][row,1]
+                content = hcat(content,contents[i+1][row:row,2:end])
+                # content = reshape(permutedims(content),(1,len))
+            end
+        end
+        content = hcat(contents[1][row:row,1],content)
+        writedlm(f,[content],',')
+    end
+    close(f)
+end
+
+function best_AIC(outfile,infile)
+    contents,head = readdlm(infile,',',header=true)
+    head = vec(head)
+    ind = occursin.("AIC",string.(head)) .& .~ occursin.("WAIC",string.(head))
+    f = open(outfile,"w")
+    writedlm(f,["Gene" "Model 1" "Model 2" "Model 3" "Winning Model"],',')
+    for row in eachrow(contents)
+        writedlm(f,[row[1] reshape(row[ind],1,3) argmin(float.(row[ind]))],',')
+    end
+    close(f)
+end
+
+
 function best_model(file::String)
     contents,head = readdlm(file,',',header=true)
     f = open(file,"w")
@@ -442,6 +512,12 @@ function best_model(file::String)
     end
     close(f)
 end
+
+function bestmodel(measures2,measures3)
+    m2,head = readdlm(infile,',',header=true)
+    m3,head = readdlm(infile,',',header=true)
+end
+
 
 function add_best_burst(filein,fileout,filemodel2,filemodel3)
     contents,head = readdlm(filein,',',header=true)

@@ -220,7 +220,8 @@ aic(fit)
 
 AIC
 """
-aic(fit) = 2*length(fit.parml) + 2*fit.llml
+aic(fit::Fit) = 2*length(fit.parml) + 2*fit.llml
+aic(nparams::Int,llml) = 2*nparams + 2*llml
 
 """
 initial_proposal(model)
@@ -429,7 +430,7 @@ crossentropy(predictions::Array{T},data::Array{T}) where {T}
 compute crosscentropy between data histogram and likelilhood
 """
 function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
-        lltot = hist' * log.(normalize_histogram(max.(predictions,eps(T1))))
+        lltot = hist' * log.(max.(predictions,eps(T1)))
         isfinite(lltot) ? -lltot : Inf
 end
 # function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}

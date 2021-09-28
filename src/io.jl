@@ -46,7 +46,8 @@ function assemble_rates(folder::String,label::String,cond::String,model::String,
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     if header
-        writedlm(f,ratelabels(model,false),',')
+        r = readrates(joinpath(folder, files[1]),type)
+        writedlm(f,ratelabels(model,length(r),false),',')
         # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
     end
 
@@ -77,14 +78,15 @@ function assemble_measures(folder::String,label::String,cond::String,model::Stri
 end
 
 function assemble_stats(stattype,folder::String,label::String,cond::String,model::String,append::String,header::Bool)
-    files = getfiles(folder,"stats",label,cond,model)
+    files = getfiles(folder,"param_stats",label,cond,model)
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
-    if header
-        writedlm(f,ratelabels(model,true),',')
-        # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
-    end
+    # if header
+    #     r = readstats(joinpath(folder, files[1]),stattype)
+    #     writedlm(f,ratelabels(model,length(r),true),',')
+    #     # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
+    # end
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
@@ -94,26 +96,46 @@ function assemble_stats(stattype,folder::String,label::String,cond::String,model
     close(f)
 end
 
-function ratelabels(model,sd::Bool)
-    n = parse(Int,model)
-    if sd
-        if n == 3
-            return ["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield" "sd"]
-        elseif n == 2
-            return ["Gene" "rate01" "sd" "rate10" "sd" "eject" "sd" "yield" "sd"]
-        else
-            return []
-        end
-    else
-        if n == 3
-            return ["Gene" "rate01" "rate10" "rate12" "rate21" "eject" "decay" "yield"]
-        elseif n == 2
-            return ["Gene" "rate01" "rate10" "eject" "decay" "yield"]
-        else
-            return []
-        end
+function ratelabels(model,lenr,sd::Bool)
+    G = parse(Int,model)
+    n = G-1
+    Grates = Array{String,2}(undef,1,2*n)
+    for i = 0:n-1
+        Grates[1,2*i+1] = "rate$i$(i+1)"
+        Grates[1,2*i+2] = "rates$(i+1)$i"
     end
+    nsets = div(lenr-1,2*G)
+    rates = [Grates "eject" "decay"]
+    for i = 2:nsets
+        rates = [rates Grates "eject" "decay"]
+    end
+    rates = [rates "yield"]
+    if sd
+        rates = reshape([rates; fill("sd",1,lenr)],1,2*(lenr))
+    end
+
+    return ["Gene" rates]
 end
+
+
+#     if sd
+#         if G == 3
+#             return ["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield" "sd"]
+#         elseif G == 2
+#             return ["Gene" "rate01" "sd" "rate10" "sd" "eject" "sd" "yield" "sd"]
+#         else
+#             return []
+#         end
+#     else
+#         if G == 3
+#             return ["Gene" "rate01" "rate10" "rate12" "rate21" "eject" "decay" "yield"]
+#         elseif G == 2
+#             return ["Gene" "rate01" "rate10" "eject" "decay" "yield"]
+#         else
+#             return []
+#         end
+#     end
+# end
 
 
 function get_all_rates(file::String,header::Bool)
