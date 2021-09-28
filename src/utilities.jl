@@ -271,7 +271,7 @@ functions to plot data and model predicted histograms
 
 """
 function plot_histogram(data::RNAData,model::GMlossmodel)
-    h=likelihoodarray(get_param(model),data,model)
+    h=likelihoodarray(model.rates,data,model)
     for i in eachindex(h)
         figure()
         plot(h[i])
@@ -280,7 +280,7 @@ function plot_histogram(data::RNAData,model::GMlossmodel)
     return h
 end
 function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
-    h=likelihoodarray(get_param(model),data,model)
+    h=likelihoodarray(model.rates,data,model)
     figure(data.gene)
     for i in eachindex(h)
         plot(h[i])
@@ -289,7 +289,7 @@ function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
     return h
 end
 function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
-    h=likelihoodfn(get_param(model),data,model)
+    h=likelihoodfn(model.rates,data,model)
     figure(data.gene)
     plot(h)
     plot(normalize_histogram(data.histRNA))
@@ -297,7 +297,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
 end
 
 function plot_histogram(data::RNALiveCellData,model)
-    h=likelihoodtuple(get_param(model),data,model)
+    h=likelihoodtuple(model.rates,data,model)
     figure(data.gene)
     plot(h[1])
     plot(normalize_histogram(data.OFF))
@@ -310,8 +310,7 @@ function plot_histogram(data::RNALiveCellData,model)
 end
 
 function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
-    r = model.rates
-    h=StochasticGene.likelihoodarray(r[model.fittedparam],data,model)
+    h=StochasticGene.likelihoodarray(model.rates,data,model)
     for i in eachindex(h)
         figure(data.gene *":T" * "$(data.time[i])")
         plot(h[i])
@@ -321,8 +320,7 @@ function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
 end
 
 function plot_histogram(data::RNAData,model::AbstractGMmodel)
-    r = model.rates
-    h=StochasticGene.likelihoodfn(r[model.fittedparam],data,model)
+    h=StochasticGene.likelihoodfn(model.rates,data,model)
     figure(data.gene)
     plot(h)
     plot(normalize_histogram(data.histRNA))

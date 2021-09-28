@@ -46,7 +46,6 @@ end
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     datacond = string.(split(datacond,"-"))
-
     if transient
         data = make_data(gene,datacond,datafolder,label,root,["T0","T30","T120"],[0.,30.,120.])
     else
@@ -132,6 +131,14 @@ function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,dat
     return param, data, model
 end
 
+function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    datacond = string.(split(cond,"-"))
+    data = make_data(gene,datacond,datafolder,label,root)
+    model = make_model(gene,r,G,fittedparam,nsets,root)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
 function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = decay(root,gene)
     if verbose
@@ -146,6 +153,8 @@ function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data,verbose=
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
     model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
 end
+
+make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r,G,alleles(root,gene),nsets,.02,fittedparam,r[2*G],.1,0)
 
 function make_fittedparam(G::Int,nsets)
 
@@ -366,6 +375,28 @@ function histograms(r,cond,n,datafolder,root)
     return h,hd
 end
 
+function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,folder::String,datafolder,label,nsets,root)
+    rates,head = readdlm(ratefile,',',header=true)
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
+    cond = string.(split(datacond,"-"))
+    for r in eachrow(rates)
+        h = histograms(r,fittedparam,datacond,G,folder,datafolder,label,nsets,root)
+        for i in eachindex(cond)
+            f = open(joinpath(outfolder,string(r[1]) * cond[i] * ".txt"),"w")
+            writedlm(f,h[i])
+            close(f)
+        end
+    end
+end
+
+function histograms(rin,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    gene = string(rin[1])
+    r = float.(rin[2:end])
+    param,data,model = steadystate_rna(r,gene,fittedparam,cond,G,folder,datafolder,label,nsets,root)
+    StochasticGene.likelihoodarray(r,data,model)
+end
 
 function write_burst_stats(outfile,infile::String,n,root)
     f = open(outfile,"w")

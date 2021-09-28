@@ -228,7 +228,7 @@ function likelihoodfn(param,data::RNAData,model::GMlossmodel)
     steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
 end
 function likelihoodfn(param,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <: Array, T2 <: Array}
-    h = likelihoodarray(param,data,model)
+    h = likelihoodarray(get_rates(param,model),data,model)
     hconcat = Array{Float64,1}(undef,0)
     for h in h
         hconcat = vcat(hconcat,h)
@@ -236,33 +236,39 @@ function likelihoodfn(param,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <
     return hconcat
 end
 function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
-    modelOFF, modelON, histF = likelihoodtuple(param,data,model)
+    modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
     return [modelOFF;modelON;histF]
 end
 
 """
-likelihoodarray(param,data,model)
+likelihoodarray(r,data,model)
 
-Compute time dependent model likelihoods
+Compute likelihoods for multiple distributions
+
+r = full rate vector including yield if it exists
+data = data structure
+model = model structure
+
+
+For time dependent model likelihoods
 first set of parameters gives the initial histogram
-2nd set gives the new parameters at time 0
+2nd set gives the new parameters at subsequent times
 data.histRNA holds array of histograms for time points given by data.time
 transient computes the time evolution of the histogram
 model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
 """
-function likelihoodarray(param,data::TransientRNAData,model::AbstractGMmodel)
-    h=likelihoodarray(param,data,model,maximum(data.nRNA))
+function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
+    h=likelihoodarray(r,data,model,maximum(data.nRNA))
     trim(h,data.nRNA)
 end
-function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel)
-    yieldfactor = get_rates(param,model)[end]
+function likelihoodarray(r,data::TransientRNAData,model::GMlossmodel)
+    yieldfactor = r[end]
     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
-    h = likelihoodarray(param,data::TransientRNAData,model,yieldfactor,nh)
+    h = likelihoodarray(r[1:end-1],data::TransientRNAData,model,yieldfactor,nh)
     # technical_loss!(h,yieldfactor)
     trim(h,data.nRNA)
 end
-function likelihoodarray(param,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <: Array, T2 <: Array}
-    r = get_rates(param,model)
+function likelihoodarray(r,data::RNAData{T1,T2},model::GMlossmodel) where {T1 <: Array, T2 <: Array}
     yieldfactor = r[end]
     n = model.G-1
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -271,15 +277,13 @@ function likelihoodarray(param,data::RNAData{T1,T2},model::GMlossmodel) where {T
     end
     trim(h,data.nRNA)
 end
-function likelihoodarray(param,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)
-    r = get_rates(param,model)
+function likelihoodarray(r,data::TransientRNAData,model::GMlossmodel,yieldfactor,maxdata)
     G = model.G
     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
     transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
-function likelihoodarray(param,data::RNAData,model::GMmultimodel)
-    r = get_rates(param,model)
+function likelihoodarray(r,data::RNAData,model::GMmultimodel)
     G = model.G
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
     for i in eachindex(data.nRNA)
@@ -288,8 +292,7 @@ function likelihoodarray(param,data::RNAData,model::GMmultimodel)
     end
     return h
 end
-function likelihoodarray(param,data::RNAMixedData,model::AbstractGMmodel)
-    r = get_rates(param,model)
+function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     G = model.G
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
     j = 1
@@ -306,8 +309,7 @@ function likelihoodarray(param,data::RNAMixedData,model::AbstractGMmodel)
     return h
 end
 
-function likelihoodtuple(param,data::RNALiveCellData,model::GRSMmodel)
-    r = get_rates(param,model)
+function likelihoodtuple(r,data::RNALiveCellData,model::GRSMmodel)
     if model.type == "offdecay"
         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
         histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
