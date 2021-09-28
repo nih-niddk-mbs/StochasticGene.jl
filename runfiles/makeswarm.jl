@@ -374,13 +374,23 @@ function  assemble_r(ratefile1,ratefile2,outfile)
     close(f)
 end
 
+function assemble_r(gene,G,folder1,folder2,cond1,cond2,outfolder)
+    file1 = getratefile(gene,G,folder1,cond1)[1]
+    file2 = getratefile(gene,G,folder2,cond2)[1]
+    name = replace(file1, cond1 => cond1 * "-" * cond2)
+    println(name)
+    outfile = joinpath(outfolder,name)
+    println(outfile)
+    assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
+end
+
 
 function getratefile(files,gene)
     files = files[occursin.("_"*gene*"_",files)]
     if length(files) > 0
         return files[1]
     else
-        println(gene)
+        # println(gene)
         return 0
     end
 end
@@ -400,15 +410,6 @@ function getratefile(gene,G,folder,cond)
     files[occursin.(cond,files)]
 end
 
-function assemble_r(gene,G,folder1,folder2,cond1,cond2,outfolder)
-    file1 = getratefile(gene,G,folder1,cond1)[1]
-    file2 = getratefile(gene,G,folder2,cond2)[1]
-    name = replace(file1, cond1 => cond1 * "-" * cond2)
-    println(name)
-    outfile = joinpath(outfolder,name)
-    println(outfile)
-    assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
-end
 
 function change_name(folder,oldname,newname)
     files = readdir(folder)

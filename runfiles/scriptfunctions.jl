@@ -131,7 +131,7 @@ function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,dat
     return param, data, model
 end
 
-function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
     datacond = string.(split(cond,"-"))
     data = make_data(gene,datacond,datafolder,label,root)
     model = make_model(gene,r,G,fittedparam,nsets,root)
@@ -375,14 +375,14 @@ function histograms(r,cond,n,datafolder,root)
     return h,hd
 end
 
-function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,folder::String,datafolder,label,nsets,root)
+function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,datafolder::String,label,nsets,root)
     rates,head = readdlm(ratefile,',',header=true)
     if ~isdir(outfolder)
         mkpath(outfolder)
     end
     cond = string.(split(datacond,"-"))
     for r in eachrow(rates)
-        h = histograms(r,fittedparam,datacond,G,folder,datafolder,label,nsets,root)
+        h = histograms(r,fittedparam,datacond,G,datafolder,label,nsets,root)
         for i in eachindex(cond)
             f = open(joinpath(outfolder,string(r[1]) * cond[i] * ".txt"),"w")
             writedlm(f,h[i])
@@ -391,10 +391,10 @@ function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,folder:
     end
 end
 
-function histograms(rin,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
     gene = string(rin[1])
     r = float.(rin[2:end])
-    param,data,model = steadystate_rna(r,gene,fittedparam,cond,G,folder,datafolder,label,nsets,root)
+    param,data,model = steadystate_rna(r,gene,fittedparam,cond,G,datafolder,label,nsets,root)
     StochasticGene.likelihoodarray(r,data,model)
 end
 
