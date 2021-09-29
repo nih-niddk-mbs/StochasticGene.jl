@@ -407,7 +407,7 @@ function getratefile(gene,G,folder,cond)
     files = files[occursin.("rate",files)]
     files = files[occursin.("_"*gene*"_",files)]
     files = files[occursin.("_"*G*"_",files)]
-    files[occursin.(cond,files)]
+    files[occursin.(("_"*cond*"_",files)]
 end
 
 
