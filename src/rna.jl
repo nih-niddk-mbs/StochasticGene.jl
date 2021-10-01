@@ -220,7 +220,7 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
     r0 = [.01*ones(2*(G-1));.1;decayrate]
-    rc = [.25*ones(2*(G-1));.1;0.01]
+    rc = [.1*ones(2*(G-1));.01;0.01]
     rm = r0
     rcv = rc
     for i in 2:nsets

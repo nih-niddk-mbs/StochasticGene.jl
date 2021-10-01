@@ -102,7 +102,7 @@ function ratelabels(model,lenr,sd::Bool)
     Grates = Array{String,2}(undef,1,2*n)
     for i = 0:n-1
         Grates[1,2*i+1] = "rate$i$(i+1)"
-        Grates[1,2*i+2] = "rates$(i+1)$i"
+        Grates[1,2*i+2] = "rate$(i+1)$i"
     end
     nsets = div(lenr-1,2*G)
     rates = [Grates "eject" "decay"]
