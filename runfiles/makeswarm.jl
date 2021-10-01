@@ -264,7 +264,7 @@ function filter_gene_nan(measurefile,measure)
 end
 
 function get_missing_genes(folder,type,label,cond,model)
-    genes = checkgenes(cond,folder,0.,100000000.,"../")
+    genes = checkgenes("DMSO",folder,0.,100000000.,"../")
     genes1=StochasticGene.getgenes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end

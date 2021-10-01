@@ -406,7 +406,7 @@ function write_burst_stats(outfile,infile::String,n,root)
         gene = String(r[1])
         off = meanofftime(r[2:2*n+3],n,1)
         # h,hd = histograms(r,cond,n,datafolder,root)
-        writedlm(f,[gene off r[2*n+1]/r[2*n]],',')
+        writedlm(f,[gene off r[2*n+2]/r[2*n+1]],',')
     end
     close(f)
 end
