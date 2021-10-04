@@ -402,9 +402,19 @@ function getratefile(folder,G,cond)
     files[occursin.("_"*G*"_",files)]
 end
 
-function getratefile(gene,G,folder,cond)
+# function getratefile(gene,G,folder,cond)
+#     files = readdir(folder)
+#     files = files[occursin.("rate",files)]
+#     files = files[occursin.("_"*gene*"_",files)]
+#     files = files[occursin.("_"*G*"_",files)]
+#     files[occursin.("_"*cond*"_",files)]
+# end
+
+getratefile(gene,G,folder,cond) = getfile("rate",gene,G,folder,cond)
+
+function getfile(type,gene::String,G::String,folder,cond)
     files = readdir(folder)
-    files = files[occursin.("rate",files)]
+    files = files[occursin.(type,files)]
     files = files[occursin.("_"*gene*"_",files)]
     files = files[occursin.("_"*G*"_",files)]
     files[occursin.("_"*cond*"_",files)]

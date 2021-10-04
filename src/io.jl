@@ -243,11 +243,7 @@ function write_param_stats(file,stats::Stats)
     close(f)
 end
 
-function read_covlogparam(file)
-    in = readdlm(file,',')
-    n = sum(in[end,:].!="")
-    in[end-n+1:end,1:n]
-end
+
 
 function readmeasures(file::String)
     d = readdeviance(file)
@@ -268,19 +264,50 @@ end
 
 readtemp(file::String) = readrow(file,4)
 
-function readstats(file::String,stat)
-    if stat == "mean"
-        m = readmean(file::String)
-        return reshape(m,length(m),1)
-    else
-        return 0
-    end
-end
+# function read_stats(file,rows)
+#     in = readdlm(file,',')
+#     n = sum(in[end,:].!="")
+#     in[rows,1:n]
+# end
+
+# function readstats(file::String,stat)
+#     if stat == "mean"
+#         m = readmean(file::String)
+#         return reshape(m,length(m),1)
+#     else
+#         return 0
+#     end
+# end
+
 
 function readmean(file::String)
-    m = readrow(file,[1,2])
+    m = readrow(file,1)
     reshape(m,length(m),1)
 end
+
+function readsd(file::String)
+    m = readrow(file,2)
+    reshape(m,length(m),1)
+end
+
+function read_covlogparam(file)
+    in = readdlm(file,',')
+    n = sum(in[end,:].!="")
+    in[end-n+1:end,1:n]
+end
+
+function read_covparam(file::String)
+    in = readdlm(file,',')
+    n = sum(in[end,:].!="")
+    in[5+2*n:11+2*n,1:n]
+end
+
+function read_corparam(file::String)
+    in = readdlm(file,',')
+    n = sum(in[end,:].!="")
+    in[5+n:11+n,1:n]
+end
+
 
 """
 readrates(file::String,type::Int)
@@ -299,6 +326,9 @@ function readrow(file::String,row)
     contents = readdlm(file,',')
     contents[row,:]
 end
+
+
+
 
 function write_residency_G(fileout::String,filein::String,G,header)
     rates = get_all_rates(filein,header)

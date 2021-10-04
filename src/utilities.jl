@@ -108,6 +108,9 @@ pooled_mean(means,counts) = counts'*means/sum(counts)
 pooled_variance(vars,counts) = (counts .- 1)'*vars/sum(counts .- 1)
 pooled_std(std,counts) = sqrt(pooled_variance(std.^2,counts))
 
+
+var_ratio(mua,mub,vara,varb,cov) = mua^2/mub^2*(vara/mua^2 - 2*cov/(mua*mub) + varb/mub^2)
+
 """
 decimal(x::Vector)
 convert digits of base 3 number to base 10

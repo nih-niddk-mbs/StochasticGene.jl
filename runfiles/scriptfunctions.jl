@@ -398,17 +398,43 @@ function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
     StochasticGene.likelihoodarray(r,data,model)
 end
 
-function write_burst_stats(outfile,infile::String,n,root)
+function write_burst_stats(outfile,infile::String,G::String,folder,cond,set)
     f = open(outfile,"w")
     contents,head = readdlm(infile,',',header=true)
-    writedlm(f,["Gene" "Mean OFF Period (min)" "Burst Size"],',')
+    writedlm(f,["Gene" "Frequency" "sd" "Burst Size" "sd"],',')
     for r in eachrow(contents)
         gene = String(r[1])
-        off = meanofftime(r[2:2*n+3],n,1)
+        # off = meanofftime(r[2:2*n+3],n,1)
         # h,hd = histograms(r,cond,n,datafolder,root)
-        writedlm(f,[gene off r[2*n+2]/r[2*n+1]],',')
+        freq = frequency(gene,G,folder,cond,2*parse(Int,G)-1)
+        burst = burstsize(gene,G,folder,cond,set)
+        writedlm(f,[gene freq[1] freq[2] burst[1] burst[2]],',')
     end
     close(f)
+end
+
+function frequency(gene,G,folder,cond,eject)
+    filestats=joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1])
+    filerates = joinpath(folder,getratefile(gene,G,folder,cond)[1])
+    mu = StochasticGene.readmean(filestats)
+    sd = StochasticGene.readsd(filestats)
+    rates = StochasticGene.readrates(filerates)
+    decay = rates[2*parse(Int,G)]
+    return mu[eject]/decay, sd[eject]/decay
+end
+
+function burstsize(gene,G,folder,cond,set)
+    eject = 2*parse(Int,G) -1 + set-1
+    off = eject - 1 + set -1
+    burstsize(gene,G,folder,cond,eject,off)
+end
+
+function burstsize(gene,G,folder,cond,eject,off)
+    file=joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1])
+    mu = StochasticGene.readmean(file)
+    cov = StochasticGene.read_covparam(file)
+    v = StochasticGene.var_ratio(mu[eject],mu[off],cov[eject,eject],cov[off,off],cov[off,eject])
+    return mu[eject]/mu[off], sqrt(v)
 end
 
 meanofftime(gene::String,infile,n,method,root) = sum(1 .- offtime(gene,infile,n,method,root))
