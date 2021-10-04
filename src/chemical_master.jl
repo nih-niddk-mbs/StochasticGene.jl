@@ -129,14 +129,7 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepma
     return P  # marginalize over GR states with marginalize(P) = sum(P,dims=1)
 end
 
-function checkP(A,B,P,total)
-    err = abs.(A*P[:,1])
-    for m = 2:total-1
-        err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
-    end
-    err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
-    sum(err)/total
-end
+
 """
 steady_state(r,n,nhist,nalleles)
 Steady State of mRNA in G (telegraph) model
@@ -148,24 +141,37 @@ function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles:
 end
 
 function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
-    P = steady_state_full(r,n,nhist)
+    if nhist < 1800
+        method = true
+    else
+        method = false
+    end
+    P = steady_state_full(r,n,nhist,method)
     steady_state_rna(P,n,nhist,nalleles)
 end
 """
-steady_state_full(r::Vector,n::Int,nhist::Int)
+steady_state_full(r::Vector,n::Int,nhist::Int,method::Bool)
 Steady State of full G (telegraph) model
+
+method = true: use exact method
+method = false: use fast method
 """
-function steady_state_full(r::Vector,n::Int,nhist::Int)
-    if nhist > 4000 && n > 0
-        return steady_state_fast(r,n,nhist)
+
+function steady_state_full(r::Vector,n::Int,nhist::Int,method::Bool)
+    if method
+        steady_state_full(r,n,nhist)
     else
-        M = mat_GM(r,n,nhist)
-        return normalized_nullspace(M)
+        steady_state_fast(r,n,nhist)
     end
+end
+
+function steady_state_full(r::Vector,n::Int,nhist::Int)
+    M = mat_GM(r,n,nhist)
+    return normalized_nullspace(M)
 end
 """
 steady_state_rna(P,n,nhist,nalleles)
-Steady State of G model accounting for number of alleles
+Steady State of rna distribution for G model accounting for number of alleles
 """
 function steady_state_rna(P,n,nhist,nalleles)
     mhist = marginalize(P,n)
@@ -176,17 +182,26 @@ steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
 Steady State of G model accounting for number of alleles
 using iterative block algorithm (may not converge to correct solution)
 """
-function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
-    mhist = marginalize(steady_state_fast(rin,n,nhist))
-    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
-end
+# function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
+#     mhist = marginalize(steady_state_fast(rin,n,nhist))
+#     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
+# end
 function steady_state_fast(rin::Vector,n::Int,nhist::Int)
     r = rin/rin[2*n+2]
     gammap,gamman = get_gamma(r,n)
     nu = r[2*n+1]
     T,B = transition_rate_mat(n,gammap,gamman,nu)
     P = initial_pmf(T,nu,n,nhist)
-    steady_state(nhist,P,T,B)
+    unfold(steady_state(nhist,P,T,B))
+end
+
+function checkP(A,B,P,total)
+    err = abs.(A*P[:,1])
+    for m = 2:total-1
+        err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
+    end
+    err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
+    sum(err)/total
 end
 """
 nhist_loss(nhist,yieldfactor)
@@ -747,3 +762,5 @@ function marginalize(p::Vector,n)
 end
 
 marginalize(P::Matrix) = sum(P,dims=1)
+
+unfold(P::Matrix) = reshape(P,length(P))
