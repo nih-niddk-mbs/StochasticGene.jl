@@ -69,6 +69,9 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,m
         annealsteps = 0
         warmupsteps = 0
     end
+    if cv != 0.02
+        warmupsteps = 0
+    end
     options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
     param,_ = StochasticGene.initial_proposal(model)
@@ -77,6 +80,21 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,datacond,G::Int,m
     finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println(now())
     nothing
+end
+
+function fit_fish(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+end
+
+function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
+    datarna = StochasticGene.histograms_rna(StochasticGene.scRNApath(gene,cond,rnafolder,root),gene,false)
+    f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
+    return datarna[2],f
+end
+
+function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
+    datafish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
+    StochasticGene.technical_loss(datafish[2],yield,nhist)
 end
 
 function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,maxtime,temp,tempanneal)
@@ -94,7 +112,6 @@ function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldpri
     end
     return r
 end
-
 
 function initial_ll(param,data,model,message="initial ll:")
     ll,_ = StochasticGene.loglikelihood(param,data,model)
