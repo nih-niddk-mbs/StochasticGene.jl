@@ -321,6 +321,7 @@ Read in FISH data from 7timepoint type folders
 """
 function read_fish(path::String,cond::String,threshold::Float64=.98)
     xr = zeros(1000)
+    lx = 0
     for (root,dirs,files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
@@ -329,11 +330,12 @@ function read_fish(path::String,cond::String,threshold::Float64=.98)
                 x1 = readdlm(target)[:,1]
                 x1 = truncate_histogram(x1,threshold,1000)
                 lx = length(x1)
+                println(lx)
                 xr[1:min(lx,1000)] += x1[1:min(lx,1000)]
             end
         end
     end
-    return xr
+    return truncate_histogram(xr,1.0,1000)
 end
 
 function read_fish(path1::String,cond1::String,path2::String,cond2::String,threshold::Float64=.98)
@@ -415,6 +417,8 @@ function scRNApath(gene::String,cond::String,datapath::String,root::String)
 end
 
 scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
+
+FISHpath(gene,cond,datapath,root) = joinpath(joinpath(root,datapath),gene)
 
 
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
