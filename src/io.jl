@@ -270,14 +270,14 @@ readtemp(file::String) = readrow(file,4)
 #     in[rows,1:n]
 # end
 
-# function readstats(file::String,stat)
-#     if stat == "mean"
-#         m = readmean(file::String)
-#         return reshape(m,length(m),1)
-#     else
-#         return 0
-#     end
-# end
+function readstats(file::String,stat)
+    if stat == "mean"
+        m = readmean(file::String)
+        return reshape(m,length(m),1)
+    else
+        return 0
+    end
+end
 
 
 function readmean(file::String)
