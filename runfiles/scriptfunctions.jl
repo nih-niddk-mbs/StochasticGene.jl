@@ -51,8 +51,12 @@ end
 
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
-    datafolder = string.(split(datafolder,"-"))
-    datacond = string.(split(datacond,"-"))
+    if occursin("-",datafolder)
+        datafolder = string.(split(datafolder,"-"))
+    end
+    if occursin("-",datacond)
+        datacond = string.(split(datacond,"-"))
+    end
     if transient
         data = make_data(gene,datacond,datafolder,label,root,["T0","T30","T120"],[0.,30.,120.])
     else
