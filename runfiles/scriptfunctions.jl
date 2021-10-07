@@ -70,16 +70,17 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,randomeffects::Tu
     yieldprior = .1
     r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
-    if runcycle
-        maxtime /= 2
-        r = cycle(nchains,data,r,G,nalleles,nsets,.02,fittedparam,randomeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
-        cv = .02
-        annealsteps = 0
-        warmupsteps = 0
-    end
     if cv != 0.02
         warmupsteps = 0
     end
+    if runcycle
+        maxtime /= 2
+        cv = .02
+        r = cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
+        annealsteps = 0
+        warmupsteps = div(samplesteps,5)
+    end
+
     # options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,0)
     # param,_ = StochasticGene.initial_proposal(model)
