@@ -44,9 +44,8 @@ end
 
 function fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = parse.(Int,split(fittedparam,"-"))
-    if fixedeffects == "eject"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
-    end
+
+    fixedeffects = make_fixedeffects(fixedeffcts)
     fit_rna(nchains,gene,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
 end
@@ -153,6 +152,7 @@ function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println("final ll: ",fit.llml)
     println(fit.accept," ",fit.total)
     println("Deviance: ",StochasticGene.deviance(fit,data,model))
+    println(stats.meanparam)
 end
 
 function transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
@@ -195,6 +195,22 @@ end
 
 make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r,G,alleles(root,gene),nsets,.02,fittedparam,r[2*G],.1,0)
 
+function make_fixedeffects(fixedeffects)
+    if fixedeffects == "eject"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
+    elseif fixedeffects == "off"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-2],[2*G-2])
+    elseif fixedeffects == "on"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-3],[2*G-3])
+    elseif fixedeffects == "offeject" || fixedeffects == "offeject"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-2,2*G*(nsets-1) + 2*G-1],[2*G-2,2*G-1])
+    elseif fixedeffects == "oneject" || fixedeffects == "ejecton"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-1],[2*G-3,2*G-1])
+    elseif fixedeffects == "onoff" || fixedeffects == "offon"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-2],[2*G-3,2*G-2])
+    end
+    return fixedeffects
+end
 function make_fittedparam(G::Int,nsets)
 
     if nsets == 1
