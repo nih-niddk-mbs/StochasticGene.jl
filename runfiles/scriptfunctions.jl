@@ -592,6 +592,20 @@ function best_AIC(outfile,infile)
     close(f)
 end
 
+function sample_non1_genes(infile,n)
+    contents,head = readdlm(infile,',',header=true)
+    list = Array{String,1}(undef,0)
+    for c in eachrow(contents)
+        if c[5] != 1
+            push!(list,c[1])
+        end
+    end
+    a = sample(list,n)
+end
+
+
+
+
 
 function best_model(file::String)
     contents,head = readdlm(file,',',header=true)
