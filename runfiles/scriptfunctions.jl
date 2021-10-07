@@ -252,6 +252,14 @@ function make_data(gene::String,cond::Array,datafolder,label,root)
     StochasticGene.data_rna(datafile,label,gene,false)
 end
 
+function make_data(gene::String,cond::Array,datafolder::Array,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = StochasticGene.scRNApath(gene,cond[i],datafolder[i],root)
+    end
+    StochasticGene.data_rna(datafile,label,gene,false)
+end
+
 function make_data(gene::String,cond::String,datafolder,label,root,sets::Vector,time::Vector)
     if cond == "null"
         cond = ""
