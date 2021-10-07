@@ -146,6 +146,11 @@ function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam:
     d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
     GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
 end
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,randomeffects::Tuple,decayprior::Float64,yieldprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
+    GMrandomeffectslossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,randomeffects,method)
+end
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,method::Int)
     # propcv = proposal_cv_rna(propcv,fittedparam)
     d = prior_rna(r,G::Int,nsets,fittedparam,decayprior)

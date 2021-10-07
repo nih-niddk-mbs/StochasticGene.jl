@@ -17,6 +17,15 @@ abstract type AbstractRNAData{hType} <: HistogramData end
 Data structures
 
 Do not use underscore "_" in name
+
+arguments:
+name: label for the data set
+gene: gene name (case sensitive)
+nRNA: length of histogram
+histRNA: RNA histograms
+bins: number of live cell recording time bins
+OFF:  OFF time probability density
+ON:: ON time probability density
 """
 struct RNAData{nType,hType} <: AbstractRNAData{hType}
     name::String
@@ -48,11 +57,12 @@ end
 struct RNALiveCellData <: HistogramData
     name::String
     gene::String
+    nRNA::Int
+    histRNA::Array
     bins::Array
     OFF::Array
     ON::Array
-    nRNA::Int
-    histRNA::Array
+
 end
 struct MultiRNALiveCellData <: HistogramData
     name::String
@@ -60,8 +70,8 @@ struct MultiRNALiveCellData <: HistogramData
     nRNA::Array
     histRNA::Tuple
     bins::Tuple
-    ON::Tuple
     OFF::Tuple
+    ON::Tuple
 end
 
 """
@@ -75,6 +85,19 @@ abstract type AbstractGRMmodel <: StochasticGRmodel end
 
 """
 Model structures
+
+arguments:
+G: number of G steps
+R: number of R steps
+nalleles: number of alleles producing RNA
+type: type of model (e.g. splice, premature RNA death, etc.)
+rates: transition rates
+rateprior: prior for rates
+proposal: MCMC proposal distribution
+fittedparam: indices of rates to be fitted
+    randomeffects: indices of rates that are fixed to each other, in the form of a 2tuple of vectors
+    with index 1 the tied index vector and 2 the corresponding fitted index vector
+method: numerical method for solving Master equation
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
@@ -133,6 +156,17 @@ struct GMlossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abst
     rateprior::PriorType
     proposal::ProposalType
     fittedparam::ParamType
+    method::MethodType
+end
+
+struct GMfixedeffectslossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
     method::MethodType
 end
 
@@ -328,12 +362,12 @@ get_rates(param,model)
 replace fitted rates with new values and return
 """
 function get_rates(param,model::AbstractGMmodel)
-    r = copy(model.rates)
+    r = get_r(model)
     r[model.fittedparam] = param
     return r
 end
 function get_rates(param,model::GRSMmodel)
-    r = copy(model.rates)
+    r = get_r(model)
     r[model.fittedparam] = param
     setr(r,model)
 end
@@ -345,8 +379,8 @@ get_rates(param,model::GMrescaledmodel)
 gammas are scaled by nu
 """
 function get_rates(param,model::GMrescaledmodel)
-    r = copy(model.rates)
-    n = 2*model.G - 1
+    r = get_r(model)
+    n = get_n(model)
     nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
     r[1:n-1] /= r[n]
     r[model.fittedparam] = param
@@ -356,6 +390,19 @@ function get_rates(param,model::GMrescaledmodel)
     end
     return r
 end
+
+function get_rates(param,model::GMfixedeffectslossmodel)
+    r = get_r(model)
+    n = get_n(model)
+    r[model.fittedparam] = param
+    r[model.fixedeffects[1]] = r[model.fixedeffects[2]]
+    return r
+end
+
+
+get_r(model) = copy(model.rates)
+get_n(model) = 2*model.G - 1
+
 
 """
 get_param(model)
