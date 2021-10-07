@@ -44,7 +44,7 @@ end
 
 function fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = parse.(Int,split(fittedparam,"-"))
-    fixedeffects = make_fixedeffects(fixedeffects)
+    fixedeffects = make_fixedeffects(fixedeffects,G,nsets)
     fit_rna(nchains,gene,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
 end
@@ -194,7 +194,7 @@ end
 
 make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r,G,alleles(root,gene),nsets,.02,fittedparam,r[2*G],.1,0)
 
-function make_fixedeffects(fixedeffects)
+function make_fixedeffects(fixedeffects,G,nsets)
     if fixedeffects == "eject"
         fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
     elseif fixedeffects == "off"
