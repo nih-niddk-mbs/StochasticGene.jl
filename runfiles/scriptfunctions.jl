@@ -42,16 +42,16 @@ function fit_rna(nchains::Int,gene::String,fittedparam::String,datacond,G::Int,m
     nothing
 end
 
-function fit_rna(nchains::Int,gene::String,fittedparam::String,randomeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+function fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = parse.(Int,split(fittedparam,"-"))
-    if randomeffects == "eject"
-        randomeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
+    if fixedeffects == "eject"
+        fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
     end
-    fit_rna(nchains,gene,fittedparam,randomeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    fit_rna(nchains,gene,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
 end
 
-function fit_rna(nchains::Int,gene::String,fittedparam::Vector,randomeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     datacond = string.(split(datacond,"-"))
     if transient
@@ -76,15 +76,15 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,randomeffects::Tu
     if runcycle
         maxtime /= 2
         cv = .02
-        r = cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
+        r = cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
         annealsteps = 0
         warmupsteps = div(samplesteps,5)
     end
 
     # options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-    # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,0)
+    # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
     # param,_ = StochasticGene.initial_proposal(model)
-    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     initial_ll(param,data,model)
     fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
     finalize(data,model,fit,stats,waic,temp,resultfolder,root)
@@ -107,22 +107,22 @@ function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
     StochasticGene.technical_loss(datafish[2],yield,nhist)
 end
 
-function get_structures(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-    if length(randomeffects) > 0
-        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,0)
+function get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+    if length(fixedeffects) > 0
+        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
     else
-        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,0)
+        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
     end
     options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     param,_ = StochasticGene.initial_proposal(model)
     return options,model,param
 end
 
-function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,maxtime,temp,tempanneal)
+function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
     # options = StochasticGene.MHOptions(100,0,0,maxtime/10,temp,tempanneal)
     # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
     # param,_ = StochasticGene.initial_proposal(model)
-    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,randomeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
+    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
     initial_ll(param,data,model,"pre-cycle ll:")
     t0 = time()
     while (time() - t0 < maxtime)
