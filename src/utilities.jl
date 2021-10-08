@@ -294,7 +294,7 @@ function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
     return h
 end
 function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
-    h=likelihoodfn(model.rates,data,model)
+    h=likelihoodfn(get_param(model),data,model)
     figure(data.gene)
     plot(h)
     plot(normalize_histogram(data.histRNA))
@@ -325,12 +325,13 @@ function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
 end
 
 function plot_histogram(data::RNAData,model::AbstractGMmodel)
-    h=StochasticGene.likelihoodfn(model.rates,data,model)
+    h=StochasticGene.likelihoodfn(get_param(model),data,model)
     figure(data.gene)
     plot(h)
     plot(normalize_histogram(data.histRNA))
     return h
 end
+
 
 """
 residenceprob_G(file,G,header)

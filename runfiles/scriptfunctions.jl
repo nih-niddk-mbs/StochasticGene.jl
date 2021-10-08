@@ -32,7 +32,7 @@ fittedparam = indices of parameters to be fit (input as string of ints separated
 # function fit_rna(nchains::Int,gene::String,G::Int,data::StochasticGene.HistogramData,maxtime::Float64,nsets,fittedparam,infolder,resultfolder,datafolder,inlabel,runcycle::Bool,params::Tuple,root)
 function fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = make_fittedparam(G,nsets)
-    fit_rna(nchains,gene,fittedparam,[],datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    fit_rna(nchains,gene,fittedparam,(),datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
     nothing
 end
 
@@ -114,7 +114,7 @@ function get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate
     if length(fixedeffects) > 0
         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
     else
-        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
+        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
     end
     options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     param,_ = StochasticGene.initial_proposal(model)
@@ -206,7 +206,7 @@ function make_fixedeffects(fixedeffects,G,nsets)
         fixedeffects = ([2*G*(nsets-1) + 2*G-2],[2*G-2])
     elseif fixedeffects == "on"
         fixedeffects = ([2*G*(nsets-1) + 2*G-3],[2*G-3])
-    elseif fixedeffects == "offeject" || fixedeffects == "offeject"
+    elseif fixedeffects == "offeject" || fixedeffects == "ejectoff"
         fixedeffects = ([2*G*(nsets-1) + 2*G-2,2*G*(nsets-1) + 2*G-1],[2*G-2,2*G-1])
     elseif fixedeffects == "oneject" || fixedeffects == "ejecton"
         fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-1],[2*G-3,2*G-1])
@@ -698,6 +698,13 @@ function add_best_occupancy(filein,fileout,filemodel2,filemodel3)
     end
     close(f)
 end
+
+function plot_histogram(r,n,nhist,nalleles)
+    h= StochasticGene.steady_state(r[1:2*n+2],r[end],n,nhist,nalleles)
+    plot(h)
+    return h
+end
+
 
 
 # precompile(fit_rna,(String,String,Int,Float64,String,String,String,String,String,Int,String,Bool))
