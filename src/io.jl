@@ -150,7 +150,7 @@ function getfiles(folder::String,type::String,label::String,cond::String,model::
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
-        if occursin(type,file) && occursin(* label * "_" * cond,file)
+        if occursin(type,file) && occursin(label * "_" * cond,file)
             file1 = String(split(file,label)[2])
             v = extractparts(file)
             if getG(v) == model
