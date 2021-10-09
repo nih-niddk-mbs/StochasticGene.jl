@@ -83,7 +83,7 @@ function assemble_stats(stattype,folder::String,label::String,cond::String,model
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
     if header
-        r = readrates(joinpath(folder, files[1]),type)
+        # r = readrates(joinpath(folder, files[1]),stattype)
         writedlm(f,["gene"],',')
         # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
     end
