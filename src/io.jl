@@ -82,11 +82,11 @@ function assemble_stats(stattype,folder::String,label::String,cond::String,model
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
-    # if header
-    #     r = readstats(joinpath(folder, files[1]),stattype)
-    #     writedlm(f,ratelabels(model,length(r),true),',')
-    #     # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
-    # end
+    if header
+        r = readrates(joinpath(folder, files[1]),type)
+        writedlm(f,["gene"],',')
+        # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
+    end
     for file in files
         gene = getgene(file)
         target = joinpath(folder, file)
@@ -150,13 +150,11 @@ function getfiles(folder::String,type::String,label::String,cond::String,model::
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
-        if occursin(type,file) && occursin(label,file)
+        if occursin(type,file) && occursin(* label * "_" * cond,file)
             file1 = String(split(file,label)[2])
-            if occursin(cond,file1)
-                v = extractparts(file)
-                if getG(v) == model
-                    push!(files,file)
-                end
+            v = extractparts(file)
+            if getG(v) == model
+                push!(files,file)
             end
         end
     end

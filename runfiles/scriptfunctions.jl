@@ -705,6 +705,18 @@ function plot_histogram(r,n,nhist,nalleles)
     return h
 end
 
+function prune_file(list,file,outfile,header=true)
+    contents,head = readdlm(file,',',header=header)
+    f = open(outfile,"w")
+    for c in eachrow(contents)
+        if c[1] in list
+            writedlm(f,[c],',')
+        end
+    end
+    close(f)
+end
+
+
 
 
 # precompile(fit_rna,(String,String,Int,Float64,String,String,String,String,String,Int,String,Bool))
