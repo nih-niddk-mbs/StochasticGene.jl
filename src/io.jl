@@ -290,19 +290,19 @@ end
 
 function read_covlogparam(file)
     in = readdlm(file,',')
-    n = sum(in[end,:].!="")
+    n = length(in[1,:])
     in[end-n+1:end,1:n]
 end
 
 function read_covparam(file::String)
     in = readdlm(file,',')
-    n = sum(in[end,:].!="")
+    n = length(in[1,:])
     in[5+2*n:11+2*n,1:n]
 end
 
 function read_corparam(file::String)
     in = readdlm(file,',')
-    n = sum(in[end,:].!="")
+    n = length(in[1,:])
     in[5+n:11+n,1:n]
 end
 

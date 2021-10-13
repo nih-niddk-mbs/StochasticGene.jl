@@ -486,6 +486,9 @@ function write_burst_stats(outfile,infile::String,G::String,folder,cond,root)
         rdecay = decay(root,gene)
         cov = StochasticGene.read_covparam(joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1]))
         # mu = StochasticGene.readmean(joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1]))
+        if size(cov,2) < 2
+            println(gene)
+        end
         for i in eachindex(condarray)
             j = i-1
             freq[2*i-1], freq[2*i] = frequency(rates[1+lr*(i-1)],sqrt(cov[1+lc*j,1+lc*j]),rdecay)
