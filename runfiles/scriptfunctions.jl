@@ -466,14 +466,15 @@ function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
 end
 
 function write_burst_stats(outfile,infile::String,G::String,folder,cond,root)
+    folder = joinpath(root,folder)
     condarray = split(cond,"-")
     g = parse(Int,G)
     lr = 2*g
     lc = 2*g-1
     freq = Array{Float64,1}(undef,2*length(condarray))
     burst = similar(freq)
-    f = open(outfile,"w")
-    contents,head = readdlm(infile,',',header=true)
+    f = open(joinpath(folder,outfile),"w")
+    contents,head = readdlm(joinpath(folder,infile),',',header=true)
     label = Array{String,1}(undef,0)
     for c in condarray
         label = vcat(label, "Freq " * c, "sd","Burst Size " * c, "sd")
@@ -491,6 +492,7 @@ function write_burst_stats(outfile,infile::String,G::String,folder,cond,root)
             burst[2*i-1], burst[2*i] = burstsize(rates[3+lr*j],rates[2+lr*j],cov[3+lc*j,3+lc*j],cov[2+lc*j,2+lc*j],cov[2+lc*j,3+lc*j])
         end
         writedlm(f,[gene freq[1] freq[2] burst[1] burst[2] freq[3] freq[4] burst[3] burst[4]],',')
+        flush(f)
     end
     close(f)
 end
@@ -633,9 +635,6 @@ function sample_non1_genes(infile,n)
 end
 
 
-
-
-
 function best_model(file::String)
     contents,head = readdlm(file,',',header=true)
     f = open(file,"w")
@@ -658,6 +657,26 @@ function best_model(file::String)
     end
     close(f)
 end
+
+function best_waic(folder,root)
+    folder = joinpath(root,folder)
+    files =readdir(folder)
+    lowest = Inf
+    winner = ""
+    for file in files
+        if occursin("measures",file)
+            contents,head = readdlm(joinpath(folder,file),',',header=true)
+            waic = mean(float.(contents[:,4]))
+            println(waic," ",median(float.(contents[:,4]))," ",file)
+            if waic < lowest
+                lowest = waic
+                winner = file
+            end
+        end
+    end
+    return winner,lowest
+end
+
 
 function bestmodel(measures2,measures3)
     m2,head = readdlm(infile,',',header=true)
@@ -715,7 +734,6 @@ function prune_file(list,file,outfile,header=true)
     end
     close(f)
 end
-
 
 
 
