@@ -221,7 +221,7 @@ Set prior distribution for mean and cv of rates
 """
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
     rm,rcv = setpriorrate(G,nsets,decayrate)
-    return [rm;yieldfactor],[rcv;.25]
+    return [rm;yieldfactor],[rcv;.05]
 end
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
     r0 = [.01*ones(2*(G-1));.1;decayrate]

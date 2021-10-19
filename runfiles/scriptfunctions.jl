@@ -70,7 +70,7 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tup
         println(decayrate)
     end
     nalleles = alleles(root,gene)
-    yieldprior = .1
+    yieldprior = .05
     r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
     if cv != 0.02
@@ -670,7 +670,7 @@ function best_waic(folder,root)
         if occursin("measures",file)
             contents,head = readdlm(joinpath(folder,file),',',header=true)
             waic = mean(float.(contents[:,4]))
-            println(waic," ",median(float.(contents[:,4]))," ",file)
+            println(mean(float.(contents[:,2]))," ",waic," ",median(float.(contents[:,4]))," ",file)
             if waic < lowest
                 lowest = waic
                 winner = file
