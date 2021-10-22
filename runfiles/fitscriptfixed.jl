@@ -21,3 +21,4 @@ include("/home/carsonc/StochasticGene/runfiles/scriptfunctions.jl")
 # 12: transient (bool)
 # 13: nchains
 # 14: fittedparams (string), e.g. "1-2-4-7"
+# 15: fixedeffects (string), e.g. "off"

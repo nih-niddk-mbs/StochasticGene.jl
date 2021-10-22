@@ -11,7 +11,7 @@ function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafol
     else
         cond = conds
     end
-    genes = checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root)
+    genes = checkgenes(root,cond,datafolder,thresholdlow,thresholdhigh)
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
 
@@ -61,92 +61,133 @@ function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultf
     close(f)
 end
 
-function checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root = "/Users/carsonc/Box/scrna")
-    datapath = joinpath(root,datafolder)
-    # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
-    genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')[2:end,2]
-    genenames = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')[2:end,1]
-    genes1 = Vector{String}(undef,0)
-    for i in eachindex(genedecay)
-        if typeof(genedecay[i]) <: Number
-            if thresholdlow <= genedecay[i] < thresholdhigh
-                push!(genes1,genenames[i])
+
+# function checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root = "/Users/carsonc/Box/scrna",halflives="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv")
+#     datapath = joinpath(root,datafolder)
+#     # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
+#     hlfile = joinpath(root,halflives)
+#     contents = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
+#     genedecay = contents[2:end,2]
+#     genenames = contents[2:end,1]
+#     genes1 = Vector{String}(undef,0)
+#     for i in eachindex(genedecay)
+#         if typeof(genedecay[i]) <: Number
+#             if thresholdlow <= genedecay[i] < thresholdhigh
+#                 push!(genes1,genenames[i])
+#             end
+#         end
+#     end
+#     println(length(genes1))
+#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
+#     println(length(genes2))
+#     genes = intersect(genes1,genes2)
+#     complement = setdiff(genes1,genes2)
+#     println(length(genes))
+#     println(length(complement))
+#     list = Vector{String}(undef,0)
+#     for gene in genes
+#         if cond == ""
+#             datafile = joinpath(datapath,gene * ".txt")
+#         else
+#             datafile = joinpath(datapath,gene * "_" * cond * ".txt")
+#         end
+#         if isfile(datafile)
+#             push!(list,gene)
+#         end
+#     end
+#     println(length(list))
+#     return list
+# end
+#
+#
+# function checkgenes(cond,datafolder,root = "/Users/carsonc/Box/scrna")
+#     datapath = joinpath(root,datafolder)
+#     # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
+#     genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
+#     # genes1 = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')[2:end,1]
+#     genes1 = Vector{String}(undef,0)
+#     for i in eachindex(genedecay[2:end,2])
+#         if typeof(genedecay[i,2]) <: Number
+#             push!(genes1,genedecay[i,1])
+#         end
+#     end
+#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
+#     println(length(genes1))
+#     println(length(genes2))
+#     genes = intersect(genes1,genes2)
+#     list = Vector{String}(undef,0)
+#     for gene in genes
+#         datafile = joinpath(datapath,gene * "_" * cond * ".txt")
+#         if isfile(datafile)
+#             push!(list,gene)
+#         end
+#     end
+#     println(length(list))
+#     return list
+# end
+#
+# function checkgenes(datafolder,root)
+#     datapath = joinpath(root,datafolder)
+#     genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
+#     genes1 = Vector{String}(undef,0)
+#     for i in eachindex(genedecay[2:end,2])
+#         if typeof(genedecay[i,2]) <: Number
+#             push!(genes1,genedecay[i,1])
+#         end
+#     end
+#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
+#     println(length(genes1))
+#     println(length(genes2))
+#     genes = intersect(genes1,genes2)
+#     list = Vector{String}(undef,0)
+#     for gene in genes
+#         datafile = joinpath(datapath,gene * ".txt")
+#         if isfile(datafile)
+#             push!(list,gene)
+#         end
+#     end
+#     println(length(list))
+#     return list
+# end
+
+
+
+function checkgenes(root,cond,datafolder,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
+    genes = intersect(get_halflives(root,hlfile,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
+    if allelefile != ""
+        return intersect(genes,get_alleles(root,allelefile))
+    else
+        return genes
+    end
+end
+
+function get_genes(root,cond,datafolder)
+    genes = Vector{String}(undef,0)
+    files = readdir(datafolder)
+    for file in files
+        if occursin(cond,file)
+            push!(genes,split(file,"_")[1])
+        end
+    end
+    return genes
+end
+
+function get_halflives(root,file,thresholdlow=0,thresholdhigh=1e8)
+    genes = Vector{String}(undef,0)
+    file = joinpath(root,file)
+    halflives = readdlm(file,',')
+    for row in eachrow(halflives)
+        if typeof(row[2]) <: Number
+            if thresholdlow <= row[2] < thresholdhigh
+                push!(genes,string(row[1]))
             end
         end
     end
-    println(length(genes1))
-    genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-    println(length(genes2))
-    genes = intersect(genes1,genes2)
-    complement = setdiff(genes1,genes2)
-    println(length(genes))
-    println(length(complement))
-    list = Vector{String}(undef,0)
-    for gene in genes
-        if cond == ""
-            datafile = joinpath(datapath,gene * ".txt")
-        else
-            datafile = joinpath(datapath,gene * "_" * cond * ".txt")
-        end
-        if isfile(datafile)
-            push!(list,gene)
-        end
-    end
-    println(length(list))
-    return list
+    return genes
 end
 
+get_alleles(root,allelefile = "data/HCT116_alleles_number.txt") = readdlm(joinpath(root,allelefile))[2:end,1]
 
-function checkgenes(cond,datafolder,root = "/Users/carsonc/Box/scrna")
-    datapath = joinpath(root,datafolder)
-    # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
-    genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
-    # genes1 = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')[2:end,1]
-    genes1 = Vector{String}(undef,0)
-    for i in eachindex(genedecay[2:end,2])
-        if typeof(genedecay[i,2]) <: Number
-            push!(genes1,genedecay[i,1])
-        end
-    end
-    genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-    println(length(genes1))
-    println(length(genes2))
-    genes = intersect(genes1,genes2)
-    list = Vector{String}(undef,0)
-    for gene in genes
-        datafile = joinpath(datapath,gene * "_" * cond * ".txt")
-        if isfile(datafile)
-            push!(list,gene)
-        end
-    end
-    println(length(list))
-    return list
-end
-
-
-function checkgenes(datafolder,root)
-    datapath = joinpath(root,datafolder)
-    genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
-    genes1 = Vector{String}(undef,0)
-    for i in eachindex(genedecay[2:end,2])
-        if typeof(genedecay[i,2]) <: Number
-            push!(genes1,genedecay[i,1])
-        end
-    end
-    genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-    println(length(genes1))
-    println(length(genes2))
-    genes = intersect(genes1,genes2)
-    list = Vector{String}(undef,0)
-    for gene in genes
-        datafile = joinpath(datapath,gene * ".txt")
-        if isfile(datafile)
-            push!(list,gene)
-        end
-    end
-    println(length(list))
-    return list
-end
 
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
@@ -159,27 +200,6 @@ function findjobs(folder)
     end
     unique(files)
 end
-
-# function fixruns(jobs)
-#     runlist = Vector{String}(undef,0)
-#     for job in jobs
-#         if occursin("FAILED",read(`jobhist $job`,String))
-#             swarmfile = findswarm(job)
-#             list = readdlm(swarmfile,',')
-#             runs =  chomp(read(pipeline(`jobhist $job`, `grep FAILED`),String))
-#             runs = split(runs,'\n')
-#             println(job)
-#             for run in runs
-#                 linenumber = parse(Int,split(split(run," ")[1],"_")[2])
-#                 a = String(list[linenumber+1])
-#                 println(a)
-#                 push!(runlist,a)
-#             end
-#         end
-#     end
-#     return runlist
-# end
-
 
 function fixruns(jobs,message="FAILED")
     runlist = Vector{String}(undef,0)
@@ -402,13 +422,6 @@ function getratefile(folder,G,cond)
     files[occursin.("_"*G*"_",files)]
 end
 
-# function getratefile(gene,G,folder,cond)
-#     files = readdir(folder)
-#     files = files[occursin.("rate",files)]
-#     files = files[occursin.("_"*gene*"_",files)]
-#     files = files[occursin.("_"*G*"_",files)]
-#     files[occursin.("_"*cond*"_",files)]
-# end
 
 getratefile(gene,G,folder,cond) = getfile("rate",gene,G,folder,cond)
 
@@ -427,5 +440,33 @@ function change_name(folder,oldname,newname)
     for file in files
         newfile = replace(file, oldname => newname)
         mv(joinpath(folder,file),joinpath(folder,newfile),force=true)
+    end
+end
+
+function make_halflife(infile,outfile,col=4)
+    f = open(outfile,"w")
+    writedlm(f,["Gene" "Halflife"],',')
+    contents,rows = readdlm(infile,',',header=true)
+    for row = eachrow(contents)
+        gene = string(row[1])
+        gene = strip(gene,'*')
+        h1 = float(row[col])
+        h2 = float(row[col+1])
+        if h1 > 0 || h2 > 0
+            h = (h1 + h2)/(float(h1>0) + float(h2>0))
+            writedlm(f,[gene h],',')
+        end
+    end
+    nothing
+end
+
+function make_datafiles(infolder,outfolder,label)
+    histograms = readdir(infolder)
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
+    for file in histograms
+        newfile = replace(file,label => "")
+        cp(joinpath(infolder,file),joinpath(outfolder,newfile))
     end
 end

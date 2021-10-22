@@ -49,8 +49,22 @@ function fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::Str
     nothing
 end
 
+
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    println(now())
+
+    if occursin("mouse",datafolder)
+        decayrate = decay(gene,root,"data/mouse/mousehalflife.csv")
+        nalleles = 2
+    else
+        decayrate = decay(gene,root)
+        nalleles = alleles(gene,root,allelefile)
+    end
+    if decayrate < 0
+        throw("decayrate < 0")
+    else
+        println("decay rate: ",decayrate)
+    end
+
     if occursin("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
     end
@@ -62,14 +76,17 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tup
     else
         data = make_data(gene,datacond,datafolder,label,root)
     end
-    initialize(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
-    decayrate = decay(root,gene)
-    if decayrate < 0
-        throw("error")
-    else
-        println(decayrate)
-    end
-    nalleles = alleles(root,gene)
+
+
+    fit_rna(nchains,data,gene,decayrate,nalleles,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+end
+
+function fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+    println(now())
+
+    printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
+
     yieldprior = .05
     r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
@@ -84,9 +101,6 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tup
         warmupsteps = div(samplesteps,5)
     end
 
-    # options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-    # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
-    # param,_ = StochasticGene.initial_proposal(model)
     options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     initial_ll(param,data,model)
     fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
@@ -94,6 +108,7 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tup
     println(now())
     nothing
 end
+
 
 function fit_fish(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
@@ -143,9 +158,9 @@ function initial_ll(param,data,model,message="initial ll:")
     println(message,ll)
 end
 
-function initialize(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
-    println(gene," ",G," ",cond)
+function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
     println(datafolder)
+    println(gene," ",G," ",cond)
     println("in: ", infolder," out: ",resultfolder)
     println(maxtime)
 end
@@ -343,7 +358,7 @@ function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
     return cv
 end
 
-function decay(root::String,gene,file="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",col=2)
+function decay(gene,root::String,file="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",col=2)
     path = joinpath(root,file)
     if isfile(path)
         in = readdlm(path,',')
@@ -366,7 +381,7 @@ function decay(a,gene)
     end
 end
 
-function alleles(root,gene,file="data/HCT116_alleles_number.txt")
+function alleles(gene,root,file="data/HCT116_alleles_number.txt")
     in = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))
     in[findfirst(in[:,1] .== gene),3]
 end

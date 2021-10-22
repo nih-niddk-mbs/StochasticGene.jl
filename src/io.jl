@@ -117,27 +117,6 @@ function ratelabels(model,lenr,sd::Bool)
     return ["Gene" rates]
 end
 
-
-#     if sd
-#         if G == 3
-#             return ["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield" "sd"]
-#         elseif G == 2
-#             return ["Gene" "rate01" "sd" "rate10" "sd" "eject" "sd" "yield" "sd"]
-#         else
-#             return []
-#         end
-#     else
-#         if G == 3
-#             return ["Gene" "rate01" "rate10" "rate12" "rate21" "eject" "decay" "yield"]
-#         elseif G == 2
-#             return ["Gene" "rate01" "rate10" "eject" "decay" "yield"]
-#         else
-#             return []
-#         end
-#     end
-# end
-
-
 function get_all_rates(file::String,header::Bool)
     r = readdlm(file,',',header=header)
     if header
@@ -150,7 +129,7 @@ function getfiles(folder::String,type::String,label::String,cond::String,model::
     allfiles = readdir(folder)
     files = Array{String,1}(undef,0)
     for file in allfiles
-        if occursin(type,file) && occursin(label * "_" * cond,file)
+        if occursin(type,file) && occursin(label,file) && occursin(cond,file)
             file1 = String(split(file,label)[2])
             v = extractparts(file)
             if getG(v) == model
