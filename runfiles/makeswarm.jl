@@ -163,7 +163,7 @@ end
 
 function get_genes(root,cond,datafolder)
     genes = Vector{String}(undef,0)
-    files = readdir(datafolder)
+    files = readdir(joinpath(root,datafolder))
     for file in files
         if occursin(cond,file)
             push!(genes,split(file,"_")[1])
