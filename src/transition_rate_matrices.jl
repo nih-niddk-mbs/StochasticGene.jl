@@ -87,6 +87,8 @@ returns T
 function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector)
     nT = n+1
 	T = zeros(nT,nT)
+	println(nT)
+	println(gamman)
 	T[1,1] = -gammap[2]
 	T[1,2] = gamman[2]
 	for i=2:nT-1

@@ -335,7 +335,7 @@ function setr(G,decayrate,nsets,data)
     if nsets > 1
         r = [r[1:end-1];r]
     end
-    r[end] = .1
+    r[end] = .05
     println(r)
     return r
 end
