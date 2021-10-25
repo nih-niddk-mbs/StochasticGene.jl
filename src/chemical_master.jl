@@ -141,14 +141,36 @@ function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles:
 end
 
 function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
-    if nhist > 1800 && n > 0
-        method = false
+    if n == 0
+        return steady_state_n0(r,nhist,nalleles)
     else
-        method = true
+        if nhist > 1800
+            method = false
+        else
+            method = true
+        end
+        P = steady_state_full(r,n,nhist,method)
+        return steady_state_rna(P,n,nhist,nalleles)
     end
-    P = steady_state_full(r,n,nhist,method)
-    steady_state_rna(P,n,nhist,nalleles)
 end
+
+
+"""
+steady_state_n0(r::Vector,n::Int,nhist::Int)
+
+steady state for n=0 (i.e. Poisson model)
+"""
+function steady_state_n0(r,nhist)
+    mhist = Vector{Float64}(undef,nhist+2)
+    k = r[1]/r[2]
+    d = Poisson(k)
+    for i in 1:nhist+2
+        mhist[i] = pdf(d,i-1)
+    end
+    return mhist
+end
+steady_state_n0(r,nhist,nalleles) = allele_convolve(steady_state_n0(r,nhist),nalleles)[1:nhist]
+
 """
 steady_state_full(r::Vector,n::Int,nhist::Int,method::Bool)
 Steady State of full G (telegraph) model
