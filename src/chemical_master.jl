@@ -141,10 +141,10 @@ function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles:
 end
 
 function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
-    if nhist < 1800
-        method = true
-    else
+    if nhist > 1800 && n > 0
         method = false
+    else
+        method = true
     end
     P = steady_state_full(r,n,nhist,method)
     steady_state_rna(P,n,nhist,nalleles)
