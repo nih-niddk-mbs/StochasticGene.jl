@@ -58,7 +58,7 @@ function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tup
         nalleles = 2
     else
         decayrate = decay(gene,root)
-        nalleles = alleles(gene,root,allelefile)
+        nalleles = alleles(gene,root)
     end
     if decayrate < 0
         throw("decayrate < 0")
@@ -648,7 +648,7 @@ function sample_non1_genes(infile,n)
             push!(list,c[1])
         end
     end
-    a = sample(list,n)
+    a = sample(list,n,replace=false)
 end
 
 
