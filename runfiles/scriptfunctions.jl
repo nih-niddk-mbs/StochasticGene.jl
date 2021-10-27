@@ -85,6 +85,7 @@ end
 function fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
+    prinln(data.nRNA)
 
     yieldprior = .05
     r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
@@ -633,9 +634,14 @@ function best_AIC(outfile,infile)
     head = vec(head)
     ind = occursin.("AIC",string.(head)) .& .~ occursin.("WAIC",string.(head))
     f = open(outfile,"w")
-    writedlm(f,["Gene" "Model 1" "Model 2" "Model 3" "Winning Model"],',')
+    labels = "Gene"
+    for i in 1:sum(ind)
+        labels = vcat(labels,"Model $(i)")
+    end
+    labels = vcat(labels,"Winning Model")
+    writedlm(f,[reshape(labels,1,length(labels))],',')
     for row in eachrow(contents)
-        writedlm(f,[row[1] reshape(row[ind],1,3) argmin(float.(row[ind]))],',')
+        writedlm(f,[row[1] reshape(row[ind],1,length(row[ind])) argmin(float.(row[ind]))],',')
     end
     close(f)
 end
