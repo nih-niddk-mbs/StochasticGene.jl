@@ -85,7 +85,7 @@ end
 function fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
-    prinln(data.nRNA)
+    println(data.nRNA)
 
     yieldprior = .05
     r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data)
