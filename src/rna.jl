@@ -216,7 +216,10 @@ function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Fl
         end
 end
 """
-function setpriorrate(G)
+setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
+setpriorrate(G::Int,nsets::Int,decayrate::Float64)
+setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
+
 Set prior distribution for mean and cv of rates
 """
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
@@ -244,8 +247,10 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
     return rm,rcv
 end
 """
-proposal_cv_rna(propcv)
-set propcv to a vector or matrix
+proposal_cv_rna(cv)
+proposal_cv_rna(propcv,fittedparam)
+
+set proposal cv to a vector or matrix
 """
 proposal_cv_rna(cv) = typeof(cv) == Float64 ? propcv*ones(length(fittedparam)) : propcv
 
@@ -253,6 +258,8 @@ proposal_cv_rna(propcv,fittedparam) = typeof(propcv) == Float64 ? propcv*ones(le
 
 """
 fittedparam_rna(G,nsets,loss)
+fittedparam_rna(G,nsets)
+
 select all parameters to be fitted except decay rates
 yieldfactor is last parameter in loss models
 """
@@ -295,7 +302,6 @@ function rescale_rate_rna(r,G,decayrate::Float64)
     end
     return rnew
 end
-
 
 
 # Read in data and construct histograms
@@ -350,6 +356,85 @@ function read_fish(path1::String,cond1::String,path2::String,cond2::String,thres
 end
 
 
+
+# functions to build paths to RNA/FISH data and results
+
+function scRNApath(gene::String,cond::String,datapath::String,root::String)
+    datapath = joinpath(root,datapath)
+    if cond == ""
+        joinpath(datapath,gene * ".txt")
+    else
+        joinpath(datapath,gene * "_" * cond * ".txt")
+    end
+end
+
+scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
+
+FISHpath(gene,cond,datapath,root) = joinpath(joinpath(root,datapath),gene)
+
+
+function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
+    path_Gmodel("rates",gene,G,nalleles,label * "_" * cond,folder,root)
+end
+
+function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
+    filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
+    ratefile = type * "_" * filelabel
+    joinpath(root, joinpath(folder,ratefile))
+end
+
+function stats_rna(genes::Vector,conds,datapath,threshold=.99)
+    g = Vector{String}(undef,0)
+    z = Vector{Float64}(undef,0)
+    h1 = Vector{Float64}(undef,0)
+    h2 = Vector{Float64}(undef,0)
+    for gene in genes
+        t,m1,m2 = expression_rna(gene,conds,datapath,threshold)
+        push!(g,gene)
+        push!(z,t)
+        push!(h1,m2)
+        push!(h2,m1)
+    end
+    return g,z,h1,h2
+end
+
+function expression_rna(gene,conds::Vector,folder::String,threshold=.99)
+    h = Vector{Vector}(undef,2)
+    for i in eachindex(conds)
+        datapath = scRNApath(gene,conds[i],folder)
+        h[i] = read_scrna(datapath,threshold)
+    end
+    if length(h[1]) > 0 && length(h[2]) > 0
+        return log_2sample(h[1],h[2]), mean_histogram(h[1]), mean_histogram(h[2])
+    else
+        return 0,0,0
+    end
+end
+
+function expression_rna(gene,conds::Vector,folder::Vector,threshold=.99)
+    h = Vector{Vector}(undef,2)
+    for i in eachindex(conds)
+        datapath = scRNApath(gene,conds[i],folder[i])
+        h[i] = read_scrna(datapath,threshold)
+    end
+    if length(h[1]) > 0 && length(h[2]) > 0
+        return log_2sample(h[1],h[2]), mean_histogram(h[1]), mean_histogram(h[2])
+    else
+        return 0,0,0
+    end
+end
+
+function expression_rna(genes::Vector,cond::String,folder,threshold=.99)
+    h1 = Array{Any,2}(undef,0,2)
+    for gene in genes
+        datapath = scRNApath(gene,cond,folder)
+        h = read_scrna(datapath,threshold)
+        if length(h) > 0
+            h1 = vcat(h1,[gene mean_histogram(h)])
+        end
+    end
+    return h1
+end
 """
 plot_histogram_rna()
 
@@ -407,57 +492,4 @@ function plot_transient_rna(gene,cond,G,nalleles,label,datafolders::Vector,folde
         plot(get_histogram_rna(gene,cond,datafolder,root))
     end
     return r,h
-end
-
-
-# functions to build paths to RNA/FISH data and results
-
-function scRNApath(gene::String,cond::String,datapath::String,root::String)
-    datapath = joinpath(root,datapath)
-    if cond == ""
-        joinpath(datapath,gene * ".txt")
-    else
-        joinpath(datapath,gene * "_" * cond * ".txt")
-    end
-end
-
-scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
-
-FISHpath(gene,cond,datapath,root) = joinpath(joinpath(root,datapath),gene)
-
-
-function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
-    path_Gmodel("rates",gene,G,nalleles,label * "_" * cond,folder,root)
-end
-
-function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
-    filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
-    ratefile = type * "_" * filelabel
-    joinpath(root, joinpath(folder,ratefile))
-end
-
-function stats_rna(genes::Vector,conds::Vector,datapath)
-    z = Vector{Float64}(undef,0)
-    h1 = Vector{Float64}(undef,0)
-    h2 = Vector{Float64}(undef,0)
-    for gene in genes
-        t,m1,m2 = expression_rna(gene,conds,datapath)
-        push!(z,t)
-        push!(h1,m2)
-        push!(h2,m1)
-    end
-    return z,h1,h2
-end
-
-function expression_rna(gene,conds::Vector,folder,threshold=.99)
-    h = Vector{Vector}(undef,2)
-    for i in eachindex(conds)
-        datapath = scRNApath(gene,conds[i],folder)
-        h[i] = read_scrna(datapath,threshold)
-    end
-    if length(h[1]) > 0 && length(h[1]) > 0
-        return log_2sample(h[1],h[2]), mean_histogram(h[1]), mean_histogram(h[2])
-    else
-        return 0,0,0
-    end
 end

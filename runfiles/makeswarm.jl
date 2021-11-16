@@ -11,7 +11,7 @@ function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafol
     else
         cond = conds
     end
-    genes = checkgenes(root,cond,datafolder,thresholdlow,thresholdhigh)
+    genes = checkgenes(root,cond,datafolder,thresholdlow=thresholdlow,thresholdhigh)
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
 
@@ -152,7 +152,7 @@ end
 
 
 
-function checkgenes(root,cond,datafolder;thresholdlow=thresholdlow::Float64=0.,thresholdhigh=thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
+function checkgenes(root,cond,datafolder;thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
     genes = intersect(get_halflives(root,hlfile,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
     if allelefile != ""
         return intersect(genes,get_alleles(root,allelefile))
