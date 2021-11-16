@@ -5,6 +5,10 @@ using DelimitedFiles
 
 """
 fit_rna(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=40000,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
+fit_rna(nchains::Int,gene::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
 Fit steady state or transient GM model to RNA data for a single gene
 
@@ -49,12 +53,14 @@ function fit_rna(nchains::Int,gene::String,fittedparam::String,fixedeffects::Str
     nothing
 end
 
-
 function fit_rna(nchains::Int,gene::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     println(gene)
     if occursin("mouse",datafolder)
         decayrate = decay(gene,root,"data/mouse/mousehalflife.csv")
+        nalleles = 2
+    elseif occursin("CH12",datafolder)
+        decayrate = decay(gene,root,"data/CH12/CH12_halflife.csv")
         nalleles = 2
     else
         decayrate = decay(gene,root)
@@ -101,7 +107,7 @@ function fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int
         warmupsteps = div(samplesteps,5)
     end
 
-    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+    options,model,param = make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     initial_ll(param,data,model)
     fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
     finalize(data,model,fit,stats,waic,temp,resultfolder,root)
@@ -114,18 +120,33 @@ function fit_fish(nchains::Int,gene::String,datacond,G::Int,maxtime::Float64,inf
 
 end
 
+"""
+rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
+
+output RNA histogram and downsampled FISH histogram with loss
+"""
 function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
     datarna = StochasticGene.histograms_rna(StochasticGene.scRNApath(gene,cond,rnafolder,root),gene,false)
     f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
     return datarna[2],f
 end
 
+"""
+reduce_fish(gene,cond,nhist,fishfolder,yield,root)
+
+sample fish histogram with loss (1-yield)
+"""
 function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
     datafish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
     StochasticGene.technical_loss(datafish[2],yield,nhist)
 end
 
-function get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+"""
+make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+
+return structures options, model, and param
+"""
+function make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     if length(fixedeffects) > 0
         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
     else
@@ -136,11 +157,16 @@ function get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate
     return options,model,param
 end
 
+"""
+cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
+
+run_mh by cycling through individual parameters sequentially
+"""
 function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
     # options = StochasticGene.MHOptions(100,0,0,maxtime/10,temp,tempanneal)
     # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
     # param,_ = StochasticGene.initial_proposal(model)
-    options,model,param = get_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
+    options,model,param = make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
     initial_ll(param,data,model,"pre-cycle ll:")
     t0 = time()
     while (time() - t0 < maxtime)
@@ -152,12 +178,21 @@ function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decay
     end
     return r
 end
+"""
+initial_ll(param,data,model,message="initial ll:")
 
+compute and print initial loglikelihood
+"""
 function initial_ll(param,data,model,message="initial ll:")
     ll,_ = StochasticGene.loglikelihood(param,data,model)
     println(message,ll)
 end
 
+"""
+printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
+
+print out run information
+"""
 function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
     println(datafolder)
     println(gene," ",G," ",cond)
@@ -165,6 +200,11 @@ function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
     println(maxtime)
 end
 
+"""
+finalize(data,model,fit,stats,waic,temp,resultfolder,root)
+
+write out run results and print out final loglikelihood and deviance
+"""
 function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     writefile = joinpath(root,resultfolder)
     StochasticGene.writeall(writefile,fit,stats,waic,data,temp,model)
@@ -174,6 +214,11 @@ function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println(stats.meanparam)
 end
 
+"""
+transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+make structures for transient model fit
+"""
 function transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     data = make_data(gene,cond,G,datafolder,label,nsets,root)
     model = make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data)
@@ -181,6 +226,13 @@ function transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxt
     return param, data, model
 end
 
+"""
+steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
+
+make structures for steady state rna fit
+
+"""
 function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
     datacond = string.(split(cond,"-"))
     data = make_data(gene,datacond,datafolder,label,root)
@@ -197,6 +249,13 @@ function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafold
     return param, data, model
 end
 
+"""
+make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data,verbose=true)
+make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r,G,alleles(root,gene),nsets,.02,fittedparam,r[2*G],.1,0)
+
+make model structure
+
+"""
 function make_model(gene,G,fittedparam,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = decay(root,gene)
     if verbose
@@ -264,7 +323,7 @@ function make_data(gene::String,cond::String,datafolder,label,root)
     StochasticGene.data_rna(datafile,label,gene,false)
 end
 
-function make_data(gene::String,cond::Array,datafolder,label,root)
+function make_data(gene::String,cond::Array,datafolder::String,label,root)
     datafile = Array{String,1}(undef,length(cond))
     for i in eachindex(cond)
         datafile[i] = StochasticGene.scRNApath(gene,cond[i],datafolder,root)
@@ -277,6 +336,7 @@ function make_data(gene::String,cond::Array,datafolder::Array,label,root)
     for i in eachindex(cond)
         datafile[i] = StochasticGene.scRNApath(gene,cond[i],datafolder[i],root)
     end
+    println(datafile)
     StochasticGene.data_rna(datafile,label,gene,false)
 end
 
@@ -449,14 +509,6 @@ function write_histograms(outfolder,ratefile::String,cond,n,datafolder,root)
     end
 end
 
-function histograms(r,cond,n,datafolder,root)
-    gene = String(r[1])
-    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
-    hd = StochasticGene.read_scrna(datafile)
-    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene))
-    return h,hd
-end
-
 function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,datafolder::String,label,nsets,root)
     rates,head = readdlm(ratefile,',',header=true)
     if ~isdir(outfolder)
@@ -471,6 +523,14 @@ function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,datafol
             close(f)
         end
     end
+end
+
+function histograms(r,cond,n,datafolder,root)
+    gene = String(r[1])
+    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
+    hd = StochasticGene.read_scrna(datafile)
+    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene))
+    return h,hd
 end
 
 function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
@@ -741,7 +801,7 @@ function add_best_occupancy(filein,fileout,filemodel2,filemodel3)
     close(f)
 end
 
-function plot_histogram(r,n,nhist,nalleles)
+function plot_model(r,n,nhist,nalleles)
     h= StochasticGene.steady_state(r[1:2*n+2],r[end],n,nhist,nalleles)
     plot(h)
     return h

@@ -152,7 +152,7 @@ end
 
 
 
-function checkgenes(root,cond,datafolder,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
+function checkgenes(root,cond,datafolder;thresholdlow=thresholdlow::Float64=0.,thresholdhigh=thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
     genes = intersect(get_halflives(root,hlfile,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
     if allelefile != ""
         return intersect(genes,get_alleles(root,allelefile))
@@ -469,4 +469,30 @@ function make_datafiles(infolder,outfolder,label)
         newfile = replace(file,label => "")
         cp(joinpath(infolder,file),joinpath(outfolder,newfile))
     end
+end
+
+function make_dataframe(folder::String,winners::String = "")
+    rs = Array{Any,2}(undef,0,8)
+    files =readdir(folder)
+    n = 0
+    for file in files
+        if occursin("rate",file)
+            t = parse(Float64,split(split(file,"T")[2],"_")[1])
+            r,head = readdlm(joinpath(folder,file),',',header=true)
+            r = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  [zeros(size(r)[1]); ones(size(r)[1])]  t*ones(2*size(r)[1])/60.]
+            rs = vcat(rs,r)
+            n += 1
+        end
+    end
+    if winners != ""
+        w = get_winners(winners,2*n)
+        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]),winner = w)
+    else
+        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]))
+    end
+end
+
+function get_winners(winners::String,n::Int)
+    m,h = readdlm(winners,',',header=true)
+    winner = repeat(m[:,end],n)
 end
