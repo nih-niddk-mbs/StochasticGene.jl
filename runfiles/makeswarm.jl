@@ -15,7 +15,7 @@ function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
 
-function makeswarm(;genes::Vector,G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String;conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
+function makeswarm(;genes::Vector,G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String,conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
 
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
