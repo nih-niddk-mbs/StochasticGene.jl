@@ -5,7 +5,7 @@ using DelimitedFiles
 transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
 
-function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
+function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))[1]
     else
@@ -15,7 +15,7 @@ function makeswarm(G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafol
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
 
-function makeswarm(genes::Vector,G::Int,infolder,swarmfile::String,inlabel,label,nsets,datafolder::String;conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
+function makeswarm(;genes::Vector,G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String;conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
 
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
@@ -33,12 +33,12 @@ function makeswarm(genes::Vector,G::Int,infolder,swarmfile::String,inlabel,label
         batches[end] = genes[batchsize*nbatches+1:end]
         for batch in eachindex(batches)
             sfile = swarmfile * "_" * conds * "$batch" * ".swarm"
-            writegenes(sfile,batches[batch],nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam,fixedeffects)
+            writegenes(sfile,batches[batch],cell,nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
         end
     else
         sfile = swarmfile * "_" * conds * ".swarm"
         f = open(sfile,"w")
-        writegenes(sfile,genes,nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam,fixedeffects)
+        writegenes(sfile,genes,cell,nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
     end
 end
 
@@ -53,13 +53,30 @@ function getbatches(genes,ngenes,batchsize)
     return batches
 end
 
-function writegenes(sfile,genes,nprocs,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,nchains,fittedparam,fixedeffects)
+function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
     f = open(sfile,"w")
     for gene in genes
-        writedlm(f,["julia -p" nprocs juliafile gene cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient nchains fittedparam fixedeffects])
+        writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient fittedparam fixedeffects])
     end
     close(f)
 end
+# Arguments
+# 1: nchains
+# 2: gene
+# 3: cell
+# 4: cond
+# 5: G
+# 6: maxtime
+# 7: infolder
+# 8: resultfolder
+# 9: datafolder
+# 10: inlabel
+# 11: label
+# 12: nsets (number of rate sets)
+# 13: runcycle (bool)
+# 14: transient (bool)
+# 15: fittedparams (string), e.g. "1-2-4-7"
+# 16: fixedeffects (string), e.g. "off"
 
 
 # function checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root = "/Users/carsonc/Box/scrna",halflives="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv")
