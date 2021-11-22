@@ -5,5 +5,5 @@
 ## Function Documentation
 ```@docs
 StochasticGene
-likelihoodfn(param,data::RNAData,model::GMmodel)
+likelihoodfn(param,data,model)
 ```
