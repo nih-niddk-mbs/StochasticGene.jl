@@ -8,5 +8,5 @@ makedocs(
                 "Home" => "index.md"
                ])
 deploydocs(;
-    repo="github.com/nih-niddk-mbs/StochasticGene.jl",
+    repo="github.com/nih-niddk-mbs/StochasticGene",
 )
