@@ -167,9 +167,15 @@ end
 #     return list
 # end
 
+function checkgenes(root,conds::Vector,datafolder,thresholdlow::Float64,thresholdhigh::Float64,hlfile,allelefile)
+    genes = Vector{Vector}(undef,0)
+    for cond in conds
+        genes = checkgenes(root,cond,datafolder,thresholdlow,thresholdhigh,hlfile,allelefile)
+    end
+    intersect(genes[1],genes[2])
+end
 
-
-function checkgenes(root,cond,datafolder,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
+function checkgenes(root,cond::String,datafolder,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
     genes = intersect(get_halflives(root,hlfile,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
     if allelefile != ""
         return intersect(genes,get_alleles(root,allelefile))
