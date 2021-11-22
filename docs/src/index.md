@@ -5,5 +5,5 @@
 ## Function Documentation
 ```@docs
 StochasticGene
-likelihoodfn(param,data,model)
+nonzero_rows(T)
 ```
