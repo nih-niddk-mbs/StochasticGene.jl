@@ -229,7 +229,8 @@ initialize_times(r,n,nalleles)
 
 All alleles are initialized to state 0
 """
-function initialize_times(r,n,nalleles,m=0)
+function initialize_times(r,n,nalleles)
+	m = 0
 	tau = fill(Inf,2*n+2,nalleles)
 	for n in 1:nalleles
 		tau[1,n] = -log(rand())/r[1]

@@ -17,6 +17,8 @@ const txtstr = ".txt"
 
 """
 eig_decompose(M)
+
+Take matrix M and return values and vectors
 """
 function eig_decompose(M)
     Meiv = eigen(M)
@@ -25,7 +27,8 @@ end
 
 """
 nonzero_rows(T)
-Locate all rows that have at least one nonzero element
+
+Returns an array of row indices that have at least one nonzero element for matrix T
 """
 function nonzero_rows(T)
     n = size(T)[2]
@@ -38,13 +41,21 @@ function nonzero_rows(T)
     return nonzeros
 end
 
+"""
+normalize_histogram(hist)
+
+Returns normalized histogram hist
+"""
 normalize_histogram(hist) = hist/sum(hist)
 
 
 """
 var_update(vartuple, newValue)
+
+vartuple = count, mean, M2
 iteration step for online algorithm to compute
 mean and variance
+returns count, mean, M2
 """
 function var_update(vartuple, newValue)
     count, mean, M2 = vartuple
@@ -57,6 +68,9 @@ function var_update(vartuple, newValue)
 end
 """
 cov_update(covtuple,newValue1,newValue2)
+
+update covtuple for online algorithm to compute
+    covariance
 """
 function cov_update(covtuple,newValue1,newValue2)
     count, meanx, meany, C = covtuple
@@ -69,6 +83,7 @@ function cov_update(covtuple,newValue1,newValue2)
 end
 """
 finalize(vartuple)
+
 Retrieve the mean, variance and sample variance from an aggregate
 """
 function finalize(vartuple)
@@ -82,6 +97,8 @@ end
 
 """
 truncatehistogram(x::Array{Int,1},yield::Float64,nhistmax::Int)
+
+only keep columns of histogram x that accounts for yield fraction of total sum
 """
 function truncate_histogram(x::Array,yield::Float64,nhistmax::Int)
     counts = sum(x)
@@ -99,20 +116,48 @@ function truncate_histogram(x::Array,yield::Float64,nhistmax::Int)
     end
 end
 
+"""
+combine_histogram(x1::Array,x2::Array)
+
+add histograms x1 and x2
+
+"""
 function combine_histogram(x1::Array,x2::Array)
     n = min(length(x1),length(x2))
     x1[1:n] + x2[1:n]
 end
 
+"""
+pooled_mean(means,counts)
+
+compute weighted average of means given count totals
+"""
 pooled_mean(means,counts) = counts'*means/sum(counts)
+
+"""
+pooled_variance(vars,counts)
+
+computed weighted average of variances given counts
+"""
 pooled_variance(vars,counts) = (counts .- 1)'*vars/sum(counts .- 1)
+
+"""
+pooled_std(std,counts)
+
+compute weighted average of standard deviations given counts
+"""
 pooled_std(std,counts) = sqrt(pooled_variance(std.^2,counts))
 
+"""
+var_ratio(mua,mub,vara,varb,cov)
 
+Compute ratio of variances of two variables given means, variances, and covariance of variables
+"""
 var_ratio(mua,mub,vara,varb,cov) = mua^2/mub^2*(vara/mua^2 - 2*cov/(mua*mub) + varb/mub^2)
 
 """
 decimal(x::Vector)
+
 convert digits of base 3 number to base 10
 """
 function decimal(x::Vector,base::Int=3)
@@ -121,6 +166,7 @@ function decimal(x::Vector,base::Int=3)
 end
 """
 findbase(l,n,nr)
+
 Find the number of G states for transition rate matrix of size l
 """
 function findbase(l,n,nr)
@@ -156,8 +202,20 @@ LogNormal_array(param,cv)
 Prior distribution arrays
 """
 LogNormal_array(param,cv) = distributionarray(param,cv,LogNormal)
+
+"""
+Gamma_array(param,cv)
+
+
+
+"""
 Gamma_array(param,cv) = distributionarray(param,cv,Gamma)
 
+"""
+function LogNormalBeta_array(param,cv,ind)
+
+
+"""
 function LogNormalBeta_array(param,cv,ind)
     if ind == 1
         d = [setBeta(param[ind],cv[ind])]
@@ -168,12 +226,12 @@ function LogNormalBeta_array(param,cv,ind)
     end
     return d
 end
+
 """
 distribution_array(param,cv,dist)
 
 fill an array with dist(param,cv)
 """
-
 function distributionBeta_array(param::Vector,cv::Vector,ind::Int,dist=LogNormal)
     if ind == 1
         d = [Beta_meancv(param[ind],cv[ind])]
@@ -184,6 +242,11 @@ function distributionBeta_array(param::Vector,cv::Vector,ind::Int,dist=LogNormal
     end
     return d
 end
+
+"""
+distribution_array(param::Vector,cv,dist=LogNormal)
+
+"""
 function distribution_array(param::Vector,cv,dist=LogNormal)
     d = []
     for i in eachindex(param)
@@ -246,18 +309,62 @@ function Srange(G,R)
     2*n + R + 2 : 2*n + 2*R + 1
 end
 
+"""
+mean_histogram(x)
+
+"""
 mean_histogram(x) = (collect(1:length(x)) .- 1)' * x/sum(x)
+
+"""
+m2_histogram(x)
+
+"""
 m2_histogram(x) = ((collect(1:length(x)) .- 1).^2)' * x/sum(x)
+
+"""
+var_histogram(x)
+
+"""
 function var_histogram(x)
     m2_histogram(x) - mean_histogram(x)^2
 end
-# mean_histogram(x) = ((collect(length(x)) .- 1)' * x)/sum(x)
+
+
+"""
+tstat_2sample(x1,x2)
+
+Compute t statistics of histograms x1 and x2
+"""
 tstat_2sample(x1,x2) = (mean_histogram(x1) - mean_histogram(x2))/(sqrt(var_histogram(x1)/length(x1) + var_histogram(x2)/length(x2)))
 
+
+"""
+log_2sample(x1,x2)
+
+compute the log of the ratio of means of histograms x1 and x2
+"""
 log_2sample(x1,x2) = log(mean_histogram(x1)) - log(mean_histogram(x2))
+
+"""
+delta_2sample(x1,x2)
+
+compute the difference of means of x1 and x2
+"""
 delta_2sample(x1,x2) = mean_histogram(x1)-mean_histogram(x2)
+
+"""
+delta_2frac(x1,x2)
+
+compute E(x1) - E(x2) of means normalize dot mean of x1
+"""
 delta_2frac(x1,x2) = delta_2sample(x1,x2)/mean_histogram(x1)
 
+
+"""
+mediansmooth(xin,window)
+
+median smooth histogram xin over a window
+"""
 function mediansmooth(xin,window)
     x = copy(xin)
     halfwin = div(window-1,2)

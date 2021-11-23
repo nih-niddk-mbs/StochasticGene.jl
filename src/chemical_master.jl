@@ -720,9 +720,6 @@ function init_prob(pss,r,n,nr,nonzeros)
     SIinit/sum(SIinit)
 end
 
-function init_prob(pss,r,n)
-
-end
 
 """
 accumulate(SA::Matrix,n,nr)

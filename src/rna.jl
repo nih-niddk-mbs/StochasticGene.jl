@@ -87,6 +87,7 @@ end
 """
 data_rna(path,time,gene,time)
 data_rna(path,time,gene)
+
 Load data structure
 """
 function data_rna(path,name,time,gene::String,fish::Bool)
@@ -103,7 +104,8 @@ function data_rna(path,name,gene::String,fish::Array{Bool,1})
 end
 """
 histograms_rna(path,gene)
-prepare mRNA histograms
+
+prepare mRNA histograms for gene given data folder path
 """
 function histograms_rna(path::Array,gene::String,fish::Bool)
     n = length(path)
@@ -139,6 +141,7 @@ end
 model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,yieldprior,method)
 model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,method)
 model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
+
 Load model structure
 """
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,yieldprior::Float64,method::Int)
@@ -165,7 +168,6 @@ function model_rna(r::Vector,G::Int,nalleles::Int,propcv,fittedparam::Array,deca
         GMmultimodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
     end
 end
-
 function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,delayprior)
     # propcv = proposal_cv_rna(propcv,fittedparam)
     d = prior_rna(r,G,nsets,fittedparam,decayprior,delayprior)
@@ -174,6 +176,7 @@ end
 
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
+
 prepare prior distribution
 r[mod(1:2*G,nsets)] = rates for each model set  (i.e. rates for each set are stacked)
 r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical noise)
@@ -237,7 +240,6 @@ function setpriorrate(G::Int,nsets::Int,decayrate::Float64)
     end
     return rm,rcv
 end
-
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
     rm,rcv = setpriorrate(G,nsets,decayrate)
     for nm in noisepriors
@@ -355,10 +357,13 @@ function read_fish(path1::String,cond1::String,path2::String,cond2::String,thres
     combine_histogram(x1,x2)
 end
 
-
-
 # functions to build paths to RNA/FISH data and results
+"""
+scRNApath(gene::String,cond::String,datapath::String,root::String)
 
+generate path to scRNA data for given gene and condition cond
+    data files must have format genename_cond.txt
+"""
 function scRNApath(gene::String,cond::String,datapath::String,root::String)
     datapath = joinpath(root,datapath)
     if cond == ""
@@ -367,22 +372,35 @@ function scRNApath(gene::String,cond::String,datapath::String,root::String)
         joinpath(datapath,gene * "_" * cond * ".txt")
     end
 end
-
 scRNApath(gene,cond,datapath) = joinpath(datapath,gene * "_" * cond * ".txt")
 
+"""
+FISHpath(gene,cond,datapath,root)
+
+generate path to FISH data
+"""
 FISHpath(gene,cond,datapath,root) = joinpath(joinpath(root,datapath),gene)
 
+"""
+ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
 
+"""
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
     path_Gmodel("rates",gene,G,nalleles,label * "_" * cond,folder,root)
 end
 
+"""
+path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
+"""
 function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
     filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
     ratefile = type * "_" * filelabel
     joinpath(root, joinpath(folder,ratefile))
 end
 
+"""
+stats_rna(genes::Vector,conds,datapath,threshold=.99)
+"""
 function stats_rna(genes::Vector,conds,datapath,threshold=.99)
     g = Vector{String}(undef,0)
     z = Vector{Float64}(undef,0)
@@ -398,6 +416,9 @@ function stats_rna(genes::Vector,conds,datapath,threshold=.99)
     return g,z,h1,h2
 end
 
+"""
+expression_rna(gene,conds::Vector,folder::String,threshold=.99)
+"""
 function expression_rna(gene,conds::Vector,folder::String,threshold=.99)
     h = Vector{Vector}(undef,2)
     for i in eachindex(conds)
@@ -411,6 +432,9 @@ function expression_rna(gene,conds::Vector,folder::String,threshold=.99)
     end
 end
 
+"""
+expression_rna(gene,conds::Vector,folder::Vector,threshold=.99)
+"""
 function expression_rna(gene,conds::Vector,folder::Vector,threshold=.99)
     h = Vector{Vector}(undef,2)
     for i in eachindex(conds)
@@ -424,6 +448,10 @@ function expression_rna(gene,conds::Vector,folder::Vector,threshold=.99)
     end
 end
 
+"""
+expression_rna(genes::Vector,cond::String,folder,threshold=.99)
+
+"""
 function expression_rna(genes::Vector,cond::String,folder,threshold=.99)
     h1 = Array{Any,2}(undef,0,2)
     for gene in genes
@@ -435,6 +463,7 @@ function expression_rna(genes::Vector,cond::String,folder,threshold=.99)
     end
     return h1
 end
+
 """
 plot_histogram_rna()
 
