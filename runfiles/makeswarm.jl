@@ -4,33 +4,29 @@ using DelimitedFiles
 
 transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
+"""
+makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
 
+returns swarmfile executed on biowulf
+
+"""
 function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
     if occursin.("-",conds)
-        cond = string.(split(conds,"-"))[1]
+        cond = string.(split(conds,"-"))
     else
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,thresholdlow,thresholdhigh)
     makeswarm(genes,G,infolder,swarmfile,inlabel,label,nsets,datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
-
 function makeswarm(;genes::Vector,G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String,conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
-
     resultfolder = joinpath("Results",result)
     infolder = joinpath("Results",infolder)
     ngenes = length(genes)
     println(ngenes)
     println(runcycle)
-
     if ngenes > batchsize
-        nbatches = div(ngenes,batchsize)
-        batches = Vector{Vector{String}}(undef,nbatches+1)
-        println(batchsize," ",nbatches)
-        for i in 1:nbatches
-            batches[i] = genes[batchsize*(i-1)+1:batchsize*(i)]
-        end
-        batches[end] = genes[batchsize*nbatches+1:end]
+        batches = getbatches(genes,ngenes,batchsize)
         for batch in eachindex(batches)
             sfile = swarmfile * "_" * conds * "$batch" * ".swarm"
             writegenes(sfile,batches[batch],cell,nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
@@ -40,6 +36,29 @@ function makeswarm(;genes::Vector,G::Int=2,cell="HCT116",infolder="infolder",swa
         f = open(sfile,"w")
         writegenes(sfile,genes,cell,nchains,juliafile,conds,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
     end
+    make_fitfile(juliafile,fittedparam,fixedeffects)
+end
+
+"""
+make_fitfile(fitfile,fittedparam,fixedeffects)
+
+make the file the swarm file calls to execute julia code
+
+"""
+function make_fitfile(fitfile,fittedparam,fixedeffects)
+        f = open(fitfile,"w")
+        s =   '"'
+        write(f,"@everywhere include($s/home/carsonc/StochasticGene/src/StochasticGene.jl$s)\n")
+        write(f,"include($s/home/carsonc/StochasticGene/runfiles/scriptfunctions.jl$s)\n")
+        if fittedparam == ""
+            write(f,"@time fit_rna(parse(Int,ARGS[1]),ARGS[2],ARGS[3],ARGS[4],parse(Int,ARGS[5]),parse(Float64,ARGS[6]),ARGS[7],ARGS[8],ARGS[9],ARGS[10],ARGS[11],parse(Int,ARGS[12]),parse(Bool,ARGS[13]),parse(Bool,ARGS[14]))\n")
+        elseif fixedeffects == ""
+            write(f,"@time fit_rna(parse(Int,ARGS[1]),ARGS[2],ARGS[3],ARGS[15],ARGS[4],parse(Int,ARGS[5]),parse(Float64,ARGS[6]),ARGS[7],ARGS[8],ARGS[9],ARGS[10],ARGS[11],parse(Int,ARGS[12]),parse(Bool,ARGS[13]),parse(Bool,ARGS[14]))\n")
+        else
+            write(f,"@time fit_rna(parse(Int,ARGS[1]),ARGS[2],ARGS[3],ARGS[15],ARGS[16],ARGS[4],parse(Int,ARGS[5]),parse(Float64,ARGS[6]),ARGS[7],ARGS[8],ARGS[9],ARGS[10],ARGS[11],parse(Int,ARGS[12]),parse(Bool,ARGS[13]),parse(Bool,ARGS[14]))\n")
+        end
+
+        close(f)
 end
 
 function getbatches(genes,ngenes,batchsize)
@@ -60,117 +79,18 @@ function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,r
     end
     close(f)
 end
-# Arguments
-# 1: nchains
-# 2: gene
-# 3: cell
-# 4: cond
-# 5: G
-# 6: maxtime
-# 7: infolder
-# 8: resultfolder
-# 9: datafolder
-# 10: inlabel
-# 11: label
-# 12: nsets (number of rate sets)
-# 13: runcycle (bool)
-# 14: transient (bool)
-# 15: fittedparams (string), e.g. "1-2-4-7"
-# 16: fixedeffects (string), e.g. "off"
-
-
-# function checkgenes(cond,datafolder,thresholdlow,thresholdhigh,root = "/Users/carsonc/Box/scrna",halflives="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv")
-#     datapath = joinpath(root,datafolder)
-#     # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
-#     hlfile = joinpath(root,halflives)
-#     contents = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
-#     genedecay = contents[2:end,2]
-#     genenames = contents[2:end,1]
-#     genes1 = Vector{String}(undef,0)
-#     for i in eachindex(genedecay)
-#         if typeof(genedecay[i]) <: Number
-#             if thresholdlow <= genedecay[i] < thresholdhigh
-#                 push!(genes1,genenames[i])
-#             end
-#         end
-#     end
-#     println(length(genes1))
-#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-#     println(length(genes2))
-#     genes = intersect(genes1,genes2)
-#     complement = setdiff(genes1,genes2)
-#     println(length(genes))
-#     println(length(complement))
-#     list = Vector{String}(undef,0)
-#     for gene in genes
-#         if cond == ""
-#             datafile = joinpath(datapath,gene * ".txt")
-#         else
-#             datafile = joinpath(datapath,gene * "_" * cond * ".txt")
-#         end
-#         if isfile(datafile)
-#             push!(list,gene)
-#         end
-#     end
-#     println(length(list))
-#     return list
-# end
-#
-#
-# function checkgenes(cond,datafolder,root = "/Users/carsonc/Box/scrna")
-#     datapath = joinpath(root,datafolder)
-#     # genes = readdlm(joinpath(root,"data/HCT_HEK_Half_life_top_below_1h.csv"),',')[2:end,end]
-#     genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
-#     # genes1 = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')[2:end,1]
-#     genes1 = Vector{String}(undef,0)
-#     for i in eachindex(genedecay[2:end,2])
-#         if typeof(genedecay[i,2]) <: Number
-#             push!(genes1,genedecay[i,1])
-#         end
-#     end
-#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-#     println(length(genes1))
-#     println(length(genes2))
-#     genes = intersect(genes1,genes2)
-#     list = Vector{String}(undef,0)
-#     for gene in genes
-#         datafile = joinpath(datapath,gene * "_" * cond * ".txt")
-#         if isfile(datafile)
-#             push!(list,gene)
-#         end
-#     end
-#     println(length(list))
-#     return list
-# end
-#
-# function checkgenes(datafolder,root)
-#     datapath = joinpath(root,datafolder)
-#     genedecay = readdlm(joinpath(root,"data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv"),',')
-#     genes1 = Vector{String}(undef,0)
-#     for i in eachindex(genedecay[2:end,2])
-#         if typeof(genedecay[i,2]) <: Number
-#             push!(genes1,genedecay[i,1])
-#         end
-#     end
-#     genes2 = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))[2:end,1]
-#     println(length(genes1))
-#     println(length(genes2))
-#     genes = intersect(genes1,genes2)
-#     list = Vector{String}(undef,0)
-#     for gene in genes
-#         datafile = joinpath(datapath,gene * ".txt")
-#         if isfile(datafile)
-#             push!(list,gene)
-#         end
-#     end
-#     println(length(list))
-#     return list
-# end
 
 function checkgenes(root,conds::Vector,datafolder,thresholdlow::Float64,thresholdhigh::Float64,hlfile,allelefile)
     genes = Vector{Vector}(undef,0)
-    for cond in conds
-        genes = checkgenes(root,cond,datafolder,thresholdlow,thresholdhigh,hlfile,allelefile)
+    if occursin.("-",datafolder)
+        datafolder = string.(split(datafolder,"-"))
+        for i in 1:2
+            genes[i] = checkgenes(root,conds[i],datafolder[i],thresholdlow,thresholdhigh,hlfile,allelefile)
+        end
+    else
+        for i in 1:2
+            genes[i] = checkgenes(root,conds[i],datafolder,thresholdlow,thresholdhigh,hlfile,allelefile)
+        end
     end
     intersect(genes[1],genes[2])
 end
@@ -209,7 +129,7 @@ function get_halflives(root,file,thresholdlow=0,thresholdhigh=1e8)
     return genes
 end
 
-get_alleles(root,allelefile = "data/HCT116_alleles_number.txt") = readdlm(joinpath(root,allelefile))[2:end,1]
+get_alleles(root,allelefile) = readdlm(joinpath(root,allelefile))[2:end,1]
 
 
 fix(folder) = writeruns(fixruns(findjobs(folder)))
