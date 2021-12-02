@@ -80,7 +80,7 @@ function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,r
     close(f)
 end
 
-function checkgenes(root,conds::Vector,datafolder,celltype,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8)
+function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64=,thresholdhigh::Float64)
     genes = Vector{Vector}(undef,2)
     if occursin.("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
@@ -95,7 +95,7 @@ function checkgenes(root,conds::Vector,datafolder,celltype,thresholdlow::Float64
     intersect(genes[1],genes[2])
 end
 
-function checkgenes(root,cond::String,datafolder,cell,thresholdlow::Float64,thresholdhigh::Float64)
+function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
     genes = intersect(get_halflives(root,cell,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
     alleles = get_alleles(root,cell)
     if alleles != nothing
