@@ -80,7 +80,7 @@ function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,r
     close(f)
 end
 
-function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64=,thresholdhigh::Float64)
+function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64,thresholdhigh::Float64)
     genes = Vector{Vector}(undef,2)
     if occursin.("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
