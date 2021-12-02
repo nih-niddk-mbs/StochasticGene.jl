@@ -80,25 +80,26 @@ function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,r
     close(f)
 end
 
-function checkgenes(root,conds::Vector,datafolder,thresholdlow::Float64,thresholdhigh::Float64,hlfile,allelefile)
-    genes = Vector{Vector}(undef,0)
+function checkgenes(root,conds::Vector,datafolder,celltype,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8)
+    genes = Vector{Vector}(undef,2)
     if occursin.("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
         for i in 1:2
-            genes[i] = checkgenes(root,conds[i],datafolder[i],thresholdlow,thresholdhigh,hlfile,allelefile)
+            genes[i] = checkgenes(root,conds[i],datafolder[i],celltype,thresholdlow,thresholdhigh)
         end
     else
         for i in 1:2
-            genes[i] = checkgenes(root,conds[i],datafolder,thresholdlow,thresholdhigh,hlfile,allelefile)
+            genes[i] = checkgenes(root,conds[i],datafolder,celltype,thresholdlow,thresholdhigh)
         end
     end
     intersect(genes[1],genes[2])
 end
 
-function checkgenes(root,cond::String,datafolder,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,hlfile="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",allelefile="data/HCT116_alleles_number.txt")
-    genes = intersect(get_halflives(root,hlfile,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
-    if allelefile != ""
-        return intersect(genes,get_alleles(root,allelefile))
+function checkgenes(root,cond::String,datafolder,cell,thresholdlow::Float64,thresholdhigh::Float64)
+    genes = intersect(get_halflives(root,cell,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
+    alleles = get_alleles(root,cell)
+    if alleles != nothing
+        return intersect(genes,alleles)
     else
         return genes
     end
@@ -115,9 +116,13 @@ function get_genes(root,cond,datafolder)
     return genes
 end
 
-function get_halflives(root,file,thresholdlow=0,thresholdhigh=1e8)
+function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
+    file = get_file(root,"data/halflives",cell)
+    get_halflives(file,thresholdlow,thresholdhigh)
+end
+
+function get_halflives(file,thresholdlow::Float64,thresholdhigh::Float64)
     genes = Vector{String}(undef,0)
-    file = joinpath(root,file)
     halflives = readdlm(file,',')
     for row in eachrow(halflives)
         if typeof(row[2]) <: Number
@@ -129,7 +134,26 @@ function get_halflives(root,file,thresholdlow=0,thresholdhigh=1e8)
     return genes
 end
 
-get_alleles(root,allelefile) = readdlm(joinpath(root,allelefile))[2:end,1]
+function get_alleles(root,cell)
+    file = get_file(root,"data/alleles",cell)
+    if file !=nothing
+        return readdlm(file)[2:end,1]
+    else
+        return nothing
+    end
+end
+
+function get_file(root,folder,type)
+    folder = joinpath(root,folder)
+    files = readdir(folder)
+    for file in files
+        if occursin(type,file)
+            path = joinpath(folder,file)
+            return path
+        end
+    end
+    nothing
+end
 
 
 fix(folder) = writeruns(fixruns(findjobs(folder)))
