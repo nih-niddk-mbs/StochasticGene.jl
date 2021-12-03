@@ -2,7 +2,7 @@
 
 using DelimitedFiles
 
-transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
+# transientgenelist = ["MYC", "DUSP5", "TRIB1", "PMAIP1", "SERPINE1", "SOX9", "ERRFI1", "NR4A2", "JUN", "GEM"]
 
 """
 makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects::String="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
@@ -17,7 +17,7 @@ function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
+    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,runcycle=runcycle,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root)
 end
 function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String,conds::String="DMSO-AUXIN",result::String="testout",batchsize=1000,maxtime=60.,nchains::Int=2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="",fixedeffects="",juliafile::String="/home/carsonc/StochasticGene/runfiles/fitscript.jl",root="/home/carsonc/scrna/")
     resultfolder = joinpath("Results",result)
