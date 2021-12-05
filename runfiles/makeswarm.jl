@@ -179,9 +179,12 @@ function fixruns(jobs,message="FAILED")
             println(job)
             for run in runs
                 linenumber = parse(Int,split(split(run," ")[1],"_")[2])
-                a = String(list[linenumber+1])
-                println(a)
-                push!(runlist,a)
+                n = div(length(list),1000)
+                for i in 1:n
+                    a = String(list[(i-1)*1000+linenumber+1])
+                    println(a)
+                    push!(runlist,a)
+                end
             end
         end
     end
