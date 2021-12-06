@@ -75,10 +75,20 @@ end
 function writegenes(sfile,genes,cell,nchains,juliafile,cond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,fittedparam,fixedeffects)
     f = open(sfile,"w")
     for gene in genes
+        gene = check_genename(gene)
         writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datafolder inlabel label nsets runcycle transient fittedparam fixedeffects])
     end
     close(f)
 end
+
+function check_genename(gene)
+    if occursin("(",gene)
+        gene = replace(gene,"(" => "[")
+        gene = replace(gene,")" => "]")
+    end
+    return gene
+end
+
 
 function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64,thresholdhigh::Float64)
     genes = Vector{Vector}(undef,2)

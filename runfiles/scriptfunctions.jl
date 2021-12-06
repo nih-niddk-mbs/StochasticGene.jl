@@ -4,37 +4,37 @@ using Dates
 using DelimitedFiles
 
 """
-fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=40000,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
-fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=40000,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
-Fit steady state or transient GM model to RNA data for a single gene
+Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
-Arguments:
-nchains = number of MCMC chains
-gene = gene name
-cell = cell type
-datacond = condition, if more than one condition is used enter as a single string separated by hyphen, e.g. "DMSO-AUXIN"
-maxtime = float maximum time for entire run
-infolder = folder pointing to results used as initial conditions
-resultfolder = folder where results go
-datafolder = folder for data
-inlabel = name of input files (not including gene name but including condition)
-label = name of output files
-nsets = int number of rate sets
-runcycle = if true, cycle through all parameters sequentially in MCMC
-samplesteps = int number of samples
-warmupsteps = int number of warmup steps
-annealsteps = in number of annealing steps
-temp = MCMC temperature
-tempanneal = starting temperature for annealing
-root = root folder of data and Results folders
-fittedparam = indices of parameters to be fit (input as string of ints separated by "-")
+# Arguments
+- `nchains`: number of MCMC chains
+- `gene`: gene name
+- `cell`: cell type
+- `datacond`: condition, if more than one condition is used enter as a single string separated by hyphen, e.g. "DMSO-AUXIN"
+- `maxtime`: float maximum time for entire run
+- `infolder`: folder pointing to results used as initial conditions
+- `resultfolder`: folder where results go
+- `datafolder`: folder for data
+- `inlabel`: name of input files (not including gene name but including condition)
+- `label`: = name of output files
+- `nsets`: int number of rate sets
+- `runcycle`: if true, cycle through all parameters sequentially in MCMC
+- `samplesteps`: int number of samples
+- `warmupsteps`: int number of warmup steps
+- `annealsteps`: in number of annealing steps
+- `temp`: MCMC temperature
+- `tempanneal`: starting temperature for annealing
+- `root`: root folder of data and Results folders
+- `fittedparam`: indices of parameters to be fit (input as string of ints separated by "-")
+- `fixedeffects`: string indicating which rate is fixed, e.g. "eject"
 
 """
-# function fit_rna(nchains::Int,gene::String,G::Int,data::StochasticGene.HistogramData,maxtime::Float64,nsets,fittedparam,infolder,resultfolder,datafolder,inlabel,runcycle::Bool,params::Tuple,root)
 function fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = make_fittedparam(G,nsets)
     fit_rna(nchains,gene,cell,fittedparam,(),datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
@@ -56,6 +56,7 @@ end
 
 function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
+    gene = checkgene(gene)
     println(gene)
     decayrate = decay(gene,cell,root)
     nalleles = alleles(gene,cell,root)
@@ -77,6 +78,14 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
         data = make_data(gene,datacond,datafolder,label,root)
     end
     fit_rna(nchains,data,gene,decayrate,nalleles,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+end
+
+function check_genename(gene)
+    if occursin("[",gene)
+        gene = replace(gene,"[" => "(")
+        gene = replace(gene,"]" => ")")
+    end
+    return gene
 end
 
 function fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
@@ -154,9 +163,6 @@ cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yiel
 run_mh by cycling through individual parameters sequentially
 """
 function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
-    # options = StochasticGene.MHOptions(100,0,0,maxtime/10,temp,tempanneal)
-    # model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
-    # param,_ = StochasticGene.initial_proposal(model)
     options,model,param = make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
     initial_ll(param,data,model,"pre-cycle ll:")
     t0 = time()
@@ -425,18 +431,6 @@ function decay(gene,cell,root,col=2)
 end
 
 
-# function decay(gene,root::String,file="data/HCT116_all_cells_histograms_and_half_lives_March_2021/Starved_Rep7_half_lives.csv",col=2)
-#     path = joinpath(root,file)
-#     if isfile(path)
-#         in = readdlm(path,',')
-#         a = in[findfirst(in[:,1] .== gene),col]
-#         return decay(a)
-#     else
-#         println(gene," has no decay time")
-#         return -1.
-#     end
-# end
-
 decay(a::Float64) = log(2)/a/60.
 
 function decay(a,gene)
@@ -468,11 +462,6 @@ function alleles(gene,cell,root,col=3)
         return 2
     end
 end
-
-# function alleles(gene,root,file="data/HCT116_alleles_number.txt")
-#     in = readdlm(joinpath(root,"data/HCT116_alleles_number.txt"))
-#     in[findfirst(in[:,1] .== gene),3]
-# end
 
 function repair_measures(resultfolder,measurefile,ratefile::String,cond,n::Int,datafolder,root)
     front,back = split(measurefile,".")
