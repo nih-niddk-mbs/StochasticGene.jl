@@ -56,7 +56,7 @@ end
 
 function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
-    gene = checkgene(gene)
+    gene = check_genename(gene)
     println(gene)
     decayrate = decay(gene,cell,root)
     nalleles = alleles(gene,cell,root)
