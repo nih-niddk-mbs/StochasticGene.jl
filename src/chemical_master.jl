@@ -15,7 +15,7 @@ end
 function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
     T,TA,TI = mat_GSR_DT_offeject(r,n,nr)
     pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,r,n,nr,TA,pss,method)
+    SA=ontimeCDF(t,n,nr,TA,pss,method)
     SI=offtimeCDF(t,r,n,nr,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
@@ -429,7 +429,7 @@ technical_loss(mhist,yieldfactor)
 
 Reduce counts due to technical loss
 """
-function technical_loss!(mhist,yieldfactor)
+function technical_loss!(mhist::Vector,yieldfactor)
     for i in eachindex(mhist)
         mhist[i] = technical_loss(mhist[i],yieldfactor,length(mhist[i]))
     end
@@ -439,7 +439,7 @@ technical_loss(mhist,yieldfactor,nhist)
 
 Reduce counts due to technical loss using Binomial sampling
 """
-function technical_loss(mhist,yieldfactor,nhist)
+function technical_loss(mhist::Vector,yieldfactor,nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
         d = Binomial(m-1,clamp(yieldfactor,0.,1.))

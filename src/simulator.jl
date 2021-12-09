@@ -1,5 +1,5 @@
 """
-simulator(r::Vector,n::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
+simulatorGM(r::Vector,n::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
 
 Modified Gibson and Bruch next reaction algorithm to simulate G state telegraph model (classic telegraph is 2 state)
 
@@ -101,95 +101,96 @@ function simulatorGRM(r::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int,total::I
 	end
 end
 
-function simulator1(r::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
-	tau,taumin,reactmin,Rstep,taudecay = initialize(r,n,nr,nalleles)
-	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
-	while err > tol && steps < total
-		steps += 1
-		t,allele = findmin(taumin)
-		reaction = reactmin[allele]
-		if taudecay < t
-			t = taudecay
-			dt = t-t0
-			update_mhist!(mhist,m,dt,nhist)
-			m,taudecay = decay(t,m,r)
-		else
-			dt = t-t0
-			update_mhist!(mhist,m,dt,nhist)
-			if reaction <= 2*n
-				if isodd(reaction)
-					gforward!(tau,Rstep,reaction,t,r,n,allele)
-				else
-					greverse!(tau,reaction,t,r,allele)
-				end
-			else
-				if reaction <= 2*n + nr
-					if reaction == 2*n + 1
-						initiate!(tau,Rstep,reaction,t,r,nr,allele)
-					else
-						rstep!(tau,Rstep,reaction,t,r,n,nr,allele)
-					end
-				else
-					m,taudecay = eject1!(tau,Rstep,reaction,taudecay,t,m,r,n,nr,allele)
-				end
-			end
-			taumin[allele],reactmin[allele] = findmin(tau[:,allele])
-		end
-		t0 = t
-		if t-ts > tsample
-			err,mhist0 = update_error(mhist,mhist0)
-			ts = t
-		end
-	end  # while
-	counts = max(sum(mhist),1)
-	mhist /= counts
-	if count
-		return mhist[1:nhist],counts,steps,err
-	else
-		return mhist[1:nhist]
-	end
-end
+# function simulator1(r::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
+# 	tau,taumin,reactmin,Rstep,taudecay = initialize(r,n,nr,nalleles)
+# 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
+# 	while err > tol && steps < total
+# 		steps += 1
+# 		t,allele = findmin(taumin)
+# 		reaction = reactmin[allele]
+# 		if taudecay < t
+# 			t = taudecay
+# 			dt = t-t0
+# 			update_mhist!(mhist,m,dt,nhist)
+# 			m,taudecay = decay(t,m,r)
+# 		else
+# 			dt = t-t0
+# 			update_mhist!(mhist,m,dt,nhist)
+# 			if reaction <= 2*n
+# 				if isodd(reaction)
+# 					gforward!(tau,Rstep,reaction,t,r,n,allele)
+# 				else
+# 					greverse!(tau,reaction,t,r,allele)
+# 				end
+# 			else
+# 				if reaction <= 2*n + nr
+# 					if reaction == 2*n + 1
+# 						initiate!(tau,Rstep,reaction,t,r,nr,allele)
+# 					else
+# 						rstep!(tau,Rstep,reaction,t,r,n,nr,allele)
+# 					end
+# 				else
+# 					m,taudecay = eject1!(tau,Rstep,reaction,taudecay,t,m,r,n,nr,allele)
+# 				end
+# 			end
+# 			taumin[allele],reactmin[allele] = findmin(tau[:,allele])
+# 		end
+# 		t0 = t
+# 		if t-ts > tsample
+# 			err,mhist0 = update_error(mhist,mhist0)
+# 			ts = t
+# 		end
+# 	end  # while
+# 	counts = max(sum(mhist),1)
+# 	mhist /= counts
+# 	if count
+# 		return mhist[1:nhist],counts,steps,err
+# 	else
+# 		return mhist[1:nhist]
+# 	end
+# end
+#
+# function simulator2(r::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
+# 	tau,taumin,reactmin,Rstep,taudecay = initialize(r,n,nr,nalleles)
+# 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
+# 	while err > tol && steps < total
+# 		steps += 1
+# 		t,allele = findmin(taumin)
+# 		reaction = reactmin[allele]
+# 		if taudecay < t
+# 			t = taudecay
+# 			dt = t-t0
+# 			update_mhist!(mhist,m,dt,nhist)
+# 			m,taudecay = decay(t,m,r)
+# 		else
+# 			dt = t-t0
+# 			update_mhist!(mhist,m,dt,nhist)
+# 			if reaction <= 2*n
+# 				greaction!(tau,Rstep,reaction,t,r,n,allele)
+# 			else
+# 				if reaction <= 2*n + nr
+# 					rreaction!(tau,Rstep,reaction,t,r,n,nr,allele)
+# 				else
+# 					m,taudecay = eject1!(tau,Rstep,reaction,taudecay,t,m,r,n,nr,allele)
+# 				end
+# 			end
+# 			taumin[allele],reactmin[allele] = findmin(tau[:,allele])
+# 		end
+# 		t0 = t
+# 		if t-ts > tsample
+# 			err,mhist0 = update_error(mhist,mhist0)
+# 			ts = t
+# 		end
+# 	end  # while
+# 	counts = max(sum(mhist),1)
+# 	mhist /= counts
+# 	if count
+# 		return mhist[1:nhist],counts,steps,err
+# 	else
+# 		return mhist[1:nhist]
+# 	end
+# end
 
-function simulator2(r::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
-	tau,taumin,reactmin,Rstep,taudecay = initialize(r,n,nr,nalleles)
-	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
-	while err > tol && steps < total
-		steps += 1
-		t,allele = findmin(taumin)
-		reaction = reactmin[allele]
-		if taudecay < t
-			t = taudecay
-			dt = t-t0
-			update_mhist!(mhist,m,dt,nhist)
-			m,taudecay = decay(t,m,r)
-		else
-			dt = t-t0
-			update_mhist!(mhist,m,dt,nhist)
-			if reaction <= 2*n
-				greaction!(tau,Rstep,reaction,t,r,n,allele)
-			else
-				if reaction <= 2*n + nr
-					rreaction!(tau,Rstep,reaction,t,r,n,nr,allele)
-				else
-					m,taudecay = eject1!(tau,Rstep,reaction,taudecay,t,m,r,n,nr,allele)
-				end
-			end
-			taumin[allele],reactmin[allele] = findmin(tau[:,allele])
-		end
-		t0 = t
-		if t-ts > tsample
-			err,mhist0 = update_error(mhist,mhist0)
-			ts = t
-		end
-	end  # while
-	counts = max(sum(mhist),1)
-	mhist /= counts
-	if count
-		return mhist[1:nhist],counts,steps,err
-	else
-		return mhist[1:nhist]
-	end
-end
 function greaction!(tau,Rstep,reaction,t,r,n,allele)
 	if isodd(reaction)
 		gforward!(tau,Rstep,reaction,t,r,n,allele)
@@ -205,18 +206,11 @@ function rreaction!(tau,Rstep,reaction,t,r,n,nr,allele)
 		rstep!(tau,Rstep,reaction,t,r,n,nr,allele)
 	end
 end
-"""
-technical_loss(m,yieldfactor)
-
-Accounts for loss by sampling from a Binomial distribution with probability yieldfactor
-"""
-function technical_loss(m,yield)
-	d = Binomial(m,clamp(yield,0.,1.))
-	rand(d)
-end
 
 initialize_sim(r,nhist,tol,samplefactor=20.,errfactor=10.) = zeros(nhist+1),ones(nhist+1),0,0,0.,0.,0.,samplefactor/minimum(r),errfactor*tol
+
 update_error(mhist,mhist0) = (norm(mhist/sum(mhist)-mhist0/sum(mhist0),Inf),copy(mhist))
+
 function update_mhist!(mhist,m,dt,nhist)
 	if m + 1 <= nhist
 		mhist[m+1] += dt
@@ -320,17 +314,17 @@ function eject!(tau,state,reaction,t,m,r,n,nr,nallele)
 	end
 	set_decay!(tau,reaction,t,m,r)
 end
-function eject1!(tau,state,reaction,taudecay,t,m,r,n,nr,nallele)
-	m += 1
-	tau[reaction,nallele] = Inf
-	state[nr,nallele] = 0
-	if nr == 1
-		set_initiate!(tau,t,r,n,nallele)
-	elseif state[nr-1,nallele]
-		tau[reaction-1,nallele] = -log(rand())/(r[reaction-1])+ t
-	end
-	m,set_decay(taudecay,t,m)
-end
+# function eject1!(tau,state,reaction,taudecay,t,m,r,n,nr,nallele)
+# 	m += 1
+# 	tau[reaction,nallele] = Inf
+# 	state[nr,nallele] = 0
+# 	if nr == 1
+# 		set_initiate!(tau,t,r,n,nallele)
+# 	elseif state[nr-1,nallele]
+# 		tau[reaction-1,nallele] = -log(rand())/(r[reaction-1])+ t
+# 	end
+# 	m,set_decay(taudecay,t,m)
+# end
 
 """
 set_decay!(tau,reaction,t,m)

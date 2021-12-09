@@ -42,6 +42,7 @@ end
 
 function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type=2)
     files = getfiles(folder,"rates",label,cond,model)
+    println(length(files))
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")

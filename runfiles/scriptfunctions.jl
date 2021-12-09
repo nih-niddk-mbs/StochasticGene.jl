@@ -152,7 +152,7 @@ function make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrat
     else
         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
     end
-    options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+    options = StochasticGene.MHOptions(samplesteps,annealsteps,warmupsteps,0,maxtime,temp,tempanneal)
     param,_ = StochasticGene.initial_proposal(model)
     return options,model,param
 end
@@ -272,17 +272,17 @@ make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r
 
 function make_fixedeffects(fixedeffects,G,nsets)
     if fixedeffects == "eject"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
+        fixedeffects = ([2*G-1,2*G*(nsets-1) + 2*G-1],)
     elseif fixedeffects == "off"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-2],[2*G-2])
+        fixedeffects = ([2*G-2,2*G*(nsets-1) + 2*G-2],)
     elseif fixedeffects == "on"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-3],[2*G-3])
+        fixedeffects = ([2*G-3,2*G*(nsets-1) + 2*G-3],)
     elseif fixedeffects == "offeject" || fixedeffects == "ejectoff"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-2,2*G*(nsets-1) + 2*G-1],[2*G-2,2*G-1])
+        fixedeffects = ([2*G-1,2*G*(nsets-1) + 2*G-1], [2*G-2,2*G*(nsets-1) + 2*G-2])
     elseif fixedeffects == "oneject" || fixedeffects == "ejecton"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-1],[2*G-3,2*G-1])
+        fixedeffects = ([2*G-1,2*G*(nsets-1) + 2*G-1],[2*G-3,2*G*(nsets-1) + 2*G-3])
     elseif fixedeffects == "onoff" || fixedeffects == "offon"
-        fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-2],[2*G-3,2*G-2])
+        fixedeffects = ([2*G-2,2*G*(nsets-1) + 2*G-2],[2*G-3,2*G*(nsets-1) + 2*G-3])
     end
     return fixedeffects
 end

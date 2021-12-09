@@ -5,6 +5,7 @@ struct MHOptions <: Options
     samplesteps::Int64
     annealsteps::Int64
     warmupsteps::Int64
+    cyclesteps::Int64
     maxtime::Float64
     temp::Float64
     tempanneal::Float64
@@ -99,13 +100,17 @@ function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
+    # if options.cyclesteps > 0
+    #     param,parml,ll,llml,predictions = cycle(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime*options.warmupsteps/totalsteps)
+    #     println(llml)
+    # else
     if options.annealsteps > 0
         param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
     else
         temp = options.temp
     end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime*options.warmupsteps/totalsteps)
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime/2)
     else
         parml = param
         llml = ll
@@ -159,6 +164,28 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
         proposalcv = covlogparam
     end
     return param,parml,ll,llml,d,proposalcv,predictions
+end
+"""
+cycle(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
+
+cycle through each parameter individually
+"""
+function cycle(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    prior = logprior(param,model)
+    step = 0
+    while (time() - t1 < maxtime)
+        for i in eachindex(param)
+            while  step < samplesteps && time() - t1 < maxtime
+                step += 1
+                _,predictions,param,ll,prior = mhstep(predictions,param[i],ll,prior[i],d[i],proposalcv[i],model,data,temp)
+                if ll < llml
+                    llml,parml = ll,param
+                end
+                parout[i,step] = param
+            end
+        end
+    end
+    return param,parml,ll,llml,predictions
 end
 """
 sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
@@ -258,6 +285,8 @@ return proposal distribution specified by location and scale
 #     end
 #     product_distribution(d)
 # end
+proposal(param::Float64,cv::Float64) = LogNormal(log(max(param✌🏼,1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
+
 function proposal(param::Vector,cv::Float64)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)

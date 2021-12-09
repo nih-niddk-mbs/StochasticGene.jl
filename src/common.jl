@@ -109,6 +109,16 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
     fittedparam::ParamType
     method::MethodType
 end
+struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+end
 
 struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
@@ -251,7 +261,7 @@ end
 likelihoodfn(param,data,model)
 model likelihoodfn called by loglikelihood
 """
-function likelihoodfn(param,data::RNAData,model::GMmodel)
+function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
     r = get_rates(param,model)
     n = model.G-1
     steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
@@ -261,6 +271,14 @@ function likelihoodfn(param,data::RNAData,model::AbstractGMlossmodel)
     yieldfactor = r[end]
     n = model.G-1
     steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
+end
+function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+    h = likelihoodarray(get_rates(param,model),data,model)
+    hconcat = Array{Float64,1}(undef,0)
+    for h in h
+        hconcat = vcat(hconcat,h)
+    end
+    return hconcat
 end
 function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
     h = likelihoodarray(get_rates(param,model),data,model)
@@ -303,6 +321,14 @@ function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel)
     # technical_loss!(h,yieldfactor)
     trim(h,data.nRNA)
 end
+function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+    n = model.G-1
+    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+    for i in eachindex(data.nRNA)
+        h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],n,data.nRNA[i],model.nalleles)
+    end
+    trim(h,data.nRNA)
+end
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
     yieldfactor = r[end]
     n = model.G-1
@@ -311,6 +337,12 @@ function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMlossmodel) wher
         h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],yieldfactor,n,data.nRNA[i],model.nalleles)
     end
     trim(h,data.nRNA)
+end
+function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
+    G = model.G
+    h0 = steady_state_full(r[1:2*G],G-1,maxdata)
+    transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+    # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel,yieldfactor,maxdata)
     G = model.G
@@ -392,18 +424,24 @@ function get_rates(param,model::GMrescaledmodel)
     return r
 end
 
-function get_rates(param,model::GMfixedeffectslossmodel)
+get_rates(param,model::GMfixedeffectsmodel) = fixed_rates(param,model)
+
+get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
+
+function fixed_rates(param,model)
     r = get_r(model)
     n = get_n(model)
     r[model.fittedparam] = param
-    r[model.fixedeffects[1]] = r[model.fixedeffects[2]]
+    for effect in model.fixedeffects
+        for ind in 2: length(effect)
+            r[effect[ind]] = r[effect[1]]
+        end
+    end
     return r
 end
 
-
 get_r(model) = copy(model.rates)
 get_n(model) = 2*model.G - 1
-
 
 """
 get_param(model)

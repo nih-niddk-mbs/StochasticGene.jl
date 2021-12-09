@@ -10,80 +10,89 @@ using DelimitedFiles
 using Dates
 using Distributed
 using LinearAlgebra
-using PyPlot
+using Plots
 using SparseArrays
 using DifferentialEquations
 using LSODA
+using DataFrames
 
 
 export
-    ExperimentalData,
-    SampleData,
-    HistogramData,
-    AbstractRNAData,
-    RNAData,
-    TransientRNAData,
-    RNAMixedData,
-    LiveCellData,
-    RNALiveCellData,
-    MultiRNALiveCellData,
-    Model,
-    StochasticGRmodel,
-    AbstractGMmodel,
-    AbstractGRMmodel,
-    AbtractGMlossmodel,
-    GModel,
-    GMrescaledmodel,
-    GMmultimodel,
-    GMtransientmodel,
-    GMdelaymodel,
-    GMlossmodel,
-    GMfixedeffectslossmodel,
-    GMmixedmodel,
-    GRMmodel,
-    GRSMmodel,
-    Options,
-    Results,
-    datahistogram,
-    datapdf,
-    likelihoodfn,
-    likelihoodarray,
-    likelihoodtuple,
-    get_rates,
-    get_r,
-    get_n,
-    get_param,
-    setr,
-    logprior,
-    MHOptions,
-    Fit,
-    Stats,
-    run_mh,
-    run_chains,
-    metropolis_hastings,
-    anneal,
-    warmup,
-    sample,
-    mhstep,
-    compute_waic,
-    aic,
-    initial_proposal,
-    proposal,
-    mhfactor,
-    update_waic,
-    extract_chain,
-    collate_fit,
-    collate_waic,
-    pooled_waic,
-    merge_param,
-    merge_ll,
-    merge_fit,
-    compute_stats,
-    find_ml,
-    loglikelihood,
-    crossentropy,
-    hist_entropy,
-    deviance
+    fit_rna,
+    makeswarm,
+    fix,
+    large_deviance,
+    assemble_all,
+    make_dataframe,
+    write_histograms
+    # ExperimentalData,
+    # SampleData,
+    # HistogramData,
+    # AbstractRNAData,
+    # RNAData,
+    # TransientRNAData,
+    # RNAMixedData,
+    # LiveCellData,
+    # RNALiveCellData,
+    # MultiRNALiveCellData,
+    # Model,
+    # StochasticGRmodel,
+    # AbstractGMmodel,
+    # AbstractGRMmodel,
+    # AbtractGMlossmodel,
+    # GModel,
+    # GMrescaledmodel,
+    # GMmultimodel,
+    # GMtransientmodel,
+    # GMdelaymodel,
+    # GMlossmodel,
+    # GMfixedeffectslossmodel,
+    # GMmixedmodel,
+    # GRMmodel,
+    # GRSMmodel,
+    # Options,
+    # Results,
+    # datahistogram,
+    # datapdf,
+    # likelihoodfn,
+    # likelihoodarray,
+    # likelihoodtuple,
+    # get_rates,
+    # get_r,
+    # get_n,
+    # get_param,
+    # setr,
+    # logprior,
+    # MHOptions,
+    # Fit,
+    # Stats,
+    # run_mh,
+    # run_chains,
+    # metropolis_hastings,
+    # anneal,
+    # warmup,
+    # sample,
+    # mhstep,
+    # compute_waic,
+    # aic,
+    # initial_proposal,
+    # proposal,
+    # mhfactor,
+    # update_waic,
+    # extract_chain,
+    # collate_fit,
+    # collate_waic,
+    # pooled_waic,
+    # merge_param,
+    # merge_ll,
+    # merge_fit,
+    # compute_stats,
+    # find_ml,
+    # loglikelihood,
+    # crossentropy,
+    # hist_entropy,
+    # deviance,
+    # genetrap
 
 ### Source files
 
@@ -106,14 +115,20 @@ include("chemical_master.jl")
 include("transition_rate_matrices.jl")
 
 # Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
-include("ClassicTelegraph.jl")
 include("simulator.jl")
+include("telegraphsplice.jl")
 
 # functions specific for Gene Trap experiments of Wan et al.
 include("genetrap.jl")
 
 # functions for scRNA and FISH experiments
 include("rna.jl")
+
+# functions for post fit analysis and plotting
+include("analysis.jl")
+
+# functions for use on NIH cluster Biowulf
+include("biowulf.jl")
 
 
 # include("/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/code/GillespieSimulatorExInt.jl")

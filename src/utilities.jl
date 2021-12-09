@@ -374,71 +374,6 @@ function mediansmooth(xin,window)
     x
 end
 
-"""
-plot_histogram()
-
-functions to plot data and model predicted histograms
-
-"""
-function plot_histogram(data::RNAData{Vector{Int64}, Vector{Array}},model::GMlossmodel)
-    h=likelihoodarray(model.rates,data,model)
-    for i in eachindex(h)
-        figure()
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-        savefig(string(i))
-    end
-    return h
-end
-function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
-    h=likelihoodarray(model.rates,data,model)
-    figure(data.gene)
-    for i in eachindex(h)
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-        savefig(string(i))
-    end
-    return h
-end
-function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
-    h=likelihoodfn(get_param(model),data,model)
-    figure(data.gene)
-    plot(h)
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
-function plot_histogram(data::RNALiveCellData,model)
-    h=likelihoodtuple(model.rates,data,model)
-    figure(data.gene)
-    plot(h[1])
-    plot(normalize_histogram(data.OFF))
-    plot(h[2])
-    plot(normalize_histogram(data.ON))
-    figure("FISH")
-    plot(h[3])
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
-function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
-    h=StochasticGene.likelihoodarray(model.rates,data,model)
-    for i in eachindex(h)
-        figure(data.gene *":T" * "$(data.time[i])")
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-    end
-    return h
-end
-
-function plot_histogram(data::RNAData,model::AbstractGMmodel)
-    h=StochasticGene.likelihoodfn(get_param(model),data,model)
-    figure(data.gene)
-    plot(h)
-    plot(normalize_histogram(data.histRNA))
-    return h
-end
-
 
 """
 residenceprob_G(file,G,header)
@@ -529,7 +464,7 @@ function teststeadystatemodel(model::AbstractGMmodel,nhist)
     G = model.G
     r = model.rates
     g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
-    g2 = telegraph(G-1,r[1:2*G],10000000,1e-5,nhist,model.nalleles)
+    g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
     return g1,g2
 end
 
