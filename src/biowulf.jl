@@ -1,6 +1,6 @@
 """
-makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",thresholdlow::Float64=0.,thresholdhigh::Float64=100000000.,conds::String="DMSO-AUXIN",result::String= "2021-03-11",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,runcycle::Bool=true,transient::Bool=false,fittedparam::String="1-2-5",fixedeffects::String="",juliafile::String="fitscript.jl",root="scrna/")
-
+makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
+makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
 
 Arguments
 - `G`: number of gene states
@@ -18,7 +18,6 @@ Arguments
 - `batchsize`: number of jobs per swarmfile, default = 1000
 - `maxtime`: maximum wall time for run, default = 2 hrs
 - `nchains`: number of MCMC chains, default = 2
-- `runcycle::Bool`: true means first cycle through parameters individually during fit
 - `transient::Bool`: true means fit transient model (T0, T30, T120)
 - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
 - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
@@ -27,7 +26,7 @@ Arguments
 - `root`: name of root directory for project, e.g. "scRNA\"
 
 
-returns swarmfile executed on biowulf
+returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
