@@ -45,7 +45,7 @@ function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
     makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,datafish=datafish,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,cyclesteps=cyclesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath)
 end
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",resultfolder::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="fit",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",resultfolder::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
     # resultfolder = joinpath("Results",result)
     # infolder = joinpath("Results",infolder)
     # datafolder = joinpath("Data",datafolder)
@@ -55,11 +55,11 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swar
     if ngenes > batchsize
         batches = getbatches(genes,ngenes,batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * conds * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * "$G" * "_" * conds * "$batch" * ".swarm"
             write_swarmfile(sfile,nchains,juliafile,batches[batch])
         end
     else
-        sfile = swarmfile * "_" * conds * ".swarm"
+        sfile = swarmfile * "_" * "$G" * "_" * conds * ".swarm"
         f = open(sfile,"w")
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
