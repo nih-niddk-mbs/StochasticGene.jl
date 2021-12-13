@@ -1,3 +1,6 @@
+# metropolis_hastings.jl
+
+
 """
 Structure for MH options
 """

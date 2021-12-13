@@ -1,6 +1,10 @@
-"""
-Strings
-"""
+### utilities.jl
+
+
+
+#
+# Strings
+#
 const rchar = "rml"
 const rmchar = "rmean"
 const rqchar = "rquant"

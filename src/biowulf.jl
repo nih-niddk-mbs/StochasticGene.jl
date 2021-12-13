@@ -1,6 +1,12 @@
+# biowulf.jl
+# functions for use on the NIH Biowulf super computer
+
+
+
 """
-makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
-makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
+    makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
+
+    makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
 
 Arguments
 - `G`: number of gene states
@@ -40,8 +46,9 @@ function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String
     makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,datafish=datafish,conds=conds,result=result,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,cyclesteps=cyclesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath)
 end
 function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
-    resultfolder = joinpath("Results",result)
-    infolder = joinpath("Results",infolder)
+    # resultfolder = joinpath("Results",result)
+    # infolder = joinpath("Results",infolder)
+    # datafolder = joinpath("Data",datafolder)
     ngenes = length(genes)
     println("number of genes: ",ngenes)
     juliafile = juliafile * "_" * "$G" * ".jl"
@@ -57,9 +64,17 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swar
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
     write_fitfile(juliafile,nchains,cell,conds,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,transient,samplesteps,cyclesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath)
-
-
 end
+
+"""
+    fix(folder)
+
+    finds jobs that failed and writes a swarmfile for those genes
+
+"""
+fix(folder) = writeruns(fixruns(findjobs(folder)))
+
+
 
 """
 make_fitfile(fitfile,fittedparam,fixedeffects)
@@ -182,8 +197,6 @@ function get_file(root,folder,type)
 end
 
 
-fix(folder) = writeruns(fixruns(findjobs(folder)))
-
 
 function findjobs(folder)
     files = readdir(folder)
@@ -292,27 +305,4 @@ function scan_fitfile(file,folder=".")
         push!(genes,line[4])
     end
     return genes
-end
-
-function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
-    if typeof(G) <: Number
-        G = string(G)
-    end
-    if ~isdir(outfolder)
-        mkpath(outfolder)
-    end
-    files1 = getratefile(folder1,G,cond1)
-    files2 = getratefile(folder2,G,cond2)
-    for file1 in files1
-        gene = StochasticGene.getgene(file1)
-        file2 = getratefile(files2,gene)
-        outfile = joinpath(outfolder,file2)
-        r1 = StochasticGene.readrates(joinpath(folder1,file1))
-        r2 = StochasticGene.readrates(joinpath(folder2,file2))
-        r2[end] = r1[end]
-        f = open(outfile,"w")
-        writedlm(f,[r2],',')
-        close(f)
-    end
-
 end

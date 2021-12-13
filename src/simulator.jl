@@ -1,3 +1,6 @@
+# simulator.jl
+# Functions to simulate Markov gene transcription models
+
 """
 simulatorGM(r::Vector,n::Int,nhist::Int,nalleles::Int,total::Int=10000000,tol::Float64=1e-6,count=false)
 

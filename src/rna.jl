@@ -1,10 +1,9 @@
-"""
-rna.jl
-
-Fit G state models (generalized telegraph models) to RNA abundance data
-For single cell RNA (scRNA) technical noise is included as a yieldfactor
-single molecule FISH (smFISH) is treated as loss less
-"""
+# rna.jl
+#
+# Fit G state models (generalized telegraph models) to RNA abundance data
+# For single cell RNA (scRNA) technical noise is included as a yieldfactor
+# single molecule FISH (smFISH) is treated as loss less
+#
 
 """
     fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=40000,cyclesteps=0,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
@@ -19,11 +18,11 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `nchains`: number of MCMC chains
 - `gene`: gene name
 - `cell`: cell type
-- `datacond`: condition, if more than one condition is used enter as a single string separated by hyphen, e.g. "DMSO-AUXIN"
+- `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
 - `maxtime`: float maximum time for entire run
 - `infolder`: folder pointing to results used as initial conditions
 - `resultfolder`: folder where results go
-- `datafolder`: folder for data
+- `datafolder`: folder for data, string or array of strings
 - `inlabel`: name of input files (not including gene name but including condition)
 - `label`: = name of output files
 - `nsets`: int number of rate sets
@@ -39,31 +38,11 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
 
 """
-# function fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,datafish,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-#     fittedparam = make_fittedparam(G,nsets)
-#     fit_rna(nchains,gene,cell,fittedparam,(),datacond,G,maxtime,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
-# end
-# function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,datafish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-#     fittedparam = parse.(Int,split(fittedparam,"-"))
-#     fit_rna(nchains,gene,cell,fittedparam,(),datacond,G,maxtime,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,transient,samplesteps,cyclesteps,warmupsteps,annealsteps,temp,tempanneal,root)
-# end
-# function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,datafish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-#     fittedparam = parse.(Int,split(fittedparam,"-"))
-#     fixedeffects = make_fixedeffects(fixedeffects,G,nsets)
-#     fit_rna(nchains,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,transient,samplesteps,cyclesteps,warmupsteps,annealsteps,temp,tempanneal,root)
-# end
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,datafish::Bool,inlabel,label,nsets::Int,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets::Int,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
     gene = check_genename(gene,"[")
-    # println(gene)
-    # decayrate = get_decay(gene,cell,root)
-    # nalleles = alleles(gene,cell,root)
-    # println("alleles: ",nalleles)
-    # if decayrate < 0
-    #     throw("decayrate < 0")
-    # else
-    #     println("decay rate: ",decayrate)
-    # end
+    datafolder = joinpath("data",datafolder)
     if occursin("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
     end
@@ -71,30 +50,22 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
         datacond = string.(split(datacond,"-"))
     end
     if transient
-        data = make_data(gene,datacond,datafolder,datafish,label,root,["T0","T30","T120"],[0.,30.,120.])
+        data = make_data(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
     else
-        data = make_data(gene,datacond,datafolder,datafish,label,root)
+        data = make_data(gene,datacond,datafolder,fish,label,root)
     end
-    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,transient,samplesteps,cyclesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,transient,samplesteps,cyclesteps,warmupsteps,annealsteps,temp,tempanneal,root)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,datafish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println(data.nRNA)
-    yieldprior = .05
-    # r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data,datafish)
-    # cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root)
-    # if cv != 0.02
-    #     warmupsteps = 0
-    # end
-    if cyclesteps > 0
-        cv = .02
-        annealsteps = 0
-        warmupsteps = div(samplesteps,5)
-    end
-    # options,model,param = make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-    # model = make_model(r,G,nalleles,datafish,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior)
-    model = make_model(gene,cell,G,datafish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
+
+    resultfolder = joinpath("Results",resultfolder)
+    infolder = joinpath("Results",infolder)
+
+
+    model = make_model(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
     options = StochasticGene.MHOptions(samplesteps,cyclesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
     param = StochasticGene.get_param(model)
 
@@ -105,29 +76,81 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     nothing
 end
 
-# """
-# make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
+# function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 #
-# return structures options, model, and param
-# """
-# function make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,samplesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-#     if length(fixedeffects) > 0
-#         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
+#     gene = check_genename(gene,"[")
+#     resultfolder = joinpath("Results",resultfolder)
+#     infolder = joinpath("Results",infolder)
+#     datafolder = joinpath("data",datafolder)
+#
+#
+#     if transient
+#         data = make_data(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
 #     else
-#         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
+#         data = make_data(gene,datacond,datafolder,fish,label,root)
 #     end
+#
+#     model = make_model(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
 #     options = StochasticGene.MHOptions(samplesteps,cyclesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
 #     param = StochasticGene.get_param(model)
-#     return options,model,param
+#
+#     if verbose
+#         print_ll(param,data,model)
+#     end
+#
+#     StochasticGene.run_mh(data,model,options,nchains)
 # end
 
 """
-make_model(gene,cell,G,datafish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+    make_data(gene::String,cond::String,datafolder,fish,label,root)
+
+"""
+function make_data(gene::String,cond::String,datafolder,fish::Bool,label,root)
+    if cond == "null"
+        cond = ""
+    end
+    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function make_data(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function make_data(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    println(datafile)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function make_data(gene::String,cond::String,datafolder,fish,label,root,sets::Vector,time::Vector)
+    if cond == "null"
+        cond = ""
+    end
+    datafile =[]
+    for set in sets
+        folder = joinpath(datafolder,set)
+        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+        datafile = vcat(datafile,path)
+    end
+    StochasticGene.data_rna(datafile,label,times,gene,false)
+end
+
+
+"""
+make_model(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
 
 make model structure
 
 """
-function make_model(gene,cell,G,datafish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+function make_model(gene,cell,G,fish::Bool,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = get_decay(gene,cell,root)
     nalleles = alleles(gene,cell,root)
     if verbose
@@ -138,12 +161,14 @@ function make_model(gene,cell,G,datafish,fittedparam,fixedeffects,inlabel,infold
             println("decay rate: ",decayrate)
         end
     end
-    r = getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets,root,data,verbose)
+
     cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
-    if datafish
+    if fish
+        r = getr(gene,G,nalleles,decayrate,1.,inlabel,infolder,nsets,root,data,fish,verbose)
         model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,0)
     else
         yieldprior = 0.05
+        r = getr(gene,G,nalleles,decayrate,yieldprior,inlabel,infolder,nsets,root,data,fish,verbose)
         if length(fixedeffects) > 0
             model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
         else
@@ -251,146 +276,77 @@ function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafold
     return param, data, model
 end
 
-
-# function make_fixedeffects(fixedeffects,G,nsets)
-#     if fixedeffects == "eject"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-1],[2*G-1])
-#     elseif fixedeffects == "off"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-2],[2*G-2])
-#     elseif fixedeffects == "on"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-3],[2*G-3])
-#     elseif fixedeffects == "offeject" || fixedeffects == "ejectoff"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-2,2*G*(nsets-1) + 2*G-1],[2*G-2,2*G-1])
-#     elseif fixedeffects == "oneject" || fixedeffects == "ejecton"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-1],[2*G-3,2*G-1])
-#     elseif fixedeffects == "onoff" || fixedeffects == "offon"
-#         fixedeffects = ([2*G*(nsets-1) + 2*G-3,2*G*(nsets-1) + 2*G-2],[2*G-3,2*G-2])
-#     end
-#     return fixedeffects
-# end
-# function make_fittedparam(G::Int,nsets)
-#
-#     if nsets == 1
-#         if G == 3
-#             fittedparam = [1,2,3,4,5,7]
-#         elseif G == 2
-#             fittedparam = [1,2,3,5]
-#         elseif G == 1
-#             fittedparam = [1,3]
-#         end
-#     else
-#         if G == 3
-#             # fittedparam = [1,2,3,4,5,7,8,9,10,11,13]
-#             # fittedparam = [7,8,9,10,11,13]
-#             fittedparam = [7,8,9,10,11]
-#         elseif G == 2
-#             # fittedparam = [1,2,3,5,6,7,9]
-#             # fittedparam = [5,6,7,9]
-#             fittedparam = [5,6,7]
-#         elseif G == 1
-#             fittedparam = [3,5]
-#         end
-#     end
-#     return fittedparam
-# end
-
-function make_data(gene::String,cond::String,datafolder,fish,label,root)
-    if cond == "null"
-        cond = ""
-    end
-    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::Array,datafolder::String,fish,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::Array,datafolder::Array,fish,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    println(datafile)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::String,datafolder,fish,label,root,sets::Vector,time::Vector)
-    if cond == "null"
-        cond = ""
-    end
-    datafile =[]
-    for set in sets
-        folder = joinpath(datafolder,set)
-        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-        datafile = vcat(datafile,path)
-    end
-    StochasticGene.data_rna(datafile,label,times,gene,false)
-end
-
-function getr(gene,G,nalleles,decayrate,inlabel,infolder,nsets::Int,root,data,fish::Bool,verbose=true)
+function getr(gene,G,nalleles,inlabel,infolder,root,verbose)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
     if verbose
         println(ratefile)
     end
     if isfile(ratefile)
         r = StochasticGene.readrates(ratefile,2)
+    else
+        return nothing
+    end
+end
+
+function getr(gene,G,nalleles,decayrate,yield,inlabel,infolder,nsets::Int,root,data,fish::Bool,verbose)
+    r = getr(gene,G,nalleles,inlabel,infolder,root,verbose)
+    if ~isnothing(r)
         if ~fish
             r[end] = clamp(r[end],eps(Float64),1-eps(Float64))
-            if length(r) == 2*G*nsets + 1
-                if verbose
-                    println(r)
-                end
-                return r
+        end
+        if length(r) == 2*G*nsets + Int(~fish)
+            if verbose
+                println(r)
             end
-        else
-            if length(r) == 2*G*nsets
-                if verbose
-                    println(r)
-                end
-                return r
-            end
+            return r
         end
     end
     println("No r")
-    setr(G,decayrate,nsets,data,fish)
+    setr(G,decayrate,yield,nsets,data,fish)
+
 end
 
-function setr(G,decayrate,nsets,data,fish)
-    if G == 2
-        r = [0.015,0.015,0.5,.01,1.]*decayrate/.01
-    elseif G == 3
-        r = [0.015,.2,.2,0.015,1.5,.01,1.]*decayrate/.01
-    elseif G == 1
-        if typeof(data.nRNA) <: Vector
-            r = Array{Float64,1}(undef,0)
-            for hist in data.histRNA
-                mu = StochasticGene.mean_histogram(hist)
-                r = vcat([10*mu,1.],r)
-            end
-            r *= decayrate
-            r = [r;1.]
-            nsets = 1
-        else
-            mu=StochasticGene.mean_histogram(data.histRNA)
-            r = [10*mu,1.,1.]*decayrate
-        end
-    end
-    if nsets > 1
-        r = [r[1:end-1];r]
-    end
+function setr(G,decayrate,yield,nsets::Int,data,fish)
+
     if fish
-        r = r[1:end-1]
+        r = setpriorrate(G,nsets,decayrate)[1]
     else
-        r[end] = .05
+        r = setpriorrate(G,nsets,decayrate,yield)[1]
     end
     println(r)
     return r
 end
+#     if G == 2
+#         r = [0.01,0.01,0.1,decayrate]
+#     elseif G == 3
+#         r = [0.01,.1,.1,0.01,0.1,decayrate]
+#     elseif G == 1
+#         mu=StochasticGene.mean_histogram(data.histRNA)
+#         r = [mu,yield]*decayrate/yield
+#     end
+#     for i in 2:nsets
+#         r = [r;r]
+#     end
+#     if ~fish
+#         r = [r;yield]
+#     end
+#     println(r)
+#     return r
+# end
+
+# if typeof(data.nRNA) <: Vector
+#   r = Array{Float64,1}(undef,0)
+#   for hist in data.histRNA
+#       mu = StochasticGene.mean_histogram(hist)
+#       r = vcat([10*mu,1.],r)
+#   end
+#   r *= decayrate
+#   r = [r;1.]
+#   nsets = 1
+# else
+#   mu=StochasticGene.mean_histogram(data.histRNA)
+#   r = [10*mu,1.,1.]*decayrate
+# end
 
 function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
     paramfile = StochasticGene.path_Gmodel("param_stats",gene,G,nalleles,inlabel,infolder,root)
@@ -473,8 +429,8 @@ reduce_fish(gene,cond,nhist,fishfolder,yield,root)
 sample fish histogram with loss (1-yield)
 """
 function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
-    datafish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
-    StochasticGene.technical_loss(datafish[2],yield,nhist)
+    fish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
+    StochasticGene.technical_loss(fish[2],yield,nhist)
 end
 
 # Load data, model, and option structures
@@ -856,7 +812,7 @@ ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root
 
 """
 function ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
-    path_Gmodel("rates",gene,G,nalleles,label * "_" * cond,folder,root)
+    path_Gmodel("rates",gene,G,nalleles,label * "-" * cond,folder,root)
 end
 
 """

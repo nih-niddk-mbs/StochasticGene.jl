@@ -395,9 +395,9 @@ function sstelFISH(n::Int,rin::Vector{Float64},nhist::Int,nalleles::Int)
 end
 
 
-function transientFISH(t::Float64,n::Int,P0,Mvals,Mvects,rin::Vector{Float64},nhist::Int,nalleles::Int)
-	# Closed form steady state mRNA distribution of generalized n-state classic telegraph model
-	P = transientMaster(t,Mvals,Mvects)
-	mhist= marginalize(P,nhist,n)
-	alleleConvolve(mhist,nalleles)
-end
+# function transientFISH(t::Float64,n::Int,P0,Mvals,Mvects,rin::Vector{Float64},nhist::Int,nalleles::Int)
+# 	# Closed form steady state mRNA distribution of generalized n-state classic telegraph model
+# 	P = transientMaster(t,n,Mvals,Mvects)
+# 	mhist= marginalize(P,nhist,n)
+# 	alleleConvolve(mhist,nalleles)
+# end

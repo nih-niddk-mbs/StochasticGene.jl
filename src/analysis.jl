@@ -1,91 +1,118 @@
+# analysis.jl
+
+
+"""
+    large_deviance(measurefile,threshold)
+
+returns list of genes that have deviance greater than `threshold' in 'measurefile'
+"""
 large_deviance(measurefile,threshold) = filter_gene(measurefile,"Deviance",threshold)
 
-function filter_gene(measurefile,measure,threshold)
-    genes = Vector{String}(undef,0)
-    measures,header = readdlm(measurefile,',',header=true)
-    println(length(measures[:,1]))
-    col = findfirst(header[1,:] .== measure)
-    for d in eachrow(measures)
-        if d[col] > threshold || isnan(d[col])
-            push!(genes,d[1])
+"""
+    make_dataframe(folder,models::Vector=[1,2])
+
+"""
+function make_dataframe(folder,models::Vector)
+    files = readdir(folder)
+    mfiles = Vector{String}(undef,0)
+    rfile = ""
+    for file in files
+        if occursin("measures",file)  && ~occursin("all",file)
+            push!(mfiles,joinpath(folder,file))
+        elseif occursin("rates",file) && occursin("2.csv",file)
+            rfile = joinpath(folder,file)
         end
     end
-    println(length(genes))
-    return genes
+    mfile = joinpath(folder,split("2.csv",mfiles[2])[1] * "all.csv")
+    println(rfile)
+    join_files(models,mfiles,mfile)
+    winnerfile = joinpath(folder,"Winner.csv")
+    best_AIC(winnerfile,mfile)
+    r,head = readdlm(rfile,',',header=true)
+    winner = get_winners(winnerfile,length(models))
+    cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
+    rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winner];
+    DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),winner = Int.(rs[:,8]));
 end
 
-function filter_gene_nan(measurefile,measure)
-    genes = Vector{String}(undef,0)
-    measures,header = readdlm(measurefile,',',header=true)
-    println(length(measures[:,1]))
-    col = findfirst(header[1,:] .== measure)
-    for d in eachrow(measures)
-        if isnan(d[col])
-            push!(genes,d[1])
+function make_dataframe(folder,models::Vector,winners,moments)
+    files = readdir(folder)
+    mfiles = Vector{String}(undef,0)
+    rfile = ""
+    for file in files
+        if occursin("measures",file)  && ~occursin("all",file)
+            push!(mfiles,joinpath(folder,file))
+        elseif occursin("rates",file) && occursin("2.csv",file)
+            rfile = joinpath(folder,file)
         end
     end
-    println(length(genes))
-    return genes
+    mfile = joinpath(folder,split("2.csv",mfiles[2])[1] * "all.csv")
+    println(rfile)
+    join_files(models,mfiles,mfile)
+    winnerfile = joinpath(folder,"Winner.csv")
+    best_AIC(winnerfile,mfile)
+    r,head = readdlm(rfile,',',header=true)
+    winner = get_winners(winnerfile,length(models))
+    cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
+    rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winners];
+    DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),winner = Int.(rs[:,8]));
+end
+
+function add_mean(df::DataFrame,conds::Vector,datafolder::Vector,fish::Bool,root)
+    m = Vector{Float64}(undef,0)
+    for i in eachindex(conds)
+        m = [m ; get_mean(df,conds[i],datafolder[i],root)]
+    end
+    [df DataFrame(Expression = m)]
+end
+
+function get_mean(df::DataFrame,cond,datafolder,fish::Bool,root)
+    m = Vector{Float64}(undef,length(df.Gene[df.cond .== 0]))
+    i = 1
+    for gene in df.Gene[df.cond .== 0]
+        m[i] = mean_histogram(get_histogram_rna(string(gene),cond,datafolder,fish,root))
+        i += 1
+    end
+    return m
+end
+
+function make_dataframe_transient(folder::String,winners::String = "")
+    rs = Array{Any,2}(undef,0,8)
+    files =readdir(folder)
+    n = 0
+    for file in files
+        if occursin("rate",file)
+            t = parse(Float64,split(split(file,"T")[2],"_")[1])
+            r,head = readdlm(joinpath(folder,file),',',header=true)
+            r = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  [zeros(size(r)[1]); ones(size(r)[1])]  t*ones(2*size(r)[1])/60.]
+            rs = vcat(rs,r)
+            n += 1
+        end
+    end
+    if winners != ""
+        w = get_winners(winners,2*n)
+        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]),winner = w)
+    else
+        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]))
+    end
 end
 
 
-function deviance(r,cond,n,datafolder,root)
-    h,hd = histograms(r,cell,cond,n,datafolder,root)
-    deviance(h,hd)
-end
-
-
-function compute_deviance(outfile,ratefile::String,cond,n,datafolder,root)
+function write_moments(outfile,genelist,cond,datafolder,root)
     f = open(outfile,"w")
-    rates,head = readdlm(ratefile,',',header=true)
-    for r in eachrow(rates)
-        d=deviance(r,cond,n,datafolder,root)
-        writedlm(f,[gene d],',')
+    writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
+    for gene in genelist
+        h = get_histogram_rna(gene,cond,datafolder,root)
+        writedlm(f,[gene StochasticGene.mean_histogram(h) StochasticGene.var_histogram(h)],',')
     end
     close(f)
 end
 
-function write_histograms(outfolder,ratefile::String,cond,n,datafolder,root)
-    rates,head = readdlm(ratefile,',',header=true)
-    for r in eachrow(rates)
-        h,hd = histograms(r,cell,cond,n,datafolder,root)
-        f = open(joinpath(outfolder,r[1] * ".txt"),"w")
-        writedlm(f,h)
-        close(f)
-    end
-end
 
-function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,datafolder::String,label,nsets,root)
-    rates,head = readdlm(ratefile,',',header=true)
-    if ~isdir(outfolder)
-        mkpath(outfolder)
-    end
-    cond = string.(split(datacond,"-"))
-    for r in eachrow(rates)
-        h = histograms(r,fittedparam,datacond,G,datafolder,label,nsets,root)
-        for i in eachindex(cond)
-            f = open(joinpath(outfolder,string(r[1]) * cond[i] * ".txt"),"w")
-            writedlm(f,h[i])
-            close(f)
-        end
-    end
-end
+"""
+    write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
 
-function histograms(r,cell,cond,n,datafolder,root)
-    gene = String(r[1])
-    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
-    hd = StochasticGene.read_scrna(datafile)
-    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene,cell))
-    return h,hd
-end
-
-function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
-    gene = string(rin[1])
-    r = float.(rin[2:end])
-    param,data,model = steadystate_rna(r,gene,fittedparam,cond,G,datafolder,label,nsets,root)
-    StochasticGene.likelihoodarray(r,data,model)
-end
-
+"""
 function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
     folder = joinpath(root,folder)
     condarray = split(cond,"-")
@@ -120,6 +147,51 @@ function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,roo
     end
     close(f)
 end
+
+
+function filter_gene(measurefile,measure,threshold)
+    genes = Vector{String}(undef,0)
+    measures,header = readdlm(measurefile,',',header=true)
+    println(length(measures[:,1]))
+    col = findfirst(header[1,:] .== measure)
+    for d in eachrow(measures)
+        if d[col] > threshold || isnan(d[col])
+            push!(genes,d[1])
+        end
+    end
+    println(length(genes))
+    return genes
+end
+
+function filter_gene_nan(measurefile,measure)
+    genes = Vector{String}(undef,0)
+    measures,header = readdlm(measurefile,',',header=true)
+    println(length(measures[:,1]))
+    col = findfirst(header[1,:] .== measure)
+    for d in eachrow(measures)
+        if isnan(d[col])
+            push!(genes,d[1])
+        end
+    end
+    println(length(genes))
+    return genes
+end
+
+function deviance(r,cond,n,datafolder,root)
+    h,hd = histograms(r,cell,cond,n,datafolder,root)
+    deviance(h,hd)
+end
+
+function compute_deviance(outfile,ratefile::String,cond,n,datafolder,root)
+    f = open(outfile,"w")
+    rates,head = readdlm(ratefile,',',header=true)
+    for r in eachrow(rates)
+        d=deviance(r,cond,n,datafolder,root)
+        writedlm(f,[gene d],',')
+    end
+    close(f)
+end
+
 
 frequency(ron,sd,rdecay) = (ron/rdecay, sd/rdecay)
 
@@ -162,18 +234,6 @@ function offtime(gene::String,infile,n,method,root)
 
 end
 
-function write_moments(outfile,genelist,cond,datafolder,root)
-    f = open(outfile,"w")
-    writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
-    for gene in genelist
-        datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
-        # data = StochasticGene.data_rna(datafile,label,gene,false)
-        len,h = StochasticGene.histograms_rna(datafile,gene,false)
-        # h,hd = histograms(r,cond,n,datafolder,root)
-        writedlm(f,[gene StochasticGene.mean_histogram(h) StochasticGene.var_histogram(h)],',')
-    end
-    close(f)
-end
 
 function join_files(file1::String,file2::String,outfile::String,addlabel::Bool=true)
     contents1,head1 = readdlm(file1,',',header=true)   # model G=2
@@ -347,11 +407,6 @@ function add_best_occupancy(filein,fileout,filemodel2,filemodel3)
     close(f)
 end
 
-function plot_model(r,n,nhist,nalleles)
-    h= StochasticGene.steady_state(r[1:2*n+2],r[end],n,nhist,nalleles)
-    plot(h)
-    return h
-end
 
 function prune_file(list,file,outfile,header=true)
     contents,head = readdlm(file,',',header=header)
@@ -363,6 +418,30 @@ function prune_file(list,file,outfile,header=true)
     end
     close(f)
 end
+
+function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
+    if typeof(G) <: Number
+        G = string(G)
+    end
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
+    files1 = getratefile(folder1,G,cond1)
+    files2 = getratefile(folder2,G,cond2)
+    for file1 in files1
+        gene = StochasticGene.getgene(file1)
+        file2 = getratefile(files2,gene)
+        outfile = joinpath(outfolder,file2)
+        r1 = StochasticGene.readrates(joinpath(folder1,file1))
+        r2 = StochasticGene.readrates(joinpath(folder2,file2))
+        r2[end] = r1[end]
+        f = open(outfile,"w")
+        writedlm(f,[r2],',')
+        close(f)
+    end
+
+end
+
 
 """
 assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
@@ -485,54 +564,71 @@ function make_datafiles(infolder,outfolder,label)
     end
 end
 
-function make_dataframe(folder,models::Vector=[1,2])
-    files = readdir(folder)
-    mfiles = Vector{String}(undef,0)
-    rfile = ""
-    for file in files
-        if occursin("measures",file)  && ~occursin("all",file)
-            push!(mfiles,joinpath(folder,file))
-        elseif occursin("rates",file) && occursin("2.csv",file)
-            rfile = joinpath(folder,file)
-        end
-    end
-    mfile = joinpath(folder,split("2.csv",mfiles[2])[1] * "all.csv")
-    println(rfile)
-    join_files(models,mfiles,mfile)
-    winnerfile = joinpath(folder,"Winner.csv")
-    best_AIC(winnerfile,mfile)
-    r,head = readdlm(rfile,',',header=true)
-    winner = get_winners(winnerfile,length(models))
-    cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
-    rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winner];
-    DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),winner = Int.(rs[:,8]));
-end
-
-function make_dataframe_transient(folder::String,winners::String = "")
-    rs = Array{Any,2}(undef,0,8)
-    files =readdir(folder)
-    n = 0
-    for file in files
-        if occursin("rate",file)
-            t = parse(Float64,split(split(file,"T")[2],"_")[1])
-            r,head = readdlm(joinpath(folder,file),',',header=true)
-            r = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  [zeros(size(r)[1]); ones(size(r)[1])]  t*ones(2*size(r)[1])/60.]
-            rs = vcat(rs,r)
-            n += 1
-        end
-    end
-    if winners != ""
-        w = get_winners(winners,2*n)
-        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]),winner = w)
-    else
-        return DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),time = float.(rs[:,8]))
-    end
-end
 
 function get_winners(winners::String,n::Int)
     m,h = readdlm(winners,',',header=true)
     winner = repeat(m[:,end],n)
 end
+
+function write_histograms(outfolder,ratefile::String,cond,n,datafolder,root)
+    rates,head = readdlm(ratefile,',',header=true)
+    for r in eachrow(rates)
+        h,hd = histograms(r,cell,cond,n,datafolder,root)
+        f = open(joinpath(outfolder,r[1] * ".txt"),"w")
+        writedlm(f,h)
+        close(f)
+    end
+end
+
+function write_histograms(outfolder,ratefile,fittedparam,datacond,G::Int,datafolder::String,label,nsets,root)
+    rates,head = readdlm(ratefile,',',header=true)
+    if ~isdir(outfolder)
+        mkpath(outfolder)
+    end
+    cond = string.(split(datacond,"-"))
+    for r in eachrow(rates)
+        h = histograms(r,fittedparam,datacond,G,datafolder,label,nsets,root)
+        for i in eachindex(cond)
+            f = open(joinpath(outfolder,string(r[1]) * cond[i] * ".txt"),"w")
+            writedlm(f,h[i])
+            close(f)
+        end
+    end
+end
+
+
+
+"""
+    histograms(r,cell,cond,n::Int,datafolder,root)
+
+"""
+function histograms(r,cell,cond,n::Int,datafolder,root)
+    gene = String(r[1])
+    datafile = StochasticGene.scRNApath(gene,cond,datafolder,root)
+    hd = StochasticGene.read_scrna(datafile)
+    h = StochasticGene.steady_state(r[2:2*n+3],r[end],n,length(hd),alleles(root,gene,cell))
+    return h,hd
+end
+
+function histograms(rin,fittedparam,cond,G::Int,datafolder,label,nsets,root)
+    gene = string(rin[1])
+    r = float.(rin[2:end])
+    param,data,model = steadystate_rna(r,gene,fittedparam,cond,G,datafolder,label,nsets,root)
+    StochasticGene.likelihoodarray(r,data,model)
+end
+
+function get_histogram_rna(gene,cond,datafolder,fish,root)
+    if fish
+        datapath = StochasticGene.FISHpath(gene,cond,datafolder,root)
+        h = read_fish(datapath,cond,.98)
+    else
+        datapath = StochasticGene.scRNApath(gene,cond,datafolder,root)
+        h = read_scrna(datapath,.99)
+    end
+
+    normalize_histogram(h)
+end
+
 
 """
 plot_histogram_rna()
@@ -559,21 +655,19 @@ function plot_histogram_fish(gene::String,datapaths::Array,modelfile::String,tim
     return h
 end
 
-function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,root)
-    hn = get_histogram_rna(gene,cond,datafolder,root)
+function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,fish::Bool,root)
+    hn = get_histogram_rna(gene,cond,datafolder,fish,root)
     ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
     println(ratepath)
     r = readrates(ratepath)
-    m  = steady_state(r[1:2*G],r[end],G-1,length(hn),nalleles)
+    if fish
+        m  = steady_state(r[1:2*G],G-1,length(hn),nalleles)
+    else
+        m  = steady_state(r[1:2*G],r[end],G-1,length(hn),nalleles)
+    end
     plot(m)
     plot(hn)
-    return r,hn,m,deviance(m,h),deviance(m,mediansmooth(h,3))
-end
-
-function get_histogram_rna(gene,cond,datafolder,root)
-    datapath = scRNApath(gene,cond,datafolder,root)
-    h = read_scrna(datapath,.99)
-    normalize_histogram(h)
+    return r,hn,m,deviance(m,hn),deviance(m,mediansmooth(hn,3))
 end
 
 function plot_transient_rna(gene,cond,G,nalleles,label,datafolders::Vector,folder,root)
@@ -598,6 +692,14 @@ plot_histogram()
 functions to plot data and model predicted histograms
 
 """
+
+function plot_histogram(gene,cell,G,cond,fish::Bool,label,ratefolder,datafolder,nsets,root,verbose=false)
+    data = make_data(gene,cond,datafolder,fish,label,root)
+    model = make_model(gene,cell,G,fish,[1],(),label,ratefolder,nsets,root,data,verbose)
+    plot_histogram(data,model)
+end
+
+
 function plot_histogram(data::RNAData{Vector{Int64}, Vector{Array}},model::GMlossmodel)
     h=likelihoodarray(model.rates,data,model)
     for i in eachindex(h)
@@ -649,10 +751,28 @@ function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
     return h
 end
 
+function plot_histogram(data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+    m=StochasticGene.likelihoodarray(model.rates,data,model)
+    for i in eachindex(m)
+        plt=plot(m[i])
+        plot!(normalize_histogram(data.histRNA[i]),show=true)
+        display(plt)
+    end
+    println(deviance(data,model))
+    println(StochasticGene.loglikelihood(get_param(model),data,model)[1])
+    return m
+end
+
 function plot_histogram(data::RNAData,model::AbstractGMmodel)
     h=StochasticGene.likelihoodfn(get_param(model),data,model)
     figure(data.gene)
     plot(h)
     plot(normalize_histogram(data.histRNA))
+    return h
+end
+
+function plot_model(r,n,nhist,nalleles)
+    h= StochasticGene.steady_state(r[1:2*n+2],r[end],n,nhist,nalleles)
+    plot(h)
     return h
 end

@@ -1,4 +1,15 @@
+# io.jl
 ### Files for saving and reading mh results
+
+
+function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false,type=2)
+    for l in label, c in cond, g in model
+        assemble_rates(folder,l,c,g,append,header,type)
+        assemble_measures(folder,l,c,g,append,header)
+        assemble_stats("mean",folder,l,c,g,append,header)
+    end
+end
+
 
 function extractparts(file::String)
     file = split(file,".")[1]
@@ -32,13 +43,6 @@ function makestring(v)
     return s
 end
 
-function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false,type=2)
-    for l in label, c in cond, g in model
-        assemble_rates(folder,l,c,g,append,header,type)
-        assemble_measures(folder,l,c,g,append,header)
-        assemble_stats("mean",folder,l,c,g,append,header)
-    end
-end
 
 function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type=2)
     files = getfiles(folder,"rates",label,cond,model)
@@ -270,7 +274,7 @@ end
 
 function read_covlogparam(file)
     in = readdlm(file,',')
-    n = length(in[1,:])
+    n = div((length(in[:,1])-4),4)
     in[end-n+1:end,1:n]
 end
 
