@@ -102,9 +102,9 @@ scRNA or FISH mRNA data, and burst correlations between alleles
 function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
-    totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
+    totalsteps = length(param) * options.cyclesteps + options.warmupsteps + options.samplesteps + options.annealsteps
     if options.cyclesteps > 0
-        param,parml,ll,llml,predictions = cycle(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime*options.warmupsteps/totalsteps)
+        param,parml,ll,llml,predictions = cycle(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),length(param)*options.maxtime*options.cyclesteps/totalsteps)
         println("post-cycle ll: ",llml)
     end
     if options.annealsteps > 0
@@ -113,7 +113,7 @@ function metropolis_hastings(data,model,options)
         temp = options.temp
     end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime/2)
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),options.maxtime*options.warmupsteps/totalsteps)
     else
         parml = param
         llml = ll
