@@ -104,7 +104,7 @@ function metropolis_hastings(data,model,options)
     ll,predictions = loglikelihood(param,data,model)
     totalsteps = length(param) * options.cyclesteps + options.warmupsteps + options.samplesteps + options.annealsteps
     if options.cyclesteps > 0
-        param,parml,ll,llml,predictions = cycle(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,temp,time(),length(param)*options.maxtime*options.cyclesteps/totalsteps)
+        param,parml,ll,llml,predictions = cycle(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),length(param)*options.maxtime*options.cyclesteps/totalsteps)
         println("post-cycle ll: ",llml)
     end
     if options.annealsteps > 0
