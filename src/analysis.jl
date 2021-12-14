@@ -630,62 +630,62 @@ function get_histogram_rna(gene,cond,datafolder,fish,root)
 end
 
 
-"""
-plot_histogram_rna()
-
-functions to plot data and model predicted rna histograms
-
-"""
-function plot_histogram_rna(gene::String,cond::String,datapath::String)
-    file = joinpath(datapath,gene * "_" * cond * ".txt")
-    h = read_scrna(file)
-    plot(normalize_histogram(h))
-    return h
-end
-
-function plot_histogram_fish(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
-    r = readrates(modelfile,1)
-    data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
-    h=likelihoodarray(r[fittedparam],data,model)
-    figure(gene)
-    for i in eachindex(h)
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-    end
-    return h
-end
-
-function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,fish::Bool,root)
-    hn = get_histogram_rna(gene,cond,datafolder,fish,root)
-    ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
-    println(ratepath)
-    r = readrates(ratepath)
-    if fish
-        m  = steady_state(r[1:2*G],G-1,length(hn),nalleles)
-    else
-        m  = steady_state(r[1:2*G],r[end],G-1,length(hn),nalleles)
-    end
-    plot(m)
-    plot(hn)
-    return r,hn,m,deviance(m,hn),deviance(m,mediansmooth(hn,3))
-end
-
-function plot_transient_rna(gene,cond,G,nalleles,label,datafolders::Vector,folder,root)
-    ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
-    println(ratepath)
-    r = readrates(ratepath)
-    maxdata = nhist_loss(10,r[end])
-    h0 = steady_state_full(r[1:2*G],G-1,maxdata)
-    h = transient([0.,30.,120.],r[2*G+1:4*G],r[end],G-1,nalleles,h0,1)
-    i = 0
-    for datafolder in datafolders
-        i += 1
-        figure()
-        plot(h[i])
-        plot(get_histogram_rna(gene,cond,datafolder,root))
-    end
-    return r,h
-end
+# """
+# plot_histogram_rna()
+#
+# functions to plot data and model predicted rna histograms
+#
+# """
+# function plot_histogram_rna(gene::String,cond::String,datapath::String)
+#     file = joinpath(datapath,gene * "_" * cond * ".txt")
+#     h = read_scrna(file)
+#     plot(normalize_histogram(h))
+#     return h
+# end
+#
+# function plot_histogram_fish(gene::String,datapaths::Array,modelfile::String,time=[0.;30.;120.],fittedparam=[7;8;9;10;11])
+#     r = readrates(modelfile,1)
+#     data,model,_ = transient_fish(datapaths,"",time,gene,r,1.,3,2,fittedparam,1.,1.,10)
+#     h=likelihoodarray(r[fittedparam],data,model)
+#     figure(gene)
+#     for i in eachindex(h)
+#         plot(h[i])
+#         plot(normalize_histogram(data.histRNA[i]))
+#     end
+#     return h
+# end
+#
+# function plot_histogram_rna(gene,cond,G,nalleles,label,datafolder,folder,fish::Bool,root)
+#     hn = get_histogram_rna(gene,cond,datafolder,fish,root)
+#     ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
+#     println(ratepath)
+#     r = readrates(ratepath)
+#     if fish
+#         m  = steady_state(r[1:2*G],G-1,length(hn),nalleles)
+#     else
+#         m  = steady_state(r[1:2*G],r[end],G-1,length(hn),nalleles)
+#     end
+#     plot(m)
+#     plot(hn)
+#     return r,hn,m,deviance(m,hn),deviance(m,mediansmooth(hn,3))
+# end
+#
+# function plot_transient_rna(gene,cond,G,nalleles,label,datafolders::Vector,folder,root)
+#     ratepath = ratepath_Gmodel(gene,cond,G,nalleles,label,folder,root)
+#     println(ratepath)
+#     r = readrates(ratepath)
+#     maxdata = nhist_loss(10,r[end])
+#     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
+#     h = transient([0.,30.,120.],r[2*G+1:4*G],r[end],G-1,nalleles,h0,1)
+#     i = 0
+#     for datafolder in datafolders
+#         i += 1
+#         figure()
+#         plot(h[i])
+#         plot(get_histogram_rna(gene,cond,datafolder,root))
+#     end
+#     return r,h
+# end
 """
 plot_histogram()
 
@@ -693,10 +693,11 @@ functions to plot data and model predicted histograms
 
 """
 
-function plot_histogram(gene,cell,G,cond,fish::Bool,label,ratefolder,datafolder,nsets,root,verbose=false)
+function plot_histogram(gene,cell,G,cond,fish::Bool,label,ratefolder,datafolder,nsets,root;fittedparam = [1],verbose=false)
     data = make_data(gene,cond,datafolder,fish,label,root)
-    model = make_model(gene,cell,G,fish,[1],(),label,ratefolder,nsets,root,data,verbose)
-    plot_histogram(data,model)
+    model = make_model(gene,cell,G,fish,fittedparam,(),label,ratefolder,nsets,root,data,verbose)
+    m = plot_histogram(data,model)
+    return m,data,model
 end
 
 
