@@ -180,7 +180,7 @@ function cycle(predictions,param,parml,ll,llml,d,proposalcv,data,model,sampleste
         for i in eachindex(param)
             while  step < samplesteps && time() - t1 < maxtime
                 step += 1
-                _,predictions,param,ll,prior = mhstep(predictions,param[i],ll,prior[i],d[i],proposalcv[i],model,data,temp)
+                _,predictions,param,ll,prior = mhstep(predictions,param[i],ll,prior[i],d[i],.02,model,data,temp)
                 if ll < llml
                     llml,parml = ll,param
                 end
