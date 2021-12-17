@@ -254,7 +254,14 @@ distribution_array(param::Vector,cv,dist=LogNormal)
 function distribution_array(param::Vector,cv,dist=LogNormal)
     d = []
     for i in eachindex(param)
-        push!(d,dist(param[i],cv[i]))
+        if dist == LogNormal
+            push!(d,LogNormal_meancv(param[i],cv[i]))
+        elseif dist == Gamma
+            push!(d,Gamma_meancv(param[i],cv[i]))
+        else
+            push!(d,dist(param[i],cv[i]))
+        end
+
     end
     return d
 end
@@ -317,7 +324,15 @@ end
 mean_histogram(x)
 
 """
-mean_histogram(x) = (collect(1:length(x)) .- 1)' * x/sum(x)
+mean_histogram(x::Vector{Float64}) = (collect(1:length(x)) .- 1)' * x/sum(x)
+
+function mean_histogram(x::Vector{Array})
+    y = Vector{Float64}(undef,length(x))
+    for i in eachindex(x)
+        y[i] = mean_histogram(x[i])
+    end
+    return y
+end
 
 """
 m2_histogram(x)

@@ -695,7 +695,7 @@ functions to plot data and model predicted histograms
 
 function plot_histogram(gene,cell,G,cond,fish::Bool,label,ratefolder,datafolder,nsets,root;fittedparam = [1],verbose=false)
     data = make_data(gene,cond,datafolder,fish,label,root)
-    model = make_model(gene,cell,G,fish,fittedparam,(),label,ratefolder,nsets,root,data,verbose)
+    model = make_model(gene,cell,G,fish,.01,fittedparam,(),label,ratefolder,nsets,root,data,verbose)
     m = plot_histogram(data,model)
     return m,data,model
 end
@@ -772,8 +772,16 @@ function plot_histogram(data::RNAData,model::AbstractGMmodel)
     return h
 end
 
+function plot_model(r,n,nhist,nalleles,yield)
+    h= StochasticGene.steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
+    plt = plot(h)
+    display(plt)
+    return h
+end
+
 function plot_model(r,n,nhist,nalleles)
-    h= StochasticGene.steady_state(r[1:2*n+2],r[end],n,nhist,nalleles)
-    plot(h)
+    h= StochasticGene.steady_state(r[1:2*n+2],n,nhist,nalleles)
+    plt = plot(h)
+    display(plt)
     return h
 end

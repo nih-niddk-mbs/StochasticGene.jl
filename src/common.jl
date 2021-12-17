@@ -319,7 +319,7 @@ end
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel)
     yieldfactor = r[end]
     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
-    h = likelihoodarray(r[1:end-1],data::TransientRNAData,model,yieldfactor,nh)
+    h = likelihoodarray(r[1:end-1],data,model,yieldfactor,nh)
     # technical_loss!(h,yieldfactor)
     trim(h,data.nRNA)
 end
