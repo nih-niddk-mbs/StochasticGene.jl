@@ -61,7 +61,7 @@ end
 function add_mean(df::DataFrame,conds::Vector,datafolder::Vector,fish::Bool,root)
     m = Vector{Float64}(undef,0)
     for i in eachindex(conds)
-        m = [m ; get_mean(df,conds[i],datafolder[i],root)]
+        m = [m ; get_mean(df,conds[i],datafolder[i],fish,root)]
     end
     [df DataFrame(Expression = m)]
 end
@@ -98,11 +98,11 @@ function make_dataframe_transient(folder::String,winners::String = "")
 end
 
 
-function write_moments(outfile,genelist,cond,datafolder,root)
+function write_moments(outfile,genelist,cond,datafolder,fish,root)
     f = open(outfile,"w")
     writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
     for gene in genelist
-        h = get_histogram_rna(gene,cond,datafolder,root)
+        h = get_histogram_rna(gene,cond,datafolder,fish,root)
         writedlm(f,[gene StochasticGene.mean_histogram(h) StochasticGene.var_histogram(h)],',')
     end
     close(f)
@@ -320,7 +320,7 @@ function sample_non1_genes(infile,n)
             push!(list,c[1])
         end
     end
-    a = sample(list,n,replace=false)
+    a = StatsBase.sample(list,n,replace=false)
 end
 
 
@@ -694,8 +694,8 @@ functions to plot data and model predicted histograms
 """
 
 function plot_histogram(gene,cell,G,cond,fish::Bool,label,ratefolder,datafolder,nsets,root;fittedparam = [1],verbose=false)
-    data = make_data(gene,cond,datafolder,fish,label,root)
-    model = make_model(gene,cell,G,fish,.01,fittedparam,(),label,ratefolder,nsets,root,data,verbose)
+    data = data_rna(gene,cond,datafolder,fish,label,root)
+    model = model_rna(gene,cell,G,fish,.01,fittedparam,(),label,ratefolder,nsets,root,data,verbose)
     m = plot_histogram(data,model)
     return m,data,model
 end

@@ -39,8 +39,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     gene = check_genename(gene,"[")
     datafolder = joinpath("data",datafolder)
     if occursin("-",datafolder)
@@ -50,13 +49,13 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
         datacond = string.(split(datacond,"-"))
     end
     if transient
-        data = make_data(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
+        data = data_rna(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
     else
-        data = make_data(gene,datacond,datafolder,fish,label,root)
+        data = data_rna(gene,datacond,datafolder,fish,label,root)
     end
-    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println(data.nRNA)
@@ -64,118 +63,56 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     resultfolder = joinpath("Results",resultfolder)
     infolder = joinpath("Results",infolder)
 
-    model = make_model(gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
+    model = model_rna(gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
     options = StochasticGene.MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-    param = StochasticGene.get_param(model)
 
-    print_ll(param,data,model)
+    if runcycle > 0
+        model = cycle(nchains,fish,fixedeffects,model,data,options)
+    end
+
+    print_ll(data,model)
     fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
     finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println(now())
     nothing
 end
 
-# """
-# cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
-#
-# run_mh by cycling through individual parameters sequentially
-# """
+"""
+cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
+
+run_mh by cycling through individual parameters sequentially
+"""
 # function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
-# function cycle(nchains,r,G,nalleles,nsets,cv,[fp],decayrate,yieldprior,data,param,options)
-#     make_structures(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,100,0,0,maxtime/10,temp,tempanneal)
-#     options = StochasticGene.MHOptions(cyclesteps,0,0,maxtime,temp,tempanneal)
-#     param = StochasticGene.get_param(model)
-#     initial_ll(param,data,model,"pre-cycle ll:")
-#     t0 = time()
-#     while (time() - t0 < maxtime)
-#         for fp in fittedparam
-#             if yieldprior < 1.
-#                 model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,0)
-#             else
-#                 model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,[fp],decayrate,yieldprior,0)
-#             end
-#             fit,_,_ = StochasticGene.run_mh(data,model,options,nchains);
-#             r = StochasticGene.get_rates(fit.parml,model)
-#         end
-#     end
-#     return r
-# end
-
-# function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-#
-#     gene = check_genename(gene,"[")
-#     resultfolder = joinpath("Results",resultfolder)
-#     infolder = joinpath("Results",infolder)
-#     datafolder = joinpath("data",datafolder)
-#
-#
-#     if transient
-#         data = make_data(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
-#     else
-#         data = make_data(gene,datacond,datafolder,fish,label,root)
-#     end
-#
-#     model = make_model(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
-#     options = StochasticGene.MHOptions(samplesteps,cyclesteps,annealsteps,warmupsteps,maxtime,temp,tempanneal)
-#     param = StochasticGene.get_param(model)
-#
-#     if verbose
-#         print_ll(param,data,model)
-#     end
-#
-#     StochasticGene.run_mh(data,model,options,nchains)
-# end
-
-"""
-    make_data(gene::String,cond::String,datafolder,fish,label,root)
-
-"""
-function make_data(gene::String,cond::String,datafolder,fish::Bool,label,root)
-    if cond == "null"
-        cond = ""
+function cycle(nchains,fish,fixedeffects,model,data,options)
+    maxtime = options.maxtime/10
+    options = StochasticGene.MHOptions(100,0,0,maxtime,options.temp,options.tempanneal)
+    print_ll(data,model,"pre-cycle ll:")
+    t0 = time()
+    nsets = length(data.nRNA)
+    r = model.rates
+    nalleles = model.nalleles
+    G = model.G
+    decayrate = r[2*G+2]
+    fittedparam = model.fittedparam
+    cv = 0.02
+    while (time() - t0 < maxtime)
+        for fp in fittedparam
+            model = model_rna(r,model.rateprior,G,nalleles,cv,[fp],fixedeffects,fish,0)
+            fit,_,_ = StochasticGene.run_mh(data,model,options,nchains);
+            r = StochasticGene.get_rates(fit.parml,model)
+        end
     end
-    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    println(datafile)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function make_data(gene::String,cond::String,datafolder,fish,label,root,sets::Vector,time::Vector)
-    if cond == "null"
-        cond = ""
-    end
-    datafile =[]
-    for set in sets
-        folder = joinpath(datafolder,set)
-        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-        datafile = vcat(datafile,path)
-    end
-    StochasticGene.data_rna(datafile,label,times,gene,false)
+    return model_rna(r,model.rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
 end
 
 
 """
-make_model(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+    model_rna(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
 
 make model structure
 
 """
-function make_model(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+function model_rna(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = get_decay(gene,cell,root)
     nalleles = alleles(gene,cell,root)
     if verbose
@@ -204,59 +141,24 @@ function make_model(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,i
     return model
 end
 
-function get_attributes(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,verbose=true)
-
-    decayrate = get_decay(gene,cell,root)
-    nalleles = alleles(gene,cell,root)
-    if verbose
-        println("alleles: ",nalleles)
-        if decayrate < 0
-            throw("decayrate < 0")
-        else
-            println("decay rate: ",decayrate)
-        end
-    end
-    if cv <= 0
-        cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
-    end
-
-end
-
-
-function make_model(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
-    decayrate = get_decay(gene,cell,root)
-    nalleles = alleles(gene,cell,root)
-    if verbose
-        println("alleles: ",nalleles)
-        if decayrate < 0
-            throw("decayrate < 0")
-        else
-            println("decay rate: ",decayrate)
-        end
-    end
-    if cv <= 0
-        cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
-    end
+function model_rna(r::Vector,d::Vector,G::Int,nalleles::Int,propcv,fittedparam,fixedeffects,fish::Bool,method=0)
     if fish
-        r = getr(gene,G,nalleles,decayrate,1.,inlabel,infolder,nsets,root,data,fish,verbose)
-        model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,0)
-    else
-        yieldprior = 0.05
-        r = getr(gene,G,nalleles,decayrate,yieldprior,inlabel,infolder,nsets,root,data,fish,verbose)
         if length(fixedeffects) > 0
-            model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
+            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
         else
-            model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,decayrate,yieldprior,0)
+            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
         end
+    else
+        if length(fixedeffects) > 0
+            model = GMfixedeffectslossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
+        else
+            model = GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+        end
+        return model
     end
-    return model
+
+
 end
-
-
-
-make_model(gene,r::Vector,G,fittedparam,nsets,root) = StochasticGene.model_rna(r,G,alleles(gene,cell,root),nsets,.02,fittedparam,r[2*G],.1,0)
-
-
 """
 check_genename(gene,p1)
 
@@ -280,12 +182,16 @@ end
 
 
 """
-initial_ll(param,data,model,message="initial ll:")
+print_ll(param,data,model,message="initial ll:")
 
 compute and print initial loglikelihood
 """
-function print_ll(param,data,model,message="initial ll: ")
+function print_ll(param,data,model,message)
     ll,_ = StochasticGene.loglikelihood(param,data,model)
+    println(message,ll)
+end
+function print_ll(data,model,message="initial ll: ")
+    ll,_ = StochasticGene.loglikelihood(get_param(model),data,model)
     println(message,ll)
 end
 
@@ -317,40 +223,6 @@ function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println(stats.meanparam)
 end
 
-"""
-transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-
-make structures for transient model fit
-"""
-function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    data = make_data(gene,cond,G,datafolder,label,nsets,root)
-    model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
-
-"""
-steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
-steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
-
-make structures for steady state rna fit
-
-"""
-function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
-    datacond = string.(split(cond,"-"))
-    data = make_data(gene,datacond,datafolder,label,root)
-    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data,false)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
-
-function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
-    datacond = string.(split(cond,"-"))
-    data = make_data(gene,datacond,datafolder,label,root)
-    model = make_model(gene,r,G,fittedparam,nsets,root)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
 
 function getr(gene,G,nalleles,inlabel,infolder,root,verbose)
     ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
@@ -469,89 +341,55 @@ function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
     StochasticGene.technical_loss(fish[2],yield,nhist)
 end
 
-# Load data, model, and option structures
-# """
-# transient_rna(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-# Fit transient G model to time dependent mRNA data
-# """
-#
-# function transient_rna(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,time,gene,false)
-#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return data,model,options
-# end
-# function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,time,gene,true)
-#     model,options = transient_fish(r,decayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
-#     return data,model,options
-# end
-# function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,time,gene,true)
-#     model,options = transient_fish(r,decayprior,delayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
-#     return data,model,options
-# end
-# function transient_fish(r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,method)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return model,options
-# end
-# function transient_fish(r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     model = model_delay_rna(r,G,nalleles,2,cv,fittedparam,decayprior,delayprior)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return model,options
-# end
-# function transient_rnafish(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,time,gene)
-#     model,options = transient_rnafish(r,decayprior,yieldprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
-#     return data,model,options
-# end
-# function transient_rnafish(r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
-#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return model,options
-# end
-#
-# """
-# steadystate_rna(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-# Fit G model to steady state data
-# """
-# function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,gene,false)
-#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,0)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return data,model,options
-# end
-# function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,gene,false)
-#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,0)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return data,model,options
-# end
-# function steadystate_rnafish(path,name::String,gene::String,fish::Array,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,method=1,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,gene,fish)
-#     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,method)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return data,model,options
-# end
-# function thresholds_fish(path,name::String,gene::String,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-#     data = data_rna(path,name,gene,true)
-#     model,options = thresholds_fish(r,decayprior,noisepriors,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,warmupsteps,annealsteps)
-#     return data,model,options
-# end
-# function thresholds_fish(r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
-#     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,0)
-#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
-#     return model,options
-# end
 
 #Prepare data structures
 """
-data_rna(path,time,gene,time)
-data_rna(path,time,gene)
+    data_rna(gene::String,cond::String,datafolder,fish,label,root)
+    data_rna(path,time,gene,time)
+    data_rna(path,time,gene)
 
 Load data structure
 """
+
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root)
+    if cond == "null"
+        cond = ""
+    end
+    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    println(datafile)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root,sets::Vector,time::Vector)
+    if cond == "null"
+        cond = ""
+    end
+    datafile =[]
+    for set in sets
+        folder = joinpath(datafolder,set)
+        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+        datafile = vcat(datafile,path)
+    end
+    StochasticGene.data_rna(datafile,label,times,gene,false)
+end
+
+
 function data_rna(path,name,time,gene::String,fish::Bool)
     len,h = histograms_rna(path,gene,fish)
     TransientRNAData(name,gene,len,time,h)
@@ -606,6 +444,7 @@ model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
 
 Load model structure
 """
+
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,method::Int)
     # propcv = proposal_cv_rna(propcv,fittedparam)
     d = prior_rna(r,G::Int,nsets,fittedparam,decayprior,LogNormal)
@@ -615,6 +454,11 @@ function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam:
     # propcv = proposal_cv_rna(propcv,fittedparam)
     d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
     GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+end
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior)
+    GMfixedeffectsodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
 end
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,yieldprior::Float64,method::Int)
     # propcv = proposal_cv_rna(propcv,fittedparam)
@@ -959,3 +803,113 @@ function expression_rna(genes::Vector,cond::String,folder,threshold=.99)
     end
     return h1
 end
+"""
+transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+make structures for transient model fit
+"""
+function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    data = make_data(gene,cond,G,datafolder,label,nsets,root)
+    model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
+"""
+steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
+
+make structures for steady state rna fit
+
+"""
+function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+    datacond = string.(split(cond,"-"))
+    data = make_data(gene,datacond,datafolder,label,root)
+    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data,false)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
+function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
+    datacond = string.(split(cond,"-"))
+    data = make_data(gene,datacond,datafolder,label,root)
+    model = make_model(gene,r,G,fittedparam,nsets,root)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
+# Load data, model, and option structures
+# """
+# transient_rna(nsets::Int,control::String,treatment::String,time::Float64,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+# Fit transient G model to time dependent mRNA data
+# """
+#
+# function transient_rna(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,time,gene,false)
+#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return data,model,options
+# end
+# function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,time,gene,true)
+#     model,options = transient_fish(r,decayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
+#     return data,model,options
+# end
+# function transient_fish(path,name::String,time,gene::String,r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,time,gene,true)
+#     model,options = transient_fish(r,decayprior,delayprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
+#     return data,model,options
+# end
+# function transient_fish(r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     model = model_rna(r,G,nalleles,2,cv,fittedparam,decayprior,method)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return model,options
+# end
+# function transient_fish(r::Vector,decayprior::Float64,delayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     model = model_delay_rna(r,G,nalleles,2,cv,fittedparam,decayprior,delayprior)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return model,options
+# end
+# function transient_rnafish(path,name::String,time,gene::String,nsets::Int,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,time,gene)
+#     model,options = transient_rnafish(r,decayprior,yieldprior,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,method,warmupsteps,annealsteps)
+#     return data,model,options
+# end
+# function transient_rnafish(r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp::Float64=10.,method::Int=1,warmupsteps=0,annealsteps=0)
+#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,method)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return model,options
+# end
+#
+# """
+# steadystate_rna(nsets::Int,file::String,gene::String,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+# Fit G model to steady state data
+# """
+# function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,yieldprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,gene,false)
+#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,yieldprior,0)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return data,model,options
+# end
+# function steadystate_rna(path,name::String,gene::String,nsets,r::Vector,decayprior::Float64,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,gene,false)
+#     model = model_rna(r,G,nalleles,nsets,cv,fittedparam,decayprior,0)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return data,model,options
+# end
+# function steadystate_rnafish(path,name::String,gene::String,fish::Array,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,method=1,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,gene,fish)
+#     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,method)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return data,model,options
+# end
+# function thresholds_fish(path,name::String,gene::String,r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+#     data = data_rna(path,name,gene,true)
+#     model,options = thresholds_fish(r,decayprior,noisepriors,G,nalleles,fittedparam,cv,maxtime,samplesteps,temp,warmupsteps,annealsteps)
+#     return data,model,options
+# end
+# function thresholds_fish(r::Vector,decayprior::Float64,noisepriors::Vector,G::Int,nalleles::Int,fittedparam::Vector,cv,maxtime::Float64,samplesteps::Int,temp=10.,warmupsteps=0,annealsteps=0)
+#     model = model_rna(r,G,nalleles,cv,fittedparam,decayprior,noisepriors,0)
+#     options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp,temp)
+#     return model,options
+# end

@@ -84,6 +84,7 @@ abstract type StochasticGRmodel <: Model end
 abstract type AbstractGMmodel <: StochasticGRmodel end
 abstract type AbstractGRMmodel <: StochasticGRmodel end
 abstract type AbstractGMlossmodel <: AbstractGMmodel end
+abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 
 """
@@ -111,7 +112,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
     fittedparam::ParamType
     method::MethodType
 end
-struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMfixedeffectsmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -172,7 +173,7 @@ struct GMlossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abst
     method::MethodType
 end
 
-struct GMfixedeffectslossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMlossmodel
+struct GMfixedeffectslossmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMfixedeffectsmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -478,7 +479,7 @@ compute log of the prior
 function logprior(param,model::AbstractGMmodel)
     d = model.rateprior
     p=0
-    for i in eachindex(d)
+    for i in eachindex(param)
         p -= logpdf(d[i],param[i])
     end
     return p

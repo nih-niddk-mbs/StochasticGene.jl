@@ -4,9 +4,9 @@
 
 
 """
-    makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
+    makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
 
-    makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
+    makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
 
 Arguments
 - `G`: number of gene states
@@ -36,16 +36,16 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",resultfolder::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
+function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish= false,cycle=false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",resultfolder::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,datafish=datafish,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,cyclesteps=cyclesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath=modulepath,cv=cv)
+    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,cyclesteps=cyclesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath=modulepath,cv=cv)
 end
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="fit",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",datafish=false,conds::String="DMSO-AUXIN",resultfolder::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv=0.02)
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="fit",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish=false,cycle=false,conds::String="DMSO-AUXIN",resultfolder::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv=0.02)
     # resultfolder = joinpath("Results",result)
     # infolder = joinpath("Results",infolder)
     # datafolder = joinpath("Data",datafolder)
@@ -63,7 +63,7 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swar
         f = open(sfile,"w")
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
-    write_fitfile(juliafile,nchains,cell,conds,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
+    write_fitfile(juliafile,nchains,cell,conds,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
 end
 
 """
@@ -82,21 +82,21 @@ make_fitfile(fitfile,fittedparam,fixedeffects)
 make the file the swarm file calls to execute julia code
 
 """
-function write_fitfile_module(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+function write_fitfile_module(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
         f = open(fitfile,"w")
         s =   '"'
         # write(f,"@everywhere include($s/home/carsonc/StochasticGene/src/StochasticGene.jl$s)\n")
         write(f,"@everywhere using StochasticGene\n")
-        write(f,"@time fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$datafish,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$cyclesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
+        write(f,"@time fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$fish,$cycle,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$cyclesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
         close(f)
 end
 
-function write_fitfile(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,datafish,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
+function write_fitfile(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
         f = open(fitfile,"w")
         s =   '"'
         write(f,"@everywhere include($s$modulepath$s)\n")
         # write(f,"@everywhere using StochasticGene\n")
-        write(f,"@time StochasticGene.fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$datafish,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
+        write(f,"@time StochasticGene.fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$fish,$cycle,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
         close(f)
 end
 
@@ -116,7 +116,7 @@ function write_swarmfile(sfile,nchains,juliafile,genes::Vector)
     for gene in genes
         gene = check_genename(gene,"(")
         writedlm(f,["julia -p" nchains juliafile gene])
-        # writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datafolder datafish inlabel label nsets runcycle transient fittedparam fixedeffects])
+        # writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datafolder fish inlabel label nsets runcycle transient fittedparam fixedeffects])
     end
     close(f)
 end
