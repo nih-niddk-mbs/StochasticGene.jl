@@ -28,7 +28,7 @@ end
 
 function getgene(file::String)
     v = extractparts(file)
-    getgene(v)
+    getgene(string(v))
 end
 
 getgene(v) = v[end-2]
