@@ -214,6 +214,7 @@ function model_rna(gene,cell,G,fish::Bool,cv,fittedparam,fixedeffects,inlabel,in
     else
         yieldprior = 0.05
         r = getr(gene,G,nalleles,decayrate,yieldprior,inlabel,infolder,nsets,root,data,fish,verbose)
+        r =
         if length(fixedeffects) > 0
             model = StochasticGene.model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,0)
         else
@@ -242,7 +243,7 @@ end
 
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,method::Int)
     # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G::Int,nsets,fittedparam,decayprior,LogNormal)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,LogNormal)
     GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
 end
 function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,yieldprior::Float64,method::Int)
@@ -538,12 +539,12 @@ Set prior distribution for mean and cv of rates
 setpriorrate(G::Int,nsets::Int,decayrate::Float64) = setrate(G,nsets,decayrate,.1)
 
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
-    rm,rcv = setpriorrate(G,nsets,decayrate,.1)
+    rm,rcv = setpriorrate(G,nsets,decayrate)
     return [rm;yieldfactor],[rcv;.25]
 end
 
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
-    rm,rcv = setpriorrate(G,nsets,decayrate,.1)
+    rm,rcv = setpriorrate(G,nsets,decayrate)
     for nm in noisepriors
         rm = vcat(rm,nm)
         rcv = vcat(rcv,.25)
@@ -582,10 +583,12 @@ end
 
 function setr(G,nalleles,decayrate,yield,nsets::Int,data,fish)
     mu = StochasticGene.mean_histogram(data.histRNA) * decayrate/nalleles
-    if ~fish
+    if fish
+        r = setrate(G,nsets,decayrate,mu,.1)[1]
+    else
         mu/= yield
+        r = [setrate(G,nsets,decayrate,mu,.1)[1];yield]
     end
-    r = setrate(G,nsets,decayrate,mu,.1)[1]
     println(r)
     return r
 end
