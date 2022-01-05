@@ -572,7 +572,7 @@ function setrate(G::Int,nsets::Int,decayrate::Float64,meanrate,ejectrate)
     rc = similar(rm)
     for i in 1:nsets
         if G > 1
-            rm = vcat(rm,[meanrate[i]/ejectrate*.005;.005*ones(2*(G-1)-1);ejectrate;decayrate])
+            rm = vcat(rm,[.005;.005*ones(2*(G-1)-1);ejectrate;decayrate])
         else
             rm = vcat(rm,[meanrate[i];decayrate])
         end
