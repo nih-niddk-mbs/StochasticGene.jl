@@ -52,11 +52,11 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swar
     if ngenes > batchsize
         batches = getbatches(genes,ngenes,batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * "$G" * "_" * conds * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * "$G" * "$batch" * ".swarm"
             write_swarmfile(sfile,nchains,juliafile,batches[batch])
         end
     else
-        sfile = swarmfile * "_" * label * "_" * "$G" * "_" * conds * ".swarm"
+        sfile = swarmfile * "_" * label * "_" * "$G" * ".swarm"
         f = open(sfile,"w")
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
