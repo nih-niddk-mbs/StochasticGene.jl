@@ -95,19 +95,101 @@ function cycle(nchains,fish,fixedeffects,model,data,options)
     decayrate = r[2*G+2]
     fittedparam = model.fittedparam
     cv = 0.02
+    rateprior = model.rateprior
     while (time() - t0 < maxtime)
-        for fp in fittedparam
-            model = model_rna(r,model.rateprior,G,nalleles,cv,[fp],fixedeffects,fish,0)
+        for i in eachindex(fittedparam)
+            model = model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,fish,0)
             fit,_,_ = StochasticGene.run_mh(data,model,options,nchains);
             r = StochasticGene.get_rates(fit.parml,model)
         end
     end
-    return model_rna(r,model.rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
+    return model_rna(r,rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
 end
 
+"""
+rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
+
+output RNA histogram and downsampled FISH histogram with loss
+"""
+function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
+    datarna = StochasticGene.histograms_rna(StochasticGene.scRNApath(gene,cond,rnafolder,root),gene,false)
+    f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
+    return datarna[2],f
+end
 
 """
-    model_rna(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+reduce_fish(gene,cond,nhist,fishfolder,yield,root)
+
+sample fish histogram with loss (1-yield)
+"""
+function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
+    fish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
+    StochasticGene.technical_loss(fish[2],yield,nhist)
+end
+
+#Prepare data structures
+"""
+    data_rna(gene::String,cond::String,datafolder,fish,label,root)
+    data_rna(path,time,gene,time)
+    data_rna(path,time,gene)
+
+Load data structure
+"""
+
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root)
+    if cond == "null"
+        cond = ""
+    end
+    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
+    datafile = Array{String,1}(undef,length(cond))
+    for i in eachindex(cond)
+        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+    end
+    println(datafile)
+    StochasticGene.data_rna(datafile,label,gene,fish)
+end
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root,sets::Vector,time::Vector)
+    if cond == "null"
+        cond = ""
+    end
+    datafile =[]
+    for set in sets
+        folder = joinpath(datafolder,set)
+        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+        datafile = vcat(datafile,path)
+    end
+    StochasticGene.data_rna(datafile,label,times,gene,false)
+end
+function data_rna(path,name,time,gene::String,fish::Bool)
+    len,h = histograms_rna(path,gene,fish)
+    TransientRNAData(name,gene,len,time,h)
+end
+function data_rna(path,name,gene::String,fish::Bool)
+    len,h = histograms_rna(path,gene,fish)
+    RNAData(name,gene,len,h)
+end
+function data_rna(path,name,gene::String,fish::Array{Bool,1})
+    len,h = histograms_rna(path,gene,fish)
+    RNAMixedData(name,gene,len,fish,h)
+end
+
+# Prepare model structures
+"""
+model_rna(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+model_rna(r::Vector,d::Vector,G::Int,nalleles::Int,propcv,fittedparam,fixedeffects,fish::Bool,method=0)
+model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,yieldprior,method)
+model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,method)
+model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
 
 make model structure
 
@@ -154,11 +236,90 @@ function model_rna(r::Vector,d::Vector,G::Int,nalleles::Int,propcv,fittedparam,f
         else
             model = GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
         end
-        return model
     end
-
-
+    return model
 end
+
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G::Int,nsets,fittedparam,decayprior,LogNormal)
+    GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+end
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,yieldprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
+    GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+end
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior)
+    GMfixedeffectsodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
+end
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,yieldprior::Float64,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
+    GMfixedeffectslossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
+end
+function model_rna(r::Vector,G::Int,nalleles::Int,propcv,fittedparam::Array,decayprior::Float64,noisepriors::Array,method::Int)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G::Int,1,fittedparam,decayprior,noisepriors)
+    if method == 1
+        GMrescaledmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    else
+        GMmultimodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
+    end
+end
+function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,delayprior)
+    # propcv = proposal_cv_rna(propcv,fittedparam)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,delayprior)
+    GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G,nalleles,r,d,propcv,fittedparam,1)
+end
+"""
+histograms_rna(path,gene)
+
+prepare mRNA histograms for gene given data folder path
+"""
+function histograms_rna(path::Array,gene::String,fish::Bool)
+    n = length(path)
+    h = Array{Array,1}(undef,n)
+    lengths = Array{Int,1}(undef,n)
+    for i in eachindex(path)
+        lengths[i], h[i] = histograms_rna(path[i],gene,fish)
+    end
+    return lengths,h
+end
+function histograms_rna(path::String,gene::String,fish::Bool)
+    if fish
+        h = read_fish(path,gene,.98)
+    else
+        h = read_scrna(path,.99)
+        if length(h) == 0
+            throw("data not found")
+        end
+    end
+    return length(h),h
+end
+function histograms_rna(path::Array,gene::String,fish::Array{Bool,1})
+    n = length(path)
+    h = Array{Array,1}(undef,n)
+    lengths = Array{Int,1}(undef,n)
+    for i in eachindex(path)
+        lengths[i], h[i] = histograms_rna(path[i],gene,fish[i])
+    end
+    return lengths,h
+end
+"""
+transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+
+make structures for transient model fit
+"""
+function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    data = make_data(gene,cond,G,datafolder,label,nsets,root)
+    model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
+    param,_ = StochasticGene.initial_proposal(model)
+    return param, data, model
+end
+
 """
 check_genename(gene,p1)
 
@@ -251,7 +412,6 @@ function getr(gene,G,nalleles,decayrate,yield,inlabel,infolder,nsets::Int,root,d
     end
     println("No r")
     setr(G,nalleles,decayrate,yield,nsets,data,fish)
-
 end
 
 
@@ -320,172 +480,22 @@ function alleles(gene,cell,root,col=3)
     end
 end
 
-"""
-rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
 
-output RNA histogram and downsampled FISH histogram with loss
-"""
-function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
-    datarna = StochasticGene.histograms_rna(StochasticGene.scRNApath(gene,cond,rnafolder,root),gene,false)
-    f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
-    return datarna[2],f
-end
-
-"""
-reduce_fish(gene,cond,nhist,fishfolder,yield,root)
-
-sample fish histogram with loss (1-yield)
-"""
-function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
-    fish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
-    StochasticGene.technical_loss(fish[2],yield,nhist)
-end
-
-
-#Prepare data structures
-"""
-    data_rna(gene::String,cond::String,datafolder,fish,label,root)
-    data_rna(path,time,gene,time)
-    data_rna(path,time,gene)
-
-Load data structure
-"""
-
-function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root)
-    if cond == "null"
-        cond = ""
-    end
-    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
-    datafile = Array{String,1}(undef,length(cond))
-    for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
-    end
-    println(datafile)
-    StochasticGene.data_rna(datafile,label,gene,fish)
-end
-
-function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root,sets::Vector,time::Vector)
-    if cond == "null"
-        cond = ""
-    end
-    datafile =[]
-    for set in sets
-        folder = joinpath(datafolder,set)
-        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-        datafile = vcat(datafile,path)
-    end
-    StochasticGene.data_rna(datafile,label,times,gene,false)
-end
-
-
-function data_rna(path,name,time,gene::String,fish::Bool)
-    len,h = histograms_rna(path,gene,fish)
-    TransientRNAData(name,gene,len,time,h)
-end
-function data_rna(path,name,gene::String,fish::Bool)
-    len,h = histograms_rna(path,gene,fish)
-    RNAData(name,gene,len,h)
-end
-function data_rna(path,name,gene::String,fish::Array{Bool,1})
-    len,h = histograms_rna(path,gene,fish)
-    RNAMixedData(name,gene,len,fish,h)
-end
-"""
-histograms_rna(path,gene)
-
-prepare mRNA histograms for gene given data folder path
-"""
-function histograms_rna(path::Array,gene::String,fish::Bool)
-    n = length(path)
-    h = Array{Array,1}(undef,n)
-    lengths = Array{Int,1}(undef,n)
-    for i in eachindex(path)
-        lengths[i], h[i] = histograms_rna(path[i],gene,fish)
-    end
-    return lengths,h
-end
-function histograms_rna(path::String,gene::String,fish::Bool)
-    if fish
-        h = read_fish(path,gene,.98)
-    else
-        h = read_scrna(path,.99)
-        if length(h) == 0
-            throw("data not found")
-        end
-    end
-    return length(h),h
-end
-function histograms_rna(path::Array,gene::String,fish::Array{Bool,1})
-    n = length(path)
-    h = Array{Array,1}(undef,n)
-    lengths = Array{Int,1}(undef,n)
-    for i in eachindex(path)
-        lengths[i], h[i] = histograms_rna(path[i],gene,fish[i])
-    end
-    return lengths,h
-end
-# Prepare model structures
-"""
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,yieldprior,method)
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,method)
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
-
-Load model structure
-"""
-
-function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G::Int,nsets,fittedparam,decayprior,LogNormal)
-    GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-end
-function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior::Float64,yieldprior::Float64,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
-    GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-end
-function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G,nsets,fittedparam,decayprior)
-    GMfixedeffectsodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
-end
-function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,fixedeffects::Tuple,decayprior::Float64,yieldprior::Float64,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G,nsets,fittedparam,decayprior,yieldprior)
-    GMfixedeffectslossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
-end
-function model_rna(r::Vector,G::Int,nalleles::Int,propcv,fittedparam::Array,decayprior::Float64,noisepriors::Array,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G::Int,1,fittedparam,decayprior,noisepriors)
-    if method == 1
-        GMrescaledmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-    else
-        GMmultimodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-    end
-end
-function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,delayprior)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G,nsets,fittedparam,decayprior,delayprior)
-    GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G,nalleles,r,d,propcv,fittedparam,1)
-end
 
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
+prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,noisepriors::Array)
 
 prepare prior distribution
 r[mod(1:2*G,nsets)] = rates for each model set  (i.e. rates for each set are stacked)
 r[2*G*nsets + 1] == yield factor (i.e remaining after loss due to technical noise)
+
+
+
+prior for multithresholded smFISH data
+r[1:2G] = model rates
+r[2G+1] = additive noise mean
+r[2G + 1 + 1:length(noisepriors)] = remaining fraction after thresholding (i.e. yield)
 """
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,yieldprior::Float64,f=LogNormal)
         ind = 2*G * nsets + 1
@@ -508,14 +518,7 @@ function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Fl
             throw("rates have wrong length")
         end
 end
-"""
-prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,noisepriors::Array)
 
-prior for multithresholded smFISH data
-r[1:2G] = model rates
-r[2G+1] = additive noise mean
-r[2G + 1 + 1:length(noisepriors)] = remaining fraction after thresholding (i.e. yield)
-"""
 function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,noisepriors::Array)
         if length(r) == 2*G * nsets + length(noisepriors)
             rm,rcv = setpriorrate(G,nsets,decayprior,noisepriors)
@@ -532,15 +535,15 @@ end
 Set prior distribution for mean and cv of rates
 """
 
-setpriorrate(G::Int,nsets::Int,decayrate::Float64) = setrate(G,nsets,decayrate,.5)
+setpriorrate(G::Int,nsets::Int,decayrate::Float64) = setrate(G,nsets,decayrate,.1)
 
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,yieldfactor::Float64)
-    rm,rcv = setpriorrate(G,nsets,decayrate,.5)
+    rm,rcv = setpriorrate(G,nsets,decayrate,.1)
     return [rm;yieldfactor],[rcv;.25]
 end
 
 function setpriorrate(G::Int,nsets::Int,decayrate::Float64,noisepriors::Array)
-    rm,rcv = setpriorrate(G,nsets,decayrate,.5)
+    rm,rcv = setpriorrate(G,nsets,decayrate,.1)
     for nm in noisepriors
         rm = vcat(rm,nm)
         rcv = vcat(rcv,.25)
@@ -551,24 +554,24 @@ end
     setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
 
 """
-function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
-    r0 = [.01*ones(2*(G-1));ejectrate;decayrate]
-    rc = [.2*ones(2*(G-1));.2;0.01]
-    rm = r0
-    rcv = rc
-    for i in 2:nsets
-        rm = vcat(rm,r0)
-        rcv = vcat(rcv,rc)
-    end
-    return rm,rcv
-end
+# function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
+#     r0 = [.01*ones(2*(G-1));ejectrate;decayrate]
+#     rc = [.2*ones(2*(G-1));.2;0.01]
+#     rm = r0
+#     rcv = rc
+#     for i in 2:nsets
+#         rm = vcat(rm,r0)
+#         rcv = vcat(rcv,rc)
+#     end
+#     return rm,rcv
+# end
 
-function setrate(G::Int,nsets::Int,decayrate::Float64,meanrate::Vector)
+function setrate(G::Int,nsets::Int,decayrate::Float64,meanrate,ejectrate = .1)
     rm = Vector{Float64}(undef,0)
     rc = similar(rm)
     for i in 1:nsets
         if G > 1
-            rm = vcat(rm,[meanrate[i]*.01;.01*ones(2*(G-1)-1);1.;decayrate])
+            rm = vcat(rm,[meanrate[i]/ejectrate*.01;.01*ones(2*(G-1)-1);ejectrate;decayrate])
         else
             rm = vcat(rm,[meanrate[i];decayrate])
         end
@@ -579,11 +582,10 @@ end
 
 function setr(G,nalleles,decayrate,yield,nsets::Int,data,fish)
     mu = StochasticGene.mean_histogram(data.histRNA) * decayrate/nalleles
-    if fish
-        r = setrate(G,nsets,decayrate,mu)[1]
-    else
-        r = setrate(G,nsets,decayrate,mu/yield)[1]
+    if ~fish
+        mu/= yield
     end
+    r = setrate(G,nsets,decayrate,mu)[1]
     println(r)
     return r
 end
@@ -803,40 +805,30 @@ function expression_rna(genes::Vector,cond::String,folder,threshold=.99)
     end
     return h1
 end
-"""
-transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
-make structures for transient model fit
-"""
-function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    data = make_data(gene,cond,G,datafolder,label,nsets,root)
-    model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
-
-"""
-steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
-steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
-
-make structures for steady state rna fit
-
-"""
-function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
-    datacond = string.(split(cond,"-"))
-    data = make_data(gene,datacond,datafolder,label,root)
-    model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data,false)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
-
-function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
-    datacond = string.(split(cond,"-"))
-    data = make_data(gene,datacond,datafolder,label,root)
-    model = make_model(gene,r,G,fittedparam,nsets,root)
-    param,_ = StochasticGene.initial_proposal(model)
-    return param, data, model
-end
+# """
+# steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+# steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
+#
+# make structures for steady state rna fit
+#
+# """
+#
+# function steadystate_rna(gene::String,fittedparam,cond,G::Int,folder::String,datafolder,label,nsets,root)
+#     datacond = string.(split(cond,"-"))
+#     data = make_data(gene,datacond,datafolder,label,root)
+#     model = make_model(gene,G,fittedparam,label * "_" * cond,folder,nsets,root,data,false)
+#     param,_ = StochasticGene.initial_proposal(model)
+#     return param, data, model
+# end
+#
+# function steadystate_rna(r::Vector,gene::String,fittedparam,cond,G::Int,datafolder::String,label,nsets,root)
+#     datacond = string.(split(cond,"-"))
+#     data = make_data(gene,datacond,datafolder,label,root)
+#     model = make_model(gene,r,G,fittedparam,nsets,root)
+#     param,_ = StochasticGene.initial_proposal(model)
+#     return param, data, model
+# end
 
 # Load data, model, and option structures
 # """

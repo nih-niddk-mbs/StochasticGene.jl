@@ -2,11 +2,11 @@
 ### Files for saving and reading mh results
 
 
-function assemble_all(folder::String,label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],append::String = ".csv",header=false,type=2)
+function assemble_all(folder::String;label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],fish=false,append::String = ".csv",header=true,type=2)
     for l in label, c in cond, g in model
-        assemble_rates(folder,l,c,g,append,header,type)
+        assemble_rates(folder,l,c,g,append,header,type,fish)
         assemble_measures(folder,l,c,g,append,header)
-        assemble_stats("mean",folder,l,c,g,append,header)
+        # assemble_stats("mean",folder,l,c,g,append,header)
     end
 end
 
@@ -28,12 +28,12 @@ end
 
 function getgene(file::String)
     v = extractparts(file)
-    getgene(string(v))
+    getgene(string.(v))
 end
 
-getgene(v) = v[end-2]
+getgene(v::Vector) = v[end-2]
 
-getG(v) = v[end-1]
+getG(v::Vector) = v[end-1]
 
 function makestring(v)
     s = ""
@@ -44,7 +44,7 @@ function makestring(v)
 end
 
 
-function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type=2)
+function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type,fish)
     files = getfiles(folder,"rates",label,cond,model)
     println(length(files))
     # label = split(files[1],cond)[1]
@@ -52,7 +52,7 @@ function assemble_rates(folder::String,label::String,cond::String,model::String,
     f = open(outfile,"w")
     if header
         r = readrates(joinpath(folder, files[1]),type)
-        writedlm(f,ratelabels(model,length(r),false),',')
+        writedlm(f,ratelabels(model,length(r),false,fish),',')
         # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
     end
 
@@ -96,12 +96,13 @@ function assemble_stats(stattype,folder::String,label::String,cond::String,model
         gene = getgene(file)
         target = joinpath(folder, file)
         r = readstats(target,stattype)
+        println(r)
         writedlm(f,[gene r'],',')
     end
     close(f)
 end
 
-function ratelabels(model,lenr,sd::Bool)
+function ratelabels(model,lenr,sd::Bool,fish::Bool)
     G = parse(Int,model)
     n = G-1
     Grates = Array{String,2}(undef,1,2*n)
@@ -109,12 +110,18 @@ function ratelabels(model,lenr,sd::Bool)
         Grates[1,2*i+1] = "rate$i$(i+1)"
         Grates[1,2*i+2] = "rate$(i+1)$i"
     end
-    nsets = div(lenr-1,2*G)
+    if fish
+        nsets = div(lenr,2*G)
+    else
+        nsets = div(lenr-1,2*G)
+    end
     rates = [Grates "eject" "decay"]
     for i = 2:nsets
         rates = [rates Grates "eject" "decay"]
     end
-    rates = [rates "yield"]
+    if ~fish
+        rates = [rates "yield"]
+    end
     if sd
         rates = reshape([rates; fill("sd",1,lenr)],1,2*(lenr))
     end
