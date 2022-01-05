@@ -56,7 +56,7 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swar
             write_swarmfile(sfile,nchains,juliafile,batches[batch])
         end
     else
-        sfile = swarmfile * "_" * label "_" * "$G" * "_" * conds * ".swarm"
+        sfile = swarmfile * "_" * label * "_" * "$G" * "_" * conds * ".swarm"
         f = open(sfile,"w")
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
