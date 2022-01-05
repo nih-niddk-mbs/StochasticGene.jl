@@ -554,28 +554,28 @@ end
     setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
 
 """
-# function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
-#     r0 = [.01*ones(2*(G-1));ejectrate;decayrate]
-#     rc = [.2*ones(2*(G-1));.2;0.01]
-#     rm = r0
-#     rcv = rc
-#     for i in 2:nsets
-#         rm = vcat(rm,r0)
-#         rcv = vcat(rcv,rc)
-#     end
-#     return rm,rcv
-# end
+function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
+    r0 = [.005*ones(2*(G-1));ejectrate;decayrate]
+    rc = [.4*ones(2*(G-1));.1;0.01]
+    rm = r0
+    rcv = rc
+    for i in 2:nsets
+        rm = vcat(rm,r0)
+        rcv = vcat(rcv,rc)
+    end
+    return rm,rcv
+end
 
-function setrate(G::Int,nsets::Int,decayrate::Float64,meanrate,ejectrate = .1)
+function setrate(G::Int,nsets::Int,decayrate::Float64,meanrate,ejectrate)
     rm = Vector{Float64}(undef,0)
     rc = similar(rm)
     for i in 1:nsets
         if G > 1
-            rm = vcat(rm,[meanrate[i]/ejectrate*.01;.01*ones(2*(G-1)-1);ejectrate;decayrate])
+            rm = vcat(rm,[meanrate[i]/ejectrate*.005;.005*ones(2*(G-1)-1);ejectrate;decayrate])
         else
             rm = vcat(rm,[meanrate[i];decayrate])
         end
-        rc = vcat(rc,[.2*ones(2*(G-1));.2;0.01])
+        rc = vcat(rc,[.4*ones(2*(G-1));.1;0.01])
     end
     return rm,rc
 end
@@ -585,7 +585,7 @@ function setr(G,nalleles,decayrate,yield,nsets::Int,data,fish)
     if ~fish
         mu/= yield
     end
-    r = setrate(G,nsets,decayrate,mu)[1]
+    r = setrate(G,nsets,decayrate,mu,.1)[1]
     println(r)
     return r
 end
