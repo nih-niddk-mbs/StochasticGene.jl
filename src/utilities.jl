@@ -324,7 +324,7 @@ end
 mean_histogram(x)
 
 """
-mean_histogram(x::Vector{Float64}) = (collect(1:length(x)) .- 1)' * x/sum(x)
+mean_histogram(x::Vector{Float64}) = collect(0:length(x)-1)' * x/sum(x)
 
 function mean_histogram(x::Vector{Array})
     y = Vector{Float64}(undef,length(x))
@@ -348,7 +348,32 @@ function var_histogram(x)
     m2_histogram(x) - mean_histogram(x)^2
 end
 
+function factorial_moment(h::Vector,n)
+    m = 0
+    for i in n:length(h)
+        a = i-1
+        for j in 1:n-1
+            a *= i-j-1
+        end
+        m += h[i]*a
+    end
+    return m / sum(h)
+end
 
+function moment_param_estimates(h)
+    e1 = factorial_moment(h,1)
+    e2 = factorial_moment(h,2)
+    e3 = factorial_moment(h,3)
+    r1 = e1
+    r2 = e2/e1
+    r3 = e3/e2
+
+    lambda = 2*r1*(r3-r2)/(r1*r2-2*r1*r3+r2*r3)
+    mu = 2*(r2-r1)*(r1-r3)*(r3-r2)/(r1*r2-2*r1*r3+r2*r3)/(r1-2*r2+r3)
+    nu = (-r1*r2 + 2*r1*r3-r2*r3)/(r1-2*r2+r3)
+
+    return lambda,mu,nu
+end
 """
 tstat_2sample(x1,x2)
 

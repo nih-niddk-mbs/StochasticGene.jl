@@ -746,7 +746,7 @@ function plot_histogram(gene::String,cell::String,G::Int,cond::String,fish::Bool
     end
     data = data_rna(gene,cond,datafolder,fish,"label",root)
     nalleles = alleles(gene,cell,root)
-    model = model_rna(r,[],G,nalleles,.01,[],(),fish)
+    model = model_rna(r,[],G,nalleles,.01,[],(),fish,0)
     println(typeof(model))
     println(typeof(data))
     m = plot_histogram(data,model)

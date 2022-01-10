@@ -157,13 +157,11 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
         parout[:,step] = param
         accepttotal += accept
     end
-    println(accepttotal/step)
     covlogparam = cov(log.(parout[:,1:step]'))
     if isposdef((2.4)^2 / length(param)*covlogparam)
         d=proposal(param,covlogparam)
         proposalcv = covlogparam
     end
-    println(proposalcv)
     return param,parml,ll,llml,d,proposalcv,predictions
 end
 
