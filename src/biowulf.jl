@@ -36,16 +36,24 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish= false,cycle=false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",resultfolder::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
+function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO-AUXIN",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,inlabel=inlabel,label=label,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath=modulepath,cv=cv)
+    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath=modulepath,cv=cv)
 end
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="fit",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish=false,cycle=false,conds::String="DMSO-AUXIN",resultfolder::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv=0.02)
+
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO-AUXIN",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv=0.02)
+    if label == "label"
+        if fish
+            label = "FISH-ss-" * conds
+        else
+            label = "scRNA-ss-" * conds
+        end
+    end
     ngenes = length(genes)
     println("number of genes: ",ngenes)
     juliafile = juliafile * "_" * label * "_" * "$G" * ".jl"
@@ -66,12 +74,23 @@ end
 """
     fix(folder)
 
-    finds jobs that failed and writes a swarmfile for those genes
+    Finds jobs that failed and writes a swarmfile for those genes
 
 """
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
+"""
+    setup(rootfolder = "scRNA")
 
+    Sets up the folder system prior to use
+    Defaults to "scRNA"
+
+"""
+function setup(rootfolder = "scRNA")
+
+
+
+end
 
 """
 make_fitfile(fitfile,fittedparam,fixedeffects)

@@ -13,6 +13,7 @@ using SparseArrays
 using DifferentialEquations
 using LSODA
 using DataFrames
+using FFTW
 
 export
     fit_rna,
@@ -21,7 +22,9 @@ export
     large_deviance,
     assemble_all,
     make_dataframe,
-    write_histograms
+    write_histograms,
+    moment_param_estimates,
+    simulatorGM
 
 ### Source files
 

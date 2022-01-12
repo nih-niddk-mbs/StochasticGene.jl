@@ -6,32 +6,40 @@
     make_dataframe(folder,models::Vector=[1,2])
 
 """
-function make_dataframe(root,folder,models::Vector,conds::Vector,datafolder::Vector,fish::Bool=true,anchor = "2")
-    df = make_dataframe(root,folder,models::Vector,fish,anchor)
+function make_dataframe(root,folder,models::Vector,conds::Vector,datafolder::Vector,fish::Bool=true,G::Int = 2)
+    df = make_dataframe(root,folder,models::Vector,fish,G)
     add_mean(df,conds,datafolder,fish,root)
 end
 
-function make_dataframe(root,folder,models::Vector,fish::Bool=true,anchor = "2")
+function make_dataframe(root,folder,models::Vector,fish::Bool=true,G::Int = 2)
     files = readdir(folder)
     mfiles = Vector{String}(undef,0)
     rfile = ""
     for file in files
         if occursin("measures",file)  && occursin("csv",file) && ~occursin("all",file)
             push!(mfiles,joinpath(folder,file))
-        elseif occursin("rates",file) && occursin("$anchor.csv",file)
+        elseif occursin("rates",file) && occursin("$G.csv",file)
             rfile = joinpath(folder,file)
         end
     end
     r,head = readdlm(rfile,',',header=true)
     winner = best_model(models,mfiles)
     cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
-    if fish
-        rs = [vcat(r[:,[1,2,3,4,5]], r[:,[1,6,7,8,9]])  cond]
-        df =  DataFrame(Gene = string.(rs[:,1]),on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),cond = Int.(rs[:,6]))
-    else
-        rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winner]
-        df = DataFrame(Gene = string.(rs[:,1]),on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]))
+    namelist = Symbol.(string.(head))
+    rs = [vcat(r[:,[1;2:2*G+1]], r[:,[1;2*G+2:4*G+1]])  cond]
+    # df =  DataFrame(Gene = string.(rs[:,1]),on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),cond = Int.(rs[:,6]))
+    # df = DataFrame(Gene = string.(rs[:,1]),head[i] = float.(rs[:,i) for i in 2:2*G+1,cond = Int.(rs[:,end])
+    df = DataFrame()
+    df[!,namelist[1]] = string.(rs[:,1])
+    for i in 2:2*G+1
+        df[!,namelist[i]] = float.(rs[:,i])
     end
+    if ~fish
+        rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winner]
+        vcat(r[:,4*G + 2], r[:,4*G + 2])
+        df = [df DataFrame(yield = float.(vcat(r[:,4*G + 2], r[:,4*G + 2])))]
+    end
+    df = [df DataFrame(cond = Int.(rs[:,end]))]
     df = innerjoin(df, winner, on = :Gene)
 end
 

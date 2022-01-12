@@ -622,8 +622,9 @@ function normalized_nullspace(M::AbstractMatrix)
     # end
 end
 """
-allele_convolve(mhist,nalleles)
-Convolve to compute distribution for contributions from multiple alleles
+    allele_convolve(mhist,nalleles)
+
+    Convolve to compute distribution for contributions from multiple alleles
 """
 function allele_convolve(mhist,nalleles)
     nhist = length(mhist)
@@ -639,6 +640,14 @@ function allele_convolve(mhist,nalleles)
     end
     return mhists[nalleles]
 end
+"""
+    allele_deconvolve(mhist,nalleles)
+
+    Deconvolve to compute distribution of one allele from contributions of multiple alleles
+"""
+allele_deconvolve(mhist,nalleles) = irfft((rfft(mhist)).^(1/nalleles),length(mhist))
+
+
 """
 init_prob(pss,n,nr)
 Initial condition for first passage time calculation of active (ON) state

@@ -1,26 +1,33 @@
 using StochasticGene
 using Test
 
-function fit_rna_test()
-
-    data = make_data("testgene","WT","data/",false,"test",".")
-    model = make_model("testgene","testcell",2,false,[1,2,3],(),"test","test",1,".",data)
-    options = StochasticGene.MHOptions(1000,100,1000,1000,60.,1.,100.)
-    param = StochasticGene.get_param(model)
-    fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
-    nothing
+function fit_rna_test(root=".")
+    gene = "CENPL"
+    cell = "HCT116"
+    fish = false
+    data = StochasticGene.data_rna(gene,"MOCK","data/HCT116_testdata",fish,"scRNA_test",root)
+    model = StochasticGene.model_rna(gene,cell,2,fish,.01,[1,2,3],(),"scRNA_test","scRNA_test",1,".",data,.05,1.0)
+    options = StochasticGene.MHOptions(10000,2000,0,120.,1.,100.)
+    fit,stats,waic = StochasticGene.run_mh(data,model,options,1);
+    return stats.meanparam, fit.llml, model
 end
 
-
-function teststeadystatemodel(model::AbstractGMmodel,nhist)
-    G = model.G
-    r = model.rates
-    g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
-    g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
-    
-    return g1,g2
+function teststeadystatemodel(r,G,nhist,nalleles)
+    g1 = StochasticGene.steady_state(r[1:2*G],G-1,nhist,nalleles)
+    g2 = StochasticGene.simulatorGM(r[1:2*G],G-1,nhist,nalleles)
+    return g1, g2
 end
+
 
 @testset "StochasticGene" begin
-    # Write your tests here.
+
+        p,ll,model =  fit_rna_test()
+        @test isapprox(p,[0.0097; 0.10; 0.99],rtol=0.05)
+        @test isapprox(ll,4450,rtol=0.05)
+
+        r = [0.01, 0.1, 1.0, 0.01]
+        h1,h2 = teststeadystatemodel(r,2,60,2)
+
+        @test isapprox(h1,h2,rtol=0.05)
+
 end

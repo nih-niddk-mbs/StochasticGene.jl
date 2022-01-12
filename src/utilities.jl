@@ -367,6 +367,7 @@ function moment_param_estimates(h)
     r1 = e1
     r2 = e2/e1
     r3 = e3/e2
+    println(r1,", ",r2,", ",r3)
 
     lambda = 2*r1*(r3-r2)/(r1*r2-2*r1*r3+r2*r3)
     mu = 2*(r2-r1)*(r1-r3)*(r3-r2)/(r1*r2-2*r1*r3+r2*r3)/(r1-2*r2+r3)
@@ -498,19 +499,31 @@ function burstsize(n::Int,nr::Int,r::Vector)
 	Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
 end
 
-"""
-teststeadystatemodel(model,nhist)
-
-Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
-
-"""
-function teststeadystatemodel(model::AbstractGMmodel,nhist)
-    G = model.G
-    r = model.rates
-    g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
-    g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
-    return g1,g2
-end
+# """
+# teststeadystatemodel(model,nhist)
+#
+# Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
+#
+# """
+# function teststeadystatemodel(model::AbstractGMmodel,nhist)
+#     G = model.G
+#     r = model.rates
+#     g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
+#     g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
+#     return g1,g2
+# end
+#
+# function fit_rna_test(root)
+#     gene = "CENPL"
+#     cell = "HCT116"
+#     fish = false
+#     data = data_rna(gene,"MOCK","data/HCT116_testdata",fish,"scRNA_test",root)
+#     model = model_rna(gene,cell,2,fish,.01,[1,2,3],(),"scRNA_test","scRNA_test",1,".",data,.05,1.0)
+#     options = StochasticGene.MHOptions(10000,2000,0,120.,1.,100.)
+#     fit,stats,waic = StochasticGene.run_mh(data,model,options,1);
+#     return stats.meanparam, fit.llml
+# end
+#
 
 # function online_covariance(data1, data2)
 #     meanx = meany = C = n = 0
