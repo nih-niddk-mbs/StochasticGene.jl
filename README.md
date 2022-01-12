@@ -6,7 +6,17 @@ The repository is organized into files that contain functions for specifying the
 
 The functions to specify and prepare the data and models for three specific data sets have been provided. The models and data are organized into Julia structs. The MCMC alogorithm will call for function methods specific to the models and data for the prior and proposal distributions and the loglikelihood of the model prediction.
 
-### Example:
+### Installation
+StochasticGene is a registered Julia package, so you can install a stable version of it by running the following in the Julia REPL:
+
+julia> ] add StochasticGene
+You can check if all tests pass by running
+
+julia> ] test StochasticGene
+
+
+
+### Example Use:
 To fit the four rates of a simple 2 G state model (i.e. telegraph model, G0<=>G1 -> mRNA -> 0) to smFISH mRNA data for the gene MYC,
 you would launch Julia from the directory where the file StochasticGene.jl is located and type:
 
