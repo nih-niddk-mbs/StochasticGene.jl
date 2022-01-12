@@ -46,7 +46,7 @@ function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label"
     makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,modulepath=modulepath,cv=cv)
 end
 
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO-AUXIN",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv=0.02)
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO-AUXIN",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "../StochasticGene/src/StochasticGene.jl",cv=0.02)
     if label == "label"
         if fish
             label = "FISH-ss-" * conds
@@ -86,9 +86,33 @@ fix(folder) = writeruns(fixruns(findjobs(folder)))
     Defaults to "scRNA"
 
 """
-function setup(rootfolder = "scRNA")
+function setup(root = "scRNA")
 
+    data = joinpath(root,"data")
+    results = joinpath(root,"results")
+    alleles = joinpath(data,"alleles")
+    halflives = joinpath(data,"halflives")
 
+    if ~ispath(data)
+        mkpath(data)
+    end
+    if ~ispath(results)
+        mkpath(results)
+    end
+    if ~ispath(alleles)
+        mkpath(alleles)
+    end
+    if ~ispath(halflives)
+        mkpath(halflives)
+    end
+
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/CH12_alleles.txt","$alleles/CH12_alleles.txt")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/HCT116_alleles_number.txt","$alleles/HCT116_alleles_number.txt")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/ESC_halflife.csv","$halflives/ESC_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/CH12_halflife.csv","$halflives/CH12_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/HCT116_halflife.csv","$halflives/HCT116_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife.csv","$halflives/OcaB_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife_repa.txt","$halflives/OcaB_halflife_repa.txt")
 
 end
 

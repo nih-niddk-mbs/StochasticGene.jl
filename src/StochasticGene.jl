@@ -14,8 +14,10 @@ using DifferentialEquations
 using LSODA
 using DataFrames
 using FFTW
+using Downloads
 
 export
+    setup,
     fit_rna,
     makeswarm,
     fix,

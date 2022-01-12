@@ -6,11 +6,9 @@
 #
 
 """
-    fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=40000,cyclesteps=0,warmupsteps=0,annealsteps=0,temp=100.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::String,fixedeffects::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
-    fit_rna(nchains::Int,data,gene::String,decayrate::Float64,nalleles::Int,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,,transient::Bool=false,samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+    fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
+    fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
+
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -36,6 +34,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `root`: root folder of data and Results folders
 - `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
 - `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
+- `data`: data structure
 
 """
 
@@ -60,8 +59,8 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println(data.nRNA)
 
-    resultfolder = joinpath("Results",resultfolder)
-    infolder = joinpath("Results",infolder)
+    resultfolder = joinpath("results",resultfolder)
+    infolder = joinpath("results",infolder)
 
     model = model_rna(gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yieldprior,ejectprior)
     options = StochasticGene.MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
@@ -82,8 +81,8 @@ end
 #     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
 #     println(data.nRNA)
 #
-#     resultfolder = joinpath("Results",resultfolder)
-#     infolder = joinpath("Results",infolder)
+#     resultfolder = joinpath("results",resultfolder)
+#     infolder = joinpath("results",infolder)
 #     model = model_rna(r_init,gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
 #     options = StochasticGene.MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
 #
