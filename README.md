@@ -27,7 +27,7 @@ StochasticGene is a registered Julia package.  To run Julia on Biowulf first log
 [username@biowulf ~]$ julia
 `
 
-To can install StochasticGene run the following in the Julia REPL:
+To install StochasticGene run the following in the Julia REPL:
 
 `
 julia> ] add StochasticGene
