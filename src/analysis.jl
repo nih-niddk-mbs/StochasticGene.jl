@@ -1,24 +1,55 @@
 # analysis.jl
 
+"""
+    make_dataframe(root::String,outputfile::String,folder::String,models::Vector,cond::String,datafolder::String,fish::Bool)
 
+    Arguments
+    - `root`: root folder
+    - `folder`: name of folder with result files
+    - `models`: vector of models (listed as strings), e.g. ["1","2"]
+    - `cond`: condition of experiment
+    - `datafolder`: name of folder where data is stored
+    - `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
 
 """
-    make_dataframe(folder,models::Vector=[1,2])
-
-"""
-function make_dataframe(root,folder,models::Vector,conds::Vector,datafolder::Vector,fish::Bool=true,G::Int = 2)
+function make_dataframe(root,folder,models::Vector,conds,datafolder::String,fish::Bool,G::Int = 2)
+    folder = joinpath(root,joinpath("results",folder))
+    if typeof(conds)<:String
+        cond = [conds]
+        dataconds = string.(split(conds,"-"))
+        datafolder = repeat([datafolder],length(dataconds))
+    end
+    assemble_all(folder,cond,models,fish)
+    # if ~isratefile(folder)
+    #     assemble_all(folder,cond,models,fish)
+    # end
     df = make_dataframe(root,folder,models::Vector,fish,G)
-    add_mean(df,conds,datafolder,fish,root)
+    add_mean(df,dataconds,datafolder,fish,root)
 end
 
-function make_dataframe(root,folder,models::Vector,fish::Bool=true,G::Int = 2)
+function isratefile(folder)
+    files=readdir(folder)
+    any(occursin.(".csv",files) .& occursin.("rates",files))
+end
+
+function fixfilename(folder,old="FISH_ss",new="FISH-ss")
+    files = readdir(folder)
+    for file in files
+        if occursin(old,file)
+            nfile = replace(file,old => new)
+            mv(joinpath(folder,file),joinpath(folder,nfile),force=true)
+        end
+    end
+end
+
+function make_dataframe(root,folder,models::Vector,fish::Bool=true,anchorG::Int = 2)
     files = readdir(folder)
     mfiles = Vector{String}(undef,0)
     rfile = ""
     for file in files
         if occursin("measures",file)  && occursin("csv",file) && ~occursin("all",file)
             push!(mfiles,joinpath(folder,file))
-        elseif occursin("rates",file) && occursin("$G.csv",file)
+        elseif occursin("rates",file) && occursin("$anchorG.csv",file)
             rfile = joinpath(folder,file)
         end
     end
@@ -43,6 +74,7 @@ function make_dataframe(root,folder,models::Vector,fish::Bool=true,G::Int = 2)
     df = innerjoin(df, winner, on = :Gene)
 end
 
+
 function best_model(models::Array,files::Array,measure = "AIC")
     m = length(files)
     contents = Array{Array,1}(undef,m)
@@ -58,7 +90,6 @@ function best_model(models::Array,files::Array,measure = "AIC")
         ind = occursin.(measure,string.(headers[1]))
     end
     ind = findfirst(vec(ind))
-    println(ind)
     winner = Array{Any,2}(undef,size(contents[1])[1],2)
     for row in 1:size(contents[1],1)
         content = contents[1][row,ind]
@@ -72,29 +103,6 @@ function best_model(models::Array,files::Array,measure = "AIC")
     end
     DataFrame(Gene = winner[:,1], Winner = Int.(winner[:,2]))
 end
-
-# function make_dataframe(folder,models::Vector,winners,moments)
-#     files = readdir(folder)
-#     mfiles = Vector{String}(undef,0)
-#     rfile = ""
-#     for file in files
-#         if occursin("measures",file)  && ~occursin("all",file)
-#             push!(mfiles,joinpath(folder,file))
-#         elseif occursin("rates",file) && occursin("2.csv",file)
-#             rfile = joinpath(folder,file)
-#         end
-#     end
-#     mfile = joinpath(folder,split("2.csv",mfiles[2])[1] * "all.csv")
-#     println(rfile)
-#     join_files(models,mfiles,mfile)
-#     winnerfile = joinpath(folder,"Winner.csv")
-#     best_AIC(winnerfile,mfile)
-#     r,head = readdlm(rfile,',',header=true)
-#     winner = get_winners(winnerfile,length(models))
-#     cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
-#     rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winners];
-#     DataFrame(Gene = rs[:,1],on = float.(rs[:,2]),off=float.(rs[:,3]),eject=float.(rs[:,4]),decay=float.(rs[:,5]),yield=float.(rs[:,6]),cond = Int.(rs[:,7]),winner = Int.(rs[:,8]));
-# end
 
 function add_mean(df::DataFrame,conds::Vector,datafolder::Vector,fish::Bool,root)
     m = Vector{Float64}(undef,0)
@@ -170,8 +178,8 @@ function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,roo
         gene = String(r[1])
         rates = r[2:end]
         rdecay = decay(root,cell,gene)
-        cov = StochasticGene.read_covparam(joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1]))
-        # mu = StochasticGene.readmean(joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1]))
+        cov = StochasticGene.read_covparam(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
+        # mu = StochasticGene.readmean(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
         if size(cov,2) < 2
             println(gene)
         end
@@ -245,7 +253,7 @@ function burstsize(reject::Float64,roff,covee,covoo,coveo::Float64)
 end
 
 function ratestats(gene,G,folder,cond)
-    filestats=joinpath(folder,getfile("param_stats",gene,G,folder,cond)[1])
+    filestats=joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1])
     filerates = joinpath(folder,getratefile(gene,G,folder,cond)[1])
     rates = StochasticGene.readrates(filerates)
     cov = StochasticGene.read_covparam(filestats)

@@ -17,15 +17,15 @@ using FFTW
 using Downloads
 
 export
-    setup,
-    fit_rna,
+    rna_setup,
     makeswarm,
-    fix,
-    large_deviance,
-    assemble_all,
+    fit_rna,
     make_dataframe,
+    write_dataframe,
+    fix,
+    assemble_all,
     write_histograms,
-    moment_param_estimates,
+    plot_histogram,
     simulatorGM
 
 ### Source files

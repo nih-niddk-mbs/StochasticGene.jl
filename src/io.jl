@@ -1,15 +1,51 @@
 # io.jl
 ### Files for saving and reading mh results
+"""
+    write_dataframe(root::String,outputfile::String,folder::String,models::Vector,cond::String,datafolder::String,fish::Bool)
+
+    collates fit data into a date frame and saves into a csv file
+
+    Arguments
+    - `root`: root folder
+    - `outputfile`: name of an ouput file
+    - `folder`: name of folder with result files
+    - `models`: vector of models (listed as strings), e.g. ["1","2"]
+    - `cond`: condition of experiment
+    - `datafolder`: name of folder where data is stored
+    - `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
+
+"""
+function write_dataframe(root,csvfile,resultfolder,models::Vector,conds,datafolder::String,fish::Bool=true,G::Int = 2)
+    df = make_dataframe(root,resultfolder,models,conds,datafolder,fish,G)
+    csvfile = joinpath(root,joinpath(resultfolder,csvfile))
+    CSV.write(csvfile,df)
+end
+
+"""
+    assemble_all(folder,conds,models,fish)
+
+"""
+function assemble_all(folder,conds,models,fish)
+    if fish
+        label = ["FISH-ss"]
+    else
+        label = ["scRNA-ss"]
+    end
+    assemble_all(folder,label,conds,models,fish)
+end
 
 
-function assemble_all(folder::String;label=["scRNA_T0_ss","scRNA_T120_ss"],cond::Vector=["DMSO","AUXIN"],model::Vector=["2","3"],fish=false,append::String = ".csv",header=true,type=2)
-    for l in label, c in cond, g in model
-        assemble_rates(folder,l,c,g,append,header,type,fish)
-        assemble_measures(folder,l,c,g,append,header)
-        # assemble_stats("mean",folder,l,c,g,append,header)
+function assemble_all(folder::String,label::Vector,conds::Vector=["DMSO","AUXIN"],models::Vector=["2","3"],fish=false)
+    for l in label, c in conds, g in models
+        assemble_all(folder,l,c,g,fish)
     end
 end
 
+function assemble_all(folder::String,label::String="scRNA",cond::String="DMSO",model::String="2",fish::Bool=false,append::String = ".csv",header=true,type=2)
+    assemble_rates(folder,label,cond,model,append,header,type,fish)
+    assemble_measures(folder,label,cond,model,append,header)
+    # assemble_stats("mean",folder,l,c,g,append,header)
+end
 
 function extractparts(file::String)
     file = split(file,".")[1]
@@ -42,7 +78,6 @@ function makestring(v)
     end
     return s
 end
-
 
 function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type,fish)
     files = getfiles(folder,"rates",label,cond,model)
@@ -83,7 +118,7 @@ function assemble_measures(folder::String,label::String,cond::String,model::Stri
 end
 
 function assemble_stats(stattype,folder::String,label::String,cond::String,model::String,append::String,header::Bool)
-    files = getfiles(folder,"param_stats",label,cond,model)
+    files = getfiles(folder,"param-stats",label,cond,model)
     # label = split(files[1],cond)[1]
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
     f = open(outfile,"w")
@@ -152,6 +187,21 @@ function getfiles(folder::String,type::String,label::String,cond::String,model::
     return files
 end
 
+function getfiles(folder::String,type::String,label::String,model::String)
+    allfiles = readdir(folder)
+    files = Array{String,1}(undef,0)
+    for file in allfiles
+        if occursin(type,file) && occursin(label,file)
+            file1 = String(split(file,label)[2])
+            v = extractparts(file)
+            if getG(v) == model
+                push!(files,file)
+            end
+        end
+    end
+    return files
+end
+
 """
 path_model(type::String,label::String,gene::String,model::String,nalleles,folder,root)
 
@@ -167,7 +217,6 @@ end
 
 filename(data,model::AbstractGRMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
 filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,model.nalleles)
-
 filename(label::String,gene::String,G::Int,R::Int,nalleles::Int) = filename(label,gene,"$G"*"$R","$(nalleles)")
 filename(label::String,gene,G::Int,nalleles::Int) = filename(label,gene,"$G","$(nalleles)")
 filename(label::String,gene::String,model::String,nalleles::String) = "_" * label  * "_" * gene *  "_" * model * "_" * nalleles * txtstr
@@ -183,7 +232,7 @@ function writeall(path::String,fit,stats,waic,data,temp,model::StochasticGRmodel
     name = filename(data,model)
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
     write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model),temp)
-    write_param_stats(joinpath(path,"param_stats" * name),stats)
+    write_param_stats(joinpath(path,"param-stats" * name),stats)
 
 end
 
@@ -315,9 +364,6 @@ function readrow(file::String,row)
     contents = readdlm(file,',')
     contents[row,:]
 end
-
-
-
 
 function write_residency_G(fileout::String,filein::String,G,header)
     rates = get_all_rates(filein,header)

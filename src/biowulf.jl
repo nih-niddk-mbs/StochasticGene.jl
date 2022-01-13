@@ -4,32 +4,38 @@
 
 
 """
-    makeswarm(;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="WT-Treatment",result::String= "resultfolder",batchsize=1000,maxtime = 3600. * 2,nchains::Int = 2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl")
+    makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
 
-    makeswarm(genes::Vector;G::Int=2,cell="HCT116",infolder="infolder",swarmfile::String="swarmfile",inlabel="inlabel",label="label",nsets=2,datafolder::String="datafolder",fish=false,conds::String="DMSO-AUXIN",result::String="resultfolder",batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1,2,3],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,cyclesteps=0,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "./StochasticGene/")
+    makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "../StochasticGene/src/StochasticGene.jl",cv=0.02)
 
 Arguments
-- `G`: number of gene states
-- `cell': cell type for halflives and allele numbers
-- `infolder`: name of folder for initial parameters
-- `swarmfile`: name of swarmfile to be executed by swarm
-- `inlabel`: label of output files used for inputs
-- `label`: label of output files produced
-- `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
-- `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
-- `thresholdlow`: lower threshold for halflife for genes to be fit
-- `threhsoldhigh`: upper threshold
-- `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
-- `result`: folder for results
-- `batchsize`: number of jobs per swarmfile, default = 1000
-- `maxtime`: maximum wall time for run, default = 2 hrs
-- `nchains`: number of MCMC chains, default = 2
-- `transient::Bool`: true means fit transient model (T0, T30, T120)
-- `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-     (each vector in tuple is a fixed rate set)
-- `juliafile`: name of file to be called by julia in swarmfile, if empty string the no file is made
-- `root`: name of root directory for project, e.g. "scRNA\"
+    - `G`: number of gene states
+    - `cell': cell type for halflives and allele numbers
+    - `infolder`: name of folder for initial parameters
+    - `swarmfile`: name of swarmfile to be executed by swarm
+    - `label`: label of output files produced
+    - `inlabel`: label of files used for initial conditions
+    - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
+    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+    - `thresholdlow`: lower threshold for halflife for genes to be fit
+    - `threhsoldhigh`: upper threshold
+    - `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
+    - `result`: folder for results
+    - `batchsize`: number of jobs per swarmfile, default = 1000
+    - `maxtime`: maximum wall time for run, default = 2 hrs
+    - `nchains`: number of MCMC chains, default = 2
+    - `transient::Bool`: true means fit transient model (T0, T30, T120)
+    - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+         (each vector in tuple is a fixed rate set)
+    - `juliafile`: name of file to be called by julia in swarmfile
+    - `root`: name of root directory for project, e.g. "scRNA\"
+    - `samplesteps`: number of MCMC sampling steps
+    - `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
+    - `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+    - `temp`: MCMC temperature
+    - `tempanneal`: annealing temperature
+    - `cv`: coefficient of variation (mean/std) of proposal distribution
 
 
 returns swarmfile that calls a julia file that is executed on biowulf
@@ -86,12 +92,13 @@ fix(folder) = writeruns(fixruns(findjobs(folder)))
     Defaults to "scRNA"
 
 """
-function setup(root = "scRNA")
+function rna_setup(root = "scRNA")
 
     data = joinpath(root,"data")
     results = joinpath(root,"results")
     alleles = joinpath(data,"alleles")
     halflives = joinpath(data,"halflives")
+    testdata = joinpath(data,"HCT116_testdata")
 
     if ~ispath(data)
         mkpath(data)
@@ -101,18 +108,23 @@ function setup(root = "scRNA")
     end
     if ~ispath(alleles)
         mkpath(alleles)
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/CH12_alleles.txt","$alleles/CH12_alleles.txt")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/HCT116_alleles_number.txt","$alleles/HCT116_alleles_number.txt")
+
     end
     if ~ispath(halflives)
         mkpath(halflives)
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/ESC_halflife.csv","$halflives/ESC_halflife.csv")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/CH12_halflife.csv","$halflives/CH12_halflife.csv")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/HCT116_halflife.csv","$halflives/HCT116_halflife.csv")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife.csv","$halflives/OcaB_halflife.csv")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife_repa.txt","$halflives/OcaB_halflife_repa.txt")
     end
-
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/CH12_alleles.txt","$alleles/CH12_alleles.txt")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/HCT116_alleles_number.txt","$alleles/HCT116_alleles_number.txt")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/ESC_halflife.csv","$halflives/ESC_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/CH12_halflife.csv","$halflives/CH12_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/HCT116_halflife.csv","$halflives/HCT116_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife.csv","$halflives/OcaB_halflife.csv")
-    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife_repa.txt","$halflives/OcaB_halflife_repa.txt")
+    if ~ispath(testdata)
+        mkpath(testdata)
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/HCT116_testdata/CENPL_MOCK.txt","$testdata/CENPL_MOCK.txt")
+        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/HCT116_testdata/MYC_MOCK.txt","$testdata/MYC_MOCK.txt")
+    end
 
 end
 
