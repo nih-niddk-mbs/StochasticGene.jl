@@ -134,16 +134,15 @@ make_fitfile(fitfile,fittedparam,fixedeffects)
 make the file the swarm file calls to execute julia code
 
 """
-function write_fitfile_module(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
+function write_fitfile(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,cv)
         f = open(fitfile,"w")
         s =   '"'
-        # write(f,"@everywhere include($s/home/carsonc/StochasticGene/src/StochasticGene.jl$s)\n")
         write(f,"@everywhere using StochasticGene\n")
-        write(f,"@time fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$fish,$cycle,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$cyclesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
+        write(f,"@time fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$fish,$cycle,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s)\n")
         close(f)
 end
 
-function write_fitfile(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
+function write_fitfile_include(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv)
         f = open(fitfile,"w")
         s =   '"'
         write(f,"@everywhere include($s$modulepath$s)\n")
