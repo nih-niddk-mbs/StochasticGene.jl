@@ -17,7 +17,13 @@ StochasticGene is a Julia package.  To run Julia on Biowulf first log onto Biowu
 
 `
 [username@biowulf ~]$ sinteractive --mem=64G
+`
+
+`
 [username@biowulf ~]$ module load julialang
+`
+
+`
 [username@biowulf ~]$ julia
 `
 
@@ -27,7 +33,9 @@ To can install StochasticGene run the following in the Julia REPL:
 `
 julia> ] add StochasticGene
 `
+
 You can check if all tests pass by running
+
 `
 julia> ] test StochasticGene
 `
@@ -39,6 +47,7 @@ StochasticGene requires a specific directory structure where data are stored and
 `
 julia> rna_setup("scRNA")
 `
+
 or any other name you choose for the root directory.
 
 ### Example Use:
@@ -47,25 +56,34 @@ Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (w
 
 First create swarm files using the command in the JULIA repl:
 
+`
 makeswarm(maxtime = 600.,fish = true,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root)
+`
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
 
 To exit julia type:
+
 `
 julia> exit()
 `
 
 To run the swarm file, type at the command line:
 
+`
 [username@biowulf ~]$ swarm -f fit_scRNA-ss-MOCK_3.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
+`
 
 The results will be saved in the folder "results/HCT_scRNA".  There will be three files for each gene and model.  The file names will have the form
-`[filetype]_[label]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt
+
+`[filetype]_[label]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt`
+
 filetypes are:
 
 `rates`, which contain 4 lines for maximum likelihood rates, mean rates, median rates
+
 `measures`, which contain information about the quality of the fits
+
 `param_stats`, which contain detailed statistics of the parameter posteriors (the MCMC samples are not saved)
 
 In our example the file `rates_FISH-ss-MOCK_CENPL_2_2.txt`,`measures_FISH-ss-MOCK_CENPL_2_2.txt`,`param-stats_FISH-ss-MOCK_CENPL_2_2.txt` will be produced
@@ -76,6 +94,9 @@ A dataframe of the results can be constructed in Julia using the commands
 
 `
 julia> using StochasticGene
+`
+
+`
 julia> write_dataframe(rootfolder,outputfile,"HCT_FISHtest",["1","2"],"MOCK","data/HCT116_testdata",true)
 `
 
