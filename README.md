@@ -13,7 +13,7 @@ StochasticGene is designed to run on large data sets on a multiprocessor machine
 
 ### Installation
 
-StochasticGene is a Julia package.  To run Julia on Biowulf first log onto Biowulf and at the prompt type:
+StochasticGene is a registered Julia package.  To run Julia on Biowulf first log onto Biowulf and at the prompt type:
 
 `
 [username@biowulf ~]$ sinteractive --mem=64G
@@ -27,7 +27,6 @@ StochasticGene is a Julia package.  To run Julia on Biowulf first log onto Biowu
 [username@biowulf ~]$ julia
 `
 
-### Instructions below will not work yet
 To can install StochasticGene run the following in the Julia REPL:
 
 `
