@@ -76,7 +76,12 @@ julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=t
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
 This will create two files.  The first will end in `.swarm` and the second will end in `.jl`
 
+To fit all the genes in the data folder use:
+```
+julia> using StochasticGene
 
+julia> makeswarm(maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "data/HCT116_testdata/",root = ".")
+```
 
 To exit julia type:
 
@@ -154,7 +159,7 @@ Arguments
 - `label`: label of output files produced (e.g. "scRNA-ss-CONTROL")
 - `inlabel`: label of files used for initial conditions
 - `nsets`: number of histograms to be fit simultaneously (e.g. one for wild type and one for perturbation)
-- `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+- `datafolder`: subfolder (below root) holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data/folder1-data/folder2"
 - `thresholdlow`: lower threshold for half life for genes to be fit
 - `threhsoldhigh`: upper threshold
 - `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
