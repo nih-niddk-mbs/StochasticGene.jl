@@ -88,7 +88,13 @@ To run the swarm file, type at the command line:
 [username@biowulf ~]$ swarm -f fit_scRNA-ss-MOCK_3.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
 ```
 
-The results will be saved in the folder "results/HCT_scRNA".  There will be three files for each gene and model.  The file names will have the form
+This will submit a job into the Biowulf queue.  To check the status of your job type:
+
+```
+[username@biowulf ~]$ sjobs
+```
+
+When the job finishes, Biowulf will create new swarm files in your folder. The fit results will be saved in the folder "results/HCT_scRNA".  There will be three files for each gene and model.  The file names will have the form
 
 `[filetype]_[label]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt`
 
