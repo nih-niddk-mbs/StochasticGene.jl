@@ -56,7 +56,7 @@ Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (w
 First create swarm files using the command in the JULIA repl:
 
 `
-makeswarm(maxtime = 600.,fish = true,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root)
+makeswarm(maxtime = 600.,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root)
 `
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
