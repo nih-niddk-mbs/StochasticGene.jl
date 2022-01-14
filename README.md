@@ -47,6 +47,8 @@ Command "]" brings you into the Julia Package environment, "Ctrl C" gets out
 StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders containing allele numbers and halflives.  The command `rna_setup` will create the folder structure.
 
 ```
+julia> using StochasticGene
+
 julia> rna_setup("scRNA")
 ```
 
