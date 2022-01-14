@@ -70,11 +70,13 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
+julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "data/HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
-This will create two files.  The first will end in .swarm and the second will end in .jl
+This will create two files.  The first will end in `.swarm` and the second will end in `.jl`
+
+
 
 To exit julia type:
 
