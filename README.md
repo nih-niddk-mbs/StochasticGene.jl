@@ -15,37 +15,37 @@ StochasticGene is designed to run on large data sets on a multiprocessor machine
 
 StochasticGene is a registered Julia package.  To run Julia on Biowulf first log onto Biowulf and at the prompt type:
 
-`
+```
 [username@biowulf ~]$ sinteractive --mem=64G
-`
+```
 
-`
+```
 [username@biowulf ~]$ module load julialang
-`
+```
 
-`
+```
 [username@biowulf ~]$ julia
-`
+```
 
 To install StochasticGene run the following in the Julia REPL:
 
-`
+```
 julia> ] add StochasticGene
-`
+```
 
 You can check if all tests pass by running
 
-`
+```
 julia> ] test StochasticGene
-`
+```
 
 Command "]" brings you into the Julia Package environment, "Ctrl C" gets out
 
 StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders containing allele numbers and halflives.  The command `rna_setup` will create the folder structure.
 
-`
+```
 julia> rna_setup("scRNA")
-`
+```
 
 or any other name you choose for the root directory.
 
@@ -55,17 +55,17 @@ Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (w
 
 First create swarm files using the command in the JULIA repl:
 
-`
+```
 makeswarm(maxtime = 600.,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root)
-`
+```
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
 
 To exit julia type:
 
-`
+```
 julia> exit()
-`
+```
 
 To run the swarm file, type at the command line:
 
@@ -95,18 +95,18 @@ A data frame of the results can be constructed in Julia using the commands
 julia> using StochasticGene
 ```
 
-`
+```
 julia> write_dataframe(rootfolder,outputfile,"HCT_FISHtest",["1","2"],"MOCK","data/HCT116_testdata",true)
-`
+```
 
 ###API
-`
+```
 makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
-`
+```
 
-`
+```
 makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=1,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
-`
+```
 
 create swarm files to be run on NIH Biowulf
 
@@ -140,9 +140,9 @@ Arguments
 
 - `genes`: array of genes to be fit
 
-`
+```
 write_dataframe(root::String,outputfile::String,folder::String,models::Vector,cond::String,datafolder::String,fish::Bool)
-`
+```
 collates fit data into a date frame and saves into a csv file
 
 Arguments
