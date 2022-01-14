@@ -173,7 +173,6 @@ function write_swarmfile(sfile,nchains,juliafile,genes::Vector)
 end
 
 function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64,thresholdhigh::Float64)
-    datafolder = joinpath("data",datafolder)
     genes = Vector{Vector}(undef,2)
     if occursin.("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
@@ -189,6 +188,7 @@ function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow:
 end
 
 function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
+    datafolder = joinpath("data",datafolder)
     genes = intersect(get_halflives(root,cell,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
     alleles = get_alleles(root,cell)
     if ~isnothing(alleles)
