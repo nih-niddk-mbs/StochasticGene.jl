@@ -59,18 +59,22 @@ Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (w
 First create swarm files using the command in the JULIA repl:
 
 ```
+julia> using StochasticGene
+
 julia> makeswarm(maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
 ```
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
 
-To run just a set of selected genes type:
+To run just a set of selected genes type instead:
 
 ```
+julia> using StochasticGene
+
 julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
 ```
 
-The genes are listed as a vector of strings.
+The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
 
 To exit julia type:
 
