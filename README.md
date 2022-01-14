@@ -52,17 +52,25 @@ julia> rna_setup("scRNA")
 
 or any other name you choose for the root directory.
 
-### Example Use:
+### Example Use on Biowulf:
 
 Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile
 
 First create swarm files using the command in the JULIA repl:
 
 ```
-makeswarm(maxtime = 600.,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root)
+julia> makeswarm(maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
 ```
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
+
+To run just a set of selected genes type:
+
+```
+julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
+```
+
+The genes are listed as a vector of strings.
 
 To exit julia type:
 
@@ -101,6 +109,20 @@ julia> using StochasticGene
 ```
 julia> write_dataframe(rootfolder,outputfile,"HCT_FISHtest",["1","2"],"MOCK","data/HCT116_testdata",true)
 ```
+
+### Example Use on Unix
+If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
+
+In Bash, type:
+
+```
+Bash> chmod 744 fit_scRNA-ss-MOCK_3.swarm
+
+Bash> bash fit_scRNA-ss-MOCK_3.swarm &
+
+```
+
+This will execute each gene in the swarm file sequentially. To run several genes in parallel, you can break the run up into multiple swarm files and execute each swarm file separately.  You can also trade off
 
 ### API:
 
