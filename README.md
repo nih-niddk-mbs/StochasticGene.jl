@@ -54,14 +54,23 @@ or any other name you choose for the root directory.
 
 ### Example Use on Biowulf:
 
-Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile
+Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
 
-First create swarm files using the command in the JULIA repl:
 
+First move into the root directory you created and launch julia:
+
+```
+[username@biowulf ~]$ cd scRNA
+
+[username@biowulf ~]$ julia
+
+```
+
+Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
+julia> makeswarm(maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
 ```
 
 This will create two files.  The first will end in .swarm and the second will end in .jl
@@ -71,7 +80,7 @@ To run just a set of selected genes type instead:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = "scRNA")
+julia> makeswarm(["CENPL","MYC"],maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
