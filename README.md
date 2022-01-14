@@ -85,15 +85,15 @@ filetypes are:
 
 `param_stats`, which contain detailed statistics of the parameter posteriors (the MCMC samples are not saved)
 
-In our example the file `rates_FISH-ss-MOCK_CENPL_2_2.txt`,`measures_FISH-ss-MOCK_CENPL_2_2.txt`,`param-stats_FISH-ss-MOCK_CENPL_2_2.txt` will be produced
+In our example the files `rates_FISH-ss-MOCK_CENPL_2_2.txt`,`measures_FISH-ss-MOCK_CENPL_2_2.txt`,`param-stats_FISH-ss-MOCK_CENPL_2_2.txt` will be produced
 
 The output convention is that underscore `_` is used to separate the 4 attributes of a run and thus should not be used elsewhere.
 
-A dataframe of the results can be constructed in Julia using the commands
+A data frame of the results can be constructed in Julia using the commands
 
-`
+```
 julia> using StochasticGene
-`
+```
 
 `
 julia> write_dataframe(rootfolder,outputfile,"HCT_FISHtest",["1","2"],"MOCK","data/HCT116_testdata",true)
