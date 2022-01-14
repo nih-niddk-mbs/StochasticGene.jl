@@ -6,7 +6,7 @@
 """
     makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
 
-    makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "../StochasticGene/src/StochasticGene.jl",cv=0.02)
+    makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
 
 Arguments
     - `G`: number of gene states
@@ -42,7 +42,7 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO-AUXIN",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
+function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO-AUXIN",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
@@ -52,7 +52,7 @@ function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label"
     makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv)
 end
 
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO-AUXIN",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=2,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="DMSO-AUXIN",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
     if label == "label"
         if fish
             label = "FISH-ss-" * conds
@@ -173,6 +173,7 @@ function write_swarmfile(sfile,nchains,juliafile,genes::Vector)
 end
 
 function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow::Float64,thresholdhigh::Float64)
+    datafolder = joinpath("data",datafolder)
     genes = Vector{Vector}(undef,2)
     if occursin.("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
