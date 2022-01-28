@@ -10,15 +10,30 @@
     - `outputfile`: name of an ouput file
     - `folder`: name of folder with result files
     - `models`: vector of models (listed as strings), e.g. ["1","2"]
-    - `cond`: condition of experiment
+    - `conds`: condition of experiment
     - `datafolder`: name of folder where data is stored
     - `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
 
 """
-function write_dataframe(root,csvfile,resultfolder,models::Vector,conds,datafolder::String,fish::Bool=true,G::Int = 2)
-    df = make_dataframe(root,resultfolder,models,conds,datafolder,fish,G)
+function write_dataframe(;root::String=".",csvfile::String="results.csv",resultfolder::String= "fit_result",models::Vector=["2"],conditions::String="MOCK",datafolder::String="HCT116_testdata",fish::Bool=true,G::Int = 2)
+    df = make_dataframe(root,resultfolder,models,conditions,datafolder,fish,G)
     csvfile = joinpath(root,joinpath(resultfolder,csvfile))
     CSV.write(csvfile,df)
+end
+
+function make_dataframe(root::String,folder::String,models::Vector,conds::String,datafolder::String,fish::Bool,G::Int = 2)
+    folder = joinpath(root,joinpath("results",folder))
+    if typeof(conds)<:String
+        cond = [conds]
+        dataconds = string.(split(conds,"-"))
+        datafolder = repeat([datafolder],length(dataconds))
+    end
+    assemble_all(folder,cond,models,fish)
+    # if ~isratefile(folder)
+    #     assemble_all(folder,cond,models,fish)
+    # end
+    df = make_dataframe(root,folder,models::Vector,fish,G)
+    add_mean(df,dataconds,datafolder,fish,root)
 end
 
 """

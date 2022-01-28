@@ -112,7 +112,6 @@ function cycle(nchains,fish,fixedeffects,model,data,options)
     r = model.rates
     nalleles = model.nalleles
     G = model.G
-    decayrate = r[2*G+2]
     fittedparam = model.fittedparam
     cv = 0.02
     rateprior = model.rateprior

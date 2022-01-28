@@ -12,20 +12,7 @@
     - `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
 
 """
-function make_dataframe(root,folder,models::Vector,conds,datafolder::String,fish::Bool,G::Int = 2)
-    folder = joinpath(root,joinpath("results",folder))
-    if typeof(conds)<:String
-        cond = [conds]
-        dataconds = string.(split(conds,"-"))
-        datafolder = repeat([datafolder],length(dataconds))
-    end
-    assemble_all(folder,cond,models,fish)
-    # if ~isratefile(folder)
-    #     assemble_all(folder,cond,models,fish)
-    # end
-    df = make_dataframe(root,folder,models::Vector,fish,G)
-    add_mean(df,dataconds,datafolder,fish,root)
-end
+
 
 function isratefile(folder)
     files=readdir(folder)
