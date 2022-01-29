@@ -66,7 +66,7 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",
     if ngenes > batchsize
         batches = getbatches(genes,ngenes,batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * "$G" * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * label * "_" * "$G" * "_" * "$batch" * ".swarm"
             write_swarmfile(sfile,nchains,juliafile,batches[batch])
         end
     else
@@ -210,7 +210,7 @@ function get_genes(root,cond,datafolder)
 end
 
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
-    file = get_file(root,"data/halflives",cell)
+    file = get_file(root,"data/halflives",cell,"csv")
     get_halflives(file,thresholdlow,thresholdhigh)
 end
 
@@ -228,7 +228,7 @@ function get_halflives(file,thresholdlow::Float64,thresholdhigh::Float64)
 end
 
 function get_alleles(root,cell)
-    file = get_file(root,"data/alleles",cell)
+    file = get_file(root,"data/alleles",cell,"txt")
     if ~isnothing(file)
         return readdlm(file)[2:end,1]
     else
@@ -236,11 +236,12 @@ function get_alleles(root,cell)
     end
 end
 
-function get_file(root,folder,type)
+function get_file(root,folder,type,suffix)
     folder = joinpath(root,folder)
     files = readdir(folder)
     for file in files
-        if occursin(type,file)
+        name = split(file,"_")[1]
+        if occursin(suffix,file) && name == type
             path = joinpath(folder,file)
             return path
         end
