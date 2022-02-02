@@ -56,8 +56,10 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",
     if label == "label"
         if fish
             label = "FISH-ss_" * conds
+            inlabel = label
         else
             label = "scRNA-ss_" * conds
+            inlabel = label
         end
     end
     ngenes = length(genes)
@@ -249,6 +251,7 @@ end
 
 function get_file(root,folder,type,suffix)
     folder = joinpath(root,folder)
+    println(folder)
     files = readdir(folder)
     for file in files
         name = split(file,"_")[1]
