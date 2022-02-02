@@ -186,16 +186,17 @@ Arguments
 ```
 
 ```
-  write_dataframe(root::String,outputfile::String,folder::String,models::Vector,cond::String,datafolder::String,fish::Bool)
+  write_dataframe(;root::String=".",csvfile::String="results.csv",resultfolder::String= "fit_result",models::Vector=["2"],conditions::String="MOCK",datafolder::String="HCT116_testdata",fish::Bool=true,G::Int = 2)
 
 collates fit data into a date frame and saves into a csv file
 
-Arguments
+Named Arguments
 - `root`: root folder
-- `outputfile`: name of an ouput file
+- `csvfile`: name of the output file
 - `folder`: name of folder with result files
 - `models`: vector of models (listed as strings), e.g. ["1","2"]
-- `cond`: condition of experiment
+- `conditions`: condition of experiment, hyphenate if multiple conditions
 - `datafolder`: name of folder where data is stored
 - `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
+- `G`: reference model used for rates
 ```
