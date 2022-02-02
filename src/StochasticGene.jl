@@ -15,13 +15,15 @@ using LSODA
 using DataFrames
 using FFTW
 using Downloads
+using CSV
 
 export
     rna_setup,
     makeswarm,
     fit_rna,
-    make_dataframe,
-    write_dataframe,
+    make_dataframes,
+    write_dataframes,
+    fix_filenames,
     fix,
     assemble_all,
     write_histograms,

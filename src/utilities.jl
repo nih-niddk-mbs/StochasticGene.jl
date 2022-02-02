@@ -19,6 +19,7 @@ const offchar = "LCOFF"
 const fishchar = "FISH"
 const txtstr = ".txt"
 
+
 """
 eig_decompose(M)
 

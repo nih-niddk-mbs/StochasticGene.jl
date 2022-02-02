@@ -453,18 +453,12 @@ function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
     return cv
 end
 function get_decay(gene,cell,root,col=2)
-    folder = joinpath(root,"data/halflives")
-    files = readdir(folder)
     a = nothing
-    for file in files
-        if occursin(cell,file)
-            path = joinpath(folder,file)
-            in = readdlm(path,',')
-            ind = findfirst(in[:,1] .== gene)
-            if ~isnothing(ind)
-                a = in[ind,col]
-            end
-        end
+    path = get_file(root,"data/halflives",cell,"csv")
+    in = readdlm(path,',')
+    ind = findfirst(in[:,1] .== gene)
+    if ~isnothing(ind)
+        a = in[ind,col]
     end
     get_decay(a,gene)
 end
@@ -478,18 +472,12 @@ function get_decay(a,gene)
     end
 end
 function alleles(gene,cell,root,col=3)
-    folder = joinpath(root,"data/alleles")
-    files = readdir(folder)
     a = nothing
-    for file in files
-        if occursin(cell,file)
-            path = joinpath(folder,file)
-            in = readdlm(path)
-            ind = findfirst(in[:,1] .== gene)
-            if ~isnothing(ind)
-                a = in[ind,col]
-            end
-        end
+    path = get_file(root,"data/alleles",cell,"csv")
+    in,h = readdlm(path,',',header=true)
+    ind = findfirst(in[:,1] .== gene)
+    if ~isnothing(ind)
+        a = in[ind,col]
     end
     if isnothing(a)
         return 2
@@ -714,7 +702,8 @@ FISHpath(gene,cond,datapath,root)
 
 generate path to FISH data
 """
-FISHpath(gene,cond,datapath,root) = joinpath(joinpath(joinpath(root,datapath),gene),cond)
+# FISHpath(gene,cond,datapath,root) = joinpath(joinpath(joinpath(root,datapath),gene),cond)
+FISHpath(gene,cond,datapath,root) = joinpath(root,datapath,gene,cond)
 
 """
 ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
@@ -730,7 +719,7 @@ path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
 function path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
     filelabel = label  * "_" * gene *  "_" * "$G" * "_" * "$nalleles" * ".txt"
     ratefile = type * "_" * filelabel
-    joinpath(root, joinpath(folder,ratefile))
+    joinpath(root,folder,ratefile)
 end
 
 """

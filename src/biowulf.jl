@@ -42,7 +42,7 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
+function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
@@ -55,9 +55,9 @@ end
 function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
     if label == "label"
         if fish
-            label = "FISH-ss-" * conds
+            label = "FISH-ss_" * conds
         else
-            label = "scRNA-ss-" * conds
+            label = "scRNA-ss_" * conds
         end
     end
     ngenes = length(genes)
@@ -85,6 +85,18 @@ end
 """
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
+
+function fix_filenames(folder,old="scRNA-ss-",new="scRNA-ss_")
+    files = readdir(folder)
+    for file in files
+        if occursin(old,file)
+            nfile = replace(file,old => new)
+            mv(joinpath(folder,file),joinpath(folder,nfile),force=true)
+        end
+    end
+end
+
+
 """
     setup(rootfolder = "scRNA")
 
@@ -108,23 +120,22 @@ function rna_setup(root = "scRNA")
     end
     if ~ispath(alleles)
         mkpath(alleles)
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/CH12_alleles.txt","$alleles/CH12_alleles.txt")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/alleles/HCT116_alleles_number.txt","$alleles/HCT116_alleles_number.txt")
-
     end
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/CH12_alleles.csv","$alleles/CH12_alleles.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/alleles/HCT116_alleles.csv","$alleles/HCT116_alleles.csv")
     if ~ispath(halflives)
         mkpath(halflives)
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/ESC_halflife.csv","$halflives/ESC_halflife.csv")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/CH12_halflife.csv","$halflives/CH12_halflife.csv")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/HCT116_halflife.csv","$halflives/HCT116_halflife.csv")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife.csv","$halflives/OcaB_halflife.csv")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/halflives/OcaB_halflife_repa.txt","$halflives/OcaB_halflife_repa.txt")
     end
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/ESC_halflife.csv","$halflives/ESC_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/CH12_halflife.csv","$halflives/CH12_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/HCT116_halflife.csv","$halflives/HCT116_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/OcaB_halflife.csv","$halflives/OcaB_halflife.csv")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/halflives/aB_halflife.csv","$halflives/aB_halflife.csv")
     if ~ispath(testdata)
         mkpath(testdata)
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/HCT116_testdata/CENPL_MOCK.txt","$testdata/CENPL_MOCK.txt")
-        Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/test/data/HCT116_testdata/MYC_MOCK.txt","$testdata/MYC_MOCK.txt")
     end
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/CENPL_MOCK.txt","$testdata/CENPL_MOCK.txt")
+    Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/MYC_MOCK.txt","$testdata/MYC_MOCK.txt")
 
 end
 
@@ -228,9 +239,9 @@ function get_halflives(file,thresholdlow::Float64,thresholdhigh::Float64)
 end
 
 function get_alleles(root,cell)
-    file = get_file(root,"data/alleles",cell,"txt")
+    file = get_file(root,"data/alleles",cell,"csv")
     if ~isnothing(file)
-        return readdlm(file)[2:end,1]
+        return readdlm(file,',')[2:end,1]
     else
         return nothing
     end
@@ -318,12 +329,12 @@ end
 
 function get_missing_genes(folder::String,cell,type,label,cond,model)
     genes = checkgenes(root,cond,folder,cell,0.,100000000.)
-    genes1=StochasticGene.getgenes(folder,type,label,cond,model)
+    genes1=StochasticGene.get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
 
 function get_missing_genes(genes::Vector,folder,type,label,cond,model)
-    genes1=StochasticGene.getgenes(folder,type,label,cond,model)
+    genes1=StochasticGene.get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
 

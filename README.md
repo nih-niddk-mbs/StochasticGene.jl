@@ -44,7 +44,13 @@ julia> ] test StochasticGene
 
 Command "]" brings you into the Julia Package environment, "Ctrl C" gets out
 
-StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders containing allele numbers and halflives.  The command `rna_setup` will create the folder structure.
+StochasticGene will be updated periodically, to update on Julia type
+
+```
+julia> ] update StochasticGene
+```
+
+StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  The files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.
 
 ```
 julia> using StochasticGene
@@ -72,7 +78,7 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
@@ -82,7 +88,7 @@ To fit all the genes in the data folder use:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",fittedparam=[1,2,3],resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
 ```
 
 To exit julia type:
@@ -94,7 +100,7 @@ julia> exit()
 To run the swarm file, type at the command line:
 
 ```
-[username@biowulf ~]$ swarm -f fit_scRNA-ss-MOCK_3.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
+[username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_3.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
 ```
 
 This will submit a job into the Biowulf queue.  To check the status of your job type:
@@ -103,9 +109,11 @@ This will submit a job into the Biowulf queue.  To check the status of your job 
 [username@biowulf ~]$ sjobs
 ```
 
-When the job finishes, Biowulf will create new swarm files in your folder. The fit results will be saved in the folder "results/HCT_scRNA".  There will be three files for each gene and model.  The file names will have the form
+When the job finishes, Biowulf will create new swarm files in your folder. The fit results will be saved in the folder `results/HCT_scRNA`.  There will be three files for each gene and model.  The file names will have the form
 
-`[filetype]_[label]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt`
+`[filetype]_[label]_[condition]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt`
+
+`_` (underscore) is a reserved character and should not be used in any of the file field such as `[label]`.
 
 filetypes are:
 
@@ -113,11 +121,11 @@ filetypes are:
 
 `measures`, which contain information about the quality of the fits
 
-`param_stats`, which contain detailed statistics of the parameter posteriors (the MCMC samples are not saved)
+`param-stats`, which contain detailed statistics of the parameter posteriors (the MCMC samples are not saved)
 
-In our example the files `rates_FISH-ss-MOCK_CENPL_2_2.txt`,`measures_FISH-ss-MOCK_CENPL_2_2.txt`,`param-stats_FISH-ss-MOCK_CENPL_2_2.txt` will be produced
+In our example the files `rates_HCT116-scRNA-ss_MOCK_CENPL_2_2.txt`,`measures_HCT116-scRNA-ss_MOCK_CENPL_2_2.txt`,`param-stats_HCT116-scRNA-ss_MOCK_CENPL_2_2.txt` will be produced
 
-The output convention is that underscore `_` is used to separate the 4 attributes of a run and thus should not be used elsewhere.
+The output convention is that underscore `_` is used to separate the 4 fields of a result file and thus should not be used in any of the fields.
 
 A data frame of the results can be constructed in Julia using the commands
 
@@ -126,7 +134,10 @@ julia> using StochasticGene
 ```
 
 ```
-julia> write_dataframe(rootfolder,outputfile,"HCT_FISHtest",["1","2"],"MOCK","data/HCT116_testdata",true)
+julia> write_dataframe(resultfolder,datafolder)
+
+e.g.
+julia> write_dataframe("results/HCT_scRNAtest","data/HCT116_testdata")
 ```
 
 ### Example Use on Unix
@@ -146,7 +157,7 @@ This will execute each gene in the swarm file sequentially. To run several genes
 ### API:
 
 ```
-  makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
+  makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
 
   makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=1,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
 
@@ -185,18 +196,13 @@ Arguments
 
 ```
 
+
 ```
-  write_dataframe(;root::String=".",csvfile::String="results.csv",resultfolder::String= "fit_result",models::Vector=["2"],conditions::String="MOCK",datafolder::String="HCT116_testdata",fish::Bool=true,G::Int = 2)
+  write_dataframes(resultfolder::String,datafolder::String)
 
-collates fit data into a date frame and saves into a csv file
+  collates run results into a csv file
 
-Named Arguments
-- `root`: root folder
-- `csvfile`: name of the output file
-- `folder`: name of folder with result files
-- `models`: vector of models (listed as strings), e.g. ["1","2"]
-- `conditions`: condition of experiment, hyphenate if multiple conditions
+Arguments
+- `resultfolder`: name of folder with result files
 - `datafolder`: name of folder where data is stored
-- `fish`: true if data is a FISH histogram (i.e. no technical loss is accounted for)
-- `G`: reference model used for rates
 ```
