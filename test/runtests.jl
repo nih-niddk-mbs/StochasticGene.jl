@@ -5,8 +5,11 @@ function fit_rna_test(root=".")
     gene = "CENPL"
     cell = "HCT116"
     fish = false
+    nalleles = 2
+    r = [0.01, 0.1, 1.0, 0.01006327034802035, 0.05]
+    decayrate = 0.01006327034802035
+    model = StochasticGene.model_rna(r,2,nalleles,1,.01,[1,2,3],(),decayrate,1.0,.05,fish)
     data = StochasticGene.data_rna(gene,"MOCK","data/HCT116_testdata",fish,"scRNA_test",root)
-    model = StochasticGene.model_rna(gene,cell,2,fish,.01,[1,2,3],(),"scRNA_test","scRNA_test",1,".",data,.05,1.0)
     options = StochasticGene.MHOptions(10000,2000,0,120.,1.,100.)
     fit,stats,waic = StochasticGene.run_mh(data,model,options,1);
     return stats.meanparam, fit.llml, model

@@ -38,7 +38,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior = 0.05,ejectprior = 1.0)
     gene = check_genename(gene,"[")
     datafolder = joinpath("data",datafolder)
     if occursin("-",datafolder)
@@ -54,7 +54,7 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
     end
     fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,ejectprior)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior = 0.05,ejectprior = 1.0)
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println(data.nRNA)
@@ -455,14 +455,17 @@ end
 function get_decay(gene,cell,root,col=2)
     a = nothing
     path = get_file(root,"data/halflives",cell,"csv")
-    in = readdlm(path,',')
-    ind = findfirst(in[:,1] .== gene)
-    if ~isnothing(ind)
-        a = in[ind,col]
+    if ~isnothing(path)
+        in = readdlm(path,',')
+        ind = findfirst(in[:,1] .== gene)
+        if ~isnothing(ind)
+            a = in[ind,col]
+        end
     end
     get_decay(a,gene)
 end
 get_decay(a::Float64) = log(2)/a/60.
+
 function get_decay(a,gene)
     if typeof(a) <: Number
         return get_decay(a)
@@ -474,10 +477,12 @@ end
 function alleles(gene,cell,root,col=3)
     a = nothing
     path = get_file(root,"data/alleles",cell,"csv")
-    in,h = readdlm(path,',',header=true)
-    ind = findfirst(in[:,1] .== gene)
-    if ~isnothing(ind)
-        a = in[ind,col]
+    if ~isnothing(path)
+        in,h = readdlm(path,',',header=true)
+        ind = findfirst(in[:,1] .== gene)
+        if ~isnothing(ind)
+            a = in[ind,col]
+        end
     end
     if isnothing(a)
         return 2
