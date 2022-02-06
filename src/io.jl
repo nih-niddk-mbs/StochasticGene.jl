@@ -32,8 +32,12 @@ Arguments
 function write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
     dfs = make_dataframes(resultfolder,datafolder)
     for df in dfs
-        csvfile = joinpath(resultfolder,df[1])
-        CSV.write(csvfile,df[2])
+        for dff in dfs
+            for dfff in dff
+                csvfile = joinpath(resultfolder,dfff[1])
+                CSV.write(csvfile,dfff[2])
+            end
+        end
     end
     df = best_measure(resultfolder,measure)
     for i in eachindex(df)
@@ -85,6 +89,7 @@ end
 
 get_gene(file::String) = fields(file).gene
 get_model(file::String) = fields(file).model
+get_label(file::String) = fields(file).label
 
 get_fields(parts::Vector{T}, field::Symbol) where T <: Fields = unique(getfield.(parts,field))
 
@@ -118,72 +123,28 @@ get_measuresummaryfiles(files::Vector) = get_summaryfiles(files,"measures")
 get_measuresummaryfiles(folder::String) = get_measuresummaryfiles(get_summaryfiles(folder))
 
 
-# function make_dataframe(labels::Vector,models::Vector,conds::String,resultfolder::String,datafolder::String,fish::Bool,G::Int = 2)
-#     # folder = joinpath(root,joinpath("results",folder))
-#     cond = [conds]
-#     dataconds = string.(split(conds,"-"))
-#     datafolder = repeat([datafolder],length(dataconds))
-#     if isempty(label)
-#         assemble_all(resultfolder,cond,models,fish)
-#     else
-#         assemble_all(resultfolder,label,cond,models,fish)
-#     end
-#     df = make_dataframe(folder,models::Vector,fish,G)
-#     add_mean(df,dataconds,datafolder,fish,root)
-# end
-
-# function make_dataframe_2cond(resultfolder,models::Vector,fish::Bool,G::Int = 2)
-#     files = readdir(resultfolder)
-#     mfiles = Vector{String}(undef,0)
-#     rfile = ""
-#     for file in files
-#         if occursin("measures",file)  && occursin("csv",file) && ~occursin("all",file)
-#             push!(mfiles,joinpath(resultfolder,file))
-#         elseif occursin("rates",file) && occursin("$(G).csv",file)
-#             rfile = joinpath(folder,file)
-#         end
-#     end
-#     r,head = readdlm(rfile,',',header=true)
-#     winner = best_model(models,mfiles)
-#     cond = [zeros(length(r[:,1]));ones(length(r[:,1]))];
-#     namelist = Symbol.(string.(head))
-#     rs = [vcat(r[:,[1;2:2*G+1]], r[:,[1;2*G+2:4*G+1]])  cond]
-#     df = DataFrame()
-#     df[!,namelist[1]] = string.(rs[:,1])
-#     for i in 2:2*G+1
-#         df[!,namelist[i]] = float.(rs[:,i])
-#     end
-#     if ~fish
-#         rs = [vcat(r[:,[1,2,3,4,5,10]], r[:,[1,6,7,8,9,10]])  cond winner]
-#         vcat(r[:,4*G + 2], r[:,4*G + 2])
-#         df = [df DataFrame(yield = float.(vcat(r[:,4*G + 2], r[:,4*G + 2])))]
-#     end
-#     df = [df DataFrame(cond = Int.(rs[:,end]))]
-#     df = innerjoin(df, winner, on = :Gene)
-# end
-
 function make_dataframes(resultfolder::String,datafolder::String)
     assemble_all(resultfolder)
     files = get_ratesummaryfiles(resultfolder)
     parts = fields.(files)
     models = get_models(parts)
     labels = get_labels(parts)
-    df = Vector{Tuple{String,DataFrame}}(undef,0)
+    df = Vector{Vector}(undef,0)
     for label in labels
-        lfiles = files[occursin.(label,files)]
-        dfl = Vector{DataFrame}(undef,0)
+        lfiles = files[label .== get_label.(files)]
+        dfl = Vector{Tuple}(undef,0)
         for model in models
-            mfiles = files[occursin.(model,lfiles)]
-            dfm = Vector{DataFrame}(undef,length(mfiles))
+            mfiles = lfiles[model .== get_model.(lfiles)]
+            dfm = Vector{DataFrame}(undef,0)
             for i in eachindex(mfiles)
-                dfm[i] = make_dataframe(joinpath(resultfolder,mfiles[i]),datafolder,isfish(mfiles[i]))
+                push!(dfm,make_dataframe(joinpath(resultfolder,mfiles[i]),datafolder,isfish(mfiles[i])))
             end
-            push!(df,("Summary_$(label)_$(model).csv",stack_dataframe(dfm)))
+            push!(dfl,("Summary_$(label)_$(model).csv",stack_dataframe(dfm)))
         end
+        push!(df,dfl)
     end
     return df
 end
-
 
 function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     df = read_dataframe(ratefile)
@@ -201,11 +162,11 @@ function add_measures(df,measurefile::String)
 end
 
 function add_mean(df::DataFrame,datafolder,fish::Bool)
-    root = string(split(abspath(datafolder),"data")[1])
+    # root = string(split(abspath(datafolder),"data")[1])
     m = Vector{Float64}(undef,length(df.Gene))
     i = 1
     for gene in df.Gene
-        m[i] = mean_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish,root))
+        m[i] = mean_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
         i += 1
     end
     insertcols!(df, :Expression => m)
@@ -246,26 +207,42 @@ function best_measure(folder::String,measure::Symbol)
     labels = get_labels(parts)
     df = Vector{Tuple{String,DataFrame}}(undef,0)
     for label in labels
-        lfiles = files[occursin.(label,files)]
+        lfiles = files[label .== get_label.(files)]
         dm = Vector{DataFrame}(undef,length(lfiles))
         for i in eachindex(files)
-            dm[i] = read_dataframe(joinpath(folder,files[i]))
-            insertcols!(dm[i], :Model => fill(get_model(files[i]),size(dm[i],1)))
+            if isfile(joinpath(folder,files[i]))
+                dm[i] = read_dataframe(joinpath(folder,files[i]))
+                insertcols!(dm[i], :Model => fill(get_model(files[i]),size(dm[i],1)))
+            end
         end
+        # println(best_measure(dm,measure))
         push!(df,("Winners_$(label).csv",best_measure(dm,measure)))
     end
     return df
 end
 
 function best_measure(dfs::Vector,measure::Symbol)
-    l = dfs[1][:,measure]
-    model = dfs[1][1, :Model]
-    for i in 2:length(dfs)
-        l = [l dfs[i][:,measure]]
-        model = [model dfs[i][1,:Model]]
+    df = DataFrame(Gene = [], Winner = [])
+    ngenes = Int[]
+    for d in dfs
+        ngenes = push!(ngenes,length(d[:,:Gene]))
     end
-    ind = argmin.(eachrow(l))
-    DataFrame(Gene = dfs[1].Gene, Winner = model[ind])
+    others = setdiff(eachindex(dfs),argmax(ngenes))
+    for d in eachrow(dfs[argmax(ngenes)])
+        l = d[measure]
+        model = d[:Model]
+        for k in others
+            dc = dfs[k][dfs[k].Gene .== d.Gene,:]
+            if ~isempty(dc)
+                if dc[1, measure] < l
+                    l = dc[1, measure]
+                    model = dc[1, :Model]
+                end
+            end
+        end
+        push!(df,Dict(:Gene => d.Gene, :Winner => model))
+    end
+    return df
 end
 
 
@@ -338,61 +315,6 @@ function assemble_stats(stattype,folder::String,label::String,cond::String,model
     assemble_files(folder,get_files(files,"stats",label,cond,model),outfile,header,readstats)
 end
 
-
-# function assemble_rates(folder::String,label::String,cond::String,model::String,append::String,header::Bool,type,fish)
-#     files = get_files(folder,"rates",label,cond,model)
-#     println(length(files))
-#     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * append)
-#     f = open(outfile,"w")
-#     if header
-#         r = readrates(joinpath(folder, files[1]),type)
-#         writedlm(f,ratelabels(model,length(r),false,fish),',')
-#     end
-#     for file in files
-#         gene = get_gene(file)
-#         target = joinpath(folder, file)
-#         r = readrates(target,type)
-#         writedlm(f,[gene r'],',')
-#     end
-#     close(f)
-# end
-#
-# function assemble_measures(folder::String,label::String,cond::String,model::String,append::String,header::Bool)
-#     files = get_files(folder,"measures",label,cond,model)
-#     # label = split(files[1],cond)[1]
-#     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model * append)
-#     f = open(outfile,"w")
-#     if header
-#         writedlm(f,["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature"],',')
-#     end
-#     for file in files
-#         gene = get_gene(file)
-#         target = joinpath(folder, file)
-#         r = readmeasures(target)
-#         writedlm(f,[gene r],',')
-#     end
-#     close(f)
-# end
-# function assemble_stats(stattype,folder::String,label::String,cond::String,model::String,append::String,header::Bool)
-#     files = get_files(folder,"param-stats",label,cond,model)
-#     # label = split(files[1],cond)[1]
-#     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model * append)
-#     f = open(outfile,"w")
-#     if header
-#         # r = readrates(joinpath(folder, files[1]),stattype)
-#         writedlm(f,["gene"],',')
-#         # writedlm(f,["Gene" "rate01" "sd" "rate10" "sd" "rate12" "sd" "rate21" "sd" "eject" "sd" "yield"],',')
-#     end
-#     for file in files
-#         gene = get_gene(file)
-#         target = joinpath(folder, file)
-#         r = readstats(target,stattype)
-#         println(r)
-#         writedlm(f,[gene r'],',')
-#     end
-#     close(f)
-# end
-
 function ratelabels(model,nsets,fish::Bool,sd::Bool=false)
     G = parse(Int,model)
     n = G-1
@@ -402,12 +324,6 @@ function ratelabels(model,nsets,fish::Bool,sd::Bool=false)
         Grates[1,2*i+2] = "Rate$(i+1)$i"
     end
     lenr = 2*G*nsets + Int(~fish)
-    # if fish
-    #     lenr =
-    #     nsets = div(lenr,2*G)
-    # else
-    #     nsets = div(lenr-1,2*G)
-    # end
     rates = [Grates "Eject" "Decay"]
     for i = 2:nsets
         rates = [rates Grates "Eject" "Decay"]
@@ -431,19 +347,6 @@ function get_all_rates(file::String,header::Bool)
 end
 
 
-
-# """
-# path_model(type::String,label::String,gene::String,model::String,nalleles,folder,root)
-#
-# """
-# function path_model(type::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,folder,root)
-#     file = type * filename(label,gene,G,R,nalleles)
-#     joinpath(root,folder,file)
-# end
-# function path_model(type::String,label::String,gene::String,G::Int,nalleles::Int,folder,root)
-#     file = type * filename(label,gene,G,nalleles)
-#     joinpath(root,folder,file)
-# end
 
 filename(data,model::AbstractGRMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
 filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,model.nalleles)

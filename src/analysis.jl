@@ -6,41 +6,6 @@ function isratefile(folder)
     any(occursin.(".csv",files) .& occursin.("rates",files))
 end
 
-
-# function best_model(models::Array,files::Array,measure = "AIC")
-#     println(models)
-#     println(files)
-#     m = length(files)
-#     contents = Array{Array,1}(undef,m)
-#     headers = Array{Array,1}(undef,m)
-#     len = 0
-#     for i in eachindex(models)
-#         contents[i],headers[i] = readdlm(files[i],',',header=true)
-#         len += length(headers[i][2:end])
-#     end
-#     if measure == "AIC"
-#         ind = occursin.("AIC",string.(headers[1])) .& .~ occursin.("WAIC",string.(headers[1]))
-#     else
-#         ind = occursin.(measure,string.(headers[1]))
-#     end
-#     ind = findfirst(vec(ind))
-#     winner = Array{Any,2}(undef,size(contents[1])[1],2)
-#     for row in 1:size(contents[1],1)
-#         content = contents[1][row,ind]
-#         for i in 1:m-1
-#             if contents[i][row,1] == contents[i+1][row,1]
-#                 content = hcat(content,contents[i+1][row,ind])
-#             end
-#         end
-#         winner[row,1] = contents[1][row,1]
-#         winner[row,2] = argmin(float.(vec(content)))
-#     end
-#     DataFrame(Gene = winner[:,1], Winner = Int.(winner[:,2]))
-# end
-
-
-
-
 function make_dataframe_transient(folder::String,winners::String = "")
     rs = Array{Any,2}(undef,0,8)
     files =readdir(folder)
@@ -279,82 +244,6 @@ function sample_non1_genes(infile,n)
 end
 
 
-# function best_model(file::String)
-#     contents,head = readdlm(file,',',header=true)
-#     f = open(file,"w")
-#     head = hcat(head,"Winning Model")
-#     writedlm(f,head,',')
-#     for row in eachrow(contents)
-#         if abs(row[11] - row[4]) > row[5] + row[12]
-#             if row[11] < row[4]
-#                 writedlm(f, hcat(permutedims(row),3),',')
-#             else
-#                 writedlm(f, hcat(permutedims(row),2),',')
-#             end
-#         else
-#             if row[13] < row[6]
-#                 writedlm(f, hcat(permutedims(row),3),',')
-#             else
-#                 writedlm(f, hcat(permutedims(row),2),',')
-#             end
-#         end
-#     end
-#     close(f)
-# end
-#
-# function get_winners()
-#
-#
-#
-# end
-# function get_winners(winners::String,n::Int)
-#     m,h = readdlm(winners,',',header=true)
-#     winner = repeat(m[:,end],n)
-# end
-#
-# function best_AIC(outfile,infile)
-#     contents,head = readdlm(infile,',',header=true)
-#     head = vec(head)
-#     ind = occursin.("AIC",string.(head)) .& .~ occursin.("WAIC",string.(head))
-#     f = open(outfile,"w")
-#     labels = "Gene"
-#     for i in 1:sum(ind)
-#         labels = vcat(labels,"Model $(i)")
-#     end
-#     labels = vcat(labels,"Winning Model")
-#     writedlm(f,[reshape(labels,1,length(labels))],',')
-#     for row in eachrow(contents)
-#         writedlm(f,[row[1] reshape(row[ind],1,length(row[ind])) argmin(float.(row[ind]))],',')
-#     end
-#     close(f)
-# end
-#
-# function best_waic(folder,root)
-#     folder = joinpath(root,folder)
-#     files =readdir(folder)
-#     lowest = Inf
-#     winner = ""
-#     for file in files
-#         if occursin("measures",file)
-#             contents,head = readdlm(joinpath(folder,file),',',header=true)
-#             waic = mean(float.(contents[:,4]))
-#             println(mean(float.(contents[:,2]))," ",waic," ",median(float.(contents[:,4]))," ",file)
-#             if waic < lowest
-#                 lowest = waic
-#                 winner = file
-#             end
-#         end
-#     end
-#     return winner,lowest
-# end
-#
-#
-# function bestmodel(measures2,measures3)
-#     m2,head = readdlm(infile,',',header=true)
-#     m3,head = readdlm(infile,',',header=true)
-# end
-
-
 function add_best_burst(filein,fileout,filemodel2,filemodel3)
     contents,head = readdlm(filein,',',header=true)
     burst2,head2 = readdlm(filemodel2,',',header=true)
@@ -586,6 +475,17 @@ function get_histogram_rna(gene,cond,datafolder,fish,root)
         h = read_fish(datapath,cond,.98)
     else
         datapath = StochasticGene.scRNApath(gene,cond,datafolder,root)
+        h = read_scrna(datapath,.99)
+    end
+    normalize_histogram(h)
+end
+
+function get_histogram_rna(gene,cond,datafolder,fish)
+    if fish
+        datapath = StochasticGene.FISHpath(gene,cond,datafolder)
+        h = read_fish(datapath,cond,.98)
+    else
+        datapath = StochasticGene.scRNApath(gene,cond,datafolder)
         h = read_scrna(datapath,.99)
     end
     normalize_histogram(h)

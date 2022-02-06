@@ -709,6 +709,7 @@ generate path to FISH data
 """
 # FISHpath(gene,cond,datapath,root) = joinpath(joinpath(joinpath(root,datapath),gene),cond)
 FISHpath(gene,cond,datapath,root) = joinpath(root,datapath,gene,cond)
+FISHpath(gene,cond,datapath) = joinpath(datapath,gene,cond)
 
 """
 ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
