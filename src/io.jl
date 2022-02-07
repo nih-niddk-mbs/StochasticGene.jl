@@ -47,20 +47,24 @@ function write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
     nothing
 end
 
+get_suffix(file::String) = chop(file,tail=4), last(file,3)
+
 
 function fields(file::String)
-    file,suffix = split(file,".")
+    file,suffix = get_suffix(file)
     v = split(file,"_")
     if suffix == "csv"
         if length(v) == 4
             s = Summary_Fields(v[1],v[2],v[3],v[4])
         else
+            println(file)
             throw("Incorrect file name format")
         end
     else
         if length(v) == 6
             s = Result_Fields(v[1],v[2],v[3],v[4],v[5],v[6])
         else
+            println(file)
             throw("Incorrect file name format")
         end
     end
