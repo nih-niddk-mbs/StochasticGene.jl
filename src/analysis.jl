@@ -1,5 +1,28 @@
 # analysis.jl
 
+"""
+    make_pca(file,npcs::Int,cond,datafolder,cell)
+
+    In development, not yet working
+
+"""
+function make_pca(file,npcs::Int,cond,datafolder,cell)
+    genes = checkgenes(cond,datafolder,cell,0.,Inf)
+    m,h = readdlm(file,header=true)
+    matrix = make_matrix(genes,m)
+    projection(fit(PCA,matrix;maxoutdim = npcs))
+end
+
+function make_matrix(genes,m)
+    matrix = Matrix{Float64}(undef,0,size(m,2)-1)
+    for r in eachrow(m)
+        if r[1] in genes
+            matrix = vcat(matrix,r[2:end]')
+        end
+    end
+    return matrix
+end
+
 
 function isratefile(folder)
     files=readdir(folder)

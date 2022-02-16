@@ -16,6 +16,7 @@ using DataFrames
 using FFTW
 using Downloads
 using CSV
+using MultivariateStats
 
 export
     rna_setup,

@@ -211,6 +211,16 @@ function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Floa
     end
 end
 
+function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
+    genes = intersect(get_halflives(".",cell,thresholdlow,thresholdhigh), get_genes(cond,datafolder))
+    alleles = get_alleles(".",cell)
+    if ~isnothing(alleles)
+        return intersect(genes,alleles)
+    else
+        return genes
+    end
+end
+
 function get_genes(root,cond,datafolder)
     genes = Vector{String}(undef,0)
     files = readdir(joinpath(root,datafolder))
@@ -221,6 +231,18 @@ function get_genes(root,cond,datafolder)
     end
     return genes
 end
+
+function get_genes(cond,datafolder)
+    genes = Vector{String}(undef,0)
+    files = readdir(datafolder)
+    for file in files
+        if occursin(cond,file)
+            push!(genes,split(file,"_")[1])
+        end
+    end
+    return genes
+end
+
 
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
     file = get_file(root,"data/halflives",cell,"csv")

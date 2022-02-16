@@ -498,8 +498,13 @@ readrates(file::String) = readrates(file,2)
 readrates(file::String,row::Int) = readrow(file,row)
 
 function readrow(file::String,row)
-    contents = readdlm(file,',')
-    contents[row,:]
+    if isfile(file) && ~isempty(read(file))
+        contents = readdlm(file,',')
+        return contents[row,:]
+    else
+        println(file)
+    end
+
 end
 
 function write_residency_G(fileout::String,filein::String,G,header)

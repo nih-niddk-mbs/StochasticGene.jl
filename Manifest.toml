@@ -31,6 +31,18 @@ git-tree-sha1 = "62e51b39331de8911e4a7ff6f5aaf38a5f4cc0ae"
 uuid = "ec485272-7323-5ecc-a04f-4719b315124d"
 version = "0.2.0"
 
+[[Arpack]]
+deps = ["Arpack_jll", "Libdl", "LinearAlgebra", "Logging"]
+git-tree-sha1 = "91ca22c4b8437da89b030f08d71db55a379ce958"
+uuid = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+version = "0.5.3"
+
+[[Arpack_jll]]
+deps = ["Libdl", "OpenBLAS_jll", "Pkg"]
+git-tree-sha1 = "e214a9b9bd1b4e1b4f15b22c0994862b66af7ff7"
+uuid = "68821587-b530-5797-8361-c406ea357684"
+version = "3.5.0+3"
+
 [[ArrayInterface]]
 deps = ["Compat", "IfElse", "LinearAlgebra", "Requires", "SparseArrays", "Static"]
 git-tree-sha1 = "1ee88c4c76caa995a885dc2f22a5d548dfbbc0ba"
@@ -939,6 +951,12 @@ deps = ["DataStructures", "LinearAlgebra", "MutableArithmetics"]
 git-tree-sha1 = "fa6ce8c91445e7cd54de662064090b14b1089a6d"
 uuid = "102ac46a-7ee4-5c85-9060-abc95bfdeaa3"
 version = "0.4.2"
+
+[[MultivariateStats]]
+deps = ["Arpack", "LinearAlgebra", "SparseArrays", "Statistics", "StatsBase"]
+git-tree-sha1 = "6d019f5a0465522bbfdd68ecfad7f86b535d6935"
+uuid = "6f286f6a-111f-5878-ab1e-185364afe411"
+version = "0.9.0"
 
 [[MutableArithmetics]]
 deps = ["LinearAlgebra", "SparseArrays", "Test"]
