@@ -156,7 +156,7 @@ function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     parts = fields(filename)
     G = parse(Int,parts.model)
     insertcols!(df, :Model => fill(G,size(df,1)))
-    df  = stack_dataframe(df,G,parts.cond,fish)
+    df  = stack_dataframe(df,G,parts.cond)
     add_mean(df,datafolder,fish)
 end
 
@@ -176,7 +176,7 @@ function add_mean(df::DataFrame,datafolder,fish::Bool)
     insertcols!(df, :Expression => m)
 end
 
-stack_dataframe(df,G,cond,fish) = stack_dataframe(separate_dataframe(df,G,cond,fish))
+stack_dataframe(df,G,cond) = stack_dataframe(separate_dataframe(df,G,cond))
 
 function stack_dataframe(df2::Vector{DataFrame})
     df = df2[1]
@@ -186,12 +186,12 @@ function stack_dataframe(df2::Vector{DataFrame})
     return df
 end
 
-function separate_dataframe(df,G,cond,fish)
+function separate_dataframe(df,G,cond)
     conds = split(cond,"-")
     nsets = length(conds)
     df2 = Vector{DataFrame}(undef,nsets)
     for i in 1:nsets
-        df2[i] = df[:,[1; 2*G*(i-1) + 2 : 2*G*i + 1;end-Int(~fish): end]]
+        df2[i] = df[:,[1; 2*G*(i-1) + 2 : 2*G*i + 1;2*G*nsets+2: end]]
         rename!(x->split(x,"_")[1],df2[i])
         insertcols!(df2[i], :Condition => fill(string(conds[i]),size(df,1)))
     end
@@ -327,18 +327,19 @@ function ratelabels(model,nsets,fish::Bool,sd::Bool=false)
         Grates[1,2*i+1] = "Rate$i$(i+1)"
         Grates[1,2*i+2] = "Rate$(i+1)$i"
     end
-    lenr = 2*G*nsets + Int(~fish)
     rates = [Grates "Eject" "Decay"]
     for i = 2:nsets
         rates = [rates Grates "Eject" "Decay"]
     end
-    if ~fish
+    if typeof(model) <: AbstractGMlossmodel
         rates = [rates "Yield"]
+        lenr = 2*G*nsets + 1
+    else
+        lenr = 2*G*nsets
     end
     if sd
         rates = reshape([rates; fill("SD",1,lenr)],1,2*(lenr))
     end
-
     return ["Gene" rates]
 end
 

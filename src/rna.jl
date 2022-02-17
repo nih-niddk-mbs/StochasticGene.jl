@@ -496,16 +496,19 @@ end
 """
 function get_decay(gene::String,cell::String,root::String,col::Int=2)
     path = get_file(root,"data/halflives",cell,"csv")
-    get_decay(gene,path,col)
+    if isnothing(path)
+        println(gene," has no decay time")
+        return -1.
+    else
+        get_decay(gene,path,col)
+    end
 end
 function get_decay(gene::String,path::String,col::Int)
     a = nothing
-    if ~isnothing(path)
-        in = readdlm(path,',')
-        ind = findfirst(in[:,1] .== gene)
-        if ~isnothing(ind)
-            a = in[ind,col]
-        end
+    in = readdlm(path,',')
+    ind = findfirst(in[:,1] .== gene)
+    if ~isnothing(ind)
+        a = in[ind,col]
     end
     get_decay(a,gene)
 end
@@ -527,22 +530,22 @@ get_decay(a::Float64) = log(2)/a/60.
 """
 function alleles(gene::String,cell::String,root::String,col::Int=3)
     path = get_file(root,"data/alleles",cell,"csv")
-    alleles(gene,path,col)
+    if isnothing(path)
+        return 2
+    else
+        alleles(gene,path,col)
+    end
 end
 
 function alleles(gene::String,path::String,col::Int=3)
     a = nothing
-    if ~isnothing(path)
-        in,h = readdlm(path,',',header=true)
-        ind = findfirst(in[:,1] .== gene)
-        if ~isnothing(ind)
-            a = in[ind,col]
-        end
-    end
-    if isnothing(a)
+    in,h = readdlm(path,',',header=true)
+    ind = findfirst(in[:,1] .== gene)
+    if isnothing(ind)
         return 2
     else
-        return Int(a)
+        a = in[ind,col]
+        return isnothing(a) ? 2 : Int(a)
     end
 end
 

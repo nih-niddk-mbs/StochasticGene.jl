@@ -3,7 +3,7 @@
 """
     make_pca(file,npcs::Int,cond,datafolder,cell)
 
-    In development, not yet working
+    Compute loadings for PCAs
 
 """
 function make_pca(file,npcs::Int,cond,datafolder,cell)
@@ -14,11 +14,9 @@ function make_pca(file,npcs::Int,cond,datafolder,cell)
 end
 
 function make_matrix(genes,m)
-    matrix = Matrix{Float64}(undef,0,size(m,2)-1)
-    for r in eachrow(m)
-        if r[1] in genes
-            matrix = vcat(matrix,r[2:end]')
-        end
+    matrix = Matrix{Float64}(undef,length(genes),size(m,2)-1)
+    for i in eachindex(genes)
+        matrix[i,:] = m[genes[i] .== m[:,1],2:end]'
     end
     return matrix
 end
