@@ -31,12 +31,12 @@ Arguments
 - `measure`: measure used to assess winner
 """
 
-function write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
-    write_dataframes(resultfolder,measure)
+function write_dataframes(resultfolder::String,datafolder::String,measure::Symbol=:AIC)
+    write_dataframes_only(resultfolder,datafolder)
     write_winners(resultfolder,measure)
 end
 
-function write_dataframes(resultfolder::String,measure)
+function write_dataframes_only(resultfolder::String,datafolder::String)
     dfs = make_dataframes(resultfolder,datafolder)
     for df in dfs
         for dff in dfs
