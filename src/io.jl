@@ -20,16 +20,23 @@ struct Summary_Fields <: Fields
 end
 
 """
-  write_dataframes(resultfolder::String,datafolder::String)
+  write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
+  write_dataframes(resultfolder::String,measure)
 
   collates run results into a csv file
 
 Arguments
 - `resultfolder`: name of folder with result files
 - `datafolder`: name of folder where data is stored
+- `measure`: measure used to assess winner
 """
 
 function write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
+    write_dataframes(resultfolder,measure)
+    write_winners(resultfolder,measure)
+end
+
+function write_dataframes(resultfolder::String,measure)
     dfs = make_dataframes(resultfolder,datafolder)
     for df in dfs
         for dff in dfs
@@ -39,6 +46,10 @@ function write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
             end
         end
     end
+    nothing
+end
+
+function write_winners(resultfolder,measure)
     df = best_measure(resultfolder,measure)
     for i in eachindex(df)
         csvfile = joinpath(resultfolder,df[i][1])
@@ -49,7 +60,7 @@ end
 
 get_suffix(file::String) = chop(file,tail=4), last(file,3)
 
-
+# does not account for csv files with less than 4 fields
 function fields(file::String)
     file,suffix = get_suffix(file)
     v = split(file,"_")
@@ -73,27 +84,48 @@ end
 
 isfish(string::String) = occursin("FISH",string)
 
-# function extractparts(file::String)
-#     file  = split(file,".")[1]
-#     split(file,"_")
-# end
+function get_genes(file::String)
+    r,header = readdlm(file,',',header=true)
+    return r[:,1]
+end
 
+get_genes(root,cond,datafolder) = get_genes(cond,joinpath(root,datafolder))
 
+function get_genes(cond,datafolder)
+    genes = Vector{String}(undef,0)
+    files = readdir(datafolder)
+    for file in files
+        if occursin(cond,file)
+            push!(genes,split(file,"_")[1])
+        end
+    end
+    return genes
+end
+"""
+    get_genes(folder,type,label,cond,model)
+
+"""
+# not working
 function get_genes(folder,type,label,cond,model)
     genes = Array{String,1}(undef,0)
     files = get_files(folder,type,label,cond,model)
     for file in files
         push!(genes,get_gene(file))
-
     end
     return genes
 end
 
-# get_attributes(parts::Vector,f) = unique(map(x->f(x),parts))
+get_files(folder::String,resultname,label,cond,model) = get_files(get_resultfiles(folder),resultname,label,cond,model)
+
+function get_files(files::Vector,resultname,label,cond,model)
+    parts = fields.(files)
+    files[(getfield.(parts,:name) .== resultname) .& (getfield.(parts,:label) .== label) .& (getfield.(parts,:cond) .== cond) .& (getfield.(parts,:model) .== model)]
+end
 
 get_gene(file::String) = fields(file).gene
 get_model(file::String) = fields(file).model
 get_label(file::String) = fields(file).label
+get_cond(file::String) = fields(file).cond
 
 get_fields(parts::Vector{T}, field::Symbol) where T <: Fields = unique(getfield.(parts,field))
 
@@ -106,12 +138,6 @@ get_conds(parts::Vector{T}) where T <: Fields = get_fields(parts,:cond)
 get_labels(parts::Vector{T}) where T <: Fields = get_fields(parts,:label)
 
 get_names(parts::Vector{T}) where T <: Fields = get_fields(parts,:name)
-
-get_files(folder::String,resultname,label,cond,model) = get_files(readdir(folder),resultname,label,cond,model)
-function get_files(files::Vector,resultname,label,cond,model)
-    parts = fields.(files)
-    files[(getfield.(parts,:name) .== resultname) .& (getfield.(parts,:label) .== label) .& (getfield.(parts,:cond) .== cond) .& (getfield.(parts,:model) .== model)]
-end
 
 get_resultfiles(folder::String) = get_resultfiles(readdir(folder))
 get_resultfiles(files::Vector) = files[occursin.(".txt",files) .& occursin.("_",files)]
@@ -176,6 +202,13 @@ function add_mean(df::DataFrame,datafolder,fish::Bool)
     insertcols!(df, :Expression => m)
 end
 
+add_time(csvfile::String,timestamp) = CSV.write(csvfile,add_time(read_dataframe(csvfile),timestamp))
+
+function add_time(df::DataFrame,timestamp)
+    insertcols!(df, :Time => timestamp)
+
+end
+
 stack_dataframe(df,G,cond) = stack_dataframe(separate_dataframe(df,G,cond))
 
 function stack_dataframe(df2::Vector{DataFrame})
@@ -204,29 +237,31 @@ best_AIC(folder::String) = best_measure(folder,:AIC)
 
 best_WAIC(folder::String) = best_measure(folder,:WAIC)
 
-
 function best_measure(folder::String,measure::Symbol)
     files = get_measuresummaryfiles(folder)
     parts = fields.(files)
     labels = get_labels(parts)
+    conds = get_conds(parts)
     df = Vector{Tuple{String,DataFrame}}(undef,0)
     for label in labels
-        lfiles = files[label .== get_label.(files)]
-        dm = Vector{DataFrame}(undef,length(lfiles))
-        for i in eachindex(files)
-            if isfile(joinpath(folder,files[i]))
-                dm[i] = read_dataframe(joinpath(folder,files[i]))
-                insertcols!(dm[i], :Model => fill(get_model(files[i]),size(dm[i],1)))
+        for cond in conds
+            lfiles = files[(label .== get_label.(files)) .& (cond .== get_cond.(files))]
+            dm = Vector{DataFrame}(undef,length(lfiles))
+            for i in eachindex(lfiles)
+                if isfile(joinpath(folder,lfiles[i]))
+                    dm[i] = read_dataframe(joinpath(folder,lfiles[i]))
+                    insertcols!(dm[i], :Model => fill(get_model(lfiles[i]),size(dm[i],1)))
+                end
             end
+            # println(best_measure(dm,measure))
+            push!(df,("Winners_$(label)_$(cond)_$(string(measure)).csv",best_measure(dm,measure)))
         end
-        # println(best_measure(dm,measure))
-        push!(df,("Winners_$(label).csv",best_measure(dm,measure)))
     end
     return df
 end
 
 function best_measure(dfs::Vector,measure::Symbol)
-    df = DataFrame(Gene = [], Winner = [])
+    df = DataFrame(Gene = [], Winner = [], Measure = [])
     ngenes = Int[]
     for d in dfs
         ngenes = push!(ngenes,length(d[:,:Gene]))
@@ -244,7 +279,7 @@ function best_measure(dfs::Vector,measure::Symbol)
                 end
             end
         end
-        push!(df,Dict(:Gene => d.Gene, :Winner => model))
+        push!(df,Dict(:Gene => d.Gene, :Winner => model, :Measure => l))
     end
     return df
 end

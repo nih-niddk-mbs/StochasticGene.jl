@@ -13,6 +13,34 @@ const genelength = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);(
 const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
 const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
 
+
+"""
+    fit_genetrap()
+
+"""
+
+function makeswarm_genetrap(sfile,juliafile,nchains,genes::Vector,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+write_swarmfile(sfile,nchains,juliafile,genes)
+write_fitfile(juliafile,nchains,G,R,nalleles,root,folder,maxtime,samplesteps)
+end
+
+function write_fitfile(fitfile,nchains,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+        f = open(fitfile,"w")
+        s =   '"'
+        write(f,"@everywhere using StochasticGene\n")
+        write(f,"@time fit_genetrap($nchains,ARGS[1],$G,$R,$nalleles,$s$root$s,$s$folder$s,$maxtime,$samplesteps)\n")
+        close(f)
+end
+
+function fit_genetrap(nchains,gene::String,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+    println(now())
+    data,model,options = genetrap(root,folder,"mean","gt",gene,G,R,nalleles,"",maxtime,samplesteps)
+    print_ll(data,model)
+    fit,stats,waic = run_mh(data,model,options,nchains)
+    finalize(data,model,fit,stats,waic,1.,folder,root)
+    println(now())
+end
+
 """
 genetrap()
 
@@ -22,16 +50,17 @@ root is the folder containing data and results
 FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
-function genetrap(root::String,infolder::String,rinchar::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method=1,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
-    r = readrates_genetrap(root,infolder,rinchar,gene,"$G$R",type)
+function genetrap(root::String,infolder::String,rtype::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,cyclesteps=0,annealsteps=0,warmupsteps=0,method=1,temp=1.,tempanneal=1.,tempfish=1.)
+    # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",type)
+    r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,type)
     println(r)
-    genetrap(root,r,label,gene,G,R,nalleles,type,maxtime,samplesteps,method,temp,tempfish,annealsteps,warmupsteps)
+    genetrap(root,r,label,gene,G,R,nalleles,type,maxtime,samplesteps,cyclesteps,annealsteps,warmupsteps,method,temp,tempanneal,tempfish)
 end
 
-function genetrap(root,r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,method,temp=1.,tempfish=1.,warmupsteps=0,annealsteps=0)
-    data = data_genetrap(root,label,gene,tempfish)
+function genetrap(root,r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,cyclesteps=0,annealsteps=0,warmupsteps=0,method=1,temp=1.,tempanneal=1.,tempfish=1.)
+    data = iszero(R) || iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
     model = model_genetrap(r,gene,G,R,nalleles,type,method)
-    options = MHOptions(samplesteps,annealsteps,warmupsteps,maxtime,temp)
+    options = MHOptions(samplesteps,cyclesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
     return data,model,options
 end
 
@@ -45,7 +74,12 @@ function data_genetrap(root,label,gene,tempfish=1.)
     else
         histFISH = readFISH_genetrap(root,gene,tempfish)
     end
-    RNALiveCellData(label,gene,LC[:,1],LC[:,3],LC[:,2],length(histFISH),histFISH)
+    RNALiveCellData(label,gene,length(histFISH),histFISH,LC[:,1],LC[:,3],LC[:,2])
+end
+
+function data_genetrap_FISH(root,label,gene)
+    histFISH = readFISH_genetrap(root,gene,1.)
+    RNAData(label,gene,length(histFISH),histFISH)
 end
 
 """
@@ -53,17 +87,29 @@ model_genetrap
 
 load model structure
 """
-function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,propcv=[.02*ones(2*(G-1));1e-4;1e-4*ones(R);.02*ones(R)],fittedparam=collect(1:num_rates(G,R)-1),Gprior=(.01,.5),Sprior=(.1,.5),Rcv=1e-2)
-    rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
-    # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
-    d = priordistributionGamma_genetrap(rm,rcv,G,R)
-    if r == 0
-        r = rm
+function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,)
+    if R == 0
+        fittedparam = collect(1:2*G-1)
+        decayrate = get_decay(halflife[gene])
+        if r == 0
+            r = setrate(G,1,decayrate,.1)[1]
+        end
+        d = prior_rna(r,G,1,fittedparam,decayrate,1.)
+        return  GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),Int}(G,nalleles,r,d,0.02,fittedparam,1)
     else
-        r = r[:,1]
+        propcv=[.02*ones(2*(G-1));1e-4;1e-4*ones(R);.02*ones(R)]
+        fittedparam=collect(1:num_rates(G,R)-1)
+        Gprior=(.01,.5)
+        Sprior=(.1,.5)
+        Rcv=1e-2
+        rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
+        if r == 0
+            r = rm
+        end
+        # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
+        d = priordistributionGamma_genetrap(rm,rcv,G,R)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
     end
-    GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
-    # GRSMmodel(G,R,nalleles,type,r,d,prop,fittedparam,method)
 end
 
 """
@@ -220,47 +266,81 @@ function countsFISH_genetrap(root,gene,clone=true)
 end
 
 """
-readrates_genetrap(infolder::String,rinchar::String,gene::String,model::String,type::String)
+readrates_genetrap(infolder::String,rtype::String,gene::String,model::String,type::String)
 
 Read in initial rates from previous runs
 """
-function readrates_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
-    if rinchar == "rml" || rinchar == "rlast"
-        rskip = 1
-        rstart = 1
-    elseif rinchar == "rmean"
-        rskip = 2
-        rstart = 1
-    elseif rinchar == "rquant"
-        rskip = 3
-        rstart = 2
+# function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+#     if rtype == "rml" || rtype == "rlast"
+#         rskip = 1
+#         rstart = 1
+#         row = 1
+#     elseif rtype == "rmean"
+#         rskip = 2
+#         rstart = 1
+#     elseif rtype == "rquant"
+#         rskip = 3
+#         rstart = 2
+#     end
+#     if type == "offeject" || type == "on"
+#         type = ""
+#     end
+#     infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
+#     print(gene," ","$G$R"," ",type)
+#     readrates_genetrap(infile,rstart,rskip)
+# end
+
+function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+    if rtype == "ml"
+        row = 1
+    elseif rtype == "mean"
+        row = 2
+    elseif rtype == "median"
+        row = 3
+    elseif rtype == "last"
+        row = 4
+    else
+        row = 2
     end
     if type == "offeject" || type == "on"
         type = ""
     end
-    # infile = "$resultpath/$infolder/$(gene)/$rinchar$model$type$txtstr"
-    infile = getratefolder_genetrap(root,infolder,rinchar,gene,model,type)
-    print(gene," ",model," ",type)
-    readrates_genetrap(infile,rstart,rskip)
+    infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
+    println(gene," ","$G$R"," ",type)
+    readrates_genetrap(infile,row)
 end
 
-function readrates_genetrap(infile::String,rstart::Int,rskip::Int)
+function readrates_genetrap(infile::String,row::Int)
     if isfile(infile) && ~isempty(read(infile))
-        r = readdlm(infile)
-        r = r[:,rstart:rskip:end]
-        println("")
-        return r
+        return readrates(infile,row)
     else
         println(" no prior")
         return 0
     end
-    nothing
 end
 
-function getratefolder_genetrap(root::String,infolder::String,rinchar::String,gene::String,model::String,type::String)
-    results = joinpath(root,"results")
-    infolder = joinpath(infolder,gene)
-    infolder = joinpath(infolder,rinchar * model * type * txtstr)
-    joinpath(results,infolder)
+# function readrates_genetrap(infile::String,rstart::Int,rskip::Int)
+#     if isfile(infile) && ~isempty(read(infile))
+#         r = readdlm(infile)
+#         r = r[:,rstart:rskip:end]
+#         println(r)
+#         return r
+#     else
+#         println(" no prior")
+#         return 0
+#     end
+#     nothing
+# end
 
+function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+    model = R == 0 ? "$G" : "$G$R"
+    file = "rates" * "_" * label * "_" * gene * "_" * model * "_"  * "$(nalleles)" * ".txt"
+    joinpath(infolder,file)
 end
+
+# function getratefolder_genetrap(root::String,infolder::String,rtype::String,gene::String,model::String,type::String)
+#     results = joinpath(root,"results")
+#     infolder = joinpath(infolder,gene)
+#     infolder = joinpath(infolder,rtype * model * type * txtstr)
+#     joinpath(results,infolder)
+# end

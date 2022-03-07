@@ -63,12 +63,12 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     infolder = joinpath("results",infolder)
 
     model = model_rna2(gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yieldprior,ejectprior)
-    options = StochasticGene.MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
+    options = MHOptions(samplesteps,0,warmupsteps,annealsteps,maxtime*.9,temp,tempanneal)
     if runcycle > 0
         model = cycle(nchains,fish,fixedeffects,model,data,options)
     end
     print_ll(data,model)
-    fit,stats,waic = StochasticGene.run_mh(data,model,options,nchains);
+    fit,stats,waic = run_mh(data,model,options,nchains);
     finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println(now())
     nothing
@@ -82,7 +82,7 @@ run_mh by cycling through individual parameters sequentially
 # function cycle(nchains,data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,yieldprior,maxtime,temp,tempanneal)
 function cycle(nchains,fish,fixedeffects,model,data,options)
     maxtime = options.maxtime/10
-    options = StochasticGene.MHOptions(100,0,0,maxtime,options.temp,options.tempanneal)
+    options = MHOptions(100,0,0,0,maxtime,options.temp,options.tempanneal)
     print_ll(data,model,"pre-cycle ll: ")
     t0 = time()
     nsets = length(data.nRNA)
@@ -95,8 +95,8 @@ function cycle(nchains,fish,fixedeffects,model,data,options)
     while (time() - t0 < maxtime)
         for i in eachindex(fittedparam)
             model = model_rna2(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,fish,0)
-            fit,_,_ = StochasticGene.run_mh(data,model,options,nchains);
-            r = StochasticGene.get_rates(fit.parml,model)
+            fit,_,_ = run_mh(data,model,options,nchains);
+            r = get_rates(fit.parml,model)
         end
     end
     return model_rna2(r,rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
@@ -108,7 +108,7 @@ rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
 output RNA histogram and downsampled FISH histogram with loss
 """
 function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
-    datarna = StochasticGene.histograms_rna(StochasticGene.scRNApath(gene,cond,rnafolder,root),gene,false)
+    datarna = histograms_rna(scRNApath(gene,cond,rnafolder,root),gene,false)
     f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
     return datarna[2],f
 end
@@ -119,8 +119,8 @@ reduce_fish(gene,cond,nhist,fishfolder,yield,root)
 sample fish histogram with loss (1-yield)
 """
 function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
-    fish = StochasticGene.histograms_rna(StochasticGene.FISHpath(gene,cond,fishfolder,root),gene,true)
-    StochasticGene.technical_loss(fish[2],yield,nhist)
+    fish = histograms_rna(FISHpath(gene,cond,fishfolder,root),gene,true)
+    technical_loss(fish[2],yield,nhist)
     fish[2]
 end
 
@@ -137,23 +137,23 @@ function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,
     if cond == "null"
         cond = ""
     end
-    datafile = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
-    StochasticGene.data_rna(datafile,label,gene,fish)
+    datafile = fish ? FISHpath(gene,cond,datafolder,root) : scRNApath(gene,cond,datafolder,root)
+    data_rna(datafile,label,gene,fish)
 end
 function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
     datafile = Array{String,1}(undef,length(cond))
     for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder,root) : scRNApath(gene,cond[i],datafolder,root)
     end
-    StochasticGene.data_rna(datafile,label,gene,fish)
+    data_rna(datafile,label,gene,fish)
 end
 function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
     datafile = Array{String,1}(undef,length(cond))
     for i in eachindex(cond)
-        datafile[i] = fish ? StochasticGene.FISHpath(gene,cond[i],datafolder,root) : StochasticGene.scRNApath(gene,cond[i],datafolder,root)
+        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder,root) : scRNApath(gene,cond[i],datafolder,root)
     end
     println(datafile)
-    StochasticGene.data_rna(datafile,label,gene,fish)
+    data_rna(datafile,label,gene,fish)
 end
 function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root,sets::Vector,time::Vector)
     if cond == "null"
@@ -162,10 +162,10 @@ function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,
     datafile =[]
     for set in sets
         folder = joinpath(datafolder,set)
-        path = fish ? StochasticGene.FISHpath(gene,cond,datafolder,root) : StochasticGene.scRNApath(gene,cond,datafolder,root)
+        path = fish ? FISHpath(gene,cond,datafolder,root) : scRNApath(gene,cond,datafolder,root)
         datafile = vcat(datafile,path)
     end
-    StochasticGene.data_rna(datafile,label,times,gene,false)
+    data_rna(datafile,label,times,gene,false)
 end
 function data_rna(path,name,time,gene::String,fish::Bool)
     len,h = histograms_rna(path,gene,fish)
@@ -206,7 +206,7 @@ function model_rna(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,fi
         cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
     end
     if G == 1
-        ejectrate = StochasticGene.mean_histogram(data.histRNA) * decayrate/nalleles
+        ejectrate = mean_histogram(data.histRNA) * decayrate/nalleles
         if ~fish
             ejectrate/=yield
         end
@@ -230,7 +230,7 @@ function model_rna2(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,f
         cv = getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose)
     end
     if G == 1
-        ejectrate = StochasticGene.mean_histogram(data.histRNA) * decayrate/nalleles
+        ejectrate = mean_histogram(data.histRNA) * decayrate/nalleles
         # if ~fish
         #     ejectrate/=yield
         # end
@@ -358,7 +358,7 @@ make structures for transient model fit
 function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     data = make_data(gene,cond,G,datafolder,label,nsets,root)
     model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
-    param,_ = StochasticGene.initial_proposal(model)
+    param,_ = initial_proposal(model)
     return param, data, model
 end
 
@@ -390,11 +390,11 @@ print_ll(param,data,model,message="initial ll:")
 compute and print initial loglikelihood
 """
 function print_ll(param,data,model,message)
-    ll,_ = StochasticGene.loglikelihood(param,data,model)
+    ll,_ = loglikelihood(param,data,model)
     println(message,ll)
 end
 function print_ll(data,model,message="initial ll: ")
-    ll,_ = StochasticGene.loglikelihood(get_param(model),data,model)
+    ll,_ = loglikelihood(get_param(model),data,model)
     println(message,ll)
 end
 
@@ -417,12 +417,12 @@ write out run results and print out final loglikelihood and deviance
 """
 function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     writefile = joinpath(root,resultfolder)
-    StochasticGene.writeall(writefile,fit,stats,waic,data,temp,model)
+    writeall(writefile,fit,stats,waic,data,temp,model)
     println("final max ll: ",fit.llml)
     # println(stats.meanparam)
-    print_ll(stats.meanparam,data,model,"mean ll: ")
+    print_ll(vec(stats.meanparam),data,model,"mean ll: ")
     println(fit.accept," ",fit.total)
-    println("Deviance: ",StochasticGene.deviance(fit,data,model))
+    println("Deviance: ",deviance(fit,data,model))
     println(stats.meanparam)
 end
 function getr(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets::Int,root,fish::Bool,verbose)
@@ -461,22 +461,22 @@ function getr2(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets:
     setr2(G,nsets,decayrate,ejectrate,yield,fish)
 end
 function getr(gene,G,nalleles,inlabel,infolder,root,verbose)
-    ratefile = StochasticGene.path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
+    ratefile = path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
     if verbose
         println(ratefile)
     end
     if isfile(ratefile)
-        r = StochasticGene.readrates(ratefile,2)
+        r = readrates(ratefile,2)
     else
         return nothing
     end
 end
 function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
-    paramfile = StochasticGene.path_Gmodel("param-stats",gene,G,nalleles,inlabel,infolder,root)
+    paramfile = path_Gmodel("param-stats",gene,G,nalleles,inlabel,infolder,root)
     if isfile(paramfile)
-        cv = StochasticGene.read_covlogparam(paramfile)
+        cv = read_covlogparam(paramfile)
         cv = float.(cv)
-        if ~StochasticGene.isposdef(cv) || size(cv)[1] != length(fittedparam)
+        if ~ isposdef(cv) || size(cv)[1] != length(fittedparam)
             cv = .02
         end
     else

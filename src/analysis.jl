@@ -1,28 +1,55 @@
 # analysis.jl
 
 """
-    make_pca(file,npcs::Int,cond,datafolder,cell)
+    make_pca(files::Vector,npcs::Int)
 
-    Compute loadings for PCAs
+    Compute PCA
 
 """
-function make_pca(file,npcs::Int,cond,datafolder,cell)
-    genes = checkgenes(cond,datafolder,cell,0.,Inf)
-    m,h = readdlm(file,header=true)
-    matrix = make_matrix(genes,m)
-    projection(fit(PCA,matrix;maxoutdim = npcs))
-end
 
-function make_matrix(genes,m)
-    matrix = Matrix{Float64}(undef,length(genes),size(m,2)-1)
-    for i in eachindex(genes)
-        matrix[i,:] = m[genes[i] .== m[:,1],2:end]'
+function make_combinedpca(files::Vector,npcs::Int)
+    m,h = readdlm(files[1],header=true)
+    for i in 2:length(files)
+        r,h = readdlm(files[i],header=true)
+        m = [m r[:,2:end]]
     end
-    return matrix
+    make_pca(m,npcs)
 end
 
+function make_pca(files::Vector,npcs::Int)
+    pca = Vector{DataFrame}(undef,length(files))
+    for i in 1:length(files)
+        pca[i] = make_pca(files[i],npcs)
+    end
+    return pca
+end
 
-function isratefile(folder)
+function make_pca(file::String,npcs::Int)
+    r,h = readdlm(file,header=true)
+    make_pca(r,npcs)
+end
+
+function make_pca(m::Matrix,npcs::Int)
+    M = fit(PCA,float.(m[:,2:end]),maxoutdim = npcs)
+    P = projection(M)
+    df = DataFrame(Gene = m[:,1])
+    i = 1
+    for p in eachcol(P)
+        insertcols!(df, Symbol("PC$i") => p)
+        i += 1
+    end
+    return df
+end
+
+function add_pca(df::DataFrame,files,npcs)
+    dpc = make_pca(files,npcs)
+    add_pca(df,dpc)
+end
+
+add_pca(df::DataFrame,dpc::DataFrame) = leftjoin(df,dpc,on = :Gene)
+
+
+function isratefile(folder::String)
     files=readdir(folder)
     any(occursin.(".csv",files) .& occursin.("rates",files))
 end
@@ -54,7 +81,7 @@ function write_moments(outfile,genelist,cond,datafolder,fish,root)
     writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
     for gene in genelist
         h = get_histogram_rna(gene,cond,datafolder,fish,root)
-        writedlm(f,[gene StochasticGene.mean_histogram(h) StochasticGene.var_histogram(h)],',')
+        writedlm(f,[gene mean_histogram(h) var_histogram(h)],',')
     end
     close(f)
 end
@@ -83,8 +110,8 @@ function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,roo
         gene = String(r[1])
         rates = r[2:end]
         rdecay = decay(root,cell,gene)
-        cov = StochasticGene.read_covparam(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
-        # mu = StochasticGene.readmean(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
+        cov = read_covparam(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
+        # mu = readmean(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
         if size(cov,2) < 2
             println(gene)
         end
@@ -153,17 +180,17 @@ end
 frequency(ron,sd,rdecay) = (ron/rdecay, sd/rdecay)
 
 function burstsize(reject::Float64,roff,covee,covoo,coveo::Float64)
-        v = StochasticGene.var_ratio(reject,roff,covee,covoo,coveo)
+        v = var_ratio(reject,roff,covee,covoo,coveo)
         return reject/roff, sqrt(v)
 end
 
 function ratestats(gene,G,folder,cond)
     filestats=joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1])
     filerates = joinpath(folder,getratefile(gene,G,folder,cond)[1])
-    rates = StochasticGene.readrates(filerates)
-    cov = StochasticGene.read_covparam(filestats)
-    # mu = StochasticGene.readmean(filestats)
-    # sd = StochasticGene.readsd(filestats)
+    rates = readrates(filerates)
+    cov = read_covparam(filestats)
+    # mu = readmean(filestats)
+    # sd = readsd(filestats)
     return rates, cov
 end
 
@@ -178,10 +205,10 @@ function meanofftime(r::Vector,n::Int,method::Int)
 end
 
 function offtime(r::Vector,n::Int,method::Int)
-    _,_,TI = StochasticGene.mat_G_DT(r,n)
-    vals,_ = StochasticGene.eig_decompose(TI)
+    _,_,TI = mat_G_DT(r,n)
+    vals,_ = eig_decompose(TI)
     minval = min(minimum(abs.(vals[vals.!=0])),.2)
-    StochasticGene.offtimeCDF(collect(1.:5/minval),r,n,TI,method)
+    offtimeCDF(collect(1.:5/minval),r,n,TI,method)
 end
 
 function offtime(gene::String,infile,n,method,root)
@@ -190,7 +217,6 @@ function offtime(gene::String,infile,n,method,root)
     offtime(r,n,method)
 
 end
-
 
 function join_files(file1::String,file2::String,outfile::String,addlabel::Bool=true)
     contents1,head1 = readdlm(file1,',',header=true)   # model G=2
@@ -252,7 +278,6 @@ function join_files(models::Array,files::Array,outfile::String,addlabel::Bool=tr
     close(f)
 end
 
-
 function sample_non1_genes(infile,n)
     contents,head = readdlm(infile,',',header=true)
     list = Array{String,1}(undef,0)
@@ -263,7 +288,6 @@ function sample_non1_genes(infile,n)
     end
     a = StatsBase.sample(list,n,replace=false)
 end
-
 
 function add_best_burst(filein,fileout,filemodel2,filemodel3)
     contents,head = readdlm(filein,',',header=true)
@@ -321,11 +345,11 @@ function replace_yield(G,folder1,folder2,cond1,cond2,outfolder)
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
     for file1 in files1
-        gene = StochasticGene.get_gene(file1)
+        gene = get_gene(file1)
         file2 = getratefile(files2,gene)
         outfile = joinpath(outfolder,file2)
-        r1 = StochasticGene.readrates(joinpath(folder1,file1))
-        r2 = StochasticGene.readrates(joinpath(folder2,file2))
+        r1 = readrates(joinpath(folder1,file1))
+        r2 = readrates(joinpath(folder2,file2))
         r2[end] = r1[end]
         f = open(outfile,"w")
         writedlm(f,[r2],',')
@@ -352,7 +376,7 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     files1 = getratefile(folder1,G,cond1)
     files2 = getratefile(folder2,G,cond2)
     for file1 in files1
-        gene = StochasticGene.get_gene(file1)
+        gene = get_gene(file1)
         file2 = getratefile(files2,gene)
         if file2 != 0
             file2=joinpath(folder2,file2)
@@ -365,10 +389,9 @@ function assemble_r(G,folder1,folder2,cond1,cond2,outfolder)
     end
 end
 
-
 function  assemble_r(ratefile1,ratefile2,outfile)
-    r1 = StochasticGene.readrates(ratefile1,2)
-    r2 = StochasticGene.readrates(ratefile2,2)
+    r1 = readrates(ratefile1,2)
+    r2 = readrates(ratefile2,2)
     r1[end] = clamp(r1[end],eps(Float64),1-eps(Float64))
     r = vcat(r1[1:end-1],r2[1:end-1],r1[end])
     f = open(outfile,"w")
@@ -389,7 +412,6 @@ function assemble_r(gene,G,folder1,folder2,cond1,cond2,outfolder)
     assemble_r(joinpath(folder1,file1),joinpath(folder2,file2),outfile)
 end
 
-
 function getratefile(files,gene)
     files = files[occursin.("_"*gene*"_",files)]
     if length(files) > 0
@@ -407,7 +429,6 @@ function getratefile(folder,G,cond)
     files[occursin.("_"*G*"_",files)]
 end
 
-
 getratefile(gene,G,folder,cond) = getfile("rate",gene,G,folder,cond)
 
 function getfile(type,gene::String,G::String,folder,cond)
@@ -417,7 +438,6 @@ function getfile(type,gene::String,G::String,folder,cond)
     files = files[occursin.("_"*G*"_",files)]
     files[occursin.("_"*cond*"_",files)]
 end
-
 
 function change_name(folder,oldname,newname)
     files = readdir(folder)
@@ -474,28 +494,25 @@ function write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datafolder:
     end
 end
 
-
-
 """
     histograms(r,cell,cond,n::Int,datafolder,root)
 
 """
-
 function histograms(rin,cell,cond,G::Int,datafolder,fish,root)
     gene = string(rin[1])
     r = float.(rin[2:end])
     data = data_rna(gene,cond,datafolder,fish,"label",root)
     nalleles = alleles(gene,cell,root)
     model = model_rna(r,[],G,nalleles,.01,[],(),fish)
-    StochasticGene.likelihoodarray(r,data,model)
+    likelihoodarray(r,data,model)
 end
 
 function get_histogram_rna(gene,cond,datafolder,fish,root)
     if fish
-        datapath = StochasticGene.FISHpath(gene,cond,datafolder,root)
+        datapath = FISHpath(gene,cond,datafolder,root)
         h = read_fish(datapath,cond,.98)
     else
-        datapath = StochasticGene.scRNApath(gene,cond,datafolder,root)
+        datapath = scRNApath(gene,cond,datafolder,root)
         h = read_scrna(datapath,.99)
     end
     normalize_histogram(h)
@@ -503,10 +520,10 @@ end
 
 function get_histogram_rna(gene,cond,datafolder,fish)
     if fish
-        datapath = StochasticGene.FISHpath(gene,cond,datafolder)
+        datapath = FISHpath(gene,cond,datafolder)
         h = read_fish(datapath,cond,.98)
     else
-        datapath = StochasticGene.scRNApath(gene,cond,datafolder)
+        datapath = scRNApath(gene,cond,datafolder)
         h = read_scrna(datapath,.99)
     end
     normalize_histogram(h)
@@ -563,27 +580,27 @@ function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
 end
 function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
     h=likelihoodfn(get_param(model),data,model)
-    figure(data.gene)
-    plot(h)
-    plot(normalize_histogram(data.histRNA))
+    plt = plot(h)
+    plot!(plt,normalize_histogram(data.histRNA))
+    display(plt)
     return h
 end
 
-function plot_histogram(data::RNALiveCellData,model)
+function plot_histogram(data::RNALiveCellData,model::AbstractGRMmodel)
     h=likelihoodtuple(model.rates,data,model)
-    figure(data.gene)
-    plot(h[1])
-    plot(normalize_histogram(data.OFF))
-    plot(h[2])
-    plot(normalize_histogram(data.ON))
-    figure("FISH")
-    plot(h[3])
-    plot(normalize_histogram(data.histRNA))
+    plt1 = plot(h[1])
+    plot!(plt1,normalize_histogram(data.OFF))
+    plt2 = plot(h[2])
+    plot!(plt2,normalize_histogram(data.ON))
+    plt3 = plot(h[3])
+    plot!(plt3,normalize_histogram(data.histRNA))
+    plt = plot(plt1,plt2,plt3,layout = (3,1))
+    display(plt)
     return h
 end
 
 function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
-    h=StochasticGene.likelihoodarray(model.rates,data,model)
+    h=likelihoodarray(model.rates,data,model)
     for i in eachindex(h)
         figure(data.gene *":T" * "$(data.time[i])")
         plot(h[i])
@@ -593,7 +610,7 @@ function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
 end
 
 function plot_histogram(data::RNAData{T1,T2},model::AbstractGMmodel,save = false) where {T1 <: Array, T2 <: Array}
-    m=StochasticGene.likelihoodarray(model.rates,data,model)
+    m=likelihoodarray(model.rates,data,model)
     println("*")
     for i in eachindex(m)
         plt=plot(m[i])
@@ -605,12 +622,12 @@ function plot_histogram(data::RNAData{T1,T2},model::AbstractGMmodel,save = false
         end
     end
     println(deviance(data,model))
-    println(StochasticGene.loglikelihood(get_param(model),data,model)[1])
+    println(loglikelihood(get_param(model),data,model)[1])
     return m
 end
 
 function plot_histogram(data::RNAData,model::AbstractGMmodel)
-    h=StochasticGene.likelihoodfn(get_param(model),data,model)
+    h=likelihoodfn(get_param(model),data,model)
     plt=plot(h)
     plot!(normalize_histogram(data.histRNA))
     display(plt)
@@ -618,14 +635,14 @@ function plot_histogram(data::RNAData,model::AbstractGMmodel)
 end
 
 function plot_model(r,n,nhist,nalleles,yield)
-    h= StochasticGene.steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
+    h= steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
     plt = plot(h)
     display(plt)
     return h
 end
 
 function plot_model(r,n,nhist,nalleles)
-    h= StochasticGene.steady_state(r[1:2*n+2],n,nhist,nalleles)
+    h= steady_state(r[1:2*n+2],n,nhist,nalleles)
     plt = plot(h)
     display(plt)
     return h

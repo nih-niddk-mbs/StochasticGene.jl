@@ -296,6 +296,10 @@ function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
     return [modelOFF;modelON;histF]
 end
 
+likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) = 
+    steady_state(get_rates(param,model),model.G-1,model.R,data.nRNA,model.nalleles)
+
+
 """
 likelihoodarray(r,data,model)
 
@@ -467,7 +471,7 @@ setr(r,model)
 function setr(r,model::GRSMmodel)
     n = model.G-1
     nr = model.R
-    eta = geteta(r,n,nr)
+    eta = get_eta(r,n,nr)
     r[2*n + 1 + nr + 1:2*n + 1 + nr + nr] = eta
     r
 end

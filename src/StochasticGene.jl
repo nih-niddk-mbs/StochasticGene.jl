@@ -26,6 +26,7 @@ export
     write_dataframes,
     fix_filenames,
     fix,
+    large_deviance,
     assemble_all,
     write_histograms,
     plot_histogram,

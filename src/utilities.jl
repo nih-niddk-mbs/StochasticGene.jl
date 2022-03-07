@@ -520,8 +520,8 @@ end
 #     fish = false
 #     data = data_rna(gene,"MOCK","data/HCT116_testdata",fish,"scRNA_test",root)
 #     model = model_rna(gene,cell,2,fish,.01,[1,2,3],(),"scRNA_test","scRNA_test",1,".",data,.05,1.0)
-#     options = StochasticGene.MHOptions(10000,2000,0,120.,1.,100.)
-#     fit,stats,waic = StochasticGene.run_mh(data,model,options,1);
+#     options = MHOptions(10000,2000,0,120.,1.,100.)
+#     fit,stats,waic = run_mh(data,model,options,1);
 #     return stats.meanparam, fit.llml
 # end
 #

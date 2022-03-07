@@ -6,6 +6,7 @@ Structure for MH options
 """
 struct MHOptions <: Options
     samplesteps::Int64
+    cyclesteps::Int64
     warmupsteps::Int64
     annealsteps::Int64
     maxtime::Float64
@@ -101,21 +102,46 @@ scRNA or FISH mRNA data, and burst correlations between alleles
 function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
+    cyclefrac = .1
+    maxtime = options.maxtime*(1-cyclefrac)
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
+    parml = param
+    llml = ll
+    proposalcv = model.proposal
     if options.annealsteps > 0
-        param,parml,ll,llml,predictions,temp = anneal(predictions,param,param,ll,ll,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),options.maxtime*options.annealsteps/totalsteps)
+        param,parml,ll,llml,predictions,temp = anneal(predictions,param,parml,ll,llml,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),maxtime*options.annealsteps/totalsteps)
+    end
+    if options.cyclesteps > 0
+        param,parml,ll,llml,predictions = cycle(predictions,param,parml,ll,llml,data,model,options.cyclesteps,options.temp,time(),options.maxtime * cyclefrac)
     end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),options.maxtime*options.warmupsteps/totalsteps)
-    else
-        parml = param
-        llml = ll
-        proposalcv = model.proposal
+        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
     end
-    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),options.maxtime*options.samplesteps/totalsteps)
+    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
+
+function cycle(predictions,param,parml,ll,llml,data,model,steps,temp,t1,maxtime)
+    prior = logprior(param,model)
+    d=proposal_dist(param,.02)
+    fittedparam = model.fittedparam
+    while time() - t1 < maxtime
+        for i in eachindex(fittedparam)
+            for step in 1:steps
+                paramt,dt = proposal(d,.02)
+                priort = logprior(paramt,model)
+                llt,predictionst = loglikelihood(paramt,data,model)
+                accept,predictions,param,ll,prior,d = mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
+                if ll < llml
+                    llml,parml = ll,param
+                end
+            end
+        end
+    end
+    return param,parml,ll,llml,predictions
+end
+
 """
 function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
@@ -159,7 +185,7 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     end
     covlogparam = cov(log.(parout[:,1:step]'))
     if isposdef((2.4)^2 / length(param)*covlogparam)
-        d=proposal(param,covlogparam)
+        d=proposal_dist(param,covlogparam)
         proposalcv = covlogparam
     end
     return param,parml,ll,llml,d,proposalcv,predictions
@@ -193,6 +219,29 @@ function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     Fit(parout[:,1:step],llout[1:step],parml,llml,ppd,pwaic,prior,accepttotal,step)
 end
 
+# function cycle(nchains,fish,fixedeffects,model,data,options)
+#     maxtime = options.maxtime/10
+#     options = MHOptions(100,0,0,maxtime,options.temp,options.tempanneal)
+#     print_ll(data,model,"pre-cycle ll: ")
+#     t0 = time()
+#     nsets = length(data.nRNA)
+#     r = model.rates
+#     nalleles = model.nalleles
+#     G = model.G
+#     fittedparam = model.fittedparam
+#     cv = 0.02
+#     rateprior = model.rateprior
+#     while (time() - t0 < maxtime)
+#         for i in eachindex(fittedparam)
+#             model = model_rna2(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,fish,0)
+#             fit,_,_ = run_mh(data,model,options,nchains);
+#             r = get_rates(fit.parml,model)
+#         end
+#     end
+#     return model_rna2(r,rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
+# end
+
+
 """
 mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
 
@@ -202,8 +251,17 @@ function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
     paramt,dt = proposal(d,proposalcv)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
+    mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
+    # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
+    #     return 1,predictionst,paramt,llt,priort,dt
+    # else
+    #     return 0,predictions,param,ll,prior,d
+    # end
+end
+
+function mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
     if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
-        return 1,predictionst,paramt,llt,priort,d
+        return 1,predictionst,paramt,llt,priort,dt
     else
         return 0,predictions,param,ll,prior,d
     end
@@ -235,7 +293,7 @@ return parameters to be fitted and an initial proposal distribution
 """
 function initial_proposal(model)
     param = get_param(model)
-    d=proposal(param,model.proposal)
+    d=proposal_dist(param,model.proposal)
     return param,d
 end
 """
@@ -245,18 +303,18 @@ return rand(d) and proposal distribution for cv (vector or covariance)
 """
 function proposal(d::Distribution,cv)
     param = rand(d)
-    return param, proposal(param,cv)
+    return param, proposal_dist(param,cv)
 end
 # function proposal(d::Product,cv)
 #     param = rand(d)
-#     return param, proposal(param,cv)
+#     return param, proposal_dist(param,cv)
 # end
 """
-proposal(param,cv)
+proposal_dist(param,cv)
 return proposal distribution specified by location and scale
 
 """
-# function proposal(param,cv::Vector)
+# function proposal_dist(param,cv::Vector)
 #     d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
 #     for i in eachindex(param)
 #         push!(d,truncated(Normal(param[i],cv[i]*param[i]),0.,1000.))
@@ -264,9 +322,9 @@ return proposal distribution specified by location and scale
 #     product_distribution(d)
 # end
 
-proposal(param::Float64,cv::Float64) = LogNormal(log(max(param,1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
+proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
 
-function proposal(param::Vector,cv::Float64)
+function proposal_dist(param::Vector,cv::Float64)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
         push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
@@ -274,7 +332,7 @@ function proposal(param::Vector,cv::Float64)
     product_distribution(d)
 end
 
-function proposal(param::Vector,cv::Vector)
+function proposal_dist(param::Vector,cv::Vector)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
         push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
@@ -282,7 +340,7 @@ function proposal(param::Vector,cv::Vector)
     product_distribution(d)
 end
 
-function proposal(param::Vector,cov::Matrix)
+function proposal_dist(param::Vector,cov::Matrix)
     c = (2.4)^2 / length(param)
     if isposdef(c*cov)
         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*cov)

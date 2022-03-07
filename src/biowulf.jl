@@ -1,12 +1,10 @@
 # biowulf.jl
 # functions for use on the NIH Biowulf super computer
 
-
-
 """
-    makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
+akeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
 
-    makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
+makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
 
 Arguments
     - `G`: number of gene states
@@ -42,25 +40,29 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
+function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv)
+    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp="",nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv)
 end
 
 function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
     if label == "label"
         if fish
-            label = "FISH-ss_" * conds
-            inlabel = label
+            label = "FISH-ss"
         else
-            label = "scRNA-ss_" * conds
-            inlabel = label
+            label = "scRNA-ss"
         end
+        label = label * "-" * cell
+        if ~isempty(timestamp)
+            label = label * "-" * timestamp
+        end
+        label = label * "_" * conds
+        inlabel = label
     end
     ngenes = length(genes)
     println("number of genes: ",ngenes)
@@ -73,7 +75,6 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",
         end
     else
         sfile = swarmfile * "_" * label * "_" * "$G" * ".swarm"
-        f = open(sfile,"w")
         write_swarmfile(sfile,nchains,juliafile,genes)
     end
     write_fitfile(juliafile,nchains,cell,conds,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,cv)
@@ -221,27 +222,27 @@ function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,t
     end
 end
 
-function get_genes(root,cond,datafolder)
-    genes = Vector{String}(undef,0)
-    files = readdir(joinpath(root,datafolder))
-    for file in files
-        if occursin(cond,file)
-            push!(genes,split(file,"_")[1])
-        end
-    end
-    return genes
-end
-
-function get_genes(cond,datafolder)
-    genes = Vector{String}(undef,0)
-    files = readdir(datafolder)
-    for file in files
-        if occursin(cond,file)
-            push!(genes,split(file,"_")[1])
-        end
-    end
-    return genes
-end
+# function get_genes(root,cond,datafolder)
+#     genes = Vector{String}(undef,0)
+#     files = readdir(joinpath(root,datafolder))
+#     for file in files
+#         if occursin(cond,file)
+#             push!(genes,split(file,"_")[1])
+#         end
+#     end
+#     return genes
+# end
+#
+# function get_genes(cond,datafolder)
+#     genes = Vector{String}(undef,0)
+#     files = readdir(datafolder)
+#     for file in files
+#         if occursin(cond,file)
+#             push!(genes,split(file,"_")[1])
+#         end
+#     end
+#     return genes
+# end
 
 
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
@@ -287,8 +288,6 @@ function get_file(root,folder,type,suffix)
     end
     nothing
 end
-
-
 
 function findjobs(folder)
     files = readdir(folder)
@@ -354,15 +353,18 @@ function collate(folders,type="rates_scRNA_T120")
     end
 end
 
-
-function get_missing_genes(folder::String,cell,type,label,cond,model)
-    genes = checkgenes(root,cond,folder,cell,0.,100000000.)
-    genes1=StochasticGene.get_genes(folder,type,label,cond,model)
+"""
+    get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
+"""
+# get_genes not working
+function get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
+    genes = checkgenes(root,cond,datafolder,cell,0.,100000000.)
+    genes1=get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
 
 function get_missing_genes(genes::Vector,folder,type,label,cond,model)
-    genes1=StochasticGene.get_genes(folder,type,label,cond,model)
+    genes1=get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
 
