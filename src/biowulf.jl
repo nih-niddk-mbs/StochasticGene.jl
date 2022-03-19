@@ -47,7 +47,7 @@ function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label"
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp="",nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv)
+    makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp=timestamp,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv)
 end
 
 function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
@@ -222,28 +222,6 @@ function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,t
     end
 end
 
-# function get_genes(root,cond,datafolder)
-#     genes = Vector{String}(undef,0)
-#     files = readdir(joinpath(root,datafolder))
-#     for file in files
-#         if occursin(cond,file)
-#             push!(genes,split(file,"_")[1])
-#         end
-#     end
-#     return genes
-# end
-#
-# function get_genes(cond,datafolder)
-#     genes = Vector{String}(undef,0)
-#     files = readdir(datafolder)
-#     for file in files
-#         if occursin(cond,file)
-#             push!(genes,split(file,"_")[1])
-#         end
-#     end
-#     return genes
-# end
-
 
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
     file = get_file(root,"data/halflives",cell,"csv")
@@ -356,9 +334,9 @@ end
 """
     get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
 """
-# get_genes not working
-function get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
-    genes = checkgenes(root,cond,datafolder,cell,0.,100000000.)
+
+function get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model,root=".")
+    genes = checkgenes(root,cond,datafolder,cell,0.,1e8)
     genes1=get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
@@ -367,6 +345,8 @@ function get_missing_genes(genes::Vector,folder,type,label,cond,model)
     genes1=get_genes(folder,type,label,cond,model)
     union(setdiff(genes1,genes),setdiff(genes,genes1))
 end
+
+get_missing_genes(genes,genes1) = union(setdiff(genes1,genes),setdiff(genes,genes1))
 
 function scan_swarmfiles(jobid,folder=".")
     if ~(typeof(jobid) <: String)

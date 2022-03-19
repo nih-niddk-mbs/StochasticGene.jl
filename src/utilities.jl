@@ -349,6 +349,12 @@ function var_histogram(x)
     m2_histogram(x) - mean_histogram(x)^2
 end
 
+function moment_histogram(x,n)
+    y = collect(1:length(x)) .- 1
+    v = (y .- mean_histogram(x)).^n
+    v' * x/sum(x)
+end
+
 function factorial_moment(h::Vector,n)
     m = 0
     for i in n:length(h)

@@ -38,7 +38,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior = 0.05,ejectprior = 1.0)
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".")
     gene = check_genename(gene,"[")
     datafolder = joinpath("data",datafolder)
     if occursin("-",datafolder)
@@ -52,9 +52,9 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
     else
         data = data_rna(gene,datacond,datafolder,fish,label,root)
     end
-    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,ejectprior)
+    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior = 0.05,ejectprior = 1.0)
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".")
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println(data.nRNA)
@@ -62,7 +62,7 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     resultfolder = joinpath("results",resultfolder)
     infolder = joinpath("results",infolder)
 
-    model = model_rna2(gene,cell,G,fish,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yieldprior,ejectprior)
+    model = model_rna(gene,cell,G,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data)
     options = MHOptions(samplesteps,0,warmupsteps,annealsteps,maxtime*.9,temp,tempanneal)
     if runcycle > 0
         model = cycle(nchains,fish,fixedeffects,model,data,options)
@@ -94,7 +94,7 @@ function cycle(nchains,fish,fixedeffects,model,data,options)
     rateprior = model.rateprior
     while (time() - t0 < maxtime)
         for i in eachindex(fittedparam)
-            model = model_rna2(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,fish,0)
+            model = model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
             fit,_,_ = run_mh(data,model,options,nchains);
             r = get_rates(fit.parml,model)
         end
@@ -191,7 +191,7 @@ model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
 make model structure
 
 """
-function model_rna(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yield,ejectrate,verbose=true)
+function model_rna(gene::String,cell::String,G::Int,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
     decayrate = get_decay(gene,cell,root)
     nalleles = alleles(gene,cell,root)
     if verbose
@@ -207,12 +207,11 @@ function model_rna(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,fi
     end
     if G == 1
         ejectrate = mean_histogram(data.histRNA) * decayrate/nalleles
-        if ~fish
-            ejectrate/=yield
-        end
+    else
+        ejectrate = 1.
     end
-    r = getr(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets,root,fish,verbose)
-    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,ejectrate,yield,fish)
+    r = getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets,root,verbose)
+    model = model_rna(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,ejectrate)
     return model
 end
 function model_rna2(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yield,ejectrate,verbose=true)
@@ -231,37 +230,21 @@ function model_rna2(gene::String,cell::String,G::Int,fish::Bool,cv,fittedparam,f
     end
     if G == 1
         ejectrate = mean_histogram(data.histRNA) * decayrate/nalleles
-        # if ~fish
-        #     ejectrate/=yield
-        # end
     end
     r = getr2(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets,root,fish,verbose)
     model = model_rna2(r,G,nalleles,nsets,cv,fittedparam,fixedeffects,decayrate,ejectrate,yield,fish)
     return model
 end
 
-
-function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam,fixedeffects,decayprior,ejectprior,yieldprior,fish::Bool,method=0)
-    if fish
-        d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior)
-    else
-        d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,yieldprior)
-    end
-    model_rna(r,d,G,nalleles,propcv,fittedparam,fixedeffects,fish,method)
+function model_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam,fixedeffects,decayprior,ejectprior)
+    d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior)
+    model_rna(r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects)
 end
-function model_rna(r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,fish,method)
-    if fish
-        if length(fixedeffects) > 0
-            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
-        else
-            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-        end
+function model_rna(r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,method=0)
+    if length(fixedeffects) > 0
+        model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
     else
-        if length(fixedeffects) > 0
-            model = GMfixedeffectslossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method)
-        else
-            model = GMlossmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-        end
+        model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
     end
     return model
 end
@@ -425,13 +408,16 @@ function finalize(data,model,fit,stats,waic,temp,resultfolder,root)
     println("Deviance: ",deviance(fit,data,model))
     println(stats.meanparam)
 end
-function getr(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets::Int,root,fish::Bool,verbose)
+function getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
     r = getr(gene,G,nalleles,inlabel,infolder,root,verbose)
     if ~isnothing(r)
         if length(r) == 2*G*nsets + 1
-            r[2*G*nsets + 1] = clamp(r[2*G*nsets + 1],eps(Float64),1-eps(Float64))
+            for n in nsets
+                r[2*G*n-1] *= clamp(r[2*G*nsets + 1],eps(Float64),1-eps(Float64))
+            end
+            r = r[1:2*G*nsets]
         end
-        if length(r) == 2*G*nsets + Int(~fish)
+        if length(r) == 2*G*nsets
             if verbose
                 println(r)
             end
@@ -439,7 +425,7 @@ function getr(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets::
         end
     end
     println("No r")
-    setr(G,nsets,decayrate,ejectrate,yield,fish)
+    setr(G,nsets,decayrate,ejectrate)
 end
 function getr2(gene,G,nalleles,decayrate,ejectrate,yield,inlabel,infolder,nsets::Int,root,fish::Bool,verbose)
     r = getr(gene,G,nalleles,inlabel,infolder,root,verbose)
@@ -562,19 +548,19 @@ r[1:2G] = model rates
 r[2G+1] = additive noise mean
 r[2G + 1 + 1:length(noisepriors)] = remaining fraction after thresholding (i.e. yield)
 """
-function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,ejectprior::Float64,yieldprior::Float64,f=LogNormal)
-        ind = 2*G * nsets + 1
-        if length(r) == ind
-            rm,rcv = setrate(G,nsets,decayprior,ejectprior,yieldprior)
-            if in(ind,fittedparam)
-                return distributionBeta_array(rm[fittedparam],rcv[fittedparam],findfirst(ind.==fittedparam),f)
-            else
-                return distribution_array(rm[fittedparam],rcv[fittedparam],f)
-            end
-        else
-            throw("rates have wrong length")
-        end
-end
+# function prior_rna(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,ejectprior::Float64,f=LogNormal)
+#         ind = 2*G * nsets + 1
+#         if length(r) == ind
+#             rm,rcv = setrate(G,nsets,decayprior,ejectprior,yieldprior)
+#             if in(ind,fittedparam)
+#                 return distributionBeta_array(rm[fittedparam],rcv[fittedparam],findfirst(ind.==fittedparam),f)
+#             else
+#                 return distribution_array(rm[fittedparam],rcv[fittedparam],f)
+#             end
+#         else
+#             throw("rates have wrong length")
+#         end
+# end
 function prior_rna2(r::Vector,G::Int,nsets::Int,fittedparam::Array,decayprior::Float64,ejectprior::Float64,yieldprior::Float64,f=LogNormal)
         ind = 2*G * nsets
         if length(r) == ind
@@ -611,12 +597,8 @@ end
 
 """
 
-function setr(G,nsets,decayrate,ejectrate,yield,fish)
-    if fish
-        r = setrate(G,nsets,decayrate,ejectrate)[1]
-    else
-        r = setrate(G,nsets,decayrate,ejectrate,yield)[1]
-    end
+function setr(G,nsets,decayrate,ejectrate)
+    r = setrate(G,nsets,decayrate,ejectrate)[1]
     println(r)
     return r
 end
@@ -638,10 +620,10 @@ function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64)
     end
     return rm,rc
 end
-function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64,yield::Float64)
-    rm,rcv = setrate(G,nsets,decayrate,ejectrate)
-    return [rm;yield],[rcv;.25]
-end
+# function setrate(G::Int,nsets::Int,decayrate::Float64,ejectrate::Float64,yield::Float64)
+#     rm,rcv = setrate(G,nsets,decayrate,ejectrate)
+#     return [rm;yield],[rcv;.25]
+# end
 function setrate2(G::Int,nsets::Int,decayrate::Float64,ejectprior::Float64,yieldprior::Float64)
     rm = Vector{Float64}(undef,0)
     rc = similar(rm)

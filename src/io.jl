@@ -176,14 +176,18 @@ function make_dataframes(resultfolder::String,datafolder::String)
     return df
 end
 
+statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "sd_")
+
 function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     df = read_dataframe(ratefile)
+    df2 = read_dataframe(statfile_from_ratefile(ratefile))
+    df = leftjoin(df,df2,on = :Gene,makeunique = true)
     filename = splitpath(ratefile)[end]
     parts = fields(filename)
     G = parse(Int,parts.model)
     insertcols!(df, :Model => fill(G,size(df,1)))
     df  = stack_dataframe(df,G,parts.cond)
-    add_mean(df,datafolder,fish)
+    add_moments(df,datafolder,fish)
 end
 
 function add_measures(df,measurefile::String)
@@ -200,6 +204,21 @@ function add_mean(df::DataFrame,datafolder,fish::Bool)
         i += 1
     end
     insertcols!(df, :Expression => m)
+end
+
+function add_moments(df::DataFrame,datafolder,fish::Bool)
+    # root = string(split(abspath(datafolder),"data")[1])
+    m = Vector{Float64}(undef,length(df.Gene))
+    v = similar(m)
+    t = similar(m)
+    i = 1
+    for gene in df.Gene
+        m[i] = mean_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
+        v[i] = var_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
+        t[i] = moment_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish),3)
+        i += 1
+    end
+    insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
 end
 
 add_time(csvfile::String,timestamp) = CSV.write(csvfile,add_time(read_dataframe(csvfile),timestamp))
@@ -307,7 +326,7 @@ end
 function assemble_all(folder::String,files::Vector,label::String,cond::String,model::String,fish::Bool)
     assemble_rates(folder,files,label,cond,model,fish)
     assemble_measures(folder,files,label,cond,model)
-    # assemble_stats("mean",folder,l,c,g,append,header)
+    assemble_sd(folder,files,label,cond,model)
 end
 
 function assemble_files(folder::String,files::Vector,outfile::String,header,readfunction)
@@ -316,7 +335,7 @@ function assemble_files(folder::String,files::Vector,outfile::String,header,read
     for file in files
         gene = get_gene(file)
         r = readfunction(joinpath(folder, file))
-        writedlm(f,[gene r'],',')
+        writedlm(f,[gene r],',')
     end
     close(f)
 end
@@ -336,10 +355,9 @@ function assemble_files(folder::String,files::Vector,header,readfunction)
     close(f)
 end
 
-
 function assemble_rates(folder::String,files::Vector,label::String,cond::String,model::String,fish)
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),fish),readrates)
+    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-"))),readmedian)
 end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
@@ -348,13 +366,17 @@ function assemble_measures(folder::String,files,label::String,cond::String,model
     assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
 end
 
-function assemble_stats(stattype,folder::String,label::String,cond::String,model::String,append::String,header::Bool)
-    files = get_files(folder,"param-stats",label,cond,model)
-    header = ["Gene"]
-    assemble_files(folder,get_files(files,"stats",label,cond,model),outfile,header,readstats)
+function assemble_mad(folder::String,files,label::String,cond::String,model::String)
+    outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
+    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")))[:,1:end-1],readmad)
 end
 
-function ratelabels(model,nsets,fish::Bool,sd::Bool=false)
+function assemble_sd(folder::String,files,label::String,cond::String,model::String)
+    outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
+    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),sd=true)[:,1:end-1],readsd)
+end
+
+function ratelabels(model,nsets;sd::Bool=false)
     G = parse(Int,model)
     n = G-1
     Grates = Array{String,2}(undef,1,2*n)
@@ -366,17 +388,36 @@ function ratelabels(model,nsets,fish::Bool,sd::Bool=false)
     for i = 2:nsets
         rates = [rates Grates "Eject" "Decay"]
     end
-    if typeof(model) <: AbstractGMlossmodel
-        rates = [rates "Yield"]
-        lenr = 2*G*nsets + 1
-    else
-        lenr = 2*G*nsets
-    end
     if sd
-        rates = reshape([rates; fill("SD",1,lenr)],1,2*(lenr))
+        rates .*= "SD"
     end
     return ["Gene" rates]
 end
+
+
+# function ratelabels(model,nsets,sd::Bool=false)
+#     G = parse(Int,model)
+#     n = G-1
+#     Grates = Array{String,2}(undef,1,2*n)
+#     for i = 0:n-1
+#         Grates[1,2*i+1] = "Rate$i$(i+1)"
+#         Grates[1,2*i+2] = "Rate$(i+1)$i"
+#     end
+#     rates = [Grates "Eject" "Decay"]
+#     for i = 2:nsets
+#         rates = [rates Grates "Eject" "Decay"]
+#     end
+#     if typeof(model) <: AbstractGMlossmodel
+#         rates = [rates "Yield"]
+#         lenr = 2*G*nsets + 1
+#     else
+#         lenr = 2*G*nsets
+#     end
+#     if sd
+#         rates = reshape([rates; fill("SD",1,lenr)],1,2*(lenr))
+#     end
+#     return ["Gene" rates]
+# end
 
 function get_all_rates(file::String,header::Bool)
     r = readdlm(file,',',header=header)
@@ -459,7 +500,7 @@ function readmeasures(file::String)
     w = readwaic(file)
     a = readaccept(file)
     t = readtemp(file)
-    [d[1]; w[1]; w[7]; w[8]; w[9]; a; t[1]]
+    [d[1] w[1] w[7] w[8] w[9] a t[1]]
 end
 
 readdeviance(file::String) = readrow(file,2)
@@ -484,7 +525,7 @@ readstats(file::String) = readstats(file,"mean")
 function readstats(file::String,stat)
     if stat == "mean"
         m = readmean(file::String)
-        return reshape(m,length(m),1)
+        return reshape(m,1,length(m))
     else
         return 0
     end
@@ -492,13 +533,23 @@ end
 
 
 function readmean(file::String)
-    m = readrow(file,1)
-    reshape(m,length(m),1)
+    m = readrow(file,2)
+    reshape(m,1,length(m))
+end
+
+function readmedian(file::String)
+    m = readrow(file,3)
+    reshape(m,1,length(m))
 end
 
 function readsd(file::String)
     m = readrow(file,2)
-    reshape(m,length(m),1)
+    reshape(m,1,length(m))
+end
+
+function readmad(file::String)
+    m = readrow(file,4)
+    reshape(m,1,length(m))
 end
 
 function read_covlogparam(file)
@@ -530,13 +581,14 @@ row
 4       last value of previous run
 """
 
-readrates(file::String) = readrates(file,2)
+readrates(file::String) = readrates(file,3)
 readrates(file::String,row::Int) = readrow(file,row)
 
 function readrow(file::String,row)
     if isfile(file) && ~isempty(read(file))
         contents = readdlm(file,',')
-        return contents[row,:]
+        m = contents[row,:]
+        return m[.~isempty.(m)]
     else
         println(file)
     end

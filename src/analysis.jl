@@ -1,11 +1,67 @@
 # analysis.jl
 
 """
+    add_pca(df::DataFrame,files::Vector,npcs::Int,conds::Vector)
+
+    make PCAs from files and add to dataframe df
+
+"""
+
+add_pca(df::DataFrame,files::Vector,npcs::Int,conds::Vector) = add_pca(df,make_pca(files,npcs,conds),makeunique=true)
+
+add_pca(df::DataFrame,dpc::DataFrame) = leftjoin(df,dpc,on = [:Condition,:Gene,:Time],makeunique=true)
+
+
+"""
     make_pca(files::Vector,npcs::Int)
 
     Compute PCA
 
 """
+
+function make_pca(files::Vector,npcs::Int,conds::Vector,times::Vector)
+    pca = make_pca(files[1],npcs,conds[1],times[1])
+    for i in 2:length(files)
+        pca = [pca;make_pca(files[i],npcs,conds[i],times[i])]
+    end
+    return pca
+end
+
+function make_pca(files::Vector,npcs::Int,conds::Vector)
+    pca = make_pca(files[1],npcs,conds[1])
+    for i in 2:length(files)
+        pca = [pca;make_pca(files[i],npcs,conds[i])]
+    end
+    return pca
+end
+
+function make_pca(file::String,npcs::Int,cond)
+    r,h = readdlm(file,header=true)
+    df = make_pca(r,npcs)
+    insertcols!(df, :Condition => cond)
+end
+
+function make_pca(file::String,npcs::Int,cond,time)
+    r,h = readdlm(file,header=true)
+    df = make_pca(r,npcs)
+    insertcols!(df, :Condition => cond, :Time => time)
+end
+
+function make_pca(m::Matrix,npcs::Int)
+    M = fit(PCA,float.(m[:,2:end]),maxoutdim = npcs)
+    make_pca(M,m[:,1])
+end
+
+function make_pca(M::PCA,genes)
+    P = projection(M)
+    df = DataFrame(Gene = genes)
+    i = 1
+    for p in eachcol(P)
+        insertcols!(df, Symbol("PC$i") => p)
+        i += 1
+    end
+    return df
+end
 
 function make_combinedpca(files::Vector,npcs::Int)
     m,h = readdlm(files[1],header=true)
@@ -16,37 +72,6 @@ function make_combinedpca(files::Vector,npcs::Int)
     make_pca(m,npcs)
 end
 
-function make_pca(files::Vector,npcs::Int)
-    pca = Vector{DataFrame}(undef,length(files))
-    for i in 1:length(files)
-        pca[i] = make_pca(files[i],npcs)
-    end
-    return pca
-end
-
-function make_pca(file::String,npcs::Int)
-    r,h = readdlm(file,header=true)
-    make_pca(r,npcs)
-end
-
-function make_pca(m::Matrix,npcs::Int)
-    M = fit(PCA,float.(m[:,2:end]),maxoutdim = npcs)
-    P = projection(M)
-    df = DataFrame(Gene = m[:,1])
-    i = 1
-    for p in eachcol(P)
-        insertcols!(df, Symbol("PC$i") => p)
-        i += 1
-    end
-    return df
-end
-
-function add_pca(df::DataFrame,files,npcs)
-    dpc = make_pca(files,npcs)
-    add_pca(df,dpc)
-end
-
-add_pca(df::DataFrame,dpc::DataFrame) = leftjoin(df,dpc,on = :Gene)
 
 
 function isratefile(folder::String)
