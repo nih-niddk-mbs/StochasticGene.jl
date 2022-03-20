@@ -19,6 +19,9 @@ struct Summary_Fields <: Fields
     model::String
 end
 
+const raterow_dict = Dict([("ml", 1),("mean",2),("median",3),("last",4)])
+const statrow_dict = Dict([("mean",1),("SD", 2),("median",3),("MAD",4)])
+
 """
   write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
   write_dataframes(resultfolder::String,measure)
@@ -176,7 +179,7 @@ function make_dataframes(resultfolder::String,datafolder::String)
     return df
 end
 
-statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "sd_")
+statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
 function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     df = read_dataframe(ratefile)
@@ -326,7 +329,7 @@ end
 function assemble_all(folder::String,files::Vector,label::String,cond::String,model::String,fish::Bool)
     assemble_rates(folder,files,label,cond,model,fish)
     assemble_measures(folder,files,label,cond,model)
-    assemble_sd(folder,files,label,cond,model)
+    assemble_stat(folder,files,label,cond,model)
 end
 
 function assemble_files(folder::String,files::Vector,outfile::String,header,readfunction)
@@ -340,24 +343,9 @@ function assemble_files(folder::String,files::Vector,outfile::String,header,read
     close(f)
 end
 
-function assemble_files(folder::String,files::Vector,header,readfunction)
-    namelist = Symbol.(header)
-    df = DataFrame()
-       df[!,namelist[1]] = String[]
-       for i in 2:length(header)
-           df[!,namelist[i]] = Float64[]
-       end
-    for file in files
-        gene = get_gene(file)
-        r = readfunction(joinpath(folder, file))
-        writedlm(f,[gene r'],',')
-    end
-    close(f)
-end
-
 function assemble_rates(folder::String,files::Vector,label::String,cond::String,model::String,fish)
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-"))),readmedian)
+    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-"))),readmean)
 end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
@@ -373,10 +361,15 @@ end
 
 function assemble_sd(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
-    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),sd=true)[:,1:end-1],readsd)
+    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),"SD")[:,1:end-1],readsd)
 end
 
-function ratelabels(model,nsets;sd::Bool=false)
+function assemble_stat(folder::String,files,label::String,cond::String,model::String)
+    outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model *  ".csv")
+    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,statlabels(model,length(split(cond,"-"))),readstats)
+end
+
+function Gratelabels(model,nsets)
     G = parse(Int,model)
     n = G-1
     Grates = Array{String,2}(undef,1,2*n)
@@ -384,16 +377,31 @@ function ratelabels(model,nsets;sd::Bool=false)
         Grates[1,2*i+1] = "Rate$i$(i+1)"
         Grates[1,2*i+2] = "Rate$(i+1)$i"
     end
+    return Grates
+end
+
+function ratelabels(model,nsets)
+    Grates = Gratelabels(model,nsets)
     rates = [Grates "Eject" "Decay"]
     for i = 2:nsets
-        rates = [rates Grates "Eject" "Decay"]
-    end
-    if sd
-        rates .*= "SD"
+        rates = [rates rates]
     end
     return ["Gene" rates]
 end
 
+function statlabels(model,nsets)
+    label = ["SD","Median","MAD"]
+    Grates = Gratelabels(model,nsets)
+    Grates = [Grates "Eject"]
+    for i = 2:nsets
+        Grates = [Grates Grates]
+    end
+    rates = Matrix{String}(undef,1,0)
+    for i in 1:3
+        rates = [rates Grates .* label[i]]
+    end
+    return ["Gene" rates]
+end
 
 # function ratelabels(model,nsets,sd::Bool=false)
 #     G = parse(Int,model)
@@ -495,6 +503,35 @@ function write_param_stats(file,stats::Stats)
     close(f)
 end
 
+"""
+readrates(file::String,row::Int)
+
+row
+1       maximum likelihood
+2       mean
+3       median
+4       last value of previous run
+"""
+
+readrates(file::String) = readrates(file,3)
+readrates(file::String,row::Int) = readrow(file,row)
+
+function readrow(file::String,row)
+    if isfile(file) && ~isempty(read(file))
+        contents = readdlm(file,',')
+        m = contents[row,:]
+        return m[.~isempty.(m)]
+    else
+        println(file)
+    end
+
+end
+
+function readrow_flip(file,row)
+    m = readrow(file,row)
+    reshape(m,1,length(m))
+end
+
 function readmeasures(file::String)
     d = readdeviance(file)
     w = readwaic(file)
@@ -514,23 +551,12 @@ end
 
 readtemp(file::String) = readrow(file,4)
 
-# function read_stats(file,rows)
-#     in = readdlm(file,',')
-#     n = sum(in[end,:].!="")
-#     in[rows,1:n]
-# end
-
-readstats(file::String) = readstats(file,"mean")
-
-function readstats(file::String,stat)
-    if stat == "mean"
-        m = readmean(file::String)
-        return reshape(m,1,length(m))
-    else
-        return 0
-    end
+function readstats(file::String)
+    sd = readrow_flip(file,2)
+    median = readrow_flip(file,3)
+    mad = readrow_flip(file,4)
+    [sd median mad]
 end
-
 
 function readmean(file::String)
     m = readrow(file,2)
@@ -570,30 +596,6 @@ function read_corparam(file::String)
     in[5+n:11+n,1:n]
 end
 
-
-"""
-readrates(file::String,row::Int)
-
-row
-1       maximum likelihood
-2       mean
-3       median
-4       last value of previous run
-"""
-
-readrates(file::String) = readrates(file,3)
-readrates(file::String,row::Int) = readrow(file,row)
-
-function readrow(file::String,row)
-    if isfile(file) && ~isempty(read(file))
-        contents = readdlm(file,',')
-        m = contents[row,:]
-        return m[.~isempty.(m)]
-    else
-        println(file)
-    end
-
-end
 
 function write_residency_G(fileout::String,filein::String,G,header)
     rates = get_all_rates(filein,header)
