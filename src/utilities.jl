@@ -336,6 +336,13 @@ function mean_histogram(x::Vector{Array})
 end
 
 """
+    Difference_Zscore(x1,x2,sig1,sig2) = (x1 .- x2)./ sqrt(sig1.^2 + sig2.^2)
+
+
+"""
+Difference_Zscore(x1,x2,sig1,sig2) = (x1 - x2) / sqrt(sig1^2 + sig2^2)
+
+"""
 m2_histogram(x)
 
 """

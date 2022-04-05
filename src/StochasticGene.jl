@@ -24,6 +24,8 @@ export
     fit_rna,
     make_dataframes,
     write_dataframes,
+    write_dataframes_only,
+    write_winners,
     fix_filenames,
     fix,
     large_deviance,

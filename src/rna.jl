@@ -726,8 +726,8 @@ read_fish(path,gene,threshold)
 Read in FISH data from 7timepoint type folders
 
 """
-function read_fish(path::String,cond::String,threshold::Float64=.98)
-    xr = zeros(1000)
+function read_fish(path::String,cond::String,threshold::Float64=.98,maxlength = 1800)
+    xr = zeros(maxlength)
     lx = 0
     for (root,dirs,files) in walkdir(path)
         for file in files
@@ -735,14 +735,14 @@ function read_fish(path::String,cond::String,threshold::Float64=.98)
             if occursin(cond,target) && occursin("cellular",target)
                 # println(target)
                 x1 = readdlm(target)[:,1]
-                x1 = truncate_histogram(x1,threshold,1000)
+                x1 = truncate_histogram(x1,threshold,maxlength)
                 lx = length(x1)
                 # println(lx)
-                xr[1:min(lx,1000)] += x1[1:min(lx,1000)]
+                xr[1:min(lx,maxlength)] += x1[1:min(lx,maxlength)]
             end
         end
     end
-    return truncate_histogram(xr,1.0,1000)
+    return truncate_histogram(xr,1.0,maxlength)
 end
 
 function read_fish(path1::String,cond1::String,path2::String,cond2::String,threshold::Float64=.98)

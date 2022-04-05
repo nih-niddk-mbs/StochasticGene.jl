@@ -180,7 +180,7 @@ function write_swarmfile(sfile,nchains,juliafile,genes::Vector)
     f = open(sfile,"w")
     for gene in genes
         gene = check_genename(gene,"(")
-        writedlm(f,["julia -p" nchains juliafile gene])
+        writedlm(f,["julia -t 1 -p" nchains juliafile gene])
         # writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datafolder fish inlabel label nsets runcycle transient fittedparam fixedeffects])
     end
     close(f)

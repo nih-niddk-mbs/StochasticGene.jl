@@ -61,6 +61,8 @@ function write_winners(resultfolder,measure)
     nothing
 end
 
+read_dataframe(csvfile::String) = DataFrame(CSV.File(csvfile))
+
 get_suffix(file::String) = chop(file,tail=4), last(file,3)
 
 # does not account for csv files with less than 4 fields
@@ -83,6 +85,11 @@ function fields(file::String)
         end
     end
     return s
+end
+
+function isratefile(folder::String)
+    files=readdir(folder)
+    any(occursin.(".csv",files) .& occursin.("rates",files))
 end
 
 isfish(string::String) = occursin("FISH",string)
@@ -155,155 +162,81 @@ get_ratesummaryfiles(folder::String) = get_ratesummaryfiles(get_summaryfiles(fol
 get_measuresummaryfiles(files::Vector) = get_summaryfiles(files,"measures")
 get_measuresummaryfiles(folder::String) = get_measuresummaryfiles(get_summaryfiles(folder))
 
+get_burstsummaryfiles(files::Vector) = get_summaryfiles(files,"burst")
+get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(folder))
 
-function make_dataframes(resultfolder::String,datafolder::String)
-    assemble_all(resultfolder)
-    files = get_ratesummaryfiles(resultfolder)
-    parts = fields.(files)
-    models = get_models(parts)
-    labels = get_labels(parts)
-    df = Vector{Vector}(undef,0)
-    for label in labels
-        lfiles = files[label .== get_label.(files)]
-        dfl = Vector{Tuple}(undef,0)
-        for model in models
-            mfiles = lfiles[model .== get_model.(lfiles)]
-            dfm = Vector{DataFrame}(undef,0)
-            for i in eachindex(mfiles)
-                push!(dfm,make_dataframe(joinpath(resultfolder,mfiles[i]),datafolder,isfish(mfiles[i])))
-            end
-            push!(dfl,("Summary_$(label)_$(model).csv",stack_dataframe(dfm)))
+
+
+
+function write_moments(outfile,genelist,cond,datafolder,fish,root)
+    f = open(outfile,"w")
+    writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
+    for gene in genelist
+        h = get_histogram_rna(gene,cond,datafolder,fish,root)
+        writedlm(f,[gene mean_histogram(h) var_histogram(h)],',')
+    end
+    close(f)
+end
+
+
+"""
+    write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
+
+"""
+function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
+    folder = joinpath(root,folder)
+    condarray = split(cond,"-")
+    g = parse(Int,G)
+    lr = 2*g
+    lc = 2*g-1
+    freq = Array{Float64,1}(undef,2*length(condarray))
+    burst = similar(freq)
+    f = open(joinpath(folder,outfile),"w")
+    contents,head = readdlm(joinpath(folder,infile),',',header=true)
+    label = Array{String,1}(undef,0)
+    for c in condarray
+        label = vcat(label, "Freq " * c, "sd","Burst Size " * c, "sd")
+    end
+    writedlm(f,["gene" reshape(label,1,length(label))],',')
+    for r in eachrow(contents)
+        gene = String(r[1])
+        rates = r[2:end]
+        rdecay = decay(root,cell,gene)
+        cov = read_covparam(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
+        # mu = readmean(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
+        if size(cov,2) < 2
+            println(gene)
         end
-        push!(df,dfl)
+        for i in eachindex(condarray)
+            j = i-1
+            freq[2*i-1], freq[2*i] = frequency(rates[1+lr*(i-1)],sqrt(cov[1+lc*j,1+lc*j]),rdecay)
+            burst[2*i-1], burst[2*i] = burstsize(rates[3+lr*j],rates[2+lr*j],cov[3+lc*j,3+lc*j],cov[2+lc*j,2+lc*j],cov[2+lc*j,3+lc*j])
+        end
+        writedlm(f,[gene freq[1] freq[2] burst[1] burst[2] freq[3] freq[4] burst[3] burst[4]],',')
+        flush(f)
     end
-    return df
+    close(f)
 end
+"""
+    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datafolder::String,fish,root,outfolder = "histograms")
 
-statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
-
-function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
-    df = read_dataframe(ratefile)
-    df2 = read_dataframe(statfile_from_ratefile(ratefile))
-    df = leftjoin(df,df2,on = :Gene,makeunique = true)
-    filename = splitpath(ratefile)[end]
-    parts = fields(filename)
-    G = parse(Int,parts.model)
-    insertcols!(df, :Model => fill(G,size(df,1)))
-    df  = stack_dataframe(df,G,parts.cond)
-    add_moments(df,datafolder,fish)
-end
-
-function add_measures(df,measurefile::String)
-    dm = read_dataframe(measurefile)
-    hcat(df,dm[:,[:Deviance,:WAIC,:AIC]])
-end
-
-function add_mean(df::DataFrame,datafolder,fish::Bool)
-    # root = string(split(abspath(datafolder),"data")[1])
-    m = Vector{Float64}(undef,length(df.Gene))
-    i = 1
-    for gene in df.Gene
-        m[i] = mean_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
-        i += 1
+"""
+function write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datafolder::String,fish,root,outfolder = "histograms")
+    ratefile = joinpath(resultfolder,ratefile)
+    rates,head = readdlm(ratefile,',',header=true)
+    outfolder = joinpath(resultfolder,outfolder)
+    if ~isdir(outfolder)
+        mkpath(outfolder)
     end
-    insertcols!(df, :Expression => m)
-end
-
-function add_moments(df::DataFrame,datafolder,fish::Bool)
-    # root = string(split(abspath(datafolder),"data")[1])
-    m = Vector{Float64}(undef,length(df.Gene))
-    v = similar(m)
-    t = similar(m)
-    i = 1
-    for gene in df.Gene
-        m[i] = mean_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
-        v[i] = var_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish))
-        t[i] = moment_histogram(get_histogram_rna(string(gene),df[i,:Condition],datafolder,fish),3)
-        i += 1
-    end
-    insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
-end
-
-add_time(csvfile::String,timestamp) = CSV.write(csvfile,add_time(read_dataframe(csvfile),timestamp))
-
-function add_time(df::DataFrame,timestamp)
-    insertcols!(df, :Time => timestamp)
-
-end
-
-stack_dataframe(df,G,cond) = stack_dataframe(separate_dataframe(df,G,cond))
-
-function stack_dataframe(df2::Vector{DataFrame})
-    df = df2[1]
-    for i in 2:length(df2)
-        df = vcat(df,df2[i])
-    end
-    return df
-end
-
-function separate_dataframe(df,G,cond)
-    conds = split(cond,"-")
-    nsets = length(conds)
-    df2 = Vector{DataFrame}(undef,nsets)
-    for i in 1:nsets
-        df2[i] = df[:,[1; 2*G*(i-1) + 2 : 2*G*i + 1;2*G*nsets+2: end]]
-        rename!(x->split(x,"_")[1],df2[i])
-        insertcols!(df2[i], :Condition => fill(string(conds[i]),size(df,1)))
-    end
-    return df2
-end
-
-read_dataframe(csvfile::String) = DataFrame(CSV.File(csvfile))
-
-best_AIC(folder::String) = best_measure(folder,:AIC)
-
-best_WAIC(folder::String) = best_measure(folder,:WAIC)
-
-function best_measure(folder::String,measure::Symbol)
-    files = get_measuresummaryfiles(folder)
-    parts = fields.(files)
-    labels = get_labels(parts)
-    conds = get_conds(parts)
-    df = Vector{Tuple{String,DataFrame}}(undef,0)
-    for label in labels
-        for cond in conds
-            lfiles = files[(label .== get_label.(files)) .& (cond .== get_cond.(files))]
-            dm = Vector{DataFrame}(undef,length(lfiles))
-            for i in eachindex(lfiles)
-                if isfile(joinpath(folder,lfiles[i]))
-                    dm[i] = read_dataframe(joinpath(folder,lfiles[i]))
-                    insertcols!(dm[i], :Model => fill(get_model(lfiles[i]),size(dm[i],1)))
-                end
-            end
-            # println(best_measure(dm,measure))
-            push!(df,("Winners_$(label)_$(cond)_$(string(measure)).csv",best_measure(dm,measure)))
+    cond = string.(split(datacond,"-"))
+    for r in eachrow(rates)
+        h = histograms(r,cell,cond,G,datafolder,fish,root)
+        for i in eachindex(cond)
+            f = open(joinpath(outfolder,string(r[1]) * cond[i] * ".txt"),"w")
+            writedlm(f,h[i])
+            close(f)
         end
     end
-    return df
-end
-
-function best_measure(dfs::Vector,measure::Symbol)
-    df = DataFrame(Gene = [], Winner = [], Measure = [])
-    ngenes = Int[]
-    for d in dfs
-        ngenes = push!(ngenes,length(d[:,:Gene]))
-    end
-    others = setdiff(eachindex(dfs),argmax(ngenes))
-    for d in eachrow(dfs[argmax(ngenes)])
-        l = d[measure]
-        model = d[:Model]
-        for k in others
-            dc = dfs[k][dfs[k].Gene .== d.Gene,:]
-            if ~isempty(dc)
-                if dc[1, measure] < l
-                    l = dc[1, measure]
-                    model = dc[1, :Model]
-                end
-            end
-        end
-        push!(df,Dict(:Gene => d.Gene, :Winner => model, :Measure => l))
-    end
-    return df
 end
 
 
@@ -330,6 +263,9 @@ function assemble_all(folder::String,files::Vector,label::String,cond::String,mo
     assemble_rates(folder,files,label,cond,model,fish)
     assemble_measures(folder,files,label,cond,model)
     assemble_stat(folder,files,label,cond,model)
+    if model == "2"
+        assemble_burst_model2(folder,files,label,cond)
+    end
 end
 
 function assemble_files(folder::String,files::Vector,outfile::String,header,readfunction)
@@ -367,6 +303,11 @@ end
 function assemble_stat(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model *  ".csv")
     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,statlabels(model,length(split(cond,"-"))),readstats)
+end
+
+function assemble_burst_model2(folder::String,files,label::String,cond::String,model::String = "2")
+    outfile = joinpath(folder,"burst_" * label * "_" * cond * "_" * model *  ".csv")
+    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,["Gene" "BurstSize" "BurstSD" "BurstVar" "E" "O" "VEE" "VOO" "VEO"],read_burst_model2)
 end
 
 function Gratelabels(model,nsets)
@@ -524,7 +465,6 @@ function readrow(file::String,row)
     else
         println(file)
     end
-
 end
 
 function readrow_flip(file,row)
@@ -551,51 +491,77 @@ end
 
 readtemp(file::String) = readrow(file,4)
 
-function readstats(file::String)
-    sd = readrow_flip(file,2)
-    median = readrow_flip(file,3)
-    mad = readrow_flip(file,4)
+
+function readmean(ratefile::String)
+    m = readrow(ratefile,2)
+    reshape(m,1,length(m))
+end
+
+function readsd(ratefile::String)
+    m = readrow(ratefile,2)
+    reshape(m,1,length(m))
+end
+
+function readstats(statfile::String)
+    sd = readrow_flip(statfile,2)
+    median = readrow_flip(statfile,3)
+    mad = readrow_flip(statfile,4)
     [sd median mad]
 end
 
-function readmean(file::String)
-    m = readrow(file,2)
+function readmedian(statfile::String)
+    m = readrow(statfile,3)
     reshape(m,1,length(m))
 end
 
-function readmedian(file::String)
-    m = readrow(file,3)
-    reshape(m,1,length(m))
-end
-
-function readsd(file::String)
-    m = readrow(file,2)
-    reshape(m,1,length(m))
-end
-
-function readmad(file::String)
+function readmad(statfile::String)
     m = readrow(file,4)
     reshape(m,1,length(m))
 end
 
-function read_covlogparam(file)
-    in = readdlm(file,',')
-    n = div((length(in[:,1])-4),4)
-    in[end-n+1:end,1:n]
+function read_covlogparam(statfile::String)
+    c = readdlm(file,',')
+    n = div((length(c[:,1])-4),4)
+    c[end-n+1:end,1:n]
 end
 
-function read_covparam(file::String)
-    in = readdlm(file,',')
-    n = length(in[1,:])
-    in[5+2*n:11+2*n,1:n]
+function read_covparam(statfile::String)
+    c = readdlm(file,',')
+    n = length(c[1,:])
+    c[5+2*n:4+3*n,1:n]
+end
+
+function read_covparam(c::Matrix)
+    n = length(c[1,:])
+    c[5+2*n:4+3*n,1:n]
+end
+
+read_crosscov(statfile::String) = read_crosscov(read_covparam(statfile))
+
+function read_crosscov(C::Matrix)
+    c = Float64[]
+    N = size(C,1)
+    for i in 1:N
+        for j in i+1:N
+            push!(c,C[i,j])
+        end
+    end
+    c
 end
 
 function read_corparam(file::String)
-    in = readdlm(file,',')
-    n = length(in[1,:])
-    in[5+n:11+n,1:n]
+    c = readdlm(file,',')
+    n = length(c[1,:])
+    c[5+n:4+2*n,1:n]
 end
 
+function read_burst_model2(file::String)
+    c = readdlm(file,',')
+    b = c[1,end]/c[1,end-1]
+    cov = read_covparam(c)
+    v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
+    [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
+end
 
 function write_residency_G(fileout::String,filein::String,G,header)
     rates = get_all_rates(filein,header)
