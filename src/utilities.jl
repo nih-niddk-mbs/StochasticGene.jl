@@ -513,6 +513,11 @@ function burstsize(n::Int,nr::Int,r::Vector)
 	Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
 end
 
+
+model2_mean(ron,roff,eject,decay) = ron/(ron+roff)*eject/decay
+
+model2_variance(ron,roff,eject,decay) = ron/(ron+roff)*eject/decay + ron*roff/(ron+roff)^2 * eject^2/decay/(ron + roff + decay)
+
 # """
 # teststeadystatemodel(model,nhist)
 #

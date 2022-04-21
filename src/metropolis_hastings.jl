@@ -2,6 +2,8 @@
 
 
 """
+struct MHOptions <: Options
+
 Structure for MH options
 """
 struct MHOptions <: Options
@@ -14,6 +16,8 @@ struct MHOptions <: Options
     tempanneal::Float64
 end
 """
+struct Fit <: Results
+
 Structure for MH results
 """
 struct Fit <: Results
@@ -29,6 +33,8 @@ struct Fit <: Results
 end
 
 """
+struct Stats
+
 Structure for parameter statistics results
 """
 struct Stats
@@ -40,6 +46,15 @@ struct Stats
     corparam::Array
     covparam::Array
     covlogparam::Array
+end
+
+"""
+Structure for convergence criteria
+
+"""
+struct Measures
+    waic::Tuple
+    rhat::Vector
 end
 
 """
@@ -55,10 +70,13 @@ function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param)
+        rhat = compute(rhat)
+        measures = Measures(waic,vec(rhat))
     else
         stats = 0
+        measures = 0
     end
-    return fit, stats, waic
+    return fit, stats, measures
 end
 """
 run_mh(data,model,options,nchains)
@@ -73,7 +91,8 @@ function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions,
         waic = pooled_waic(chain)
         fit = merge_fit(chain)
         stats = compute_stats(fit.param)
-        return fit, stats, waic
+        rhat = compute_rhat(chain)
+        return fit, stats, Measures(waic,vec(rhat))
     end
 end
 """
@@ -459,12 +478,57 @@ function compute_stats(param::Array{Float64,2})
     medparam = median(param,dims=2)
     np = size(param,1)
     madparam = Array{Float64,1}(undef,np)
-    qparam = Array{Array,1}(undef,np)
+    qparam = Matrix{Float64}(undef,3,0)
     for i in 1:np
         madparam[i] = mad(param[i,:],normalize=false)
-        qparam[i] = quantile(param[i,:],[.025;.5;.975])
+        qparam = hcat(qparam,quantile(param[i,:],[.025;.5;.975]))
     end
     Stats(meanparam,stdparam,medparam,madparam,qparam,corparam,covparam,covlogparam)
+end
+"""
+compute_rhat(chain::Array{Tuple,1})
+compute_rhat(fits::Array{Fit,1})
+compute_rhat(params::Vector{Array})
+
+
+"""
+compute_rhat(chain::Array{Tuple,1}) = compute_rhat(collate_fit(chain))
+
+function compute_rhat(fits::Vector{Fit})
+    M = length(fits)
+    params = Vector{Array}(undef,M)
+    for i in 1:M
+        params[i] = fits[i].param
+    end
+    compute_rhat(params)
+end
+
+
+function compute_rhat(params::Vector{Array})
+    N = chainlength(params)
+    M = length(params)
+    m = Matrix{Float64}(undef,size(params[1],1),2*M)
+    s = similar(m)
+    for i in 1:M
+        m[:,2*i-1] = mean(params[i][:,1:N],dims=2)
+        m[:,2*i] = mean(params[i][:,N+1:2*N],dims=2)
+        s[:,2*i-1] = var(params[i][:,1:N],dims=2)
+        s[:,2*i] = var(params[i][:,N+1:2*N],dims=2)
+    end
+    B = N*var(m,dims=2)
+    W = mean(s,dims=2)
+    sqrt.((N-1)/N .+ B./W/N)
+end
+
+
+"""
+ chainlength(params)
+
+"""
+function chainlength(params)
+    N = minimum(size.(params,2))
+    N = iseven(N) ? N : N-1
+    div(N,2)
 end
 
 """

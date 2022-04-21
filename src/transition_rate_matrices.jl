@@ -2,6 +2,7 @@
 Transition rate matrices for G-R-S transcription model
 n+1 G states, nr R steps, and nr S sites
 returns T,B,TA,TI or M matrices
+T P(m) = A P(m) + B P(m-1)
 """
 
 """

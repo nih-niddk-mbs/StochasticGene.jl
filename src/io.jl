@@ -32,15 +32,16 @@ Arguments
 - `resultfolder`: name of folder with result files
 - `datafolder`: name of folder where data is stored
 - `measure`: measure used to assess winner
+- `assemble`: if true then assemble results into summary files
 """
 
-function write_dataframes(resultfolder::String,datafolder::String,measure::Symbol=:AIC)
-    write_dataframes_only(resultfolder,datafolder)
+function write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
+    write_dataframes_only(resultfolder,datafolder,assemble=assemble)
     write_winners(resultfolder,measure)
 end
 
-function write_dataframes_only(resultfolder::String,datafolder::String)
-    dfs = make_dataframes(resultfolder,datafolder)
+function write_dataframes_only(resultfolder::String,datafolder::String;assemble::Bool=true)
+    dfs = make_dataframes(resultfolder,datafolder,assemble)
     for df in dfs
         for dff in dfs
             for dfff in dff
@@ -167,7 +168,10 @@ get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(f
 
 
 
+"""
+write_moments(outfile,genelist,cond,datafolder,fish,root)
 
+"""
 function write_moments(outfile,genelist,cond,datafolder,fish,root)
     f = open(outfile,"w")
     writedlm(f,["Gene" "Expression Mean" "Expression Variance"],',')
@@ -291,7 +295,7 @@ function assemble_measures(folder::String,files,label::String,cond::String,model
 end
 
 function assemble_mad(folder::String,files,label::String,cond::String,model::String)
-    outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
+    outfile = joinpath(folder,"mad_" * label * "_" * cond * "_" * model *  ".csv")
     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")))[:,1:end-1],readmad)
 end
 
@@ -388,13 +392,13 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 """
 write_results(file::String,x)
 """
-function writeall(path::String,fit,stats,waic,data,temp,model::StochasticGRmodel)
+function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel)
     if ~isdir(path)
         mkpath(path)
     end
     name = filename(data,model)
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
-    write_measures(joinpath(path,"measures" * name),fit,waic,deviance(fit,data,model),temp)
+    write_measures(joinpath(path,"measures" * name),fit,measures,deviance(fit,data,model),temp)
     write_param_stats(joinpath(path,"param-stats" * name),stats)
 
 end
@@ -419,12 +423,14 @@ end
 """
 write_measures(file,fit,waic,dev)
 """
-function write_measures(file::String,fit::Fit,waic,dev,temp)
+function write_measures(file::String,fit::Fit,measures::Measures,dev,temp)
     f = open(file,"w")
-    writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' waic[1] waic[2] aic(fit)],',')
+    writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' measures.waic[1] measures.waic[2] aic(fit)],',')
     writedlm(f,dev,',')
     writedlm(f,[fit.accept fit.total],',')
     writedlm(f,temp,',')
+    writedlm(f,measures.rhat',',')
+    writedlm(f,maximum(measures.rhat),',')
     close(f)
 end
 """
@@ -519,21 +525,28 @@ function readmad(statfile::String)
     reshape(m,1,length(m))
 end
 
-function read_covlogparam(statfile::String)
-    c = readdlm(file,',')
-    n = div((length(c[:,1])-4),4)
-    c[end-n+1:end,1:n]
-end
-
-function read_covparam(statfile::String)
+function read_corparam(file::String)
     c = readdlm(file,',')
     n = length(c[1,:])
-    c[5+2*n:4+3*n,1:n]
+    # c[5+n:4+2*n,1:n]
+    c[8:7+n,1:n]
+end
+
+function read_covparam(file::String)
+    c = readdlm(file,',')
+    read_covparam(c)
 end
 
 function read_covparam(c::Matrix)
     n = length(c[1,:])
-    c[5+2*n:4+3*n,1:n]
+    # c[5+2*n:4+3*n,1:n]
+    c[8+n:7+2*n,1:n]
+end
+
+function read_covlogparam(file::String)
+    c = readdlm(file,',')
+    n = length(c[1,:])
+    c[8+2*n:7+3*n,1:n]
 end
 
 read_crosscov(statfile::String) = read_crosscov(read_covparam(statfile))
@@ -549,11 +562,6 @@ function read_crosscov(C::Matrix)
     c
 end
 
-function read_corparam(file::String)
-    c = readdlm(file,',')
-    n = length(c[1,:])
-    c[5+n:4+2*n,1:n]
-end
 
 function read_burst_model2(file::String)
     c = readdlm(file,',')

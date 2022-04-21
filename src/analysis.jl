@@ -4,8 +4,10 @@
     make_dataframes(resultfolder::String,datafolder::String)
 
 """
-function make_dataframes(resultfolder::String,datafolder::String)
-    assemble_all(resultfolder)
+function make_dataframes(resultfolder::String,datafolder::String,assemble=true)
+    if assemble
+        assemble_all(resultfolder)
+    end
     files = get_ratesummaryfiles(resultfolder)
     parts = fields.(files)
     models = get_models(parts)
@@ -72,6 +74,18 @@ function add_moments!(df::DataFrame,datafolder,fish::Bool)
     insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
 end
 
+function add_modelmoments!(df::DataFrame)
+    m = Vector{Float64}(undef,length(df.Gene))
+    v = similar(m)
+    i = 1
+    for gene in df.Gene
+        m[i] = model2_mean(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i])
+        v[i] = model2_variance(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i])
+        i += 1
+    end
+    insertcols!(df, :Model_Expression => m, :Model_Variance => v)
+end
+
 function make_burst_df(resultfolder::String)
     files = get_burstsummaryfiles(resultfolder)
     df = Vector{DataFrame}(undef,0)
@@ -84,7 +98,12 @@ function make_burst_df(resultfolder::String)
     stack_dataframe(df)
 end
 
-add_burstsize!(df,db) = lefjoin(df,db,on = [:Gene,:Cond,:Time])
+add_burstsize(df,db,cols::Vector{Symbol} = [:Gene,:Cond]) = lefjoin(df,db,on = cols)
+
+function add_burstsize(df,resultfolder,cols::Vector{Symbol} = [:Gene,:Cond])
+    db=make_burst_df(resultfolder)
+    addburstsize(df,db,cols)
+end
 
 
 # add_time(csvfile::String,timestamp) = CSV.write(csvfile,add_time!(read_dataframe(csvfile),timestamp))
@@ -124,7 +143,7 @@ end
 #
 # end
 
-function make_flat_dataframe(df,conditions::Vector)
+function make_Zscore_dataframe(df,conditions::Vector)
     dfc = Array{DataFrame}(undef,length(conditions))
     for i in eachindex(dfc)
         dfc[i] = df[df.Condition .== conditions[i],:]
