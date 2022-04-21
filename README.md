@@ -157,42 +157,45 @@ This will execute each gene in the swarm file sequentially. To run several genes
 ### API:
 
 ```
-  makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="DMSO",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int = 2,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,modulepath = "/Users/carsonc/github/StochasticGene/src/StochasticGene.jl",cv = 0.02)
+makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,yieldprior=0.05)
 
-  makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,nsets=1,datafolder::String="data/HCT116_testdata",fish=false,cycle=true,conds::String="DMSO",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=1,transient::Bool=false,fittedparam=[1],fixedeffects=(),juliafile::String="fitscript",root="../",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02)
-
-  Generates swarm files
-
+makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05)
 
 Arguments
-- `G`: number of gene states
-- `cell': cell type used for half life and allele number
-- `infolder`: name of folder for initial parameters
-- `swarmfile`: name of swarm file to be executed by swarm
-- `label`: label of output files produced (e.g. "scRNA-ss-CONTROL")
-- `inlabel`: label of files used for initial conditions
-- `nsets`: number of histograms to be fit simultaneously (e.g. one for wild type and one for perturbation)
-- `datafolder`: subfolder (below root) holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data/folder1-data/folder2"
-- `thresholdlow`: lower threshold for half life for genes to be fit
-- `threhsoldhigh`: upper threshold
-- `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
-- `result`: folder for results
-- `batchsize`: maximum number of jobs per swarmfile, default = 1000
-- `maxtime`: maximum wall time for run, default = 2 hrs
-- `nchains`: number of MCMC chains, default = 2
-- `transient::Bool`: true means fit transient model, e.g. at times 0, 30, and 120 minutes, using a time dependent model
-- `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3] means rate1, rate2 and rate3 are fit and all other rates are fixed
-- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3 (each vector in tuple is a fixed rate set) only used for nsets > 1
-- `juliafile`: name of file to be called by julia in swarmfile
-- `root`: name of root directory for project, e.g. "scRNA\"
-- `samplesteps`: number of MCMC sampling steps
-- `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
-- `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-- `temp`: MCMC temperature
-- `tempanneal`: annealing temperature
-- `cv`: coefficient of variation (mean/std) of proposal distribution
+    - `G`: number of gene states
+    - `cell': cell type for halflives and allele numbers
+    - `infolder`: name of folder for initial parameters
+    - `swarmfile`: name of swarmfile to be executed by swarm
+    - `label`: label of output files produced
+    - `inlabel`: label of files used for initial conditions
+    - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
+    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+    - `fish`: Data file type, set to true for FISH and false to scRNA (FISH type assumes different folder structure)
+    - `thresholdlow`: lower threshold for halflife for genes to be fit
+    - `threhsoldhigh`: upper threshold
+    - `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
+    - `result`: folder for results
+    - `batchsize`: number of jobs per swarmfile, default = 1000
+    - `maxtime`: maximum wall time for run, default = 2 hrs
+    - `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
+    - 'nthreads`: number of Julia threads per processesor, default = 1
+    - `transient::Bool`: true means fit transient model (T0, T30, T120)
+    - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first,     e.g. ([3,8],) means  index 8 is fixed to index 3
+         (each vector in tuple is a fixed rate set)
+    - `juliafile`: name of file to be called by julia in swarmfile
+    - `root`: name of root directory for project, e.g. "scRNA\"
+    - `samplesteps`: number of MCMC sampling steps
+    - `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
+    - `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+    - `temp`: MCMC temperature
+    - `tempanneal`: annealing temperature
+    - `cv`: coefficient of variation (mean/std) of proposal distribution
+    - `yieldprior`: prior for yield, default = .05, (set to 1 for FISH if using scRNA data format for FISH data)
+    - `genes`: array of genes to be fit
 
-- `genes`: array of genes to be fit
+
+returns swarmfile that calls a julia file that is executed on biowulf
 
 ```
 
