@@ -181,7 +181,7 @@ Arguments
     - 'nthreads`: number of Julia threads per processesor, default = 1
     - `transient::Bool`: true means fit transient model (T0, T30, T120)
     - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first,     e.g. ([3,8],) means  index 8 is fixed to index 3
+    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
          (each vector in tuple is a fixed rate set)
     - `juliafile`: name of file to be called by julia in swarmfile
     - `root`: name of root directory for project, e.g. "scRNA\"
