@@ -45,7 +45,7 @@ end
 
 function add_measures(df,measurefile::String)
     dm = read_dataframe(measurefile)
-    leftjoin(df,dm[:,[:Deviance,:WAIC,:AIC]], on = :Gene)
+    leftjoin(df,dm[:,[:Gene,:Deviance,:WAIC,:AIC,:Rhat]], on = :Gene)
 end
 
 function add_mean!(df::DataFrame,datafolder,fish::Bool)

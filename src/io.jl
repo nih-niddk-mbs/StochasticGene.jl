@@ -290,7 +290,7 @@ end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model *  ".csv")
-    header = ["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature"]
+    header = ["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature" "Rhat"]
     assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
 end
 
@@ -483,7 +483,8 @@ function readmeasures(file::String)
     w = readwaic(file)
     a = readaccept(file)
     t = readtemp(file)
-    [d[1] w[1] w[7] w[8] w[9] a t[1]]
+    r = readrhat(file)
+    [d[1] w[1] w[7] w[8] w[9] a t[1] r[1]]
 end
 
 readdeviance(file::String) = readrow(file,2)
@@ -497,6 +498,7 @@ end
 
 readtemp(file::String) = readrow(file,4)
 
+readrhat(file::String) = readrow(file,6)
 
 function readmean(ratefile::String)
     m = readrow(ratefile,2)
