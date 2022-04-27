@@ -78,7 +78,7 @@ function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",
         end
     else
         sfile = swarmfile * "_" * label * "_" * "$G" * ".swarm"
-        write_swarmfile(sfile,nchains,juliafile,genes)
+        write_swarmfile(sfile,nchains,nthreads,juliafile,genes)
     end
     write_fitfile(juliafile,nchains,cell,conds,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,cv,yieldprior)
 end
