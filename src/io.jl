@@ -35,6 +35,8 @@ Arguments
 - `assemble`: if true then assemble results into summary files
 """
 
+
+
 function write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
     write_dataframes_only(resultfolder,datafolder,assemble=assemble)
     write_winners(resultfolder,measure)
@@ -53,6 +55,12 @@ function write_dataframes_only(resultfolder::String,datafolder::String;assemble:
     nothing
 end
 
+"""
+write_winners(resultfolder,measure)
+
+Write best performing model for measure
+
+"""
 function write_winners(resultfolder,measure)
     df = best_measure(resultfolder,measure)
     for i in eachindex(df)
@@ -62,8 +70,24 @@ function write_winners(resultfolder,measure)
     nothing
 end
 
+"""
+write_augmented(summaryfile::String,resultfolder,datafolder;fishdata=false)
+
+Augment summary file with G=2 burst size, model predicted moments, and fit measures
+
+
+"""
+write_augmented(summaryfile::String,resultfolder,datafolder;fishdata=false) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder,datafolder))
+
+"""
+read_dataframe(csvfile::String)
+"""
 read_dataframe(csvfile::String) = DataFrame(CSV.File(csvfile))
 
+"""
+get_suffix(file::String)
+
+"""
 get_suffix(file::String) = chop(file,tail=4), last(file,3)
 
 # does not account for csv files with less than 4 fields
@@ -137,6 +161,7 @@ get_gene(file::String) = fields(file).gene
 get_model(file::String) = fields(file).model
 get_label(file::String) = fields(file).label
 get_cond(file::String) = fields(file).cond
+get_nalleles(file::String) = fields(file).nalleles
 
 get_fields(parts::Vector{T}, field::Symbol) where T <: Fields = unique(getfield.(parts,field))
 
@@ -149,6 +174,8 @@ get_conds(parts::Vector{T}) where T <: Fields = get_fields(parts,:cond)
 get_labels(parts::Vector{T}) where T <: Fields = get_fields(parts,:label)
 
 get_names(parts::Vector{T}) where T <: Fields = get_fields(parts,:name)
+
+get_nalleles(parts::Vector{T}) where T <: Fields = get_fields(parts,:nalleles)
 
 get_resultfiles(folder::String) = get_resultfiles(readdir(folder))
 get_resultfiles(files::Vector) = files[occursin.(".txt",files) .& occursin.("_",files)]
@@ -166,8 +193,6 @@ get_measuresummaryfiles(folder::String) = get_measuresummaryfiles(get_summaryfil
 get_burstsummaryfiles(files::Vector) = get_summaryfiles(files,"burst")
 get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(folder))
 
-
-
 """
 write_moments(outfile,genelist,cond,datafolder,fish,root)
 
@@ -181,7 +206,6 @@ function write_moments(outfile,genelist,cond,datafolder,fish,root)
     end
     close(f)
 end
-
 
 """
     write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
@@ -290,8 +314,18 @@ end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model *  ".csv")
-    header = ["Gene" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature" "Rhat"]
-    assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
+    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature" "Rhat"]
+    # assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
+    files = get_files(files,"measures",label,cond,model)
+    f = open(outfile,"w")
+    writedlm(f,header,',')
+    for file in files
+        gene = get_gene(file)
+        nalleles = get_nalleles(file)
+        r = readmeasures(joinpath(folder, file))
+        writedlm(f,[gene nalleles r],',')
+    end
+    close(f)
 end
 
 function assemble_mad(folder::String,files,label::String,cond::String,model::String)

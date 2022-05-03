@@ -346,7 +346,7 @@ Difference_Zscore(x1,x2,sig1,sig2) = (x1 - x2) / sqrt(sig1^2 + sig2^2)
 m2_histogram(x)
 
 """
-m2_histogram(x) = ((collect(1:length(x)) .- 1).^2)' * x/sum(x)
+m2_histogram(x) = (collect(0:length(x)-1).^2)' * x/sum(x)
 
 """
 var_histogram(x)
@@ -484,14 +484,15 @@ function splicesiteusage(r::Vector,n::Int,nr::Int)
 end
 
 """
-burstsize(n,nr,r)
+burstoccupancy(n,nr,r)
 Burst size distribution of GRS  model
 for total pre-mRNA occupancy and
 unspliced (visible) occupancy
 obtained by marginalizing over conditional steady state distribution
 """
-burstsize(model::GRSMmodel) = burstsize(model.G-1,model.R,model.rates)
-function burstsize(n::Int,nr::Int,r::Vector)
+burstoccupancy(model::GRSMmodel) = burstsize(model.G-1,model.R,model.rates)
+
+function burstoccupancy(n::Int,nr::Int,r::Vector)
     T =  mat_GSR_T(r,n,nr)
     pss = normalized_nullspace(T)
 	Rss = zeros(nr)
@@ -513,24 +514,27 @@ function burstsize(n::Int,nr::Int,r::Vector)
 	Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
 end
 
+model2_mean(ron,roff,eject,decay,nalleles) = 2*model2_mean(ron,roff,eject,decay)
 
 model2_mean(ron,roff,eject,decay) = ron/(ron+roff)*eject/decay
 
+model2_variance(ron,roff,eject,decay,nalleles) = 2*model2_variance(ron,roff,eject,decay)
+
 model2_variance(ron,roff,eject,decay) = ron/(ron+roff)*eject/decay + ron*roff/(ron+roff)^2 * eject^2/decay/(ron + roff + decay)
 
-# """
-# teststeadystatemodel(model,nhist)
-#
-# Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
-#
-# """
-# function teststeadystatemodel(model::AbstractGMmodel,nhist)
-#     G = model.G
-#     r = model.rates
-#     g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
-#     g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
-#     return g1,g2
-# end
+"""
+test_steadystatemodel(model,nhist)
+
+Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
+
+"""
+function test_steadystatemodel(model::AbstractGMmodel,nhist)
+    G = model.G
+    r = model.rates
+    g1 = steady_state(r[1:2*G],G-1,nhist,model.nalleles)
+    g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
+    return g1,g2
+end
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"

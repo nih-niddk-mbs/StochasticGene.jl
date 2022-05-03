@@ -43,9 +43,30 @@ function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     add_moments!(df,datafolder,fish)
 end
 
-function add_measures(df,measurefile::String)
-    dm = read_dataframe(measurefile)
-    leftjoin(df,dm[:,[:Gene,:Deviance,:WAIC,:AIC,:Rhat]], on = :Gene)
+function augment_dataframe(df,resultfolder,datafolder;fishdata=false)
+    dfc = copy(df)
+    if dfc[1,:Model] > 1
+        dfc = add_burstsize(dfc,resultfolder)
+    end
+    dfc = add_measures(dfc,resultfolder)
+    add_modelmoments!(dfc)
+end
+
+function make_measure_df(resultfolder::String)
+    files = get_measuresummaryfiles(resultfolder)
+    df = Vector{DataFrame}(undef,0)
+    for file in files
+        parts = fields(file)
+        df0 = read_dataframe(joinpath(resultfolder,file))
+        insertcols!(df0, :Condition => parts.cond)
+        push!(df,df0)
+    end
+    stack_dataframe(df)
+end
+
+function add_measures(df,resultfolder::String)
+    dm = make_measure_df(resultfolder)
+    leftjoin(df,dm[:,[:Gene,:Nalleles,:Condition,:Deviance,:WAIC,:AIC,:Rhat]], on = [:Gene,:Condition])
 end
 
 function add_mean!(df::DataFrame,datafolder,fish::Bool)
@@ -79,12 +100,16 @@ function add_modelmoments!(df::DataFrame)
     v = similar(m)
     i = 1
     for gene in df.Gene
-        m[i] = model2_mean(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i])
-        v[i] = model2_variance(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i])
+        m[i] = model2_mean(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i],df.Nalleles[i])
+        v[i] = model2_variance(df.Rate01[i],df.Rate10[i],df.Eject[i],df.Decay[i],df.Nalleles[i])
         i += 1
     end
     insertcols!(df, :Model_Expression => m, :Model_Variance => v)
 end
+
+add_burstsize(df,resultfolder::String,cols::Vector{Symbol} = [:Gene,:Condition]) = add_burstsize(df,make_burst_df(resultfolder),cols)
+
+add_burstsize(df,db,cols::Vector{Symbol} = [:Gene,:Condition]) = leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene,:Condition]],on = cols)
 
 function make_burst_df(resultfolder::String)
     files = get_burstsummaryfiles(resultfolder)
@@ -96,13 +121,6 @@ function make_burst_df(resultfolder::String)
         push!(df,df0)
     end
     stack_dataframe(df)
-end
-
-add_burstsize(df,db,cols::Vector{Symbol} = [:Gene,:Cond]) = lefjoin(df,db,on = cols)
-
-function add_burstsize(df,resultfolder,cols::Vector{Symbol} = [:Gene,:Cond])
-    db=make_burst_df(resultfolder)
-    addburstsize(df,db,cols)
 end
 
 
@@ -356,6 +374,11 @@ function filter_gene_nan(measurefile,measure)
     println(length(genes))
     return genes
 end
+"""
+large_rhat(measureile,threshold)
+
+"""
+large_rhat(measurefile,threshold) = filter_gene(measurefile,"Rhat",threshold)
 """
     large_deviance(measurefile,threshold)
 
@@ -716,12 +739,13 @@ end
 
 """
 plot_histogram()
+plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
 
 functions to plot data and model predicted histograms
 
 """
 
-function plot_histogram(ratefile::String,datafolder,fish=false,root=".",row=2)
+function plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
     r = readrow(ratefile,row)
     println(r)
     parts = fields(ratefile)
@@ -732,6 +756,7 @@ function plot_histogram(ratefile::String,datafolder,fish=false,root=".",row=2)
     model = model_rna(r,r,parse(Int,parts.model),parse(Int,parts.nalleles),.01,[],(),0)
     # model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
     plot_histogram(data,model)
+    return data,model
 end
 
 

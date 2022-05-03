@@ -203,7 +203,7 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
         accepttotal += accept
     end
     covlogparam = cov(log.(parout[:,1:step]'))
-    if isposdef((2.4)^2 / length(param)*covlogparam)
+    if isposdef((2.4)^2 / length(param)*covlogparam) && step > 1000 && accepttotal/step > .1
         d=proposal_dist(param,covlogparam)
         proposalcv = covlogparam
     end

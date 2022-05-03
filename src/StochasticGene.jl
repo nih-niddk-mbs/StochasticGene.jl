@@ -26,6 +26,7 @@ export
     write_dataframes,
     write_dataframes_only,
     write_winners,
+    write_augmented,
     fix_filenames,
     fix,
     large_deviance,
