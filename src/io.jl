@@ -23,8 +23,7 @@ const raterow_dict = Dict([("ml", 1),("mean",2),("median",3),("last",4)])
 const statrow_dict = Dict([("mean",1),("SD", 2),("median",3),("MAD",4)])
 
 """
-  write_dataframes(resultfolder::String,datafolder::String,measure=:AIC)
-  write_dataframes(resultfolder::String,measure)
+  write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
 
   collates run results into a csv file
 
@@ -77,7 +76,7 @@ Augment summary file with G=2 burst size, model predicted moments, and fit measu
 
 
 """
-write_augmented(summaryfile::String,resultfolder,datafolder;fishdata=false) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder,datafolder))
+write_augmented(summaryfile::String,resultfolder;fishdata=false) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder))
 
 """
 read_dataframe(csvfile::String)
@@ -309,7 +308,7 @@ end
 
 function assemble_rates(folder::String,files::Vector,label::String,cond::String,model::String,fish)
     outfile = joinpath(folder,"rates_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-"))),readmean)
+    assemble_files(folder,get_files(files,"rates",label,cond,model),outfile,ratelabels(model,length(split(cond,"-"))),readml)
 end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
@@ -369,14 +368,14 @@ function ratelabels(model,nsets)
 end
 
 function statlabels(model,nsets)
-    label = ["SD","Median","MAD"]
+    label = ["Mean","SD","Median","MAD"]
     Grates = Gratelabels(model,nsets)
     Grates = [Grates "Eject"]
     for i = 2:nsets
         Grates = [Grates Grates]
     end
     rates = Matrix{String}(undef,1,0)
-    for i in 1:3
+    for i in 1:4
         rates = [rates Grates .* label[i]]
     end
     return ["Gene" rates]
@@ -534,6 +533,11 @@ readtemp(file::String) = readrow(file,4)
 
 readrhat(file::String) = readrow(file,6)
 
+function readml(ratefile::String)
+    m = readrow(ratefile,1)
+    reshape(m,1,length(m))
+end
+
 function readmean(ratefile::String)
     m = readrow(ratefile,2)
     reshape(m,1,length(m))
@@ -545,10 +549,11 @@ function readsd(ratefile::String)
 end
 
 function readstats(statfile::String)
+    mean = readrow_flip(statfile,1)
     sd = readrow_flip(statfile,2)
     median = readrow_flip(statfile,3)
     mad = readrow_flip(statfile,4)
-    [sd median mad]
+    [mean sd median mad]
 end
 
 function readmedian(statfile::String)

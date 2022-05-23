@@ -43,30 +43,37 @@ function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     add_moments!(df,datafolder,fish)
 end
 
-function augment_dataframe(df,resultfolder,datafolder;fishdata=false)
+function augment_dataframe(df,resultfolder;fishdata=false)
     dfc = copy(df)
-    if dfc[1,:Model] > 1
+    G = dfc[1,:Model]
+    if G == 2
         dfc = add_burstsize(dfc,resultfolder)
+        dfc = add_measures(dfc,resultfolder,string(G))
+        add_modelmoments!(dfc)
+    else
+        dfc = add_measures(dfc,resultfolder,string(G))
     end
-    dfc = add_measures(dfc,resultfolder)
-    add_modelmoments!(dfc)
+    add_residenceprob!(dfc)
+    dfc
 end
 
-function make_measure_df(resultfolder::String)
+function make_measure_df(resultfolder::String,G::String)
     files = get_measuresummaryfiles(resultfolder)
     df = Vector{DataFrame}(undef,0)
     for file in files
         parts = fields(file)
-        df0 = read_dataframe(joinpath(resultfolder,file))
-        insertcols!(df0, :Condition => parts.cond)
-        push!(df,df0)
+        if parts.model == G
+            df0 = read_dataframe(joinpath(resultfolder,file))
+            insertcols!(df0, :Condition => parts.cond)
+            push!(df,df0)
+        end
     end
     stack_dataframe(df)
 end
 
-function add_measures(df,resultfolder::String)
-    dm = make_measure_df(resultfolder)
-    leftjoin(df,dm[:,[:Gene,:Nalleles,:Condition,:Deviance,:WAIC,:AIC,:Rhat]], on = [:Gene,:Condition])
+function add_measures(df,resultfolder::String,G)
+    dm = make_measure_df(resultfolder,G)
+    leftjoin(df,dm, on = [:Gene,:Condition])
 end
 
 function add_mean!(df::DataFrame,datafolder,fish::Bool)
@@ -106,6 +113,26 @@ function add_modelmoments!(df::DataFrame)
     end
     insertcols!(df, :Model_Expression => m, :Model_Variance => v)
 end
+
+function add_residenceprob!(df::DataFrame)
+    n = df.Model[1] - 1
+    N = length(df.Gene)
+    g = Matrix{Float64}(undef,N,n+1)
+    r = Vector{Float64}(undef,2*n)
+    for i in 1:N
+        for j in 1:n
+            Symbol("Rate$j$(j-1)")
+            Symbol("Rate$(j-1)$j")
+            r[2*j-1] = df[i,Symbol("Rate$j$(j-1)")]
+            r[2*j] = df[i,Symbol("Rate$(j-1)$j")]
+            g[i,:] = residenceprob_G(r,n)
+        end
+    end
+    for j in 1:n+1
+        insertcols!(df, Symbol("ProbG$(j-1)") => g[:,j])
+    end
+end
+
 
 add_burstsize(df,resultfolder::String,cols::Vector{Symbol} = [:Gene,:Condition]) = add_burstsize(df,make_burst_df(resultfolder),cols)
 
@@ -760,15 +787,15 @@ function plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
 end
 
 
-function plot_histogram(gene::String,cell::String,G::Int,cond::String,fish::Bool,ratefile::String,datafolder::String,root::String,yield = -1.)
+function plot_histogram(gene::String,cell::String,G::Int,cond::String,fish::Bool,ratefile::String,datafolder::String,root::String=".")
     rates = readdlm(ratefile,',',header=true)
     r = rates[1][findfirst(rates[1][:,1] .== gene)[1],2:end]
-    if yield > 0 && ~fish
-        r[end] = yield
-    end
+    # if yield > 0 && ~fish
+    #     r[end] = yield
+    # end
     data = data_rna(gene,cond,datafolder,fish,"label",root)
     nalleles = alleles(gene,cell,root)
-    model = model_rna(r,[],G,nalleles,.01,[],(),fish,0)
+    model = model_rna(r,[],G,nalleles,.01,[],(),0)
     println(typeof(model))
     println(typeof(data))
     m = plot_histogram(data,model)

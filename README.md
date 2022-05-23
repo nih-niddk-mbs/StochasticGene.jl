@@ -26,9 +26,9 @@ This generates an interactive session
 Loads Julia for use
 
 ```
-[username@biowulf ~]$ julia
+[username@biowulf ~]$ julia - t 1
 ```
-Starts Julia:
+Starts Julia (with a single thread):
 
 To install StochasticGene run the following in the Julia REPL:
 
@@ -70,7 +70,7 @@ First move into the root directory you created and launch julia:
 ```
 [username@biowulf ~]$ cd scRNA
 
-[username@biowulf ~]$ julia
+[username@biowulf ~]$ julia - t 1
 
 ```
 
@@ -78,7 +78,7 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
@@ -100,7 +100,7 @@ julia> exit()
 To run the swarm file, type at the command line:
 
 ```
-[username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_3.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
+[username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_2.swarm --time 24:00:00 -t 8  -g 24 --merge-output --module julialang
 ```
 
 This will submit a job into the Biowulf queue.  To check the status of your job type:
@@ -109,7 +109,7 @@ This will submit a job into the Biowulf queue.  To check the status of your job 
 [username@biowulf ~]$ sjobs
 ```
 
-When the job finishes, Biowulf will create new swarm files in your folder. The fit results will be saved in the folder `results/HCT_scRNA`.  There will be three files for each gene and model.  The file names will have the form
+When the job finishes, Biowulf will create new swarm files in your folder. The fit results will be saved in the folder `results/HCT_scRNA`.  There will be three result files for each gene and model.  The file names will have the form
 
 `[filetype]_[label]_[condition]_[gene name]_[modeltype written as consecutive numbers GRS]_[number of alleles].txt`
 
@@ -127,17 +127,21 @@ In our example the files `rates_HCT116-scRNA-ss_MOCK_CENPL_2_2.txt`,`measures_HC
 
 The output convention is that underscore `_` is used to separate the 4 fields of a result file and thus should not be used in any of the fields.
 
-A data frame of the results can be constructed in Julia using the commands
+A data frame of the results can be constructed in Julia using the write_dataframes(resultfolder,datafolder) function, e.g.
 
 ```
 julia> using StochasticGene
+
+julia> write_dataframes("results/HCT_scRNAtest","data/HCT116_testdata")
 ```
+The result will be a set of csv files collating the result files of all the genes along with a "Winners" file that lists which model performed best for a given measure (default is AIC but can be changed with a named argument, see API below) and a Summary file condensing the information of the other files.
+
+The Summary file can be supplemented with more information via the write_augmented(summaryfile,resultfolder,datafolder) function, e.g.
 
 ```
-julia> write_dataframe(resultfolder,datafolder)
+julia> write_augmented("Summary_HCT116-scRNA-ss_MOCK_2.csv","results/HCT_scRNAtest","data/HCT116_testdata")
 
-e.g.
-julia> write_dataframe("results/HCT_scRNAtest","data/HCT116_testdata")
+
 ```
 
 ### Example Use on Unix
@@ -146,9 +150,9 @@ If not running on Biowulf, the same swarm files can be used, although they will 
 In Bash, type:
 
 ```
-Bash> chmod 744 fit_scRNA-ss-MOCK_3.swarm
+Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
 
-Bash> bash fit_scRNA-ss-MOCK_3.swarm &
+Bash> bash fit_scRNA-ss-MOCK_2.swarm &
 
 ```
 
@@ -199,13 +203,29 @@ returns swarmfile that calls a julia file that is executed on biowulf
 
 ```
 
-
 ```
-  write_dataframes(resultfolder::String,datafolder::String)
+  write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
 
   collates run results into a csv file
 
 Arguments
 - `resultfolder`: name of folder with result files
 - `datafolder`: name of folder where data is stored
+- `measure`: measure used to assess winner
+- `assemble`: if true then assemble results into summary files
+```
+
+```
+write_winners(resultfolder,measure)
+
+Write best performing model for measure (e.g. AIC, WAIC, Deviance)
+
+```
+
+```
+write_augmented(summaryfile::String,resultfolder,datafolder)
+
+Augment summary file with burst size (for G > 1), model predicted moments, and fit measures
+
+
 ```

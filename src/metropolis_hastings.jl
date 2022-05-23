@@ -238,29 +238,6 @@ function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     Fit(parout[:,1:step],llout[1:step],parml,llml,ppd,pwaic,prior,accepttotal,step)
 end
 
-# function cycle(nchains,fish,fixedeffects,model,data,options)
-#     maxtime = options.maxtime/10
-#     options = MHOptions(100,0,0,maxtime,options.temp,options.tempanneal)
-#     print_ll(data,model,"pre-cycle ll: ")
-#     t0 = time()
-#     nsets = length(data.nRNA)
-#     r = model.rates
-#     nalleles = model.nalleles
-#     G = model.G
-#     fittedparam = model.fittedparam
-#     cv = 0.02
-#     rateprior = model.rateprior
-#     while (time() - t0 < maxtime)
-#         for i in eachindex(fittedparam)
-#             model = model_rna2(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,fish,0)
-#             fit,_,_ = run_mh(data,model,options,nchains);
-#             r = get_rates(fit.parml,model)
-#         end
-#     end
-#     return model_rna2(r,rateprior,G,nalleles,cv,fittedparam,fixedeffects,fish,0)
-# end
-
-
 """
 mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
 
@@ -271,11 +248,6 @@ function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
     mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
-    # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
-    #     return 1,predictionst,paramt,llt,priort,dt
-    # else
-    #     return 0,predictions,param,ll,prior,d
-    # end
 end
 
 function mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
@@ -341,12 +313,12 @@ return proposal distribution specified by location and scale
 #     product_distribution(d)
 # end
 
-proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
+proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
 
 function proposal_dist(param::Vector,cv::Float64)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
+        push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
     end
     product_distribution(d)
 end
@@ -354,7 +326,7 @@ end
 function proposal_dist(param::Vector,cv::Vector)
     d = Vector{LogNormal{Float64}}(undef,0)
     for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],1e-100))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
+        push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
     end
     product_distribution(d)
 end
@@ -554,6 +526,7 @@ function loglikelihood(param,data,model)
     hist = datahistogram(data)
     return crossentropy(predictions,hist),predictions
 end
+
 """
 crossentropy(predictions::Array{T},data::Array{T}) where {T}
 
@@ -563,14 +536,13 @@ function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
         lltot = hist' * log.(max.(predictions,eps(T1)))
         isfinite(lltot) ? -lltot : Inf
 end
-# function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
-#     if minimum(predictions) > -0.00000001
-#         lltot = hist' * log.(normalize_histogram(max.(predictions,eps(T1))))
-#         return isfinite(lltot) ? -lltot : Inf
-#     else
-#         return Inf
-#     end
-# end
+
+"""
+sumloglikelihood(predictions,data)
+
+sumloglikelihood(predictions,data::RNACountData) = -sum(log.(max.(predictions[data.CountRNA],eps(T1))))
+"""
+
 """
 hist_entropy(hist)
 

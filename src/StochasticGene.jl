@@ -30,6 +30,7 @@ export
     fix_filenames,
     fix,
     large_deviance,
+    large_rhat,
     assemble_all,
     write_histograms,
     plot_histogram,

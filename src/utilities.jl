@@ -163,7 +163,7 @@ var_ratio(mua,mub,vara,varb,cov) = mua^2/mub^2*(vara/mua^2 - 2*cov/(mua*mub) + v
 """
 decimal(x::Vector)
 
-convert digits of base 3 number to base 10
+convert number to base 10 from any base
 """
 function decimal(x::Vector,base::Int=3)
     nr = length(x)
@@ -206,7 +206,7 @@ end
 LogNormal_array(param,cv)
 Prior distribution arrays
 """
-LogNormal_array(param,cv) = distributionarray(param,cv,LogNormal)
+LogNormal_array(param,cv) = distribution_array(param,cv,LogNormal)
 
 """
 Gamma_array(param,cv)
@@ -214,7 +214,7 @@ Gamma_array(param,cv)
 
 
 """
-Gamma_array(param,cv) = distributionarray(param,cv,Gamma)
+Gamma_array(param,cv) = distribution_array(param,cv,Gamma)
 
 """
 function LogNormalBeta_array(param,cv,ind)

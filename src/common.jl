@@ -296,7 +296,7 @@ function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
     return [modelOFF;modelON;histF]
 end
 
-likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) = 
+likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) =
     steady_state(get_rates(param,model),model.G-1,model.R,data.nRNA,model.nalleles)
 
 
@@ -490,7 +490,7 @@ function logprior(param,model::AbstractGMmodel)
 end
 
 """
-logprior(x,model::GRSModel)
+logprior(param,model::GRSModel)
 Compute log prior using distributions in Model.rateprior
 called by mhstep() in metropolis_hastings.jl
 """
