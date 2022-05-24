@@ -36,7 +36,7 @@ To install StochasticGene run the following in the Julia REPL:
 julia> ] add StochasticGene
 ```
 
-You can check if all tests pass by running
+You can check if all tests pass by running (currently not working)
 
 ```
 julia> ] test StochasticGene
