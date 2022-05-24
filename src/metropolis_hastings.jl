@@ -70,7 +70,7 @@ function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param)
-        rhat = compute(rhat)
+        rhat = compute_rhat([fit])
         measures = Measures(waic,vec(rhat))
     else
         stats = 0
