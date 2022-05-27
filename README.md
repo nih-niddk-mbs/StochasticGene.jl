@@ -173,6 +173,7 @@ Arguments
     - `label`: label of output files produced
     - `inlabel`: label of files used for initial conditions
     - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
+    - `timestamp`: label for time of sample (e.g. T120)
     - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
     - `fish`: Data file type, set to true for FISH and false to scRNA (FISH type assumes different folder structure)
     - `thresholdlow`: lower threshold for halflife for genes to be fit
@@ -196,6 +197,7 @@ Arguments
     - `tempanneal`: annealing temperature
     - `cv`: coefficient of variation (mean/std) of proposal distribution
     - `yieldprior`: prior for yield, default = .05, (set to 1 for FISH if using scRNA data format for FISH data)
+    - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
     - `genes`: array of genes to be fit
 
 
@@ -223,7 +225,7 @@ Write best performing model for measure (e.g. AIC, WAIC, Deviance)
 ```
 
 ```
-write_augmented(summaryfile::String,resultfolder,datafolder)
+write_augmented(summaryfile::String,resultfolder::String)
 
 Augment summary file with burst size (for G > 1), model predicted moments, and fit measures
 
