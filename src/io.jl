@@ -499,8 +499,12 @@ readrates(file::String,row::Int) = readrow(file,row)
 function readrow(file::String,row)
     if isfile(file) && ~isempty(read(file))
         contents = readdlm(file,',')
-        m = contents[row,:]
-        return m[.~isempty.(m)]
+        if row <= size(contents,1)
+            m = contents[row,:]
+            return m[.~isempty.(m)]
+        else
+            return [nothing]
+        end
     else
         println(file)
     end
