@@ -293,17 +293,20 @@ function assemble_all(folder::String,files::Vector,label::String,cond::String,mo
     if model == "2"
         assemble_burst_model2(folder,files,label,cond)
     end
+    assemble_optimized(folder,files,label,cond,model)
 end
 
 function assemble_files(folder::String,files::Vector,outfile::String,header,readfunction)
-    f = open(outfile,"w")
-    writedlm(f,header,',')
-    for file in files
-        gene = get_gene(file)
-        r = readfunction(joinpath(folder, file))
-        writedlm(f,[gene r],',')
+    if ~isempty(files)
+        f = open(outfile,"w")
+        writedlm(f,header,',')
+        for file in files
+            gene = get_gene(file)
+            r = readfunction(joinpath(folder, file))
+            writedlm(f,[gene r],',')
+        end
+        close(f)
     end
-    close(f)
 end
 
 function assemble_rates(folder::String,files::Vector,label::String,cond::String,model::String,fish)
@@ -327,15 +330,20 @@ function assemble_measures(folder::String,files,label::String,cond::String,model
     close(f)
 end
 
+function assemble_optimized(folder::String,files,label::String,cond::String,model::String)
+    outfile = joinpath(folder,"optimized_" * label * "_" * cond * "_" * model *  ".csv")
+    assemble_files(folder,get_files(files,"optimized",label,cond,model),outfile,hcat(ratelabels(model,length(split(cond,"-")))[:,1:end-1],["LL" "Converged"]),read_optimized)
+end
+
 function assemble_mad(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"mad_" * label * "_" * cond * "_" * model *  ".csv")
     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")))[:,1:end-1],readmad)
 end
-
-function assemble_sd(folder::String,files,label::String,cond::String,model::String)
-    outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
-    assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),"SD")[:,1:end-1],readsd)
-end
+#
+# function assemble_sd(folder::String,files,label::String,cond::String,model::String)
+#     outfile = joinpath(folder,"sd_" * label * "_" * cond * "_" * model *  ".csv")
+#     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,ratelabels(model,length(split(cond,"-")),"SD")[:,1:end-1],readsd)
+# end
 
 function assemble_stat(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model *  ".csv")
@@ -425,7 +433,7 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 """
 write_results(file::String,x)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel)
+function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel,optimized)
     if ~isdir(path)
         mkpath(path)
     end
@@ -433,7 +441,7 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
     write_measures(joinpath(path,"measures" * name),fit,measures,deviance(fit,data,model),temp)
     write_param_stats(joinpath(path,"param-stats" * name),stats)
-
+    write_optimized(joinpath(path,"optimized" * name),optimized)
 end
 
 """
@@ -480,6 +488,17 @@ function write_param_stats(file,stats::Stats)
     writedlm(f,stats.corparam,',')
     writedlm(f,stats.covparam,',')
     writedlm(f,stats.covlogparam,',')
+    close(f)
+end
+
+"""
+write_optimized(file,optimized)
+"""
+function write_optimized(file::String,optimized)
+    f = open(file,"w")
+    writedlm(f,Optim.minimizer(optimized)',',')
+    writedlm(f,Optim.minimum(optimized),',')
+    writedlm(f,Optim.converged(optimized),',')
     close(f)
 end
 
@@ -614,6 +633,13 @@ function read_burst_model2(file::String)
     cov = read_covparam(c)
     v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
     [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
+end
+
+function read_optimized(file::String)
+    rates = readrow_flip(file,1)
+    ll = readrow(file,2)
+    conv = readrow(file,3)
+    [rates ll conv]
 end
 
 function write_residency_G(fileout::String,filein::String,G,header)

@@ -73,7 +73,8 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     end
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
-    finalize(data,model,fit,stats,measures,temp,resultfolder,root)
+    optimized = Optim.optimize(x -> loglikelihood(x,data,model)[1],get_param(model))
+    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
     println(now())
     nothing
 end
@@ -157,15 +158,18 @@ finalize(data,model,fit,stats,waic,temp,resultfolder,root)
 
 write out run results and print out final loglikelihood and deviance
 """
-function finalize(data,model,fit,stats,measures,temp,resultfolder,root)
+function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
     writefolder = joinpath(root,resultfolder)
-    writeall(writefolder,fit,stats,measures,data,temp,model)
+    writeall(writefolder,fit,stats,measures,data,temp,model,optimized)
     println("final max ll: ",fit.llml)
     print_ll(vec(stats.meanparam),data,model,"mean ll: ")
     println("Mean fitted rates: ",stats.meanparam[:,1])
+    println("ML rates: ",fit.parml)
     println("Acceptance: ",fit.accept,"/",fit.total)
     println("Deviance: ",deviance(fit,data,model))
     println("rhat: ",maximum(measures.rhat))
+    println("Optimized ML: ",Optim.minimum(optimized))
+    println("Optimized rates: ",Optim.minimizer(optimized))
 end
 
 #Prepare data structures

@@ -17,6 +17,7 @@ using FFTW
 using Downloads
 using CSV
 using MultivariateStats
+using Optim
 
 export
     rna_setup,
