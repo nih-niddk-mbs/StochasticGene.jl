@@ -73,7 +73,7 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     end
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
-    optimized = Optim.optimize(x -> loglikelihood(x,data,model)[1],get_param(model))
+    optimized = Optim.optimize(x -> loglikelihood(x,data,model)[1],fit.parml,LBFGS())
     finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
     println(now())
     nothing
