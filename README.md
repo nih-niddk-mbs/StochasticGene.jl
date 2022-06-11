@@ -174,7 +174,7 @@ Arguments
     - `inlabel`: label of files used for initial conditions
     - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
     - `timestamp`: label for time of sample (e.g. T120)
-    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2", can use full or path        relative to root
     - `fish`: Data file type, set to true for FISH and false to scRNA (FISH type assumes different folder structure)
     - `thresholdlow`: lower threshold for halflife for genes to be fit
     - `threhsoldhigh`: upper threshold

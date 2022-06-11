@@ -38,9 +38,14 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
     gene = check_genename(gene,"[")
-    datafolder = joinpath("data",datafolder)
+    if ~ispath(datafolder)
+        datafolder = joinpath(root,"data",datafolder)
+        if ~ispath(datafolder)
+            throw("$datafolder not found")
+        end
+    end
     if occursin("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
     end
@@ -48,13 +53,13 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
         datacond = string.(split(datacond,"-"))
     end
     if transient
-        data = data_rna(gene,datacond,datafolder,fish,label,root,["T0","T30","T120"],[0.,30.,120.])
+        data = data_rna(gene,datacond,datafolder,fish,label,["T0","T30","T120"],[0.,30.,120.])
     else
-        data = data_rna(gene,datacond,datafolder,fish,label,root)
+        data = data_rna(gene,datacond,datafolder,fish,label)
     end
     fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println("size of histogram: ",data.nRNA)
@@ -73,7 +78,12 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     end
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
-    optimized = Optim.optimize(x -> loglikelihood(x,data,model)[1],fit.parml,LBFGS())
+    optimized = 0
+    try
+        optimized = Optim.optimize(x -> loglikelihood(x,data,model)[1],fit.parml,LBFGS())
+    catch
+        @warn "Optimizer failed"
+    end
     finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
     println(now())
     nothing
@@ -168,49 +178,52 @@ function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root
     println("Acceptance: ",fit.accept,"/",fit.total)
     println("Deviance: ",deviance(fit,data,model))
     println("rhat: ",maximum(measures.rhat))
-    println("Optimized ML: ",Optim.minimum(optimized))
-    println("Optimized rates: ",Optim.minimizer(optimized))
+    if optimized != 0
+        println("Optimized ML: ",Optim.minimum(optimized))
+        println("Optimized rates: ",Optim.minimizer(optimized))
+    end
 end
 
 #Prepare data structures
 """
-    data_rna(gene::String,cond::String,datafolder,fish,label,root)
+    data_rna(gene::String,cond::String,datafolder,fish,label)
+    data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,sets::Vector,time::Vector)
     data_rna(path,time,gene,time)
     data_rna(path,time,gene)
 
 Load data structure
 """
 
-function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root)
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label)
     if cond == "null"
         cond = ""
     end
-    datafile = fish ? FISHpath(gene,cond,datafolder,root) : scRNApath(gene,cond,datafolder,root)
+    datafile = fish ? FISHpath(gene,cond,datafolder) : scRNApath(gene,cond,datafolder)
     data_rna(datafile,label,gene,fish)
 end
-function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label,root)
+function data_rna(gene::String,cond::Array,datafolder::String,fish::Bool,label)
     datafile = Array{String,1}(undef,length(cond))
     for i in eachindex(cond)
-        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder,root) : scRNApath(gene,cond[i],datafolder,root)
+        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder) : scRNApath(gene,cond[i],datafolder)
     end
     data_rna(datafile,label,gene,fish)
 end
-function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label,root)
+function data_rna(gene::String,cond::Array,datafolder::Array,fish::Bool,label)
     datafile = Array{String,1}(undef,length(cond))
     for i in eachindex(cond)
-        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder,root) : scRNApath(gene,cond[i],datafolder,root)
+        datafile[i] = fish ? FISHpath(gene,cond[i],datafolder) : scRNApath(gene,cond[i],datafolder)
     end
     println(datafile)
     data_rna(datafile,label,gene,fish)
 end
-function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,root,sets::Vector,time::Vector)
+function data_rna(gene::String,cond::String,datafolder::String,fish::Bool,label,sets::Vector,time::Vector)
     if cond == "null"
         cond = ""
     end
     datafile =[]
     for set in sets
         folder = joinpath(datafolder,set)
-        path = fish ? FISHpath(gene,cond,datafolder,root) : scRNApath(gene,cond,datafolder,root)
+        path = fish ? FISHpath(gene,cond,datafolder) : scRNApath(gene,cond,datafolder)
         datafile = vcat(datafile,path)
     end
     data_rna(datafile,label,times,gene,false)
@@ -759,9 +772,9 @@ rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
 
 output RNA histogram and downsampled FISH histogram with loss
 """
-function rna_fish(gene,cond,fishfolder,rnafolder,yield,root)
-    datarna = histograms_rna(scRNApath(gene,cond,rnafolder,root),gene,false)
-    f=reduce_fish(gene,cond,datarna[1],fishfolder,yield,root)
+function rna_fish(gene,cond,fishfolder,rnafolder,yield)
+    datarna = histograms_rna(scRNApath(gene,cond,rnafolder),gene,false)
+    f=reduce_fish(gene,cond,datarna[1],fishfolder,yield)
     return datarna[2],f
 end
 
@@ -770,8 +783,8 @@ reduce_fish(gene,cond,nhist,fishfolder,yield,root)
 
 sample fish histogram with loss (1-yield)
 """
-function reduce_fish(gene,cond,nhist,fishfolder,yield,root)
-    fish = histograms_rna(FISHpath(gene,cond,fishfolder,root),gene,true)
+function reduce_fish(gene,cond,nhist,fishfolder,yield)
+    fish = histograms_rna(FISHpath(gene,cond,fishfolder),gene,true)
     technical_loss(fish[2],yield,nhist)
     fish[2]
 end

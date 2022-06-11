@@ -76,7 +76,7 @@ Augment summary file with G=2 burst size, model predicted moments, and fit measu
 
 
 """
-write_augmented(summaryfile::String,resultfolder;fishdata=false) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder))
+write_augmented(summaryfile::String,resultfolder) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder))
 
 """
 read_dataframe(csvfile::String)
@@ -441,7 +441,9 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
     write_rates(joinpath(path,"rates" * name ),fit,stats,model)
     write_measures(joinpath(path,"measures" * name),fit,measures,deviance(fit,data,model),temp)
     write_param_stats(joinpath(path,"param-stats" * name),stats)
-    write_optimized(joinpath(path,"optimized" * name),optimized)
+    if optimized != 0
+        write_optimized(joinpath(path,"optimized" * name),optimized)
+    end
 end
 
 """

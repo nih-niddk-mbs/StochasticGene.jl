@@ -43,7 +43,7 @@ function make_dataframe(ratefile::String,datafolder::String,fish::Bool)
     add_moments!(df,datafolder,fish)
 end
 
-function augment_dataframe(df,resultfolder;fishdata=false)
+function augment_dataframe(df,resultfolder)
     dfc = copy(df)
     G = dfc[1,:Model]
     if G == 2
@@ -64,16 +64,26 @@ function make_measure_df(resultfolder::String,G::String)
         parts = fields(file)
         if parts.model == G
             df0 = read_dataframe(joinpath(resultfolder,file))
-            insertcols!(df0, :Condition => parts.cond)
+            if ~isempty(parts.cond)
+                insertcols!(df0, :Condition => parts.cond)
+            end
             push!(df,df0)
         end
     end
     stack_dataframe(df)
 end
 
+function join_cols(d)
+    if ismissing(d.Condition[1])
+        return [:Gene]
+    else
+        return [:Gene, :Condition]
+    end
+end
+
 function add_measures(df,resultfolder::String,G)
     dm = make_measure_df(resultfolder,G)
-    leftjoin(df,dm, on = [:Gene,:Condition])
+    leftjoin(df,dm, on = join_cols(df))
 end
 
 function add_mean!(df::DataFrame,datafolder,fish::Bool)
@@ -88,7 +98,6 @@ function add_mean!(df::DataFrame,datafolder,fish::Bool)
 end
 
 function add_moments!(df::DataFrame,datafolder,fish::Bool)
-    # root = string(split(abspath(datafolder),"data")[1])
     m = Vector{Float64}(undef,length(df.Gene))
     v = similar(m)
     t = similar(m)
@@ -133,10 +142,15 @@ function add_residenceprob!(df::DataFrame)
     end
 end
 
+add_burstsize(df,resultfolder::String,cols::Vector{Symbol} = join_cols(df)) = add_burstsize(df,make_burst_df(resultfolder),cols)
 
-add_burstsize(df,resultfolder::String,cols::Vector{Symbol} = [:Gene,:Condition]) = add_burstsize(df,make_burst_df(resultfolder),cols)
-
-add_burstsize(df,db,cols::Vector{Symbol} = [:Gene,:Condition]) = leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene,:Condition]],on = cols)
+function add_burstsize(df,db,cols)
+    if ismissing(df[1,:Condition])
+        leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene]],on = cols)
+    else
+        leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene,:Condition]],on = cols)
+    end
+end
 
 function make_burst_df(resultfolder::String)
     files = get_burstsummaryfiles(resultfolder)
@@ -144,9 +158,12 @@ function make_burst_df(resultfolder::String)
     for file in files
         parts = fields(file)
         df0 = read_dataframe(joinpath(resultfolder,file))
-        insertcols!(df0, :Condition => parts.cond)
+        if ~isempty(parts.cond)
+            insertcols!(df0, :Condition => parts.cond)
+        end
         push!(df,df0)
     end
+    println(length(df))
     stack_dataframe(df)
 end
 
