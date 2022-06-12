@@ -56,7 +56,7 @@ function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label"
     makeswarm(genes,G=G,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp=timestamp,nsets=nsets,datafolder=datafolder,fish=fish,cycle=cycle,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,nthreads=nthreads,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv,yieldprior=yieldprior,priorcv=priorcv,decayrate=decayrate)
 end
 
-function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=false,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05,priorcv=10.,decayrate=-1)
+function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=false,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05,priorcv=10.,decayrate=-1.)
     if label == "label"
         if fish
             label = "FISH-ss"
@@ -164,15 +164,6 @@ function write_fitfile(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixed
         close(f)
 end
 
-# function write_fitfile_include(fitfile,nchains,cell,datacond,G,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,fish,cycle,inlabel,label,nsets,runcycle,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,modulepath,cv,yieldprior)
-#         f = open(fitfile,"w")
-#         s =   '"'
-#         write(f,"@everywhere include($s$modulepath$s)\n")
-#         # write(f,"@everywhere using StochasticGene\n")
-#         write(f,"@time StochasticGene.fit_rna($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$s$datacond$s,$G,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$fish,$cycle,$s$inlabel$s,$s$label$s,$nsets,$cv,$runcycle,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$yieldprior)\n")
-#         close(f)
-# end
-
 function getbatches(genes,ngenes,batchsize)
     nbatches = div(ngenes,batchsize)
     batches = Vector{Vector{String}}(undef,nbatches+1)
@@ -220,6 +211,11 @@ function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Floa
     end
 end
 
+function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
+    datafolder = joinpath(root,"data",datafolder)
+    checkgenes(cond,datafolder,cell,thresholdlow,thresholdhigh)
+end
+
 function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
     genes = intersect(get_halflives(".",cell,thresholdlow,thresholdhigh), get_genes(cond,datafolder))
     alleles = get_alleles(".",cell)
@@ -230,15 +226,14 @@ function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,t
     end
 end
 
-
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
-    file = get_file(root,"data/halflives",cell,"csv")
-    get_halflives(file,thresholdlow,thresholdhigh)
+    path = get_file(root,"data/halflives",cell,"csv")
+    get_halflives(path,thresholdlow,thresholdhigh)
 end
 
-function get_halflives(file,thresholdlow::Float64,thresholdhigh::Float64)
+function get_halflives(hlpath,thresholdlow::Float64,thresholdhigh::Float64)
     genes = Vector{String}(undef,0)
-    halflives = readdlm(file,',')
+    halflives = readdlm(hlpath,',')
     for row in eachrow(halflives)
         if typeof(row[2]) <: Number
             if thresholdlow <= row[2] < thresholdhigh
@@ -249,22 +244,24 @@ function get_halflives(file,thresholdlow::Float64,thresholdhigh::Float64)
     return genes
 end
 
-function get_alleles(root,cell)
-    file = get_file(root,"data/alleles",cell,"csv")
-    if ~isnothing(file)
-        return readdlm(file,',')[2:end,1]
+get_alleles(root,cell) = get_alleles(get_file(root,"data/alleles",cell,"csv"))
+
+function get_alleles(allelepath)
+    if ~isnothing(allelepath)
+        return readdlm(allelepath,',')[2:end,1]
     else
         return nothing
     end
 end
 
-function get_file(root,folder,type,suffix)
-    folder = joinpath(root,folder)
+get_file(root,folder,filetype,suffix) = get_file(joinpath(root,folder),filetype,suffix)
+
+function get_file(folder,filetype,suffix)
     if ispath(folder)
         files = readdir(folder)
         for file in files
             name = split(file,"_")[1]
-            if occursin(suffix,file) && name == type
+            if occursin(suffix,file) && name == filetype
                 path = joinpath(folder,file)
                 return path
             end
@@ -324,32 +321,17 @@ function findswarm(job)
     list[occursin.(".swarm",list)][1]
 end
 
-# function collate(folders,type="rates_scRNA_T120")
-#     genes = Vector{Vector}(undef,0)
-#     for folder in folders
-#         files = readdir(folder)
-#         for file in files
-#             if occursin(type,file)
-#                 contents=readdlm(file,',')
-#                 for row in eachrow(contents)
-#                     row[1] .== genes
-#                 end
-#             end
-#         end
-#     end
-# end
-
 """
     get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
 """
 
-function get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model,root=".")
-    genes = checkgenes(root,cond,datafolder,cell,0.,1e8)
-    get_missing_genes(genes,folder,type,label,cond,model)
+function get_missing_genes(datafolder::String,resultfolder::String,cell,filetype,label,cond,model,root=".")
+    genes = checkgenes(cond,datafolder,cell,0.,1e8)
+    get_missing_genes(genes,resultfolder,filetype,label,cond,model)
 end
 
-function get_missing_genes(genes::Vector,folder,type,label,cond,model)
-    genes1=get_genes(folder,type,label,cond,model)
+function get_missing_genes(genes::Vector,resultfolder,filetype,label,cond,model)
+    genes1=get_genes(resultfolder,filetype,label,cond,model)
     get_missing_genes(genes,genes1)
 end
 
