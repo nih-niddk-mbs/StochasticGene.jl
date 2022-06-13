@@ -201,8 +201,8 @@ function checkgenes(root,conds::Vector,datafolder,celltype::String,thresholdlow:
 end
 
 function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
-    datafolder = joinpath("data",datafolder)
-    genes = intersect(get_halflives(root,cell,thresholdlow,thresholdhigh), get_genes(root,cond,datafolder))
+    datafolder = folder_path(datafolder,root,"data")
+    genes = intersect(get_halflives(root,cell,thresholdlow,thresholdhigh), get_genes(cond,datafolder))
     alleles = get_alleles(root,cell)
     if ~isnothing(alleles)
         return intersect(genes,alleles)
@@ -211,19 +211,17 @@ function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Floa
     end
 end
 
-function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
-    datafolder = joinpath(root,"data",datafolder)
-    checkgenes(cond,datafolder,cell,thresholdlow,thresholdhigh)
-end
-
-function checkgenes(cond::String,datafolder,cell::String,thresholdlow::Float64,thresholdhigh::Float64)
-    genes = intersect(get_halflives(".",cell,thresholdlow,thresholdhigh), get_genes(cond,datafolder))
-    alleles = get_alleles(".",cell)
-    if ~isnothing(alleles)
-        return intersect(genes,alleles)
-    else
-        return genes
+function folder_path(folder::String,root::String,foldertype::String)
+    if ~ispath(folder)
+        f = joinpath(root,folder)
+        if ~ispath(f)
+            f = joinpath(root,foldertype,folder)
+            if ~ispath(f)
+                throw("$folder not found")
+            end
+        end
     end
+    f
 end
 
 function get_halflives(root,cell,thresholdlow::Float64,thresholdhigh::Float64)
@@ -326,8 +324,8 @@ end
 """
 
 function get_missing_genes(datafolder::String,resultfolder::String,cell,filetype,label,cond,model,root=".")
-    genes = checkgenes(cond,datafolder,cell,0.,1e8)
-    get_missing_genes(genes,resultfolder,filetype,label,cond,model)
+    genes = checkgenes(root,cond,datafolder,cell,0.,1e8)
+    get_missing_genes(genes,folder_path(resultfolder,root,"results"),filetype,label,cond,model)
 end
 
 function get_missing_genes(genes::Vector,resultfolder,filetype,label,cond,model)

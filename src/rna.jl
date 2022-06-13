@@ -40,12 +40,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
     gene = check_genename(gene,"[")
-    if ~ispath(datafolder)
-        datafolder = joinpath(root,"data",datafolder)
-        if ~ispath(datafolder)
-            throw("$datafolder not found")
-        end
-    end
+    datafolder = folder_path(datafolder,root,"data")
     if occursin("-",datafolder)
         datafolder = string.(split(datafolder,"-"))
     end
