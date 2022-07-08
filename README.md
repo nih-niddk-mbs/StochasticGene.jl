@@ -78,7 +78,7 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
+julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,fish = false,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
@@ -88,7 +88,7 @@ To fit all the genes in the data folder use:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,fish = false,cycle=true,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,fish = false,G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
 ```
 
 To exit julia type:
@@ -139,7 +139,7 @@ The result will be a set of csv files collating the result files of all the gene
 The Summary file can be supplemented with more information via the write_augmented(summaryfile,resultfolder,datafolder) function, e.g.
 
 ```
-julia> write_augmented("Summary_HCT116-scRNA-ss_MOCK_2.csv","results/HCT_scRNAtest","data/HCT116_testdata")
+julia> write_augmented("results/HCT_scRNAtest/Summary_HCT116-scRNA-ss_MOCK_2.csv","results/HCT_scRNAtest")
 
 
 ```
@@ -161,9 +161,9 @@ This will execute each gene in the swarm file sequentially. To run several genes
 ### API:
 
 ```
-makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish= false,cycle=true,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,yieldprior=0.05)
+makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,yieldprior=0.05)
 
-makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,cycle=true,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05)
+makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel=label,timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05)
 
 Arguments
     - `G`: number of gene states
