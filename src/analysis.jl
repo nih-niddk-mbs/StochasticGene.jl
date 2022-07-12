@@ -4,9 +4,9 @@
     make_dataframes(resultfolder::String,datafolder::String)
 
 """
-function make_dataframes(resultfolder::String,datafolder::String,assemble=true)
+function make_dataframes(resultfolder::String,datafolder::String,assemble=true,fittedparams="")
     if assemble
-        assemble_all(resultfolder)
+        assemble_all(resultfolder,fittedparams=fittedparams)
     end
     files = get_ratesummaryfiles(resultfolder)
     parts = fields.(files)

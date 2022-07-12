@@ -357,7 +357,7 @@ function var_histogram(x)
 end
 
 function moment_histogram(x,n)
-    y = collect(1:length(x)) .- 1
+    y = collect(0:length(x)-1)
     v = (y .- mean_histogram(x)).^n
     v' * x/sum(x)
 end
