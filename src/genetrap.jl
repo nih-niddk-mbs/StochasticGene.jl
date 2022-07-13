@@ -37,8 +37,9 @@ function fit_genetrap(nchains,gene::String,G::Int,R::Int,nalleles::Int,root::Str
     data,model,options = genetrap(root,folder,"mean","gt",gene,G,R,nalleles,"",maxtime,samplesteps)
     print_ll(data,model)
     fit,stats,waic = run_mh(data,model,options,nchains)
-    finalize(data,model,fit,stats,waic,1.,folder,root)
+    finalize(data,model,fit,stats,waic,1.,folder,0,root)
     println(now())
+    return get_rates(stats.medparam,model)
 end
 
 """
