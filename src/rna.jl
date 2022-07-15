@@ -38,7 +38,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
+function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
     gene = check_genename(gene,"[")
     datafolder = folder_path(datafolder,root,"data")
     if occursin("-",datafolder)
@@ -52,9 +52,9 @@ function fit_rna(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixe
     else
         data = data_rna(gene,datacond,datafolder,fish,label)
     end
-    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,runcycle,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
+    fit_rna(nchains,data,gene,cell,fittedparam,fixedeffects,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
 end
-function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
+function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.)
     println(now())
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
     println("size of histogram: ",data.nRNA)
@@ -68,9 +68,6 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
 
     model = model_rna(gene,cell,G,cv,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,yieldprior,decayrate,LogNormal,priorcv,true)
     options = MHOptions(samplesteps,0,warmupsteps,annealsteps,maxtime*.9,temp,tempanneal)
-    if runcycle
-        model = cycle(nchains,fish,fixedeffects,model,data,options)
-    end
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
     optimized = 0
@@ -79,37 +76,27 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     catch
         @warn "Optimizer failed"
     end
-    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
+    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burstsize(fit,model),root)
     println(now())
     nothing
 end
 
 """
-cycle(nchains,fish,fixedeffects,model,data,options)
+burstsize(fit,model::AbstractGMmodel)
 
-run_mh by cycling through individual parameters sequentially
+Compute burstsize and stats using MCMC chain
+
 """
-function cycle(nchains,fish,fixedeffects,model,data,options)
-    maxtime = options.maxtime/10
-    options = MHOptions(100,0,0,0,maxtime,options.temp,options.tempanneal)
-    print_ll(data,model,"pre-cycle ll: ")
-    t0 = time()
-    nsets = length(data.nRNA)
-    r = model.rates
-    nalleles = model.nalleles
-    G = model.G
-    fittedparam = model.fittedparam
-    cv = 0.02
-    rateprior = model.rateprior
-    while (time() - t0 < maxtime)
-        for i in eachindex(fittedparam)
-            model = model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
-            fit,_,_ = run_mh(data,model,options,nchains);
-            r = get_rates(fit.parml,model)
-        end
+function burstsize(fit,model::AbstractGMmodel)
+    b = Float64[]
+    for p in eachcol(fit.param)
+        r = get_rates(p,model)
+        push!(b,r[2*model.G-1] / r[2*model.G-2])
     end
-    return model_rna(r,rateprior,G,nalleles,cv,fittedparam,fixedeffects,0)
+    BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
 end
+
+
 """
 check_genename(gene,p1)
 
@@ -159,13 +146,13 @@ function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
 end
 
 """
-finalize(data,model,fit,stats,waic,temp,resultfolder,root)
+finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
 
 write out run results and print out final loglikelihood and deviance
 """
-function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,root)
+function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,root)
     writefolder = joinpath(root,resultfolder)
-    writeall(writefolder,fit,stats,measures,data,temp,model,optimized)
+    writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
     println("final max ll: ",fit.llml)
     print_ll(vec(stats.meanparam),data,model,"mean ll: ")
     println("Mean fitted rates: ",stats.meanparam[:,1])

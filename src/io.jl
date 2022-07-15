@@ -19,6 +19,20 @@ struct Summary_Fields <: Fields
     model::String
 end
 
+"""
+struct BurstMeasures <: Results
+
+Structure for Burst measures
+"""
+struct BurstMeasures <: Results
+    mean::Float64
+    std::Float64
+    median::Float64
+    mad::Float64
+    quantiles::Array
+end
+
+
 const raterow_dict = Dict([("ml", 1),("mean",2),("median",3),("last",4)])
 const statrow_dict = Dict([("mean",1),("SD", 2),("median",3),("MAD",4)])
 
@@ -212,44 +226,6 @@ function write_moments(outfile,genelist,cond,datafolder,fish,root)
 end
 
 """
-    write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root)
-
-"""
-function write_burst_stats(outfile,infile::String,G::String,cell,folder,cond,root,fittedparams)
-    folder = joinpath(root,folder)
-    condarray = split(cond,"-")
-    g = parse(Int,G)
-    lr = 2*g
-    lc = 2*g-1
-    freq = Array{Float64,1}(undef,2*length(condarray))
-    burst = similar(freq)
-    f = open(joinpath(folder,outfile),"w")
-    contents,head = readdlm(joinpath(folder,infile),',',header=true)
-    label = Array{String,1}(undef,0)
-    for c in condarray
-        label = vcat(label, "Freq " * c, "sd","Burst Size " * c, "sd")
-    end
-    writedlm(f,["gene" reshape(label,1,length(label))],',')
-    for r in eachrow(contents)
-        gene = String(r[1])
-        rates = r[2:end]
-        rdecay = decay(root,cell,gene)
-        cov = read_covparam(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
-        # mu = readmean(joinpath(folder,getfile("param-stats",gene,G,folder,cond)[1]))
-        if size(cov,2) < 2
-            println(gene)
-        end
-        for i in eachindex(condarray)
-            j = i-1
-            freq[2*i-1], freq[2*i] = frequency(rates[1+lr*(i-1)],sqrt(cov[1+lc*j,1+lc*j]),rdecay)
-            burst[2*i-1], burst[2*i] = burstsize(rates[3+lr*j],rates[2+lr*j],cov[3+lc*j,3+lc*j],cov[2+lc*j,2+lc*j],cov[2+lc*j,3+lc*j])
-        end
-        writedlm(f,[gene freq[1] freq[2] burst[1] burst[2] freq[3] freq[4] burst[3] burst[4]],',')
-        flush(f)
-    end
-    close(f)
-end
-"""
     write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datafolder::String,fish,root,outfolder = "histograms")
 
 """
@@ -324,7 +300,7 @@ end
 
 function assemble_measures(folder::String,files,label::String,cond::String,model::String)
     outfile = joinpath(folder,"measures_" * label * "_" * cond * "_" * model *  ".csv")
-    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "SD" "AIC" "Acceptance" "Temperature" "Rhat"]
+    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
     # assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
     files = get_files(files,"measures",label,cond,model)
     f = open(outfile,"w")
@@ -343,62 +319,63 @@ function assemble_optimized(folder::String,files,label::String,cond::String,mode
     assemble_files(folder,get_files(files,"optimized",label,cond,model),outfile,optlabels(model,split(cond,"-"),fittedparams),read_optimized)
 end
 
-# function assemble_mad(folder::String,files,label::String,cond::String,model::String)
-#     outfile = joinpath(folder,"mad_" * label * "_" * cond * "_" * model *  ".csv")
-#     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,statlabels(model,split(cond,"-"),fittedparams),readmad)
-# end
-
 function assemble_stats(folder::String,files,label::String,cond::String,model::String,fittedparams)
     outfile = joinpath(folder,"stats_" * label * "_" * cond * "_" * model *  ".csv")
     assemble_files(folder,get_files(files,"param-stats",label,cond,model),outfile,statlabels(model,split(cond,"-"),fittedparams),readstats)
 end
 
 function assemble_burst_sizes(folder,files,label,cond,model,fittedparams)
-    conds = split(cond,"-")
-    head = ["BurstSize" "BurstSD"]
-    if length(conds) > 1
-        header = Matrix{String}(undef,1,0)
-        for cond in conds
-            header = hcat(header,head .* cond)
-        end
-    else
-        header = head
-    end
-    header = hcat("Gene",header)
     outfile = joinpath(folder,"burst_" * label * "_" * cond * "_" * model *  ".csv")
-    f = open(outfile,"w")
-    writedlm(f,header,',')
-    files = get_files(files,"param-stats",label,cond,model)
-    N = 2*parse(Int,model)
-    for file in files
-        c = readdlm(joinpath(folder, file),',')
-        cov = read_covparam(c)
-        r = Matrix{Float64}(undef,1,0)
-        for i in eachindex(conds)
-            off = N*i - 2
-            off = off in fittedparams ? off : mod(off - N,N)
-            off = findfirst(off .== fittedparams)
-            eject = N*i - 3
-            eject = eject in fittedparams ? eject : mod(eject - N,N)
-            eject = findfirst(eject .== fittedparams)
-            b,s = burstsize(c[1,eject],c[1,off],cov[eject,eject],cov[off,off],cov[eject,off])
-            r = [r b s]
-        end
-        gene = get_gene(file)
-        writedlm(f,[gene r],',')
-    end
-    close(f)
+    assemble_files(folder,get_files(files,"burst",label,cond,model),outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"],read_burst)
 end
 
+# function assemble_burst_sizes(folder,files,label,cond,model,fittedparams)
+#     conds = split(cond,"-")
+#     head = ["BurstSize" "BurstSD"]
+#     if length(conds) > 1
+#         header = Matrix{String}(undef,1,0)
+#         for cond in conds
+#             header = hcat(header,head .* cond)
+#         end
+#     else
+#         header = head
+#     end
+#     header = hcat("Gene",header)
+#     outfile = joinpath(folder,"burst_" * label * "_" * cond * "_" * model *  ".csv")
+#     f = open(outfile,"w")
+#     writedlm(f,header,',')
+#     files = get_files(files,"param-stats",label,cond,model)
+#     N = 2*parse(Int,model)
+#     for file in files
+#         c = readdlm(joinpath(folder, file),',')
+#         cov = read_covparam(c)
+#         r = Matrix{Float64}(undef,1,0)
+#         for i in eachindex(conds)
+#             off = N*i - 2
+#             off = off in fittedparams ? off : mod(off - N,N)
+#             off = findfirst(off .== fittedparams)
+#             eject = N*i - 3
+#             eject = eject in fittedparams ? eject : mod(eject - N,N)
+#             eject = findfirst(eject .== fittedparams)
+#             b,s = burstsize(c[1,eject],c[1,off],cov[eject,eject],cov[off,off],cov[eject,off])
+#             r = [r b s]
+#         end
+#         gene = get_gene(file)
+#         writedlm(f,[gene r],',')
+#     end
+#     close(f)
+# end
 
 
-function read_burst_model2(file::String,conds,fittedparam)
-    c = readdlm(file,',')
-    b = c[1,end]/c[1,end-1]
-    cov = read_covparam(c)
-    v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
-    [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
-end
+#
+#
+# function read_burst_model2(file::String,conds,fittedparam)
+#     c = readdlm(file,',')
+#     b = c[1,end]/c[1,end-1]
+#     cov = read_covparam(c)
+#     v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
+#     [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
+# end
 
 function rlabels(model)
     G = parse(Int,model)
@@ -442,30 +419,6 @@ end
 optlabels(model,conds,fittedparams) = ["Gene" rlabels(model,conds,fittedparams) "LL" "Convergence"]
 
 
-# function ratelabels(model,nsets,sd::Bool=false)
-#     G = parse(Int,model)
-#     n = G-1
-#     Grates = Array{String,2}(undef,1,2*n)
-#     for i = 0:n-1
-#         Grates[1,2*i+1] = "Rate$i$(i+1)"
-#         Grates[1,2*i+2] = "Rate$(i+1)$i"
-#     end
-#     rates = [Grates "Eject" "Decay"]
-#     for i = 2:nsets
-#         rates = [rates Grates "Eject" "Decay"]
-#     end
-#     if typeof(model) <: AbstractGMlossmodel
-#         rates = [rates "Yield"]
-#         lenr = 2*G*nsets + 1
-#     else
-#         lenr = 2*G*nsets
-#     end
-#     if sd
-#         rates = reshape([rates; fill("SD",1,lenr)],1,2*(lenr))
-#     end
-#     return ["Gene" rates]
-# end
-
 function get_all_rates(file::String,header::Bool)
     r = readdlm(file,',',header=header)
     if header
@@ -486,7 +439,7 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 """
 write_results(file::String,x)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel,optimized)
+function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0)
     if ~isdir(path)
         mkpath(path)
     end
@@ -496,6 +449,9 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
     write_param_stats(joinpath(path,"param-stats" * name),stats)
     if optimized != 0
         write_optimized(joinpath(path,"optimized" * name),optimized)
+    end
+    if burst != 0
+        write_burstsize(joinpath(path,"burst" * name),burst)
     end
 end
 
@@ -556,6 +512,20 @@ function write_optimized(file::String,optimized)
     writedlm(f,Optim.converged(optimized),',')
     close(f)
 end
+
+"""
+write_burstsize(file,burstsize)
+"""
+function write_burstsize(file::String,b::BurstMeasures)
+    f = open(file,"w")
+    writedlm(f,b.mean,',')
+    writedlm(f,b.std,',')
+    writedlm(f,b.median,',')
+    writedlm(f,b.mad,',')
+    writedlm(f,b.quantiles,',')
+    close(f)
+end
+
 
 """
 readrates(file::String,row::Int)
@@ -681,12 +651,9 @@ function read_crosscov(C::Matrix)
     c
 end
 
-function read_burst_model2(file::String)
-    c = readdlm(file,',')
-    b = c[1,end]/c[1,end-1]
-    cov = read_covparam(c)
-    v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
-    [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
+function read_burst(file::String)
+    b = readdlm(file,',')
+    reshape(b[1:4],1,4)
 end
 
 function read_optimized(file::String)

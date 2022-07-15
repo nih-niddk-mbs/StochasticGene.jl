@@ -146,9 +146,9 @@ add_burstsize(df,resultfolder::String,cols::Vector{Symbol} = join_cols(df)) = ad
 
 function add_burstsize(df,db,cols)
     if ismissing(df[1,:Condition])
-        leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene]],on = cols)
+        leftjoin(df,db[:,[:BurstMean,:BurstSD,:BurstMedian,:BurstMAD,:Gene]],on = cols)
     else
-        leftjoin(df,db[:,[:BurstSize,:BurstSD,:Gene,:Condition]],on = cols)
+        leftjoin(df,db[:,[:BurstMean,:BurstSD,:BurstMedian,:BurstMAD,:Gene,:Condition]],on = cols)
     end
 end
 
@@ -163,7 +163,6 @@ function make_burst_df(resultfolder::String)
         end
         push!(df,df0)
     end
-    println(length(df))
     stack_dataframe(df)
 end
 
