@@ -490,7 +490,7 @@ for total pre-mRNA occupancy and
 unspliced (visible) occupancy
 obtained by marginalizing over conditional steady state distribution
 """
-burstoccupancy(model::GRSMmodel) = burstsize(model.G-1,model.R,model.rates)
+burstoccupancy(model::GRSMmodel) = burstoccupancy(model.G-1,model.R,model.rates)
 
 function burstoccupancy(n::Int,nr::Int,r::Vector)
     T =  mat_GSR_T(r,n,nr)
