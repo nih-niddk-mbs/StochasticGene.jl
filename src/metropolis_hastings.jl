@@ -8,7 +8,6 @@ Structure for MH options
 """
 struct MHOptions <: Options
     samplesteps::Int64
-    cyclesteps::Int64
     warmupsteps::Int64
     annealsteps::Int64
     maxtime::Float64
@@ -121,8 +120,7 @@ scRNA or FISH mRNA data, and burst correlations between alleles
 function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
     ll,predictions = loglikelihood(param,data,model)
-    cyclefrac = .1
-    maxtime = options.maxtime*(1-cyclefrac)
+    maxtime = options.maxtime
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
     parml = param
     llml = ll
@@ -130,35 +128,12 @@ function metropolis_hastings(data,model,options)
     if options.annealsteps > 0
         param,parml,ll,llml,predictions,temp = anneal(predictions,param,parml,ll,llml,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),maxtime*options.annealsteps/totalsteps)
     end
-    if options.cyclesteps > 0
-        param,parml,ll,llml,predictions = cycle(predictions,param,parml,ll,llml,data,model,options.cyclesteps,options.temp,time(),options.maxtime * cyclefrac)
-    end
     if options.warmupsteps > 0
         param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
     end
     fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
-end
-
-function cycle(predictions,param,parml,ll,llml,data,model,steps,temp,t1,maxtime)
-    prior = logprior(param,model)
-    d=proposal_dist(param,.02)
-    fittedparam = model.fittedparam
-    while time() - t1 < maxtime
-        for i in eachindex(fittedparam)
-            for step in 1:steps
-                paramt,dt = proposal(d,.02)
-                priort = logprior(paramt,model)
-                llt,predictionst = loglikelihood(paramt,data,model)
-                accept,predictions,param,ll,prior,d = mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
-                if ll < llml
-                    llml,parml = ll,param
-                end
-            end
-        end
-    end
-    return param,parml,ll,llml,predictions
 end
 
 """
