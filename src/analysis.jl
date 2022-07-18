@@ -46,13 +46,13 @@ end
 function augment_dataframe(df,resultfolder)
     dfc = copy(df)
     G = dfc[1,:Model]
-    if G == 2
+    if G > 1
         dfc = add_burstsize(dfc,resultfolder)
-        dfc = add_measures(dfc,resultfolder,string(G))
-        add_modelmoments!(dfc)
-    else
-        dfc = add_measures(dfc,resultfolder,string(G))
     end
+    if G == 2
+        add_modelmoments!(dfc)
+    end
+    dfc = add_measures(dfc,resultfolder,string(G))
     add_residenceprob!(dfc)
     dfc
 end
