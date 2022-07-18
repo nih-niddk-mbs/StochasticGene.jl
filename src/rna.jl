@@ -88,12 +88,16 @@ Compute burstsize and stats using MCMC chain
 
 """
 function burstsize(fit,model::AbstractGMmodel)
-    b = Float64[]
-    for p in eachcol(fit.param)
-        r = get_rates(p,model)
-        push!(b,r[2*model.G-1] / r[2*model.G-2])
+    if model.G > 1
+        b = Float64[]
+        for p in eachcol(fit.param)
+            r = get_rates(p,model)
+            push!(b,r[2*model.G-1] / r[2*model.G-2])
+        end
+        return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
+    else
+        return 0
     end
-    BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
 end
 
 
