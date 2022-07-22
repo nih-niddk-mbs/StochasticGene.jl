@@ -6,25 +6,26 @@
 # Mean dwell time for being ON
 #
 
-function prep_param_telegraph(r,n,zeta)
+function prep_param_telegraph(r,n,nr)
 	# Transition rates
-	gammap = zeros(n+1)
-	gamman = zeros(n+1)
-	nu = zeros(zeta+1)
-	eps = zeros(zeta)
-	for i = 1:n
-		gammap[i] = r[2*(i-1)+1]
-		gamman[i+1] = r[2*i]
-	end
-	for i = 1:zeta+1
-		nu[i] = r[2*n+i]
-	end
-    # Splice rate is non decreasing, rates in r represent increase in splice rate from previous step
-	eps[1] = r[2*n + 1 + zeta + 1]
-	for i = 2:zeta
-		eps[i] = eps[i-1] + r[2*n + 1 + zeta + i]
-	end
-	return gammap,gamman,nu,eps
+	# gammap = zeros(n+1)
+	# gamman = zeros(n+1)
+	# nu = zeros(nr+1)
+	# eps = zeros(nr)
+	# for i = 1:n
+	# 	gammap[i] = r[2*(i-1)+1]
+	# 	gamman[i+1] = r[2*i]
+	# end
+	# for i = 1:zeta+1
+	# 	nu[i] = r[2*n+i]
+	# end
+    # # Splice rate is non decreasing, rates in r represent increase in splice rate from previous step
+	# eps[1] = r[2*n + 1 + zeta + 1]
+	# for i = 2:zeta
+	# 	eps[i] = eps[i-1] + r[2*n + 1 + zeta + i]
+	# end
+	gammap,gamman = get_gamma(r,n)
+	return gammap[2:n+2],gamman[1:n+1],get_nu(r,n,nr),get_eta(r,n,nr)
 end
 
 #Compute dwelltime and steady state mRNA distributions

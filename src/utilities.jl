@@ -252,7 +252,7 @@ end
 distribution_array(param::Vector,cv,dist=LogNormal)
 
 """
-function distribution_array(param::Vector,cv,dist=LogNormal)
+function distribution_array(param::Vector,cv,dist=Normal)
     d = []
     for i in eachindex(param)
         if dist == LogNormal
@@ -297,29 +297,8 @@ sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 mulognormal(mean,cv) = log.(mean) - .5*log.(1 .+ cv .^ 2)
 
-"""
-Parameter information for GR models
-"""
-function num_rates(G,R)
-    n = G - 1
-    2*n + 2*R + 2
-end
-function Grange(G)
-    n = G - 1
-    1 : 2*n
-end
-function initiation(G)
-    n = G - 1
-    2*n + 1
-end
-function Rrange(G,R)
-    n = G - 1
-    2*n + 2 : 2*n + R + 1
-end
-function Srange(G,R)
-    n = G - 1
-    2*n + R + 2 : 2*n + 2*R + 1
-end
+
+
 
 """
 mean_histogram(x)

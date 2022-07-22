@@ -32,14 +32,53 @@ function write_fitfile(fitfile,nchains,G::Int,R::Int,nalleles::Int,root::String,
         close(f)
 end
 
-function fit_genetrap(nchains,gene::String,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=1.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
     println(now())
-    data,model,options = genetrap(root,folder,"mean","gt",gene,G,R,nalleles,"",maxtime,samplesteps)
+    data,model = genetrap(root,gene,transitions,G,R,2,type,fittedparam,infolder,folder,label,"median",tempfish)
+    println("size of histogram: ",data.nRNA)
+    options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
     print_ll(data,model)
-    fit,stats,waic = run_mh(data,model,options,nchains)
-    finalize(data,model,fit,stats,waic,1.,folder,0,root)
+    fit,stats,measures = run_mh(data,model,options,nchains)
+    if burst
+        bs = burstsize(fit,model)
+    else
+        bs = 0
+    end
+    finalize(data,model,fit,stats,measures,1.,folder,0,bs,root)
     println(now())
-    return get_rates(stats.medparam,model)
+    return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,nalleles,fittedparam,type,1,transitions,data)
+end
+
+function burstsize(fit::Fit,model::GRSMmodel)
+    if model.G > 1
+        b = Float64[]
+        L = size(fit.param,2)
+        rho = 100/L
+        println(rho)
+        for p in eachcol(fit.param)
+            r = get_rates(p,model)
+            if rand() < rho
+                push!(b,burstsize(r,model))
+            end
+        end
+        return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
+    else
+        return 0
+    end
+end
+
+burstsize(r,model::GRSMmodel) = burstsize(r,model.R,length(model.Gtransitions))
+
+function burstsize(r,R,ntransitions)
+    total = min(Int(div(r[ntransitions + 1],r[ntransitions])) * 2,400)
+    indices = Indices(collect(ntransitions:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),[],1)
+    M = make_mat_M(make_components_M([(2,1)],2,R,total,0.,2,indices),r)
+    nT = 2*2^R
+    L = nT*total
+    S0 = zeros(L)
+    S0[2] = 1.
+    s=StochasticGene.time_evolve_diff([1,10/minimum(r[ntransitions:ntransitions+R+1])],M,S0)
+    mean_histogram(s[2,collect(1:nT:L)])
 end
 
 """
@@ -51,18 +90,18 @@ root is the folder containing data and results
 FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
-function genetrap(root::String,infolder::String,rtype::String,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,cyclesteps=0,annealsteps=0,warmupsteps=0,method=1,temp=1.,tempanneal=1.,tempfish=1.)
+function genetrap(root,gene::String,transitions::Tuple,G::Int,R::Int,nalleles,type::String,fittedparam::Vector,infolder::String,resultfolder::String,label::String,rtype::String,tempfish)
     # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",type)
     r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,type)
     println(r)
-    genetrap(root,r,label,gene,G,R,nalleles,type,maxtime,samplesteps,cyclesteps,annealsteps,warmupsteps,method,temp,tempanneal,tempfish)
+    genetrap(root,r,label,gene,G,R,transitions,nalleles,type,fittedparam,tempfish)
 end
 
-function genetrap(root,r,label::String,gene::String,G::Int,R::Int,nalleles::Int,type::String,maxtime::Float64,samplesteps::Int,cyclesteps=0,annealsteps=0,warmupsteps=0,method=1,temp=1.,tempanneal=1.,tempfish=1.)
-    data = iszero(R) || iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
-    model = model_genetrap(r,gene,G,R,nalleles,type,method)
-    options = MHOptions(samplesteps,cyclesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-    return data,model,options
+function genetrap(root,r,label::String,gene::String,G::Int,R::Int,transitions,nalleles::Int=2,type::String="",fittedparam=collect(1:num_rates(transitions,R)-1),tempfish=1.,method=1)
+    # data = iszero(R) || iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
+    data = iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
+    model = model_genetrap(r,gene,G,R,nalleles,fittedparam,type,method,transitions,data)
+    return data,model
 end
 
 function data_genetrap(root,label,gene,tempfish=1.)
@@ -88,28 +127,34 @@ model_genetrap
 
 load model structure
 """
-function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,type::String,method,)
+function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,type::String,method,transitions,data)
+    ntransitions = length(transitions)
     if R == 0
-        fittedparam = collect(1:2*G-1)
         decayrate = get_decay(halflife[gene])
         if r == 0
             r = setrate(G,1,decayrate,.1)[1]
         end
         d = prior_rna(r,G,1,fittedparam,decayrate,1.)
-        return  GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),Int}(G,nalleles,r,d,0.02,fittedparam,1)
+        # components = make_components(transitions,G,data.nRNA+2,decayrate)
+        components = make_components(transitions,G,r,data.nRNA+2,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2))
+        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,0.05,fittedparam,method,transitions,components)
     else
-        propcv=[.02*ones(2*(G-1));1e-4;1e-4*ones(R);.02*ones(R)]
-        fittedparam=collect(1:num_rates(G,R)-1)
-        Gprior=(.01,.5)
-        Sprior=(.1,.5)
-        Rcv=1e-2
+        propcv=[.02*ones(2*(G-1));.02;.02*ones(R);.02*ones(R)]
+        Gprior=(.01,10)
+        Sprior=(.1,10)
+        Rcv=10.
         rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
+
         if r == 0
             r = rm
+            println(r)
         end
         # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
-        d = priordistributionGamma_genetrap(rm,rcv,G,R)
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,R,nalleles,type,r,d,propcv,fittedparam,method)
+        d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
+        # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
+        components = make_components(transitions,G,R,r,data.nRNA+2,type,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
+
     end
 end
 
@@ -120,7 +165,7 @@ Set prior distribution for mean and cv of rates
 function prior_rates_genetrap(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
     n = G-1
     rm = [fill(Gprior[1],2*n);2000/(genelength[gene]-MS2end[gene]);fill(2000/MS2end[gene]*R,R);fill(Sprior[1], R);log(2.)/(60 .* halflife[gene])]
-    rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], R);Rcv]
+    rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], R);.01]
     return rm,rcv
 end
 
@@ -149,7 +194,7 @@ function priordistributionLogNormal_genetrap(r,cv,G,R)
     # priors for splice rates
     rs = 0.
     for i in Srange(G,R)
-        rs += r[i]
+        rs = r[i]
         push!(d,Distributions.LogNormal(log(rs),sigma[j]))
         j += 1
     end
@@ -191,7 +236,7 @@ function priordistributionGamma_genetrap(rm,cv,G,R)
     # priors for ejection rates
     rs = 0
     for i in Srange(G,R)
-        rs += rm[i]
+        rs = rm[i]
         theta = rsig[j]*rs
         alpha = 1/rsig[j]
         push!(d,Distributions.Gamma(alpha,theta))
@@ -267,30 +312,10 @@ function countsFISH_genetrap(root,gene,clone=true)
 end
 
 """
-readrates_genetrap(infolder::String,rtype::String,gene::String,model::String,type::String)
+readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
 
 Read in initial rates from previous runs
 """
-# function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
-#     if rtype == "rml" || rtype == "rlast"
-#         rskip = 1
-#         rstart = 1
-#         row = 1
-#     elseif rtype == "rmean"
-#         rskip = 2
-#         rstart = 1
-#     elseif rtype == "rquant"
-#         rskip = 3
-#         rstart = 2
-#     end
-#     if type == "offeject" || type == "on"
-#         type = ""
-#     end
-#     infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
-#     print(gene," ","$G$R"," ",type)
-#     readrates_genetrap(infile,rstart,rskip)
-# end
-
 function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
     if rtype == "ml"
         row = 1
@@ -320,28 +345,85 @@ function readrates_genetrap(infile::String,row::Int)
     end
 end
 
-# function readrates_genetrap(infile::String,rstart::Int,rskip::Int)
-#     if isfile(infile) && ~isempty(read(infile))
-#         r = readdlm(infile)
-#         r = r[:,rstart:rskip:end]
-#         println(r)
-#         return r
-#     else
-#         println(" no prior")
-#         return 0
-#     end
-#     nothing
-# end
-
 function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
     model = R == 0 ? "$G" : "$G$R"
     file = "rates" * "_" * label * "_" * gene * "_" * model * "_"  * "$(nalleles)" * ".txt"
     joinpath(infolder,file)
 end
 
-# function getratefolder_genetrap(root::String,infolder::String,rtype::String,gene::String,model::String,type::String)
-#     results = joinpath(root,"results")
-#     infolder = joinpath(infolder,gene)
-#     infolder = joinpath(infolder,rtype * model * type * txtstr)
-#     joinpath(results,infolder)
-# end
+
+"""
+get_gamma(r,n,nr)
+G state forward and backward transition rates
+for use in transition rate matrices of Master equation
+(different from gamma used in Gillespie algorithms)
+"""
+function get_gamma(r,n)
+    gammaf = zeros(n+2)
+    gammab = zeros(n+2)
+    for i = 1:n
+        gammaf[i+1] = r[2*(i-1)+1]
+        gammab[i+1] = r[2*i]
+    end
+    return gammaf, gammab
+end
+"""
+get_nu(r,n,nr)
+R step forward transition rates
+"""
+function get_nu(r,n,nr)
+    r[2*n+1 : 2*n+nr+1]
+end
+"""
+get_eta(r,n,nr)
+Intron ejection rates at each R step
+"""
+function get_eta(r,n,nr)
+    eta = zeros(nr)
+    if length(r) > 2*n + 2*nr
+        eta[1] = r[2*n + 1 + nr + 1]
+        for i = 2:nr
+            # eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
+            eta[i] = r[2*n + 1 + nr + i]
+        end
+    end
+    return eta
+end
+"""
+survival_fraction(nu,eta,nr)
+Fraction of introns that are not spliced prior to ejection
+"""
+function survival_fraction(nu,eta,nr)
+    pd = 1.
+    for i = 1:nr
+        pd *= nu[i+1]/(nu[i+1]+eta[i])
+    end
+    return pd
+end
+
+
+"""
+Parameter information for GR models
+"""
+function num_rates(transitions::Tuple,R)
+    length(transitions) + 2*R + 2
+end
+function num_rates(G::Int,R)
+    2*G + 2*R
+end
+function Grange(G::Int)
+    n = G - 1
+    1 : 2*n
+end
+function initiation(G::Int)
+    n = G - 1
+    2*n + 1
+end
+function Rrange(G::Int,R)
+    n = G - 1
+    2*n + 2 : 2*n + R + 1
+end
+function Srange(G::Int,R)
+    n = G - 1
+    2*n + R + 2 : 2*n + 2*R + 1
+end

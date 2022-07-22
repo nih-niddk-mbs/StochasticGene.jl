@@ -103,7 +103,7 @@ fittedparam: indices of rates to be fitted
     with index 1 the tied index vector and 2 the corresponding fitted index vector
 method: numerical method for solving Master equation
 """
-struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -111,8 +111,10 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstract
     proposal::ProposalType
     fittedparam::ParamType
     method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
 end
-struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMfixedeffectsmodel
+struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMfixedeffectsmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -121,6 +123,8 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType}
     fittedparam::ParamType
     fixedeffects::Tuple
     method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
 end
 
 struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
@@ -194,7 +198,7 @@ struct GMmixedmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abs
     method::MethodType
 end
 
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGRMmodel
+struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
     nalleles::Int
@@ -203,9 +207,11 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstrac
     proposal::ProposalType
     fittedparam::ParamType
     method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
 end
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGRMmodel
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
     nalleles::Int
@@ -215,6 +221,8 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abstra
     proposal::ProposalType
     fittedparam::ParamType
     method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
 end
 
 function write_model(model)
@@ -264,17 +272,22 @@ end
 likelihoodfn(param,data,model)
 model likelihoodfn called by loglikelihood
 """
+# function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
+#     r = get_rates(param,model)
+#     n = model.G-1
+#     steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
+# end
 function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
     r = get_rates(param,model)
-    n = model.G-1
-    steady_state(r[1:2*n+2],n,data.nRNA,model.nalleles)
+    M = make_mat_M(model.components,r)
+    steady_state(M,model.G,model.nalleles,data.nRNA)
 end
-function likelihoodfn(param,data::RNAData,model::AbstractGMlossmodel)
-    r = get_rates(param,model)
-    yieldfactor = r[end]
-    n = model.G-1
-    steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
-end
+# function likelihoodfn(param,data::RNAData,model::AbstractGMlossmodel)
+#     r = get_rates(param,model)
+#     yieldfactor = r[end]
+#     n = model.G-1
+#     steady_state(r[1:2*n+2],yieldfactor,n,data.nRNA,model.nalleles)
+# end
 function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
     h = likelihoodarray(get_rates(param,model),data,model)
     hconcat = Array{Float64,1}(undef,0)
@@ -283,15 +296,20 @@ function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {
     end
     return hconcat
 end
-function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
-    h = likelihoodarray(get_rates(param,model),data,model)
-    hconcat = Array{Float64,1}(undef,0)
-    for h in h
-        hconcat = vcat(hconcat,h)
-    end
-    return hconcat
-end
+# function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
+#     h = likelihoodarray(get_rates(param,model),data,model)
+#     hconcat = Array{Float64,1}(undef,0)
+#     for h in h
+#         hconcat = vcat(hconcat,h)
+#     end
+#     return hconcat
+# end
 function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
+    modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
+    return [modelOFF;modelON;histF]
+end
+
+function likelihoodfn(param::Vector,data::RNALiveCellData,model::GMmodel)
     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
     return [modelOFF;modelON;histF]
 end
@@ -321,42 +339,45 @@ function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
     h=likelihoodarray(r,data,model,maximum(data.nRNA))
     trim(h,data.nRNA)
 end
-function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel)
-    yieldfactor = r[end]
-    nh = nhist_loss(maximum(data.nRNA),yieldfactor)
-    h = likelihoodarray(r[1:end-1],data,model,yieldfactor,nh)
-    # technical_loss!(h,yieldfactor)
-    trim(h,data.nRNA)
-end
+# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel)
+#     yieldfactor = r[end]
+#     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
+#     h = likelihoodarray(r[1:end-1],data,model,yieldfactor,nh)
+#     # technical_loss!(h,yieldfactor)
+#     trim(h,data.nRNA)
+# end
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
-    n = model.G-1
+    # n = model.G-1
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
     for i in eachindex(data.nRNA)
-        h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],n,data.nRNA[i],model.nalleles)
+        M = make_mat_M(model.components[i],r[(i-1)*2*model.G+1 : i*2*model.G])
+        h[i] = steady_state(M,model.G,model.nalleles,data.nRNA[i])
+        #
+        # h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],n,data.nRNA[i],model.nalleles)
     end
     trim(h,data.nRNA)
 end
-function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
-    yieldfactor = r[end]
-    n = model.G-1
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-    for i in eachindex(data.nRNA)
-        h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],yieldfactor,n,data.nRNA[i],model.nalleles)
-    end
-    trim(h,data.nRNA)
-end
+# function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
+#     yieldfactor = r[end]
+#     n = model.G-1
+#     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+#     for i in eachindex(data.nRNA)
+#         h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],yieldfactor,n,data.nRNA[i],model.nalleles)
+#     end
+#     trim(h,data.nRNA)
+# end
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
     G = model.G
     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
     transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
-function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel,yieldfactor,maxdata)
-    G = model.G
-    h0 = steady_state_full(r[1:2*G],G-1,maxdata)
-    transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
-    # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
-end
+# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel,yieldfactor,maxdata)
+#     G = model.G
+#     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
+#     transient(data.time,r[2*G+1:4*G],yieldfactor,G-1,model.nalleles,h0,model.method)
+#     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
+# end
 function likelihoodarray(r,data::RNAData,model::GMmultimodel)
     G = model.G
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -383,19 +404,45 @@ function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     return h
 end
 
-function likelihoodtuple(r,data::RNALiveCellData,model::GRSMmodel)
-    if model.type == "offdecay"
-        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
-        histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-    elseif model.type == "offeject"
-        modelOFF, modelON = offonPDF_offeject(data.bins,r,model.G-1,model.R,model.method)
-        histF = steady_state_offeject(r,model.G-1,model.R,data.nRNA,model.nalleles)
-    else
-        modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
-        histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
-    end
+# function likelihoodtuple(r,data::RNALiveCellData,model::GRSMmodel)
+#     if model.type == "offdecay"
+#         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
+#         histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
+#     elseif model.type == "offeject"
+#         modelOFF, modelON = offonPDF_offeject(data.bins,r,model.G-1,model.R,model.method)
+#         histF = steady_state_offeject(r,model.G-1,model.R,data.nRNA,model.nalleles)
+#     else
+#         modelOFF, modelON = offonPDF(data.bins,r,model.G-1,model.R,model.method)
+#         histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
+#     end
+#     return modelOFF, modelON, histF
+# end
+function likelihoodtuple(rin,data::RNALiveCellData,model::GRSMmodel)
+        r = copy(rin)
+        if model.type == "offdecay"
+            r[end-1] *= survival_fraction(nu,eta,model.R)
+        end
+        T = make_mat_T(model.components.tcomponents,r)
+        TA = make_mat_TA(model.components.tcomponents,r)
+        TI = make_mat_TI(model.components.tcomponents,r)
+        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
+        M = make_mat_M(model.components.mcomponents,r)
+        # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
+        histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+        # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
     return modelOFF, modelON, histF
 end
+
+function likelihoodtuple(r,data::RNALiveCellData,model::GMmodel)
+        T = make_mat_T(model.components.tcomponents,r)
+        TA = make_mat_TA(model.components.tcomponents,r)
+        TI = make_mat_TI(model.components.tcomponents,r)
+        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.method)
+        M = make_mat_M(model.components.mcomponents,r)
+        histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+    return modelOFF, modelON, histF
+end
+
 
 """
 get_rates(param,model)
@@ -403,15 +450,16 @@ replace fitted rates with new values and return
 """
 function get_rates(param,model::AbstractGMmodel)
     r = get_r(model)
-    r[model.fittedparam] = param
+    r[model.fittedparam] = exp.(param)
     return r
 end
 function get_rates(param,model::GRSMmodel)
     r = get_r(model)
-    r[model.fittedparam] = param
-    setr(r,model)
+    r[model.fittedparam] = exp.(param)
+    # setr(r,model)
+    return r
 end
-get_rates(param,model::GMtransientmodel) = param[1:2*model.G]
+get_rates(param,model::GMtransientmodel) = exp.(param[1:2*model.G])
 
 """
 get_rates(param,model::GMrescaledmodel)
@@ -421,9 +469,9 @@ gammas are scaled by nu
 function get_rates(param,model::GMrescaledmodel)
     r = get_r(model)
     n = get_n(model)
-    nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
+    nu = n in model.fittedparam ? exp.(param[findfirst(model.fittedparam .== n)]) : r[n]
     r[1:n-1] /= r[n]
-    r[model.fittedparam] = param
+    r[model.fittedparam] = exp.(param)
     r[1:n-1] *= nu
     if r[2*model.G + 3] > 1
         r[2*model.G + 3] = 1
@@ -438,7 +486,7 @@ get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
 function fixed_rates(param,model)
     r = get_r(model)
     n = get_n(model)
-    r[model.fittedparam] = param
+    r[model.fittedparam] = exp.(param)
     for effect in model.fixedeffects
         for ind in 2: length(effect)
             r[effect[ind]] = r[effect[1]]
@@ -455,13 +503,13 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::StochasticGRmodel) = model.rates[model.fittedparam]
+get_param(model::StochasticGRmodel) = log.(model.rates[model.fittedparam])
 
 function get_param(model::GMrescaledmodel)
     r = copy(model.rates)
     n = 2*model.G - 1
     r[1:n-1] /= r[n]
-    r[model.fittedparam]
+    log.(r[model.fittedparam])
 end
 
 """
@@ -480,7 +528,7 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::AbstractGMmodel)
+function logprior(param,model::StochasticGRmodel)
     d = model.rateprior
     p=0
     for i in eachindex(param)
@@ -489,37 +537,37 @@ function logprior(param,model::AbstractGMmodel)
     return p
 end
 
-"""
-logprior(param,model::GRSModel)
-Compute log prior using distributions in Model.rateprior
-called by mhstep() in metropolis_hastings.jl
-"""
-function logprior(param,model::GRSMmodel)
-    r = get_rates(param,model)
-    d = model.rateprior
-    G = model.G
-    R = model.R
-    p=0
-    j = 1
-    #  G rates
-    for i in Grange(G)
-        p -= logpdf(d[j],r[i])
-        j += 1
-    end
-    # initiation rate
-    i = initiation(G)
-    p -= logpdf(d[j],r[i])
-    j += 1
-    # sum of R Steps rates are bounded by length of insertion site to end of gene, i.e sum of reciprocal rates is bounded
-    t = sum(1 ./ r[Rrange(G,R)])
-    p -= logpdf(d[j],1/t)
-    j += 1
-    # priors for splice rates
-    rs = 0
-    for i in Srange(G,R)
-        rs += r[i]
-        p -= logpdf(d[j],rs)
-        j += 1
-    end
-    return p
-end
+# """
+# logprior(param,model::GRSModel)
+# Compute log prior using distributions in Model.rateprior
+# called by mhstep() in metropolis_hastings.jl
+# """
+# function logprior(param,model::GRSMmodel)
+#     r = get_rates(param,model)
+#     d = model.rateprior
+#     G = model.G
+#     R = model.R
+#     p=0
+#     j = 1
+#     #  G rates
+#     for i in Grange(G)
+#         p -= logpdf(d[j],r[i])
+#         j += 1
+#     end
+#     # initiation rate
+#     i = initiation(G)
+#     p -= logpdf(d[j],r[i])
+#     j += 1
+#     # sum of R Step rates are bounded by length of insertion site to end of gene, i.e sum of reciprocal rates is bounded
+#     t = sum(1 ./ r[Rrange(G,R)])
+#     p -= logpdf(d[j],1/t)
+#     j += 1
+#     # priors for splice rates
+#     rs = 0
+#     for i in Srange(G,R)
+#         rs = r[i]
+#         p -= logpdf(d[j],rs)
+#         j += 1
+#     end
+#     return p
+# end

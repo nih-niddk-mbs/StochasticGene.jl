@@ -507,7 +507,7 @@ write_optimized(file,optimized)
 """
 function write_optimized(file::String,optimized)
     f = open(file,"w")
-    writedlm(f,Optim.minimizer(optimized)',',')
+    writedlm(f,exp.(Optim.minimizer(optimized))',',')
     writedlm(f,Optim.minimum(optimized),',')
     writedlm(f,Optim.converged(optimized),',')
     close(f)

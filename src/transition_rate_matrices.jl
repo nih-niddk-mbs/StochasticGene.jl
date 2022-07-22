@@ -53,6 +53,7 @@ struct Indices
 	gamma::Vector{Int}
 	nu::Vector{Int}
 	eta::Vector{Int}
+	decay::Int
 end
 
 
@@ -85,50 +86,55 @@ returns T
 set_elements_R!(elementsT,G,R,indices::Indices) = set_elements_R!(elementsT,G,R,indices.nu)
 
 function set_elements_R!(elementsT,G,R,nu::Vector)
-	for w=1:2^R, z=1:2^R, i=1:G
-		a = i + G*(z-1)
-		b = i + G*(w-1)
-		zdigits = digits(z-1,base=2,pad=R)
-		wdigits = digits(w-1,base=2,pad=R)
-		z1 = zdigits[1]
-		w1 = wdigits[1]
-		zr = zdigits[R]
-		wr = wdigits[R]
-		zbar1 = zdigits[2:R]
-		wbar1 = wdigits[2:R]
-		zbarr = zdigits[1:R-1]
-		wbarr = wdigits[1:R-1]
-		s = (i==G)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
-		if  abs(s) == 1
-			push!(elementsT,Element(a,b,nu[1],s))
-		end
-		s = (zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-		if abs(s) == 1
-			push!(elementsT,Element(a,b,nu[R+1],s))
-		end
-		for j = 1:R-1
-			zbarj = zdigits[[1:j-1;j+2:R]]
-			wbarj = wdigits[[1:j-1;j+2:R]]
-			zj = zdigits[j]
-			zj1 = zdigits[j+1]
-			wj = wdigits[j]
-			wj1 = wdigits[j+1]
-			s = (zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)
+	if R == 0
+		set_elements_R!(elementsT,G,nu::Vector)
+	else
+		for w=1:2^R, z=1:2^R, i=1:G
+			a = i + G*(z-1)
+			b = i + G*(w-1)
+			zdigits = digits(z-1,base=2,pad=R)
+			wdigits = digits(w-1,base=2,pad=R)
+			z1 = zdigits[1]
+			w1 = wdigits[1]
+			zr = zdigits[R]
+			wr = wdigits[R]
+			zbar1 = zdigits[2:R]
+			wbar1 = wdigits[2:R]
+			zbarr = zdigits[1:R-1]
+			wbarr = wdigits[1:R-1]
+			s = (i==G)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
+			if  abs(s) == 1
+				push!(elementsT,Element(a,b,nu[1],s))
+			end
+			s = (zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
 			if abs(s) == 1
-				push!(elementsT,Element(a,b,nu[j+1],s))
+				push!(elementsT,Element(a,b,nu[R+1],s))
+			end
+			for j = 1:R-1
+				zbarj = zdigits[[1:j-1;j+2:R]]
+				wbarj = wdigits[[1:j-1;j+2:R]]
+				zj = zdigits[j]
+				zj1 = zdigits[j+1]
+				wj = wdigits[j]
+				wj1 = wdigits[j+1]
+				s = (zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)
+				if abs(s) == 1
+					push!(elementsT,Element(a,b,nu[j+1],s))
+				end
 			end
 		end
 	end
 end
+
 """
 set_elements_RS!(elementsT,G,R,ntransitions)
 
 return T
 """
 
-set_elements_RS!(elementT,G,R,indices::Indices) = set_elements(elementT,G,R,indices.nu,indices.eta)
+set_elements_RS!(elementT,G,R,indices::Indices) = set_elements_RS!(elementT,G,R,indices.nu,indices.eta)
 
-function set_elements_RS!(elementsT,G,R,nu,eta)
+function set_elements_RS!(elementsT,G,R,nu::Vector{Int},eta::Vector{Int})
 	for w=1:3^R,z=1:3^R
 		zdigits = digits(z-1,base=3,pad=R)
 		wdigits = digits(w-1,base=3,pad=R)
@@ -194,7 +200,7 @@ set_elements_RS_offeject!(G,R,ntransitions)
 set_elements_R_offeject!(elementsT,G,R,indices::Indices) = set_elements_R_offeject!(elementsT,G,R,indices.nu,indices.eta)
 
 
-function set_elements_R_offeject!(elementsT,G,R,nu::Vector,eta::Vector)
+function set_elements_R_offeject!(elementsT,G,R,nu::Vector{Int},eta::Vector{Int})
 	for w=1:2^R, z=1:2^R, i=1:G
 		a = i + G*(z-1)
 		b = i + G*(w-1)
@@ -250,6 +256,13 @@ set_elements_TA!(elementsTA,elementsT)
 
 
 """
+function set_elements_TA!(elementsTA,elementsT,G)
+	for e in elementsT
+		if e.b == G
+			push!(elementsTA,e)
+		end
+	end
+end
 function set_elements_TA!(elementsTA,elementsT,G,R,base=3)
 	for e in elementsT
 		wdigits = digits(div(e.b-1,G),base=base,pad=R)
@@ -263,6 +276,13 @@ set_elements_TI!(elementsTA,elementsT)
 
 
 """
+function set_elements_TI!(elementsTI,elementsT,G)
+	for e in elementsT
+		if e.b < G
+			push!(elementsTI,e)
+		end
+	end
+end
 function set_elements_TI!(elementsTI,elementsT,G,R,base=3)
 	for e in elementsT
 		wdigits = digits(div(e.b-1,G),base=base,pad=R)
@@ -273,8 +293,8 @@ function set_elements_TI!(elementsTI,elementsT,G,R,base=3)
 end
 
 """
-set_elements_T(transitions)
-set_elements_T(transitions,G,R,base,f!=set_elements_R!)
+set_elements_T(transitions,gamma)
+set_elements_T(transitions,G,R,base,f!,indices)
 
 """
 function set_elements_T(transitions,gamma::Vector)
@@ -331,11 +351,10 @@ function make_components_M(transitions,G,R,total,decay,base,indices)
 	if R == 0
 		return make_components_M(transitions,G,total,decay)
 	else
-		nT = G*base^R
-		elementsT = set_elements_T(transitions,G,R,base,indices)
-		elementsB = set_elements_B(nT,indices.indices.nu[R+1])
-		S,Sm,Sp = make_mat_S(total,mu)
-		return MComponents(elementsT,elementsB,nT,S,Sm,Sp)
+		elementsT = set_elements_T(transitions,G,R,base,set_elements_R!,indices)
+		elementsB = set_elements_B(G,R,indices.nu[R+1])
+		S,Sm,Sp = make_mat_S(total,decay)
+		return MComponents(elementsT,elementsB,G*base^R,S,Sm,Sp)
 	end
 end
 
@@ -343,6 +362,13 @@ end
 make_components_TAI
 
 """
+function make_components_TAI(elementsT,G)
+	elementsTA = Vector{Element}(undef,0)
+	elementsTI = Vector{Element}(undef,0)
+	set_elements_TA!(elementsTA,elementsT,G)
+	set_elements_TI!(elementsTI,elementsT,G)
+	TComponents(G,elementsT,elementsTA,elementsTI)
+end
 function make_components_TAI(elementsT,G,R,base)
 	elementsTA = Vector{Element}(undef,0)
 	elementsTI = Vector{Element}(undef,0)
@@ -352,10 +378,16 @@ function make_components_TAI(elementsT,G,R,base)
 end
 
 """
-make_components
+make_components(transitions,nT,r,data::RNAData)
+make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices)
+make_components(transitions,G,R,r,total,indices::Indices)
+make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices)
+make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
+
+make the appropriate matrix components
 
 """
-make_components(transitions,nT,r,data::RNAData) = make_components_M(transitions,nT,data.nRNA,r[2*nT])
+make_components(transitions,nT,r,data::RNAData) = make_components_M(transitions,nT,data.nRNA+2,r[2*nT])
 
 function make_components(transitions,nT,r,data::RNAData{T1,T2}) where {T1 <: Array, T2 <: Array}
 	c = Array{Mcomponents}(undef,0)
@@ -365,39 +397,47 @@ function make_components(transitions,nT,r,data::RNAData{T1,T2}) where {T1 <: Arr
 	c
 end
 
-function make_components(transitions,G,R,r,data::RNALiveCellData,indices)
-	elementsT = set_elements_T(transitions,G,R,2,set_elements_R!,indices)
-	S,Sm,Sp = make_S_mat(data.nRNA,r[end])
-	MTComponents(MComponents(elementsT,set_elements_B(G,R,indices.nu[R+1]),nT,S,Sm,Sp),make_components_TAI(elementsT,transitions,G,R))
+make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices) = make_components(transitions,G,R,r,data.nRNA,indices)
+
+make_components(transitions,G,R,r,total,indices::Indices) = MTComponents(make_components_M(transitions,G,R,total,r[indices.decay],2,indices),make_components_TAI(set_elements_T(transitions,G,R,2,set_elements_R!,indices),G,R,2))
+
+make_components(transitions,G,r,data::RNALiveCellData,indices::Indices) = make_components(transitions,G,r,data.nRNA+2,indices)
+
+function make_components(transitions,G,r,total::Int,indices::Indices)
+	elementsT = set_elements_T(transitions,indices.gamma)
+	S,Sm,Sp = make_mat_S(total,r[indices.decay])
+	MTComponents(MComponents(elementsT,set_elements_B(G,indices.nu[1]),G,S,Sm,Sp),make_components_TAI(elementsT,G))
 end
 
+make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices) = make_components(transitions,G,R,r,data.nRNA+2,type,indices)
 
-function make_components(transitions,G,R,r,data::RNALiveCellData,type,indices)
+function make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
 	if type == "offeject"
 		elementsT = set_elements_T(transitions,G,R,2,set_elements_R_offeject!,indices)
 	else
 		elementsT = set_elements_T(transitions,G,R,2,set_elements_R!,indices)
 	end
-	S,Sm,Sp = make_mat_S(data.nRNA,r[end])
+	S,Sm,Sp = make_mat_S(total,r[indices.decay])
 	MTComponents(MComponents(elementsT,set_elements_B(G,R,indices.nu[R+1]),G*2^R,S,Sm,Sp),make_components_TAI(set_elements_T(transitions,G,R,3,set_elements_RS!,indices),G,R,3))
 end
 
-
-
 """
-make_mat!
+make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 
+set matrix elements of T to those in vector argument elements
 """
-function make_mat!(T,elements,rates)
+function make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 	for e in elements
 		T[e.a,e.b] += e.pm * rates[e.index]
 	end
 end
 """
-make_mat
+make_mat(elements,rates,nT)
+
+create a matrix T of size nTxnT with matrix elements in vector elements
 
 """
-function make_mat(elements,rates,nT)
+function make_mat(elements::Vector,rates::Vector,nT::Int)
 	T = spzeros(nT,nT)
 	make_mat!(T,elements,rates)
 	return T
@@ -406,7 +446,7 @@ end
 make_S_mat
 
 """
-function make_mat_S(total,mu)
+function make_mat_S(total::Int,mu::Float64)
 	S = spzeros(total,total)
 	Sminus = spzeros(total,total)
 	Splus = spzeros(total,total)
@@ -435,13 +475,11 @@ function make_mat_M(T::SparseMatrixCSC,B::SparseMatrixCSC,S::SparseMatrixCSC,Smi
 	nT = size(T,1)
 	total = size(S,1)
 	M = kron(S,sparse(I,nT,nT)) + kron(sparse(I,total,total),T-B) + kron(Sminus,B) + kron(Splus,sparse(I,nT,nT))
-	range = (total-1)*nT+1:total*nT
-	M[end-size(B,1)+1:end,end-size(B,1)+1:end] .+= B
-	# M[range,range] .+= B  # boundary condition to ensure probability is conserved
+	M[end-size(B,1)+1:end,end-size(B,1)+1:end] .+= B  # boundary condition to ensure probability is conserved
 	return M
 end
 
-function make_mat_M(components,rates)
+function make_mat_M(components::MComponents,rates::Vector)
 	T = make_mat(components.elementsT,rates,components.nT)
 	B = make_mat(components.elementsB,rates,components.nT)
 	make_mat_M(T,B,components.S,components.Sminus,components.Splus)
@@ -452,372 +490,8 @@ make_T_mat
 
 
 """
-make_mat_T(components,rates) = make_mat(components.elementsT,rates,components.nT)
+make_mat_T(components::TComponents,rates) = make_mat(components.elementsT,rates,components.nT)
 
-make_mat_TA(components,rates) = make_mat(components.elementsTA,rates,components.nT)
+make_mat_TA(components::TComponents,rates) = make_mat(components.elementsTA,rates,components.nT)
 
-make_mat_TI(components,rates) = make_mat(components.elementsTI,rates,components.nT)
-
-
-"""
-TAI_mat(T,n)
-
-"""
-function make_mat_TAI(T,nT)
-    TI = copy(T)
-	TI[nT,nT] = 0.
-	TI[nT-1,nT] = 0.
-    TA = zeros(nT,nT)
-	TA[nT,nT] = T[nT,nT]
-    return TA,TI
-end
-
-
-
-
-"""
-Transition rate matrices for G-R-S transcription model
-n+1 G states, nr R steps, and nr S sites
-returns T,B,TA,TI or M matrices
-T P(m) = A P(m) + B P(m-1)
-"""
-
-"""
-transition_rate_mat(nu::Float64,nhist::Int)
-Full master equation transition rate matrix for (G=1) (n=0) transcription model
-(i.e. Poisson model)
-returns M
-"""
-function transition_rate_mat(nu::Float64,nhist::Int)
-	total = nhist + 2
-	M = zeros(total,total)
-	for m=1:total,mp=1:total
-		M[m,mp] = nu *(m==mp+1) - nu*(m==mp) + (mp-1)*(m==mp-1) - (mp-1)*(m==mp)
-	end
-	M[end,end] += nu
-	return M
-end
-
-"""
-transition_rate_mat(n,gammap,gamman,nu,mu,nhist)
-Transition rate matrices for G transcription model (i.e. classic telegraph model with n+1 states)
-mRNA decay rate = mu
-returns M
-"""
-function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64,mu::Float64,nhist::Int)
-	T,B = transition_rate_mat(n,gammap,gamman,nu)
-	transition_rate_mat(n,T,B,nu,mu,nhist)
-end
-"""
-transition_rate_mat(n,gammap,gamman,nu,nhist)
-Full master equation transition rate matrix for GM transcription model (i.e. classic telegraph model with n+1 states)
-with mRNA decay time set to 1
-returns M
-"""
-function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64,nhist::Int)
-	T,B = transition_rate_mat(n,gammap,gamman,nu)
-	transition_rate_mat(n,T,B,nu,1.,nhist)
-end
-"""
-transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
-
-transition rate matrices for G model
-returns T and B
-"""
-function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
-	B = transition_rate_mat(n,nu)
-	T = transition_rate_mat(n,gammap,gamman)
-	return T, B
-end
-# function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector,nu::Float64)
-#     nT = n+1
-# 	T = zeros(nT,nT)
-# 	B = zeros(nT,nT)
-# 	T[1,1] = -(gamman[1]+gammap[2])
-# 	T[1,2] = gamman[2]
-# 	for i=2:nT-1
-# 		# T[i,ip] =  gammap[i]*(ip==i-1) - (gamman[i]+gammap[i+1])*(ip==i) + gamman[i+1]*(ip==i+1)
-# 		T[i,i-1] = gammap[i]
-# 		T[i,i] = -(gamman[i]+gammap[i+1])
-# 		T[i,i+1] = gamman[i+1]
-# 	end
-# 	T[nT,nT-1] = gammap[nT]
-# 	T[nT,nT] = -(gamman[nT]+gammap[nT+1])
-# 	B[nT,nT] = nu
-# 	return T, B
-# end
-"""
-transition_rate_mat(n::Int,nu::Float64)
-B matrix for G model
-returns B
-"""
-function transition_rate_mat(n::Int,nu::Float64)
-    nT = n+1
-	B = zeros(nT,nT)
-	B[nT,nT] = nu
-	return B
-end
-"""
-transition_rate_mat(n::Int,gammap::Vector,gamman::Vector)
-G state transition rate matrix for G model (Telegraph model state transitions)
-returns T
-"""
-function transition_rate_mat(n::Int,gammap::Vector,gamman::Vector)
-    nT = n+1
-	T = zeros(nT,nT)
-	T[1,1] = -gammap[2]
-	T[1,2] = gamman[2]
-	for i=2:nT-1
-		# T[i,ip] =  gammap[i]*(ip==i-1) - (gamman[i]+gammap[i+1])*(ip==i) + gamman[i+1]*(ip==i+1)
-		T[i,i-1] = gammap[i]
-		T[i,i] = -(gamman[i]+gammap[i+1])
-		T[i,i+1] = gamman[i+1]
-	end
-	T[nT,nT-1] = gammap[nT]
-	T[nT,nT] = -gamman[nT]
-	return T
-end
-"""
-transition_rate_mat(T,n::Int)
-
-transtion matrices TA and TI for n-state telegraph model given matrix T
-Treat G state n+1 as the ON state
-returns T, TA, and TI
-"""
-function transition_rate_mat(T::Matrix,n)
-    nT = (n+1)
-    TI = copy(T)
-	TI[nT,nT] = 0.
-	TI[nT-1,nT] = 0.
-    TA = zeros(nT,nT)
-	TA[nT,nT] = T[nT,nT]
-    return T,TA,TI
-end
-"""
-transition_rate_mat(n::Int,T::Matrix,B::Matrix,nu::Float64,mu::Float64,nhist::Int)
-
-Construct full GM transition rate matrix using outer product (kron) of T and B matrices
-returns M
-"""
-function transition_rate_mat(n::Int,T::Matrix,B::Matrix,nu::Float64,mu::Float64,nhist::Int)
-	nT = n+1
-	total = nhist + 2
-	S = zeros(total,total)
-	Sminus = zeros(total,total)
-	Splus = zeros(total,total)
-	# Generate matrices for m transitions
-	Splus[1,2] = mu
-	for m=2:total-1
-		S[m,m] = -mu*(m-1)
-		Sminus[m,m-1] = 1
-		Splus[m,m+1] = mu*m
-	end
-	S[total,total] = -mu*(total-1)
-	Sminus[total,total-1] = 1
-	# Construct m truncated Master equation rate matrix
-	M = kron(S,Matrix{Float64}(I,nT,nT)) + kron(Matrix{Float64}(I,total,total),T-B) + kron(Sminus,B) + kron(Splus,Matrix{Float64}(I,nT,nT))
-	M[end,end]+=nu  # boundary condition to ensure probability is conserved
-	return M
-end
-
-
-
-"""
-transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector)
-transtion matrix for GR (marginalized over m) master equation
-returns T and B
-"""
-function transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector)
-	# standard GR intron reporter model
-	nT = (n+1)*2^nr
-	# Declare Transition matrices
-	T = transition_rate_mat_G(n,nr,gammap,gamman,2)
-	B = zeros(nT,nT)
-	# Generate T = A + B transition matrix and B transition matrix
-	# R states are a Base 2 number, e.g. 0100, means presence of polymerase at step 2, other steps are empty
-	for w=1:2^nr, z=1:2^nr, i=1:n+1
-		a = i + (n+1)*(z-1)
-		b = i + (n+1)*(w-1)
-		zdigits = digits(z-1,base=2,pad=nr)
-		wdigits = digits(w-1,base=2,pad=nr)
-		z1 = zdigits[1]
-		w1 = wdigits[1]
-		zr = zdigits[nr]
-		wr = wdigits[nr]
-		zbar1 = zdigits[2:nr]
-		wbar1 = wdigits[2:nr]
-		zbarr = zdigits[1:nr-1]
-		wbarr = wdigits[1:nr-1]
-		T[a,b] +=  nu[1]*((i==n+1)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0))
-		T[a,b] += nu[nr+1]*((zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1))
-		B[a,b] =  nu[nr+1]*((zbarr==wbarr)*(zr==0)*(wr==1))
-		for j = 1:nr-1
-			zbarj = zdigits[[1:j-1;j+2:nr]]
-			wbarj = wdigits[[1:j-1;j+2:nr]]
-			zj = zdigits[j]
-			zj1 = zdigits[j+1]
-			wj = wdigits[j]
-			wj1 = wdigits[j+1]
-			T[a,b] += nu[j+1]*((zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0))
-		end
-	end
-	return T, B
-end
-"""
-transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector)
-transtion matrix for GR (marginalized over m) master equation
-returns T and B
-"""
-function transition_rate_mat_offeject(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-	# standard GR intron reporter model
-	nT = (n+1)*2^nr
-	# Declare Transition matrices
-	T = transition_rate_mat_G(n,nr,gammap,gamman,2)
-	B = zeros(nT,nT)
-	# Generate T = A + B transition matrix and B transition matrix
-	# R states are a Base 2 number, e.g. 0100, means presence of polymerase at step 2, other steps are empty
-	for w=1:2^nr, z=1:2^nr, i=1:n+1
-		a = i + (n+1)*(z-1)
-		b = i + (n+1)*(w-1)
-		zdigits = digits(z-1,base=2,pad=nr)
-		wdigits = digits(w-1,base=2,pad=nr)
-		z1 = zdigits[1]
-		w1 = wdigits[1]
-		zr = zdigits[nr]
-		wr = wdigits[nr]
-		zbar1 = zdigits[2:nr]
-		wbar1 = wdigits[2:nr]
-		zbarr = zdigits[1:nr-1]
-		wbarr = wdigits[1:nr-1]
-		T[a,b] +=  nu[1]*(i==n+1)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
-		T[a,b] += nu[nr+1]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-		T[a,b] += eta[nr]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-		B[a,b] =  nu[nr+1]*((zbarr==wbarr)*(zr==0)*(wr==1))
-		for j = 1:nr-1
-			zbarj = zdigits[[1:j-1;j+2:nr]]
-			wbarj = wdigits[[1:j-1;j+2:nr]]
-			zbark = zdigits[[1:j-1;j+1:nr]]
-			wbark = wdigits[[1:j-1;j+1:nr]]
-			zj = zdigits[j]
-			zj1 = zdigits[j+1]
-			wj = wdigits[j]
-			wj1 = wdigits[j+1]
-			T[a,b] += nu[j+1]*((zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0))+ eta[j]*((zbark==wbark)*((zj==0)-(zj==1))*(wj==1))
-		end
-	end
-	return T, B
-end
-"""
-transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base=3)
-
-transition rate matrix for GR(S) model, base = 2 for GR and base = 3 for GRS
-returns T
-"""
-function transition_rate_mat_G(n::Int,nr::Int,gammap::Vector,gamman::Vector,base::Int=3)
-	# G state transition matrix for GR and GRS models
-	nA = (n+1)*base^nr
-	T = zeros(nA,nA)
-	# R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
-	for a = 0 : n+1 :nA-1
-		# a = (n+1)*w
-		T[a+1,a+1] = -(gamman[1]+gammap[2])
-		T[a+1,a+2] = gamman[2]
-		for i = 2:n
-			T[a+i,a+i-1] = gammap[i]
-			T[a+i,a+i] = -(gamman[i]+gammap[i+1])
-			T[a+i,a+i+1] = gamman[i+1]
-		end
-		T[a+n+1,a+n] = gammap[n+1]
-		T[a+n+1,a+n+1] = -(gamman[n+1]+gammap[n+2])
-	end
-	return T
-end
-
-# """
-# transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-#
-# transtion matrices for GRS Master equation
-# (introns are spliced)
-# returns T, TA, and TI
-# """
-# function transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-# 	T = transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
-# 	transition_rate_mat(T,n,nr)
-# end
-# """
-# transition_rate_mat(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-#
-# transtion matrices for GRS Master equation
-# (introns are spliced)
-# returns T, TA, and TI
-# """
-# function transition_rate_mat_offeject2(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-# 	T,B = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
-# 	transition_rate_mat(T,n,nr)
-# end
-"""
-transition_rate_mat(T,n::Int,nr::Int)
-
-transtion matrices TA and TI for GRS Master equation given matrix T
-(introns are spliced)
-returns T, TA, and TI
-"""
-function transition_rate_mat(T::Matrix,n,nr,base=3)
-    nA = (n+1)*base^nr
-    TA = zeros(nA,nA)
-    TI = zeros(nA,nA)
-    # R states are a base 3 number, e.g. 01200, which means pol2 no intron at step 2, pol2 and intron at step 3, and empty elsehwere
-    for w=1:base^nr,ip=1:n+1,z=1:base^nr,i=1:n+1
-        a = i + (n+1)*(z-1)
-        b = ip + (n+1)*(w-1)
-        zdigits = digits(z-1,base=base,pad=nr)
-        wdigits = digits(w-1,base=base,pad=nr)
-		TA[a,b] = T[a,b]*(any(wdigits.> base-2))
-		TI[a,b] = T[a,b]*(~any(wdigits.> base-2))
-    end
-    return T,TA,TI
-end
-"""
-transition_rate_mat_T(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-
-transtion matrix T for GRS Master equation
-(introns are spliced)
-returns T
-"""
-function transition_rate_mat_T(n::Int,nr::Int,gammap::Vector,gamman::Vector,nu::Vector,eta::Vector)
-
-	T = transition_rate_mat_G(n,nr,gammap,gamman)
-	for w=1:3^nr,z=1:3^nr
-		zdigits = digits(z-1,base=3,pad=nr)
-		wdigits = digits(w-1,base=3,pad=nr)
-		z1 = zdigits[1]
-		w1 = wdigits[1]
-		zr = zdigits[nr]
-		wr = wdigits[nr]
-		zbar1 = zdigits[2:nr]
-		wbar1 = wdigits[2:nr]
-		zbarr = zdigits[1:nr-1]
-		wbarr = wdigits[1:nr-1]
-		B = nu[nr+1]*((zbarr==wbarr)*(((zr==0)-(zr==1))*(wr==1)+((zr==0)-(zr==2))*(wr==2)))
-		C = eta[nr]*((zbarr==wbarr)*((zr==1)-(zr==2))*(wr==2))
-		T[(n+1)*z,(n+1)*w] += nu[1]*((zbar1==wbar1)*((z1==2)-(z1==0))*(w1==0))
-		for i=1:n+1
-			a = i + (n+1)*(z-1)
-			b = i + (n+1)*(w-1)
-			T[a,b] += B
-			T[a,b] += C
-			for j = 1:nr-1
-				zbarj = zdigits[[1:j-1;j+2:nr]]
-				wbarj = wdigits[[1:j-1;j+2:nr]]
-				zbark = zdigits[[1:j-1;j+1:nr]]
-				wbark = wdigits[[1:j-1;j+1:nr]]
-				zj = zdigits[j]
-				zj1 = zdigits[j+1]
-				wj = wdigits[j]
-				wj1 = wdigits[j+1]
-				T[a,b] += nu[j+1]*((zbarj==wbarj)*(((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)+((zj==0)*(zj1==2)-(zj==2)*(zj1==0))*(wj==2)*(wj1==0))) + eta[j]*((zbark==wbark)*((zj==1)-(zj==2))*(wj==2))
-			end
-		end
-	end
-	return T
-end
+make_mat_TI(components::TComponents,rates) = make_mat(components.elementsTI,rates,components.nT)

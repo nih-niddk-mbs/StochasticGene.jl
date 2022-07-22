@@ -219,14 +219,15 @@ mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
 ll is negative log likelihood
 """
 function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
-    paramt,dt = proposal(d,proposalcv)
+    paramt,dt = proposal(d,proposalcv,model)
     priort = logprior(paramt,model)
     llt,predictionst = loglikelihood(paramt,data,model)
     mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
 end
 
 function mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
-    if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
+    # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
+    if rand() < exp((ll + prior - llt - priort)/temp)
         return 1,predictionst,paramt,llt,priort,dt
     else
         return 0,predictions,param,ll,prior,d
@@ -259,7 +260,7 @@ return parameters to be fitted and an initial proposal distribution
 """
 function initial_proposal(model)
     param = get_param(model)
-    d=proposal_dist(param,model.proposal)
+    d=proposal_dist(param,model.proposal,model)
     return param,d
 end
 """
@@ -267,53 +268,66 @@ proposal(d,cv)
 return rand(d) and proposal distribution for cv (vector or covariance)
 
 """
-function proposal(d::Distribution,cv)
+function proposal(d::Distribution,cv,model)
     param = rand(d)
-    return param, proposal_dist(param,cv)
+    return param, proposal_dist(param,cv,model)
 end
-# function proposal(d::Product,cv)
-#     param = rand(d)
-#     return param, proposal_dist(param,cv)
-# end
+
 """
 proposal_dist(param,cv)
 return proposal distribution specified by location and scale
 
 """
-# function proposal_dist(param,cv::Vector)
-#     d = Array{Truncated{Normal{Float64},Continuous}}(undef,0)
+
+proposal_scale(cv::Float64,model::StochasticGRmodel) = sqrt(log(1+cv^2))
+
+proposal_dist(param::Float64,cv::Float64,model) = Normal(param,proposal_scale(cv,model))
+function proposal_dist(param::Vector,cv::Float64,model)
+    d = Vector{Normal{Float64}}(undef,0)
+    for i in eachindex(param)
+        push!(d,Normal(param[i],proposal_scale(cv,model)))
+    end
+    product_distribution(d)
+end
+function proposal_dist(param::Vector,cv::Vector,model)
+    d = Vector{Normal{Float64}}(undef,0)
+    for i in eachindex(param)
+        push!(d,Normal(param[i],proposal_scale(cv[i],model)))
+    end
+    product_distribution(d)
+end
+function proposal_dist(param::Vector,cov::Matrix,model)
+    c = (2.4)^2 / length(param)
+    if isposdef(c*cov)
+        return MvNormal(param,c*cov)
+    else
+        return MvNormal(param,sqrt.(abs.(diag(c*cov))))
+    end
+end
+# proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
+# function proposal_dist(param::Vector,cv::Float64)
+#     d = Vector{LogNormal{Float64}}(undef,0)
 #     for i in eachindex(param)
-#         push!(d,truncated(Normal(param[i],cv[i]*param[i]),0.,1000.))
+#         push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
 #     end
 #     product_distribution(d)
 # end
-
-proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
-
-function proposal_dist(param::Vector,cv::Float64)
-    d = Vector{LogNormal{Float64}}(undef,0)
-    for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
-    end
-    product_distribution(d)
-end
-
-function proposal_dist(param::Vector,cv::Vector)
-    d = Vector{LogNormal{Float64}}(undef,0)
-    for i in eachindex(param)
-        push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
-    end
-    product_distribution(d)
-end
-
-function proposal_dist(param::Vector,cov::Matrix)
-    c = (2.4)^2 / length(param)
-    if isposdef(c*cov)
-        return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*cov)
-    else
-        return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),sqrt.(abs.(diag(c*cov))))
-    end
-end
+# function proposal_dist(param::Vector,cv::Vector)
+#     d = Vector{LogNormal{Float64}}(undef,0)
+#     for i in eachindex(param)
+#         push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
+#     end
+#     product_distribution(d)
+# end
+#
+# function proposal_dist(param::Vector,cov::Matrix)
+#     c = (2.4)^2 / length(param)
+#     if isposdef(c*cov)
+#         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*cov)
+#     else
+#         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),sqrt.(abs.(diag(c*cov))))
+#     end
+# end
 
 
 """
@@ -416,12 +430,14 @@ compute_stats(fit::Fit)
 
 Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
 """
-function compute_stats(param::Array{Float64,2})
+function compute_stats(paramin::Array{Float64,2})
+    param = paramin
     meanparam = mean(param,dims=2)
     stdparam = std(param,dims=2)
     corparam = cor(param')
     covparam = cov(param')
-    covlogparam = cov(log.(param'))
+    # covlogparam = cov(log.(param'))
+    covlogparam = cov(param')
     medparam = median(param,dims=2)
     np = size(param,1)
     madparam = Array{Float64,1}(undef,np)

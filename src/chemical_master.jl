@@ -5,28 +5,25 @@ Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 method = 1 uses DifferentialEquations.jl
 """
-function offonPDF(t::Vector,r::Vector,n::Int,nr::Int,method)
-    T,TA,TI = mat_GSR_DT(r,n,nr)
+function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,R::Int,method)
     pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,n,nr,TA,pss,method)
-    SI=offtimeCDF(t,r,n,nr,TI,pss,method)
-    return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
-end
-function offonPDF_offeject(t::Vector,r::Vector,n::Int,nr::Int,method)
-    T,TA,TI = mat_GSR_DT_offeject(r,n,nr)
-    pss = normalized_nullspace(T)
-    SA=ontimeCDF(t,n,nr,TA,pss,method)
-    SI=offtimeCDF(t,r,n,nr,TI,pss,method)
+    SA=ontimeCDF(t,G,R,TA,pss,method)
+    SI=offtimeCDF(t,r,G,R,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 
+function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,method)
+    SA=ontimeCDF(t,G,TA,method)
+    SI=offtimeCDF(t,r,G,TI,method)
+    return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
+end
 
 """
 pdf_from_cdf(t,S)
 """
 function pdf_from_cdf(t,S)
     P = diff(S)
-    P/(sum(P)*(t[2]-t[1]))
+    P/sum(P)
 end
 
 """
@@ -38,77 +35,57 @@ Found by computing accumulated probability into OFF(ON) states
 where transitions out of OFF(ON) states are zeroed, starting from first instance of ON(OFF) state
 weighted by steady state distribution (i.e. solving a first passage time problem)x
 """
-function ontimeCDF(tin::Vector,n::Int,nr::Int,TA::Matrix,pss::Vector,method)
-    t = [tin ; tin[end] + tin[2]-tin[1]] #add a time point so that diff() gives original length
-    SAinit = init_prob(pss,n,nr)
+function ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
+    t = [0;tin]
+    SAinit = init_prob(pss,G-1,R)
     SA = time_evolve(t,TA,SAinit,method)
-    accumulate(SA,n,nr)  # accumulated prob into OFF states
+    accumulate(SA,G-1,R)  # accumulated prob into OFF states
 end
-function offtimeCDF(tin::Vector,r::Vector,n::Int,nr::Int,TI::Matrix,pss::Vector,method)
-    t = [tin ; tin[end] + tin[2]-tin[1]]
+function offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
+    t = [0;tin]
     nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
     TI = TI[nonzerosI,nonzerosI]
-    SIinit = init_prob(pss,r,n,nr,nonzerosI)
+    SIinit = init_prob(pss,r,G-1,R,nonzerosI)
     SI = time_evolve(t,TI,SIinit,method)
-    accumulate(SI,n,nr,nonzerosI,length(pss)) # accumulated prob into ON states
+    accumulate(SI,G-1,R,nonzerosI,length(pss)) # accumulated prob into ON states
 end
-function offtimeCDF(tin::Vector,r::Vector,n::Int,TI::Matrix,method)
-    t = [tin ; tin[end] + tin[2]-tin[1]]
-    SIinit = zeros(n+1)
-    SIinit[n] = 1.
+function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
+    t = [0;tin]
+    SAinit = zeros(G)
+    SAinit[G] = 1.
+    SA = time_evolve(t,TA,SAinit,method)
+    return sum(SA[:,1:G-1],dims=2)[:,1]
+end
+function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,method)
+    t = [0;tin]
+    SIinit = zeros(G)
+    SIinit[G-1] = 1.
     SI = time_evolve(t,TI,SIinit,method)
-    return SI[:,end]
+    return SI[:,G]
+end
+
+"""
+steady_state(M,nT,nalleles,nhist)
+
+Steady State of mRNA
+"""
+steady_state(M,nT,nalleles,nhist) = steady_state(M,nT,nalleles)[1:nhist]
+
+function steady_state(M,nT,nalleles)
+     P = normalized_nullspace(M)
+     mhist = marginalize(P,nT)
+     allele_convolve(mhist,nalleles)
 end
 
 
 """
-steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-GRS model where mRNA decay rate is accelerated to account for nonviability of off-pathway pre-mRNA
-from RNA that is recursively spliced
-"""
-function steady_state_offpath(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-    r = copy(rin)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    # r[end] /= survival_fraction(nu,eta,nr)
-    yieldfactor = survival_fraction(nu,eta,nr)
-    mhist=steady_state(r,n,nr,nhist,nalleles)
-    technical_loss(mhist,yieldfactor,nhist)
-end
-"""
-steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-Steady state distribution of mRNA in GRM model (which is the same as GRSM model)
-"""
-function steady_state(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-    r = rin/rin[end]
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
-    P = initial_pmf(T,nu[end],n,nr,nhist)
-    mhist=steady_state(nhist,P,T,B)
-    mhist = marginalize(mhist)
-    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
-end
-"""
-steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-Steady state distribution of mRNA in GRM model (which is the same as GRSM model)
-"""
-function steady_state_offeject(rin::Vector,n::Int,nr::Int,nhist::Int,nalleles::Int)
-    r = rin/rin[end]
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    T,B = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
-    P = initial_pmf(T,nu[end],n,nr,nhist)
-    mhist=steady_state(nhist,P,T,B)
-    mhist = marginalize(mhist)
-    allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
-end
-"""
-steady_state(nhist::Int,nalleles::Int,ejectrate,P,T,B,tol = 1e-6)
+steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
+
 Iterative algorithm for computing null space of truncated transition rate matrix
 of Master equation of GR model to give steady state of mRNA in GRM model
 for single allele
+
+currently not used
 """
 function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
     total = size(P,2)
@@ -129,94 +106,6 @@ function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepma
     return P  # marginalize over GR states with marginalize(P) = sum(P,dims=1)
 end
 
-
-"""
-steady_state(r,n,nhist,nalleles)
-Steady State of mRNA in G (telegraph) model
-"""
-function steady_state(r::Vector,yieldfactor::Float64,n::Int,nhist::Int,nalleles::Int)
-    nh = nhist_loss(nhist,yieldfactor)
-    mhist = steady_state(r,n,nh,nalleles)
-    technical_loss(mhist,yieldfactor,nhist)
-end
-
-function steady_state(r::Vector,n::Int,nhist::Int,nalleles::Int)
-    if n == 0
-        return steady_state_n0(r,nhist,nalleles)
-    else
-        if nhist > 1800
-            method = false
-        else
-            method = true
-        end
-        P = steady_state_full(r,n,nhist,method)
-        return steady_state_rna(P,n,nhist,nalleles)
-    end
-end
-
-
-"""
-steady_state_n0(r::Vector,n::Int,nhist::Int)
-
-steady state for n=0 (i.e. Poisson model)
-"""
-function steady_state_n0(r,nhist)
-    mhist = Vector{Float64}(undef,nhist+2)
-    k = r[1]/r[2]
-    d = Poisson(k)
-    for i in 1:nhist+2
-        mhist[i] = pdf(d,i-1)
-    end
-    return mhist
-end
-steady_state_n0(r,nhist,nalleles) = allele_convolve(steady_state_n0(r,nhist),nalleles)[1:nhist]
-
-"""
-steady_state_full(r::Vector,n::Int,nhist::Int,method::Bool)
-Steady State of full G (telegraph) model
-
-method = true: use exact method
-method = false: use fast method
-"""
-
-function steady_state_full(r::Vector,n::Int,nhist::Int,method::Bool)
-    if method
-        steady_state_full(r,n,nhist)
-    else
-        steady_state_fast(r,n,nhist)
-    end
-end
-
-function steady_state_full(r::Vector,n::Int,nhist::Int)
-    M = mat_GM(r,n,nhist)
-    return normalized_nullspace(M)
-end
-"""
-steady_state_rna(P,n,nhist,nalleles)
-Steady State of rna distribution for G model accounting for number of alleles
-"""
-function steady_state_rna(P,n,nhist,nalleles)
-    mhist = marginalize(P,n)
-    allele_convolve(mhist,nalleles)[1:nhist]
-end
-"""
-steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
-Steady State of G model accounting for number of alleles
-using iterative block algorithm (may not converge to correct solution)
-"""
-# function steady_state_fast(rin::Vector,n::Int,nhist::Int,nalleles::Int)
-#     mhist = marginalize(steady_state_fast(rin,n,nhist))
-#     allele_convolve(mhist[1:nhist],nalleles) # Convolve to obtain result for n alleles
-# end
-function steady_state_fast(rin::Vector,n::Int,nhist::Int)
-    r = rin/rin[2*n+2]
-    gammap,gamman = get_gamma(r,n)
-    nu = r[2*n+1]
-    T,B = transition_rate_mat(n,gammap,gamman,nu)
-    P = initial_pmf(T,nu,n,nhist)
-    unfold(steady_state(nhist,P,T,B))
-end
-
 function checkP(A,B,P,total)
     err = abs.(A*P[:,1])
     for m = 2:total-1
@@ -225,68 +114,6 @@ function checkP(A,B,P,total)
     err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
     sum(err)/total
 end
-"""
-nhist_loss(nhist,yieldfactor)
-
-Compute length of pre-loss histogram
-"""
-nhist_loss(nhist,yieldfactor) = round(Int,nhist/yieldfactor)
-
-"""
-mat(r,n,nr,nhist)
-Transition rate matrices for GSR model
-return T,TA,TI
-"""
-function mat_GSR_DT(r,n,nr)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    T = transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
-    transition_rate_mat(T,n,nr)
-end
-function mat_GSR_DT_offeject(r,n,nr)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    T,_ = transition_rate_mat_offeject(n,nr,gammap,gamman,nu,eta)
-    transition_rate_mat(T,n,nr,2)
-end
-function mat_G_DT(r,n)
-    gammap,gamman = get_gamma(r,n)
-    T = transition_rate_mat(n,gammap,gamman)
-    transition_rate_mat(T,n)
-end
-function mat_GSR_T(r,n,nr)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    transition_rate_mat_T(n,nr,gammap,gamman,nu,eta)
-end
-"""
-mat_GM(r,n,nhist)
-Transition rate matrix of GM model
-"""
-function mat_GM(r,n,nhist)
-    if n == 0
-        nu = r[1]/r[2]
-        return transition_rate_mat(nu,nhist)
-    else
-        gammap,gamman = get_gamma(r,n)
-        return transition_rate_mat(n,gammap,gamman, r[2*n+1],r[2*n+2],nhist)
-    end
-end
-"""
-get_rates_GSR(r,n,nr)
-Convert rates in r to parameters used in the Transition rate matrices for GSR model
-return gammap,gamman,nu,eta
-"""
-function get_rates_GSR(r,n,nr)
-    gammap,gamman = get_gamma(r,n)
-    nu = get_nu(r,n,nr)
-    eta = get_eta(r,n,nr)
-    return gammap,gamman,nu,eta
-end
-
 
 """
 transient(ts::Vector,r,n,nhist,nalleles,P0)
@@ -345,7 +172,7 @@ end
 time_evolve(t,M::Matrix,Sinit::Vector)
 Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
 """
-function time_evolve(t,M::Matrix,S0::Vector,method)
+function time_evolve(t,M::AbstractMatrix,S0::Vector,method)
     if method == 1
         return time_evolve_diff(t,M,S0)
     else
@@ -353,7 +180,7 @@ function time_evolve(t,M::Matrix,S0::Vector,method)
     end
 end
 
-function time_evolve(t,M::Matrix,Sinit::Vector)
+function time_evolve(t,M::AbstractMatrix,Sinit::Vector)
     vals,vects = eig_decompose(M)
     weights = solve_vector(vects,Sinit)
     time_evolve(t,vals,vects,weights)
@@ -390,7 +217,7 @@ time_evolve_diff(t,M::Matrix,P0)
 
 Solve transient problem using DifferentialEquations.jl
 """
-function time_evolve_diff(t,M::Matrix,P0)
+function time_evolve_diff(t,M::AbstractMatrix,P0)
     global M_global = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(fglobal,P0,tspan)
@@ -423,6 +250,12 @@ function fdelay!(du,u,p,t)
     du[end] = -delay*u[end]
 end
 
+"""
+nhist_loss(nhist,yieldfactor)
+
+Compute length of pre-loss histogram
+"""
+nhist_loss(nhist,yieldfactor) = round(Int,nhist/yieldfactor)
 
 """
 technical_loss(mhist,yieldfactor)
@@ -535,76 +368,14 @@ function initial_pmf(t0,ejectrate,nhist)
     end
     P
 end
-"""
-get_gamma(r,n,nr)
-G state forward and backward transition rates
-for use in transition rate matrices of Master equation
-(different from gamma used in Gillespie algorithms)
-"""
-function get_gamma(r,n)
-    gammaf = zeros(n+2)
-    gammab = zeros(n+2)
-    for i = 1:n
-        gammaf[i+1] = r[2*(i-1)+1]
-        gammab[i+1] = r[2*i]
-    end
-    return gammaf, gammab
-end
-"""
-get_nu(r,n,nr)
-R step forward transition rates
-"""
-function get_nu(r,n,nr)
-    r[2*n+1 : 2*n+nr+1]
-end
-"""
-get_eta(r,n,nr)
-Intron ejection rates at each R step
-"""
-function get_eta(r,n,nr)
-    eta = zeros(nr)
-    if length(r) > 2*n + 2*nr
-        eta[1] = r[2*n + 1 + nr + 1]
-        for i = 2:nr
-            eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
-        end
-    end
-    return eta
-end
-"""
-survival_fraction(nu,eta,nr)
-Fraction of introns that are not spliced prior to ejection
-"""
-function survival_fraction(nu,eta,nr)
-    pd = 1.
-    for i = 1:nr
-        pd *= nu[i+1]/(nu[i+1]+eta[i])
-    end
-    return pd
-end
-
-function reparametrize(r,n)
-    gammaf,gammb = get_gamma(r,n)
-    alpha = Vector{Float64}(undef,n)
-    alpha[1] = 1
-    for i in 2:n
-        alpha[i] = alpha[i-1] * gammaf[i]/gammab[i]
-    end
-    return alpha
-end
-
-function invert_parameter(alpha,n)
-
-
-end
 
 """
 normalized_nullspace(M::AbstractMatrix)
 Compute the normalized null space of a nxn matrix
 of rank n-1 using QR decomposition with pivoting
 """
-function normalized_nullspace(M::AbstractMatrix)
-    F = qr(M,Val(true));  #QR decomposition with pivoting
+function normalized_nullspace(M::SparseMatrixCSC)
+    F = qr(M)
     R = F.R
     m = size(M,1)
     # if rank(M) == m-1
@@ -614,12 +385,12 @@ function normalized_nullspace(M::AbstractMatrix)
     for i in 1:m-1
         p[m-i] = -R[m-i,m-i+1:end]'*p[m-i+1:end]/R[m-i,m-i]
     end
-    p = max.(p,eps(Float64))
-    p /= sum(p);
-    return F.P*p
-    # else
-    #     return zeros(m)
-    # end
+    pp = copy(p)
+    for i in eachindex(p)
+        pp[F.pcol[i]] = p[i]
+    end
+    pp /= sum(pp)
+    # max.(p,0)
 end
 """
     allele_convolve(mhist,nalleles)
@@ -714,16 +485,15 @@ function init_prob(pss,r,n,nr,nonzeros)
             SIinit[ainit] += pss[apss]*nu[nr+1]
         end
         # Start of OFF state by splicing
-        for i in 1:n+1
-            ainit = i
-            for j in 1:nr
-                introns = zeros(Int,nr)
-                introns[j] = 1
-                apss  = i + (n+1)*decimal(introns,2)
-                SIinit[ainit] += pss[apss]*eta[j]
-            end
-        end
-
+        # for i in 1:n+1
+        #     ainit = i
+        #     for j in 1:nr
+        #         introns = zeros(Int,nr)
+        #         introns[j] = 1
+        #         apss  = i + (n+1)*decimal(introns,2)
+        #         SIinit[ainit] += pss[apss]*eta[j]
+        #     end
+        # end
     end
     SIinit = SIinit[nonzeros]
     SIinit/sum(SIinit)
@@ -737,7 +507,7 @@ Sum over all probability vectors accumulated into OFF states
 function accumulate(SA,n,nr)
     l,p = size(SA)
     base = findbase(p,n,nr)
-    SAj = zeros(size(SA)[1])
+    SAj = zeros(size(SA,1))
     for i=1:n+1, z=1:base^nr
         zdigits = digits(z-1,base=base,pad=nr)
         if ~any(zdigits.> base-2)
@@ -774,9 +544,8 @@ marginalize(P::Matrix)
 
 Marginalize over G states
 """
-function marginalize(p::Vector,n,nhist)
+function marginalize(p::Vector,nT,nhist)
     mhist = zeros(nhist)
-    nT = n+1
     for m in 1:nhist
         i = (m-1)*nT
         mhist[m] = sum(p[i+1:i+nT])
@@ -784,9 +553,9 @@ function marginalize(p::Vector,n,nhist)
     return mhist
 end
 
-function marginalize(p::Vector,n)
-    nhist = Int(length(p)/(n+1)) - 2
-    marginalize(p,n,nhist)
+function marginalize(p::Vector,nT)
+    nhist = div(length(p),nT)
+    marginalize(p,nT,nhist)
 end
 
 marginalize(P::Matrix) = sum(P,dims=1)
