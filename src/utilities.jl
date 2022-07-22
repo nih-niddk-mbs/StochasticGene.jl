@@ -514,6 +514,12 @@ function test_steadystatemodel(model::AbstractGMmodel,nhist)
     g2 = simulatorGM(r[1:2*G],G-1,nhist,model.nalleles)
     return g1,g2
 end
+
+function test_model(data::RNALiveCellData,model::GRSMmodel)
+    telegraphsplice0(data.bins,data.nRNA,model.G-1,model.R,model.rates,1000000000,1e-5,model.nalleles)
+end
+
+
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"
