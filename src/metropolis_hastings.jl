@@ -68,7 +68,7 @@ model and data must have a likelihoodfn function
 function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
-        stats = compute_stats(fit.param)
+        stats = compute_stats(fit.param,model)
         rhat = compute_rhat([fit])
         measures = Measures(waic,vec(rhat))
     else
@@ -89,7 +89,7 @@ function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions,
         chain = extract_chain(sd)
         waic = pooled_waic(chain)
         fit = merge_fit(chain)
-        stats = compute_stats(fit.param)
+        stats = compute_stats(fit.param,model)
         rhat = compute_rhat(chain)
         return fit, stats, Measures(waic,vec(rhat))
     end
@@ -177,10 +177,11 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
         parout[:,step] = param
         accepttotal += accept
     end
-    covlogparam = cov(log.(parout[:,1:step]'))
-    if isposdef((2.4)^2 / length(param)*covlogparam) && step > 1000 && accepttotal/step > .1
-        d=proposal_dist(param,covlogparam)
-        proposalcv = covlogparam
+    covparam = cov(parout[:,1:step]')*(2.4)^2 / length(param)
+    if isposdef(covparam) && step > 1000 && accepttotal/step > .25
+        d=proposal_dist(param,covparam,model)
+        proposalcv = covparam
+        println(proposalcv)
     end
     return param,parml,ll,llml,d,proposalcv,predictions
 end
@@ -297,11 +298,11 @@ function proposal_dist(param::Vector,cv::Vector,model)
     product_distribution(d)
 end
 function proposal_dist(param::Vector,cov::Matrix,model)
-    c = (2.4)^2 / length(param)
-    if isposdef(c*cov)
-        return MvNormal(param,c*cov)
+    # c = (2.4)^2 / length(param)
+    if isposdef(cov)
+        return MvNormal(param,cov)
     else
-        return MvNormal(param,sqrt.(abs.(diag(c*cov))))
+        return MvNormal(param,sqrt.(abs.(diag(cov))))
     end
 end
 # proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
@@ -430,14 +431,14 @@ compute_stats(fit::Fit)
 
 Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
 """
-function compute_stats(paramin::Array{Float64,2})
-    param = paramin
+function compute_stats(paramin::Array{Float64,2},model)
+    param = inverse_transform(paramin,model)
     meanparam = mean(param,dims=2)
     stdparam = std(param,dims=2)
     corparam = cor(param')
     covparam = cov(param')
     # covlogparam = cov(log.(param'))
-    covlogparam = cov(param')
+    covlogparam = cov(paramin')
     medparam = median(param,dims=2)
     np = size(param,1)
     madparam = Array{Float64,1}(undef,np)

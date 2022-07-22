@@ -77,7 +77,7 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     end
     finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burstsize(fit,model),root)
     println(now())
-    get_rates(stats.medparam,model)
+    get_rates(transform(stats.medparam,model),model)
 end
 
 
@@ -161,9 +161,9 @@ function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burs
     writefolder = joinpath(root,resultfolder)
     writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
     println("final max ll: ",fit.llml)
-    print_ll(vec(stats.medparam),data,model,"median ll: ")
-    println("Median fitted rates: ",get_rates(stats.medparam[:,1],model))
-    println("ML rates: ",get_rates(fit.parml,model))
+    print_ll(transform(vec(stats.medparam),model),data,model,"median ll: ")
+    println("Median fitted rates: ",stats.medparam[:,1])
+    println("ML rates: ",inverse_transform(fit.parml,model))
     println("Acceptance: ",fit.accept,"/",fit.total)
     println("Deviance: ",deviance(fit,data,model))
     println("rhat: ",maximum(measures.rhat))

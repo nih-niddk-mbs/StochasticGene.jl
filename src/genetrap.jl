@@ -32,7 +32,7 @@ function write_fitfile(fitfile,nchains,G::Int,R::Int,nalleles::Int,root::String,
         close(f)
 end
 
-function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=1.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
+function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
     println(now())
     data,model = genetrap(root,gene,transitions,G,R,2,type,fittedparam,infolder,folder,label,"median",tempfish)
     println("size of histogram: ",data.nRNA)
@@ -165,7 +165,7 @@ Set prior distribution for mean and cv of rates
 function prior_rates_genetrap(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
     n = G-1
     rm = [fill(Gprior[1],2*n);2000/(genelength[gene]-MS2end[gene]);fill(2000/MS2end[gene]*R,R);fill(Sprior[1], R);log(2.)/(60 .* halflife[gene])]
-    rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], R);.01]
+    rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], 2*R);.01]
     return rm,rcv
 end
 

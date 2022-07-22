@@ -5,16 +5,16 @@ Active (ON) and Inactive (OFF) time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 method = 1 uses DifferentialEquations.jl
 """
-function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,R::Int,method)
+function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,R::Int,method::Int)
     pss = normalized_nullspace(T)
     SA=ontimeCDF(t,G,R,TA,pss,method)
     SI=offtimeCDF(t,r,G,R,TI,pss,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 
-function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,method)
+function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,method,SIinit::Vector)
     SA=ontimeCDF(t,G,TA,method)
-    SI=offtimeCDF(t,r,G,TI,method)
+    SI=offtimeCDF(t,r,G,TI,method,SIinit)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 
@@ -52,17 +52,16 @@ end
 function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
     t = [0;tin]
     SAinit = zeros(G)
-    SAinit[G] = 1.
+    SAinit[G] = 1
     SA = time_evolve(t,TA,SAinit,method)
     return sum(SA[:,1:G-1],dims=2)[:,1]
 end
-function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,method)
+function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,method,SIinit::Vector)
     t = [0;tin]
-    SIinit = zeros(G)
-    SIinit[G-1] = 1.
     SI = time_evolve(t,TI,SIinit,method)
     return SI[:,G]
 end
+
 
 """
 steady_state(M,nT,nalleles,nhist)

@@ -467,8 +467,8 @@ last accepted
 function write_rates(file::String,fit::Fit,stats,model)
     f = open(file,"w")
     writedlm(f,[get_rates(fit.parml,model)],',')
-    writedlm(f,[get_rates(stats.meanparam,model)],',')
-    writedlm(f,[get_rates(stats.medparam,model)],',')
+    writedlm(f,[get_rates(transform(stats.meanparam,model),model)],',')
+    writedlm(f,[get_rates(transform(stats.medparam,model),model)],',')
     writedlm(f,[get_rates(fit.param[:,end],model)],',')
     close(f)
 end

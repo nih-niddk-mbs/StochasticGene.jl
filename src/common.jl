@@ -437,12 +437,39 @@ function likelihoodtuple(r,data::RNALiveCellData,model::GMmodel)
         T = make_mat_T(model.components.tcomponents,r)
         TA = make_mat_TA(model.components.tcomponents,r)
         TI = make_mat_TI(model.components.tcomponents,r)
-        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.method)
+        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.method,SIinit(r,model))
         M = make_mat_M(model.components.mcomponents,r)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     return modelOFF, modelON, histF
 end
 
+
+function SIinit(r,model::GMmodel)
+    start = 0
+    for t in model.Gtransitions
+        if t[1] == model.G
+            start = t[2]
+        end
+    end
+    Sinit = zeros(model.G)
+    Sinit[start] = 1
+    return Sinit
+end
+
+"""
+transform(r,model::StochasticGRmodel)
+
+transform rates to real domain
+"""
+transform(r,model::StochasticGRmodel) = log.(r)
+
+"""
+inverse_transform(x,model::StochasticGRmodel)
+
+transform MH parameters on real domain back to rate domain
+
+"""
+inverse_transform(p,model::StochasticGRmodel) = exp.(p)
 
 """
 get_rates(param,model)
@@ -450,7 +477,7 @@ replace fitted rates with new values and return
 """
 function get_rates(param,model::AbstractGMmodel)
     r = get_r(model)
-    r[model.fittedparam] = exp.(param)
+    r[model.fittedparam] = inverse_transform(param,model)
     return r
 end
 function get_rates(param,model::GRSMmodel)
@@ -467,11 +494,12 @@ get_rates(param,model::GMrescaledmodel)
 gammas are scaled by nu
 """
 function get_rates(param,model::GMrescaledmodel)
+    param = inverse_transform(param)
     r = get_r(model)
     n = get_n(model)
-    nu = n in model.fittedparam ? exp.(param[findfirst(model.fittedparam .== n)]) : r[n]
+    nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
     r[1:n-1] /= r[n]
-    r[model.fittedparam] = exp.(param)
+    r[model.fittedparam] = param
     r[1:n-1] *= nu
     if r[2*model.G + 3] > 1
         r[2*model.G + 3] = 1
@@ -486,7 +514,7 @@ get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
 function fixed_rates(param,model)
     r = get_r(model)
     n = get_n(model)
-    r[model.fittedparam] = exp.(param)
+    r[model.fittedparam] = inverse_transform(param,model)
     for effect in model.fixedeffects
         for ind in 2: length(effect)
             r[effect[ind]] = r[effect[1]]
@@ -503,13 +531,13 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::StochasticGRmodel) = log.(model.rates[model.fittedparam])
+get_param(model::StochasticGRmodel) = transform(model.rates[model.fittedparam],model)
 
 function get_param(model::GMrescaledmodel)
     r = copy(model.rates)
     n = 2*model.G - 1
     r[1:n-1] /= r[n]
-    log.(r[model.fittedparam])
+    transform(r[model.fittedparam],model)
 end
 
 """
