@@ -242,14 +242,13 @@ function initiate!(tau,state,index,t,m,r,allele,G,R,S,downstream)
 		tau[index+1,allele] =  -log(rand())/(r[index+1])+ t
 	end
 	if S > 0
-
-
+		tau[downstream[1]+R,allele] = -log(rand())/(r[downstream[1]+R])+ t
 	end
 end
 function transitionR!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final)
 	tau[index,allele] = Inf
 	if S > 0 && isfinite(tau[index+R+1])
-		tau[index+R+2] = -log(rand())/r[index+R+2] + t
+		tau[index+R+2] = tau[index+R+1]
 		tau[index+R+1] = Inf
 	end
 	for d in downstream
@@ -272,8 +271,8 @@ end
 function eject!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final)
 	m += 1
 	set_decay!(tau,downstream[end],t,m,r)
-	if S > 0
-		# tau[splice] = Inf
+	if S > 0 && isfinite(tau[index+R,allele])
+		tau[index+R,allele] = Inf
 	end
 	if R > 0
 		tau[index,allele] = Inf
