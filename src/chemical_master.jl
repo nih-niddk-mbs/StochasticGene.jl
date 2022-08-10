@@ -14,8 +14,20 @@ end
 
 function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,method,SIinit::Vector)
     SA=ontimeCDF(t,G,TA,method)
-    SI=offtimeCDF(t,r,G,TI,method,SIinit)
+    SI=offtimeCDF(t,r,G,TI,SIinit,method)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
+end
+
+function SIinit(r,G,transitions)
+    start = 0
+    for t in transitions
+        if t[1] == G
+            start = t[2]
+        end
+    end
+    Sinit = zeros(G)
+    Sinit[start] = 1
+    return Sinit
 end
 
 """
@@ -56,12 +68,11 @@ function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
     SA = time_evolve(t,TA,SAinit,method)
     return sum(SA[:,1:G-1],dims=2)[:,1]
 end
-function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,method,SIinit::Vector)
+function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
     t = [0;tin]
     SI = time_evolve(t,TI,SIinit,method)
     return SI[:,G]
 end
-
 
 """
 steady_state(M,nT,nalleles,nhist)
@@ -76,7 +87,42 @@ function steady_state(M,nT,nalleles)
      allele_convolve(mhist,nalleles)
 end
 
+function steady_state(r,transitions,G,R,nhist,nalleles,type="")
+    ntransitions = length(transitions)
+    components = make_components(transitions,G,R,r,nhist+2,type,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+    M = make_mat_M(mcomponents.mcomponents,r)
+    steady_state(M,components.mcomponents.nT,nalleles,nhist)
+end
 
+function steady_state(r,transitions,G,nhist,nalleles)
+    components = make_components_M(transitions,G,nhist+2,r[end])
+    M = make_mat_M(components,r)
+    steady_state(M,G,nalleles,nhist)
+end
+
+function gt_histograms(r,transitions,G,R,S,nhist,nalleles,range,method=1,type="")
+    ntransitions = length(transitions)
+    if R > 0
+        components = make_components(transitions,G,R,r,nhist+2,type,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+    else
+        components = make_components(transitions,G,r,nhist+2,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+    end
+
+    # if type == "offdecay"
+    #     r[end-1] *= survival_fraction(nu,eta,model.R)
+    # end
+    T = make_mat_T(components.tcomponents,r)
+    TA = make_mat_TA(components.tcomponents,r)
+    TI = make_mat_TI(components.tcomponents,r)
+    if R > 0
+        modelOFF, modelON = offonPDF(T,TA,TI,range,r,G,R,method)
+    else
+        modelOFF, modelON = offonPDF(T,TA,TI,range,r,G,method,SIinit(r,G,transitions))
+    end
+    M = make_mat_M(components.mcomponents,r)
+    histF = steady_state(M,components.mcomponents.nT,nalleles,nhist)
+    return modelOFF, modelON, histF
+end
 """
 steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
 

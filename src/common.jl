@@ -443,18 +443,21 @@ function likelihoodtuple(r,data::RNALiveCellData,model::GMmodel)
     return modelOFF, modelON, histF
 end
 
+# function SIinit(r,model::GMmodel)
+#     start = 0
+#     for t in model.Gtransitions
+#         if t[1] == model.G
+#             start = t[2]
+#         end
+#     end
+#     Sinit = zeros(model.G)
+#     Sinit[start] = 1
+#     return Sinit
+# end
 
-function SIinit(r,model::GMmodel)
-    start = 0
-    for t in model.Gtransitions
-        if t[1] == model.G
-            start = t[2]
-        end
-    end
-    Sinit = zeros(model.G)
-    Sinit[start] = 1
-    return Sinit
-end
+SIinit(r,model::GMmodel) = SIinit(r,model.G,model.Gtransitions)
+
+
 
 """
 transform(r,model::StochasticGRmodel)
