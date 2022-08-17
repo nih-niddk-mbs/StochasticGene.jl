@@ -305,30 +305,6 @@ function proposal_dist(param::Vector,cov::Matrix,model)
         return MvNormal(param,sqrt.(abs.(diag(cov))))
     end
 end
-# proposal_dist(param::Float64,cv::Float64) = LogNormal(log(max(param,eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2)))
-# function proposal_dist(param::Vector,cv::Float64)
-#     d = Vector{LogNormal{Float64}}(undef,0)
-#     for i in eachindex(param)
-#         push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv^2),sqrt(log(1+cv^2))))
-#     end
-#     product_distribution(d)
-# end
-# function proposal_dist(param::Vector,cv::Vector)
-#     d = Vector{LogNormal{Float64}}(undef,0)
-#     for i in eachindex(param)
-#         push!(d,LogNormal(log(max(param[i],eps(Float64)))-.5*log(1+cv[i]^2),sqrt(log(1+cv[i]^2))))
-#     end
-#     product_distribution(d)
-# end
-#
-# function proposal_dist(param::Vector,cov::Matrix)
-#     c = (2.4)^2 / length(param)
-#     if isposdef(c*cov)
-#         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),c*cov)
-#     else
-#         return MvLogNormal(log.(max.(param,eps(Float64))) - .5*c*diag(cov),sqrt.(abs.(diag(c*cov))))
-#     end
-# end
 
 
 """

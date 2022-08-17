@@ -60,7 +60,7 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 			println(num_introns(state,allele,G,R))
 			println(tau)
 			println(rindex)
-			println(invactions[action])	
+			println(invactions[action])
 		end
 		if action < 5
 			if action < 3
@@ -155,7 +155,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 set_arguments(reaction) = (reaction.initial,reaction.final,reaction.upstream,reaction.downstream,reaction.action)
 
-function set_indices(Gtransitions,R,S)
+function set_reactionindices(Gtransitions,R,S)
 	g = 1:length(Gtransitions)
 	r = length(Gtransitions) + 1 : length(Gtransitions) + 1 + R
 	s = length(Gtransitions) + 1 + R + 1 : length(Gtransitions) + 1 + R + S
@@ -169,7 +169,7 @@ create a vector of Reactions
 """
 function set_reactions(Gtransitions,G,R,S)
 	actions = set_actions()
-	indices = set_indices(Gtransitions,R,S)
+	indices = set_reactionindices(Gtransitions,R,S)
 	reactions = Reaction[]
 	nG = length(Gtransitions)
 	for g in eachindex(Gtransitions)

@@ -19,18 +19,18 @@ const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9
 
 """
 
-function makeswarm_genetrap(sfile,juliafile,nchains,genes::Vector,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
-write_swarmfile(sfile,nchains,juliafile,genes)
-write_fitfile(juliafile,nchains,G,R,nalleles,root,folder,maxtime,samplesteps)
-end
-
-function write_fitfile(fitfile,nchains,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
-        f = open(fitfile,"w")
-        s =   '"'
-        write(f,"@everywhere using StochasticGene\n")
-        write(f,"@time fit_genetrap($nchains,ARGS[1],$G,$R,$nalleles,$s$root$s,$s$folder$s,$maxtime,$samplesteps)\n")
-        close(f)
-end
+# function makeswarm_genetrap(sfile,juliafile,nchains,genes::Vector,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+# write_swarmfile(sfile,nchains,juliafile,genes)
+# write_fitfile(juliafile,nchains,G,R,nalleles,root,folder,maxtime,samplesteps)
+# end
+#
+# function write_fitfile(fitfile,nchains,G::Int,R::Int,nalleles::Int,root::String,folder::String,maxtime::Float64,samplesteps::Int)
+#         f = open(fitfile,"w")
+#         s =   '"'
+#         write(f,"@everywhere using StochasticGene\n")
+#         write(f,"@time fit_genetrap($nchains,ARGS[1],$G,$R,$nalleles,$s$root$s,$s$folder$s,$maxtime,$samplesteps)\n")
+#         close(f)
+# end
 
 function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
     println(now())
@@ -49,37 +49,37 @@ function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,inf
     return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,nalleles,fittedparam,type,1,transitions,data)
 end
 
-function burstsize(fit::Fit,model::GRSMmodel)
-    if model.G > 1
-        b = Float64[]
-        L = size(fit.param,2)
-        rho = 100/L
-        println(rho)
-        for p in eachcol(fit.param)
-            r = get_rates(p,model)
-            if rand() < rho
-                push!(b,burstsize(r,model))
-            end
-        end
-        return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
-    else
-        return 0
-    end
-end
-
-burstsize(r,model::GRSMmodel) = burstsize(r,model.R,length(model.Gtransitions))
-
-function burstsize(r,R,ntransitions)
-    total = min(Int(div(r[ntransitions + 1],r[ntransitions])) * 2,400)
-    indices = Indices(collect(ntransitions:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),[],1)
-    M = make_mat_M(make_components_M([(2,1)],2,R,total,0.,2,indices),r)
-    nT = 2*2^R
-    L = nT*total
-    S0 = zeros(L)
-    S0[2] = 1.
-    s=StochasticGene.time_evolve_diff([1,10/minimum(r[ntransitions:ntransitions+R+1])],M,S0)
-    mean_histogram(s[2,collect(1:nT:L)])
-end
+# function burstsize(fit::Fit,model::GRSMmodel)
+#     if model.G > 1
+#         b = Float64[]
+#         L = size(fit.param,2)
+#         rho = 100/L
+#         println(rho)
+#         for p in eachcol(fit.param)
+#             r = get_rates(p,model)
+#             if rand() < rho
+#                 push!(b,burstsize(r,model))
+#             end
+#         end
+#         return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
+#     else
+#         return 0
+#     end
+# end
+#
+# burstsize(r,model::GRSMmodel) = burstsize(r,model.R,length(model.Gtransitions))
+#
+# function burstsize(r,R,ntransitions)
+#     total = min(Int(div(r[ntransitions + 1],r[ntransitions])) * 2,400)
+#     indices = Indices(collect(ntransitions:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),[],1)
+#     M = make_mat_M(make_components_M([(2,1)],2,R,total,0.,2,indices),r)
+#     nT = 2*2^R
+#     L = nT*total
+#     S0 = zeros(L)
+#     S0[2] = 1.
+#     s=StochasticGene.time_evolve_diff([1,10/minimum(r[ntransitions:ntransitions+R+1])],M,S0)
+#     mean_histogram(s[2,collect(1:nT:L)])
+# end
 
 """
 genetrap()
@@ -127,6 +127,15 @@ model_genetrap
 
 load model structure
 """
+
+function model_genetrap(gene::String,transitions::Tuple,G::Int,R::Int,nalleles,type::String,fittedparam::Vector,fixedeffects,infolder::String,label::String,rtype::String,root::String)
+    # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",type)
+    r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,type)
+    println(r)
+    # genetrap(root,r,label,gene,G,R,transitions,nalleles,type,fittedparam,tempfish)
+    model_genetrap(r,gene,G,R,nalleles,fittedparam,type,method,transitions,data)
+end
+
 function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,type::String,method,transitions,data)
     ntransitions = length(transitions)
     if R == 0
@@ -152,7 +161,7 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,t
         # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
         d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
         # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
-        components = make_components(transitions,G,R,r,data.nRNA+2,type,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+        components = make_components(transitions,G,R,r,data.nRNA+2,type,set_indices(ntransitions,G,R))
         return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
 
     end
