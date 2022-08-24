@@ -518,7 +518,35 @@ end
 function test_model(data::RNALiveCellData,model::GRSMmodel)
     telegraphsplice0(data.bins,data.nRNA,model.G-1,model.R,model.rates,1000000000,1e-5,model.nalleles)
 end
+"""
+ make_histograms(folder,file,label)
+ make_histogram(r)
 
+
+"""
+function make_histograms(folder,file,label)
+    if ~ispath(folder)
+        mkpath(folder)
+    end
+    a,h =readdlm(file,',',header=true)
+    for r in eachrow(a)
+        f= open("$folder/$(r[1])_$label.txt","w")
+        a = r[2:end]
+        a = a[(a .!= "") .& (a.!= "NA")]
+        h = make_histogram(Int.(a) .+ 1)
+        writedlm(f,h)
+        close(f)
+    end
+end
+
+function make_histogram(r)
+    nhist = maximum(r)
+    h = zeros(Int,nhist+1)
+    for c in r
+        h[c] += 1
+    end
+    h
+end
 
 #
 # function fit_rna_test(root)

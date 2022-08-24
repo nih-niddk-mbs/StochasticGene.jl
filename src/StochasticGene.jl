@@ -61,6 +61,9 @@ include("transition_rate_matrices.jl")
 include("simulator.jl")
 include("telegraphsplice.jl")
 
+# functions for fitting models to data
+include("fit.jl")
+
 # functions specific for Gene Trap experiments of Wan et al.
 include("genetrap.jl")
 

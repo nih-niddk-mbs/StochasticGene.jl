@@ -80,98 +80,98 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     get_rates(transform(stats.medparam,model),model)
 end
 
-
-
-lossfnc(x,data,model) = loglikelihood(x,data,model)[1]
-
-"""
-burstsize(fit,model::AbstractGMmodel)
-
-Compute burstsize and stats using MCMC chain
-
-"""
-function burstsize(fit,model::AbstractGMmodel)
-    if model.G > 1
-        b = Float64[]
-        for p in eachcol(fit.param)
-            r = get_rates(p,model)
-            push!(b,r[2*model.G-1] / r[2*model.G-2])
-        end
-        return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
-    else
-        return 0
-    end
-end
-
-
-"""
-check_genename(gene,p1)
-
-Check genename for p1
-if p1 = "[" change to "("
-(since swarm cannot parse "(")
-
-"""
-function check_genename(gene,p1)
-    if occursin(p1,gene)
-        if p1 == "["
-            gene = replace(gene,"[" => "(")
-            gene = replace(gene,"]" => ")")
-        elseif p1 == "("
-            gene = replace(gene,"(" => "]")
-            gene = replace(gene,")" => "]")
-        end
-    end
-    return gene
-end
-
-
-"""
-print_ll(param,data,model,message="initial ll:")
-
-compute and print initial loglikelihood
-"""
-function print_ll(param,data,model,message)
-    ll,_ = loglikelihood(param,data,model)
-    println(message,ll)
-end
-function print_ll(data,model,message="initial ll: ")
-    ll,_ = loglikelihood(get_param(model),data,model)
-    println(message,ll)
-end
-
-"""
-printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
-
-print out run information
-"""
-function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
-    println("Gene: ",gene," G: ",G," Treatment:  ",cond)
-    println("data: ",datafolder)
-    println("in: ", infolder," out: ",resultfolder)
-    println("maxtime: ",maxtime)
-end
-
-"""
-finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
-
-write out run results and print out final loglikelihood and deviance
-"""
-function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,root)
-    writefolder = joinpath(root,resultfolder)
-    writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
-    println("final max ll: ",fit.llml)
-    print_ll(transform(vec(stats.medparam),model),data,model,"median ll: ")
-    println("Median fitted rates: ",stats.medparam[:,1])
-    println("ML rates: ",inverse_transform(fit.parml,model))
-    println("Acceptance: ",fit.accept,"/",fit.total)
-    println("Deviance: ",deviance(fit,data,model))
-    println("rhat: ",maximum(measures.rhat))
-    if optimized != 0
-        println("Optimized ML: ",Optim.minimum(optimized))
-        println("Optimized rates: ",exp.(Optim.minimizer(optimized)))
-    end
-end
+#
+#
+# lossfnc(x,data,model) = loglikelihood(x,data,model)[1]
+#
+# """
+# burstsize(fit,model::AbstractGMmodel)
+#
+# Compute burstsize and stats using MCMC chain
+#
+# """
+# function burstsize(fit,model::AbstractGMmodel)
+#     if model.G > 1
+#         b = Float64[]
+#         for p in eachcol(fit.param)
+#             r = get_rates(p,model)
+#             push!(b,r[2*model.G-1] / r[2*model.G-2])
+#         end
+#         return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
+#     else
+#         return 0
+#     end
+# end
+#
+#
+# """
+# check_genename(gene,p1)
+#
+# Check genename for p1
+# if p1 = "[" change to "("
+# (since swarm cannot parse "(")
+#
+# """
+# function check_genename(gene,p1)
+#     if occursin(p1,gene)
+#         if p1 == "["
+#             gene = replace(gene,"[" => "(")
+#             gene = replace(gene,"]" => ")")
+#         elseif p1 == "("
+#             gene = replace(gene,"(" => "]")
+#             gene = replace(gene,")" => "]")
+#         end
+#     end
+#     return gene
+# end
+#
+#
+# """
+# print_ll(param,data,model,message="initial ll:")
+#
+# compute and print initial loglikelihood
+# """
+# function print_ll(param,data,model,message)
+#     ll,_ = loglikelihood(param,data,model)
+#     println(message,ll)
+# end
+# function print_ll(data,model,message="initial ll: ")
+#     ll,_ = loglikelihood(get_param(model),data,model)
+#     println(message,ll)
+# end
+#
+# """
+# printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
+#
+# print out run information
+# """
+# function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
+#     println("Gene: ",gene," G: ",G," Treatment:  ",cond)
+#     println("data: ",datafolder)
+#     println("in: ", infolder," out: ",resultfolder)
+#     println("maxtime: ",maxtime)
+# end
+#
+# """
+# finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
+#
+# write out run results and print out final loglikelihood and deviance
+# """
+# function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,root)
+#     writefolder = joinpath(root,resultfolder)
+#     writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
+#     println("final max ll: ",fit.llml)
+#     print_ll(transform(vec(stats.medparam),model),data,model,"median ll: ")
+#     println("Median fitted rates: ",stats.medparam[:,1])
+#     println("ML rates: ",inverse_transform(fit.parml,model))
+#     println("Acceptance: ",fit.accept,"/",fit.total)
+#     println("Deviance: ",deviance(fit,data,model))
+#     println("rhat: ",maximum(measures.rhat))
+#     if optimized != 0
+#         println("Optimized ML: ",Optim.minimum(optimized))
+#         println("Optimized rates: ",exp.(Optim.minimizer(optimized)))
+#     end
+# end
 
 #Prepare data structures
 """
@@ -341,119 +341,6 @@ function transient_rna(nchains,gene::String,cell,fittedparam,cond::Vector,G::Int
     model = make_model(gene,cell,G,fittedparam,inlabel,infolder,nsets,root,data)
     param,_ = initial_proposal(model)
     return param, data, model
-end
-
-"""
-getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
-
-"""
-function getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
-    r = getr(gene,G,nalleles,inlabel,infolder,root,verbose)
-    if ~isnothing(r)
-        if length(r) == 2*G*nsets + 1
-            for n in nsets
-                r[2*G*n-1] *= clamp(r[2*G*nsets + 1],eps(Float64),1-eps(Float64))
-            end
-            r = r[1:2*G*nsets]
-        end
-        if length(r) == 2*G*nsets
-            if verbose
-                println("init rates: ",r)
-            end
-            return r
-        end
-    end
-    println("No r")
-    setr(G,nsets,decayrate,ejectrate)
-end
-
-function getr(gene,G,nalleles,inlabel,infolder,root,verbose)
-    ratefile = path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
-    if verbose
-        println("rate file: ",ratefile)
-    end
-    if isfile(ratefile)
-        r = readrates(ratefile,2)
-    else
-        return nothing
-    end
-end
-function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
-    paramfile = path_Gmodel("param-stats",gene,G,nalleles,inlabel,infolder,root)
-    if isfile(paramfile)
-        cv = read_covlogparam(paramfile)
-        cv = float.(cv)
-        if ~ isposdef(cv) || size(cv)[1] != length(fittedparam)
-            cv = .02
-        end
-    else
-        cv = .02
-    end
-    if verbose
-        println("cv: ",cv)
-    end
-    return cv
-end
-"""
-    get_decay(gene::String,cell::String,root::String,col::Int=2)
-    get_decay(gene::String,path::String,col::Int)
-
-    Get decay rate for gene and cell
-
-"""
-function get_decay(gene::String,cell::String,root::String,col::Int=2)
-    path = get_file(root,"data/halflives",cell,"csv")
-    if isnothing(path)
-        println(gene," has no decay time")
-        return -1.
-    else
-        get_decay(gene,path,col)
-    end
-end
-function get_decay(gene::String,path::String,col::Int)
-    a = nothing
-    in = readdlm(path,',')
-    ind = findfirst(in[:,1] .== gene)
-    if ~isnothing(ind)
-        a = in[ind,col]
-    end
-    get_decay(a,gene)
-end
-function get_decay(a,gene::String)
-    if typeof(a) <: Number
-        return get_decay(float(a))
-    else
-        println(gene," has no decay time")
-        return -1.
-    end
-end
-get_decay(a::Float64) = log(2)/a/60.
-
-"""
-    alleles(gene::String,cell::String,root::String,col::Int=3)
-    alleles(gene::String,path::String,col::Int=3)
-
-    Get allele number for gene and cell
-"""
-function alleles(gene::String,cell::String,root::String;nalleles::Int=2,col::Int=3)
-    path = get_file(root,"data/alleles",cell,"csv")
-    if isnothing(path)
-        return 2
-    else
-        alleles(gene,path,nalleles=nalleles,col=col)
-    end
-end
-
-function alleles(gene::String,path::String;nalleles::Int=2,col::Int=3)
-    a = nothing
-    in,h = readdlm(path,',',header=true)
-    ind = findfirst(in[:,1] .== gene)
-    if isnothing(ind)
-        return nalleles
-    else
-        a = in[ind,col]
-        return isnothing(a) ? nalleles : Int(a)
-    end
 end
 
 """
@@ -760,26 +647,26 @@ function reduce_fish(gene,cond,nhist,fishfolder,yield)
     fish[2]
 end
 
-function make_histograms(folder,file,label)
-    if ~ispath(folder)
-        mkpath(folder)
-    end
-    a,h =readdlm(file,',',header=true)
-    for r in eachrow(a)
-        f= open("$folder/$(r[1])_$label.txt","w")
-        a = r[2:end]
-        a = a[(a .!= "") .& (a.!= "NA")]
-        h = make_histogram(Int.(a) .+ 1)
-        writedlm(f,h)
-        close(f)
-    end
-end
-
-function make_histogram(r)
-    nhist = maximum(r)
-    h = zeros(Int,nhist+1)
-    for c in r
-        h[c] += 1
-    end
-    h
-end
+# function make_histograms(folder,file,label)
+#     if ~ispath(folder)
+#         mkpath(folder)
+#     end
+#     a,h =readdlm(file,',',header=true)
+#     for r in eachrow(a)
+#         f= open("$folder/$(r[1])_$label.txt","w")
+#         a = r[2:end]
+#         a = a[(a .!= "") .& (a.!= "NA")]
+#         h = make_histogram(Int.(a) .+ 1)
+#         writedlm(f,h)
+#         close(f)
+#     end
+# end
+#
+# function make_histogram(r)
+#     nhist = maximum(r)
+#     h = zeros(Int,nhist+1)
+#     for c in r
+#         h[c] += 1
+#     end
+#     h
+# end

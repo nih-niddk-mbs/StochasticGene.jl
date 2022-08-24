@@ -92,7 +92,7 @@ set tempfish = 0 to equalize FISH and live cell counts
 """
 function genetrap(root,gene::String,transitions::Tuple,G::Int,R::Int,nalleles,type::String,fittedparam::Vector,infolder::String,resultfolder::String,label::String,rtype::String,tempfish)
     # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",type)
-    r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,type)
+    r = readrates_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
     println(r)
     genetrap(root,r,label,gene,G,R,transitions,nalleles,type,fittedparam,tempfish)
 end
@@ -128,7 +128,7 @@ model_genetrap
 load model structure
 """
 
-function model_genetrap(gene::String,transitions::Tuple,G::Int,R::Int,nalleles,type::String,fittedparam::Vector,fixedeffects,infolder::String,label::String,rtype::String,root::String)
+function model_genetrap(data,gene::String,transitions::Tuple,G::Int,R::Int,nalleles,type::String,fittedparam::Vector,fixedeffects,infolder::String,label::String,rtype::String,root::String)
     # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",type)
     r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,type)
     println(r)
@@ -319,47 +319,6 @@ function countsFISH_genetrap(root,gene,clone=true)
     end
     return counts
 end
-
-"""
-readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
-
-Read in initial rates from previous runs
-"""
-function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
-    if rtype == "ml"
-        row = 1
-    elseif rtype == "mean"
-        row = 2
-    elseif rtype == "median"
-        row = 3
-    elseif rtype == "last"
-        row = 4
-    else
-        row = 2
-    end
-    if type == "offeject" || type == "on"
-        type = ""
-    end
-    infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
-    println(gene," ","$G$R"," ",type)
-    readrates_genetrap(infile,row)
-end
-
-function readrates_genetrap(infile::String,row::Int)
-    if isfile(infile) && ~isempty(read(infile))
-        return readrates(infile,row)
-    else
-        println(" no prior")
-        return 0
-    end
-end
-
-function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
-    model = R == 0 ? "$G" : "$G$R"
-    file = "rates" * "_" * label * "_" * gene * "_" * model * "_"  * "$(nalleles)" * ".txt"
-    joinpath(infolder,file)
-end
-
 
 """
 get_gamma(r,n,nr)

@@ -36,30 +36,31 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-fit_gt(nchains,maxtime,gene,transitions,G,R,S,infolder::String,resultfolder::String,samplesteps::Int=1000;nalleles::Int=2,inlabel="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false) = fit(nchains,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,R,S,maxtime,infolder,resultfolder,datafolder,datatype,inlabel,inlabel,1,0.,false,samplesteps,0,0,1.,100.,root ,10.,-1.,burst)
+fit_gt(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false,optimize=false) = fit(nchains,gene,"",fittedparam,(),transitions,"",G,R,R,maxtime,infolder,folder,"","genetrap",label,label,1,0.,false,samplesteps,0,0,1.,100.,root ,10.,-1.,burst,nalleles,optimize)
 
-function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true)
+function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
     println(now())
     gene = check_genename(gene,"[")
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
-    println("size of histogram: ",data.nRNA)
 
     resultfolder = folder_path(resultfolder,root,"results")
     infolder = folder_path(infolder,root,"results")
 
-    if datatype = "genetrap"
-        data = data_genetrap_FISH(root,label,gene)
-        model = model_genetrap(gene,transitions,G,R,nalleles,type,fittedparam,fixedeffects,infolder,label,rtype,root)
+    if datatype == "genetrap"
+        # data = data_genetrap_FISH(root,label,gene)
+        # model = model_genetrap(data,gene,transitions,G,R,nalleles,type,fittedparam,fixedeffects,infolder,label,rtype,root)
+        data,model = genetrap(root,gene,transitions,G,R,nalleles,type,fittedparam,infolder,resultfolder,label,"median",1.)
     else
         datafolder = folder_path(datafolder,root,"data")
         if occursin("-",datafolder)
             datafolder = string.(split(datafolder,"-"))
         end
         if datatype == "fish"
-            fish == true
+            fish = true
             yieldprior = 1.
         else
-            fish == false
+            fish = false
+            yieldprior = 0.05
         end
         if occursin("-",datacond)
             datacond = string.(split(datacond,"-"))
@@ -71,34 +72,22 @@ function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeff
         end
         model = model_rna(data,gene,cell,G,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate,Normal,priorcv,true)
     end
-    options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-    fit(nchains,data,model,options,temp,resultfolder,burst,root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
-end
-# function fit(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,fish::Bool,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",yieldprior::Float64=0.05,priorcv::Float64=10.,decayrate=-1.,burst=false)
-#     println(now())
-#     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
-#     println("size of histogram: ",data.nRNA)
-#
-#
-#     if fish
-#         yieldprior = 1.
-#     end
-#
-#     model = model_rna(data,gene,cell,G,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate,Normal,priorcv,true)
-#     options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-#
-#     function fit(nchains,data,model,options,temp,resultfolder,burst,root)
-#
-# end
+    println("size of histogram: ",data.nRNA)
 
-function fit(nchains,data,model,options,temp,resultfolder,burst,root)
+    options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
+    fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
+end
+
+function fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
     optimized = 0
-    try
-        optimized = Optim.optimize(x -> lossfnc(x,data,model),fit.parml,LBFGS())
-    catch
-        @warn "Optimizer failed"
+    if optimize
+        try
+            optimized = Optim.optimize(x -> lossfnc(x,data,model),fit.parml,LBFGS())
+        catch
+            @warn "Optimizer failed"
+        end
     end
     if burst
         bs = burstsize(fit,model)
@@ -229,5 +218,166 @@ function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burs
     if optimized != 0
         println("Optimized ML: ",Optim.minimum(optimized))
         println("Optimized rates: ",exp.(Optim.minimizer(optimized)))
+    end
+end
+
+
+"""
+readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+
+Read in initial rates from previous runs
+"""
+
+function read_ratefile
+
+
+end
+
+function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+    if rtype == "ml"
+        row = 1
+    elseif rtype == "mean"
+        row = 2
+    elseif rtype == "median"
+        row = 3
+    elseif rtype == "last"
+        row = 4
+    else
+        row = 3
+    end
+    if type == "offeject" || type == "on"
+        type = ""
+    end
+    infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
+    println(gene," ","$G$R"," ",label)
+    readrates_genetrap(infile,row)
+end
+
+function readrates_genetrap(infile::String,row::Int)
+    if isfile(infile) && ~isempty(read(infile))
+        return readrates(infile,row)
+    else
+        println(" no prior")
+        return 0
+    end
+end
+
+function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+    model = R == 0 ? "$G" : "$G$R"
+    file = "rates" * "_" * label * "_" * gene * "_" * model * "_"  * "$(nalleles)" * ".txt"
+    joinpath(infolder,file)
+end
+
+
+"""
+getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
+
+"""
+function getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
+    r = getr(gene,G,nalleles,inlabel,infolder,root,verbose)
+    if ~isnothing(r)
+        if length(r) == 2*G*nsets + 1
+            for n in nsets
+                r[2*G*n-1] *= clamp(r[2*G*nsets + 1],eps(Float64),1-eps(Float64))
+            end
+            r = r[1:2*G*nsets]
+        end
+        if length(r) == 2*G*nsets
+            if verbose
+                println("init rates: ",r)
+            end
+            return r
+        end
+    end
+    println("No r")
+    setr(G,nsets,decayrate,ejectrate)
+end
+
+function getr(gene,G,nalleles,inlabel,infolder,root,verbose)
+    ratefile = path_Gmodel("rates",gene,G,nalleles,inlabel,infolder,root)
+    if verbose
+        println("rate file: ",ratefile)
+    end
+    if isfile(ratefile)
+        r = readrates(ratefile,2)
+    else
+        return nothing
+    end
+end
+function getcv(gene,G,nalleles,fittedparam,inlabel,infolder,root,verbose = true)
+    paramfile = path_Gmodel("param-stats",gene,G,nalleles,inlabel,infolder,root)
+    if isfile(paramfile)
+        cv = read_covlogparam(paramfile)
+        cv = float.(cv)
+        if ~ isposdef(cv) || size(cv)[1] != length(fittedparam)
+            cv = .02
+        end
+    else
+        cv = .02
+    end
+    if verbose
+        println("cv: ",cv)
+    end
+    return cv
+end
+"""
+    get_decay(gene::String,cell::String,root::String,col::Int=2)
+    get_decay(gene::String,path::String,col::Int)
+
+    Get decay rate for gene and cell
+
+"""
+function get_decay(gene::String,cell::String,root::String,col::Int=2)
+    path = get_file(root,"data/halflives",cell,"csv")
+    if isnothing(path)
+        println(gene," has no decay time")
+        return -1.
+    else
+        get_decay(gene,path,col)
+    end
+end
+function get_decay(gene::String,path::String,col::Int)
+    a = nothing
+    in = readdlm(path,',')
+    ind = findfirst(in[:,1] .== gene)
+    if ~isnothing(ind)
+        a = in[ind,col]
+    end
+    get_decay(a,gene)
+end
+function get_decay(a,gene::String)
+    if typeof(a) <: Number
+        return get_decay(float(a))
+    else
+        println(gene," has no decay time")
+        return -1.
+    end
+end
+get_decay(a::Float64) = log(2)/a/60.
+
+"""
+    alleles(gene::String,cell::String,root::String,col::Int=3)
+    alleles(gene::String,path::String,col::Int=3)
+
+    Get allele number for gene and cell
+"""
+function alleles(gene::String,cell::String,root::String;nalleles::Int=2,col::Int=3)
+    path = get_file(root,"data/alleles",cell,"csv")
+    if isnothing(path)
+        return 2
+    else
+        alleles(gene,path,nalleles=nalleles,col=col)
+    end
+end
+
+function alleles(gene::String,path::String;nalleles::Int=2,col::Int=3)
+    a = nothing
+    in,h = readdlm(path,',',header=true)
+    ind = findfirst(in[:,1] .== gene)
+    if isnothing(ind)
+        return nalleles
+    else
+        a = in[ind,col]
+        return isnothing(a) ? nalleles : Int(a)
     end
 end

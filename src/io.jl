@@ -329,54 +329,6 @@ function assemble_burst_sizes(folder,files,label,cond,model,fittedparams)
     assemble_files(folder,get_files(files,"burst",label,cond,model),outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"],read_burst)
 end
 
-# function assemble_burst_sizes(folder,files,label,cond,model,fittedparams)
-#     conds = split(cond,"-")
-#     head = ["BurstSize" "BurstSD"]
-#     if length(conds) > 1
-#         header = Matrix{String}(undef,1,0)
-#         for cond in conds
-#             header = hcat(header,head .* cond)
-#         end
-#     else
-#         header = head
-#     end
-#     header = hcat("Gene",header)
-#     outfile = joinpath(folder,"burst_" * label * "_" * cond * "_" * model *  ".csv")
-#     f = open(outfile,"w")
-#     writedlm(f,header,',')
-#     files = get_files(files,"param-stats",label,cond,model)
-#     N = 2*parse(Int,model)
-#     for file in files
-#         c = readdlm(joinpath(folder, file),',')
-#         cov = read_covparam(c)
-#         r = Matrix{Float64}(undef,1,0)
-#         for i in eachindex(conds)
-#             off = N*i - 2
-#             off = off in fittedparams ? off : mod(off - N,N)
-#             off = findfirst(off .== fittedparams)
-#             eject = N*i - 3
-#             eject = eject in fittedparams ? eject : mod(eject - N,N)
-#             eject = findfirst(eject .== fittedparams)
-#             b,s = burstsize(c[1,eject],c[1,off],cov[eject,eject],cov[off,off],cov[eject,off])
-#             r = [r b s]
-#         end
-#         gene = get_gene(file)
-#         writedlm(f,[gene r],',')
-#     end
-#     close(f)
-# end
-
-
-#
-#
-# function read_burst_model2(file::String,conds,fittedparam)
-#     c = readdlm(file,',')
-#     b = c[1,end]/c[1,end-1]
-#     cov = read_covparam(c)
-#     v = var_ratio(c[1,end],c[1,end-1],cov[end,end],cov[end-1,end-1],cov[end-1,end])
-#     [b sqrt(abs(v)) v c[1,end] c[1,end-1] cov[end,end] cov[end-1,end-1] cov[end-1,end]]
-# end
-
 function rlabels(model)
     G = parse(Int,model)
     n = G-1
