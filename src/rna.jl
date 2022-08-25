@@ -646,27 +646,3 @@ function reduce_fish(gene,cond,nhist,fishfolder,yield)
     technical_loss(fish[2],yield,nhist)
     fish[2]
 end
-
-# function make_histograms(folder,file,label)
-#     if ~ispath(folder)
-#         mkpath(folder)
-#     end
-#     a,h =readdlm(file,',',header=true)
-#     for r in eachrow(a)
-#         f= open("$folder/$(r[1])_$label.txt","w")
-#         a = r[2:end]
-#         a = a[(a .!= "") .& (a.!= "NA")]
-#         h = make_histogram(Int.(a) .+ 1)
-#         writedlm(f,h)
-#         close(f)
-#     end
-# end
-#
-# function make_histogram(r)
-#     nhist = maximum(r)
-#     h = zeros(Int,nhist+1)
-#     for c in r
-#         h[c] += 1
-#     end
-#     h
-# end
