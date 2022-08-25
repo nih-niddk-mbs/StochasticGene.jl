@@ -2,61 +2,70 @@
 # functions for use on the NIH Biowulf super computer
 
 """
-    function makeswarm(;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish= false,thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,yieldprior=0.05,priorcv= 10.)
+    function makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
 
-    function makeswarm(genes::Vector;G::Int=2,cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",fish=false,conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05,priorcv=10.)
-        if label == "label"
+    function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
 
     Arguments
     - `G`: number of gene states
+    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+    - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
     - `cell': cell type for halflives and allele numbers
-    - `infolder`: name of folder for initial parameters
     - `swarmfile`: name of swarmfile to be executed by swarm
     - `label`: label of output files produced
     - `inlabel`: label of files used for initial conditions
     - `timestamp`: label for time of sample (e.g. T120)
     - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
     - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
-    - `datatype`: String that desecribes data file type, e.g. "scRNA", "fish", "genetrap", "RNA-counts", (presumes folder structure)
+    - `datatype`: String that desecribes data type, e.g. "scRNA", "fish", "genetrap", "RNA-counts" (coming soon)
     - `thresholdlow`: lower threshold for halflife for genes to be fit
     - `threhsoldhigh`: upper threshold
-    - `conds`: string describing conditions to be fit with `-` to separate if two conditions, e.g. "WT-AUXIN"
-    - `result`: folder for results
+    - `conds`: string describing data treatment condition, e.g. "WT", "DMSO", use `-` for two conditions, e.g. "WT-AUXIN"
+    - `resultfolder`: folder for results
+    - `infolder`: folder for initial parameters
     - `batchsize`: number of jobs per swarmfile, default = 1000
     - `maxtime`: maximum wall time for run, default = 2 hrs
     - `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
     - 'nthreads`: number of Julia threads per processesor, default = 1
-    - `transient::Bool`: true means fit transient model (T0, T30, T120)
+    - `transient::Bool`: true means fit a time dependent transient model (T0, T30, T120)
     - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
     - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
          (each vector in tuple is a fixed rate set)
     - `juliafile`: name of file to be called by julia in swarmfile
+    - `fitscript`: name of fit file called by swarm file
     - `root`: name of root directory for project, e.g. "scRNA\"
     - `samplesteps`: number of MCMC sampling steps
     - `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
     - `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+    Arguments below usually do not need to be set
     - `temp`: MCMC temperature
     - `tempanneal`: annealing temperature
     - `cv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-    - `yieldprior`: prior for yield, default = .05, (set to 1 for FISH if using scRNA data format for FISH data)
     - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+    - `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+    - `burst`: if true then compute burst frequency
+    - `nalleles`: number of alleles, value in alleles folder will be used if it exists
+    - `optimize`: use optimizer to compute maximum likelihood value
+    - `type`: switch used for GRS models, choices include "", "offeject"
+    - `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 
 
     returns swarmfile that calls a julia file that is executed on biowulf
 
 """
 
-function makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,yieldprior=0.05,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
+function makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
         cond = conds
     end
     genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
-    makeswarm(genes,G=G,R=R,S=S,transitions=transitions,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp=timestamp,nsets=nsets,datafolder=datafolder,datatype=datatype,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,nthreads=nthreads,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv,yieldprior=yieldprior,priorcv=priorcv,decayrate=decayrate,burst=burst,nalleles=nalleles,optimize=optimize,type=type,rtype=rtype)
+    makeswarm(genes,G=G,R=R,S=S,transitions=transitions,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp=timestamp,nsets=nsets,datafolder=datafolder,datatype=datatype,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,nthreads=nthreads,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv,priorcv=priorcv,decayrate=decayrate,burst=burst,nalleles=nalleles,optimize=optimize,type=type,rtype=rtype)
 end
 
-function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,yieldprior=0.05,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
+function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
     if datatype == "genetype"
         label == "gt"
     else
