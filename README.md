@@ -80,7 +80,7 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
+julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,transitions = ([1,2],[2,1]),conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
@@ -90,8 +90,10 @@ To fit all the genes in the data folder use:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,transitions = ([1,2],[2,1]), conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
 ```
+
+(for G = 3, use transitions = ([1,2],[2,1],[2,3],[3,2]), for 3 state Kinetic Proofreading model use transitions = ([1,2],[2,1],[2,3],[3,1]))
 
 To exit julia type:
 
