@@ -22,7 +22,7 @@ using Optim
 export
     rna_setup,
     makeswarm,
-    fit_rna,
+    fit,
     make_dataframes,
     write_dataframes,
     write_dataframes_only,
