@@ -262,8 +262,8 @@ Arguments
 	- `r`: vector of rates
 	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 	- `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+  - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+  - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
 	- `nhist::Int`: Size of mRNA histogram
 	- `nalleles`: Number of alleles
 
