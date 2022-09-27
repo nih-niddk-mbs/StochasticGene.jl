@@ -25,19 +25,41 @@ struct Reaction
 end
 
 """
-	simulator
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
+
+	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+
+	Arguments
+	- `r`: vector of rates
+	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+	- `G`: number of gene states
+    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+	- `nhist::Int`: Size of mRNA histogram
+	- `nalleles`: Number of alleles
+
+	Named arguments
+	- `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
+	- `total::Int=10000000`: maximum number of simulation steps
+	- `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram
+	- `verbose::Bool=false`: flag for printing state information
 
 """
-function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int,range;total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
+function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
 	reactions = set_reactions(transitions,G,R,S)
 	tau,state = initialize(r,G,R,length(reactions),nalleles)
 	tIA = zeros(Float64,nalleles)
 	tAI = zeros(Float64,nalleles)
-	ndt = length(range)
-	dt = range[2]-range[1]
-	histofftdd = zeros(Int,ndt)
-	histontdd  = zeros(Int,ndt)
+	if length(range) < 1
+		count = false
+	else
+		count = true
+		ndt = length(range)
+		dt = range[2]-range[1]
+		histofftdd = zeros(Int,ndt)
+		histontdd  = zeros(Int,ndt)
+	end
 	if verbose
 		invactions = invert_dict(set_actions())
 	end
@@ -54,7 +76,6 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 			err,mhist0 = update_error(mhist,mhist0)
 			ts = t
 		end
-
 		if verbose
 			println(state)
 			println(num_introns(state,allele,G,R))
