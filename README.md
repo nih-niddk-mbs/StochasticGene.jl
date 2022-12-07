@@ -274,3 +274,19 @@ Named arguments
 	- `verbose::Bool=false`: flag for printing state information
 
 ```
+
+```
+new_FISH(newroot::String,oldroot::String,rep::String)
+
+Create new folder for FISH data with only one replicate
+
+Arguments
+  - `newroot`: new data folder e.g. HCT_T120_FISH_rep1
+  - `oldroot`: old data folder e.g. HCT_T120_FISH
+  - `rep`: name of replicate folder e.g. rep1
+
+```
+
+### Example
+
+new_FISH("data/HCT_T120_8genes_FISH_rep1","data/HCT_T120_8genes_FISH","rep1")
