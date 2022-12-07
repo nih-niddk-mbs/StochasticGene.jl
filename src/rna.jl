@@ -515,6 +515,22 @@ function read_fish(path1::String,cond1::String,path2::String,cond2::String,thres
     x2 = read_fish(path2,cond2,threshold)
     combine_histogram(x1,x2)
 end
+# function to create a FISH directory
+function new_FISH(newroot::String,oldroot::String,rep::String)
+    for (root, dirs, files) in walkdir(oldroot)
+        for dir in dirs
+            if occursin(rep,dir)
+            oldtarget = joinpath(root,dir)
+            newtarget =replace(oldtarget,oldroot => newroot)
+            println(newtarget)
+            if !ispath(newtarget)
+                mkpath(newtarget)
+            end
+            cp(oldtarget,newtarget,force=true)
+            end
+        end
+    end
+end
 
 # functions to build paths to RNA/FISH data and results
 """
