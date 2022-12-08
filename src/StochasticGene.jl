@@ -35,7 +35,7 @@ export
     assemble_all,
     write_histograms,
     plot_histogram,
-    simulator
+    simulator,
     new_FISH
 
 ### Source files
