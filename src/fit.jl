@@ -36,14 +36,12 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-fit_gt(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false,optimize=false) = fit(nchains,gene,"",fittedparam,(),transitions,"",G,R,R,maxtime,infolder,folder,"","genetrap",label,label,1,0.,false,samplesteps,0,0,1.,100.,root ,10.,-1.,burst,nalleles,optimize)
-
 function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
     println(now())
     gene = check_genename(gene,"[")
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
 
-    resultfolder = folder_path(resultfolder,root,"results")
+    resultfolder = folder_path(resultfolder,root,"results",make=true)
     infolder = folder_path(infolder,root,"results")
 
     if datatype == "genetrap"

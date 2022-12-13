@@ -222,14 +222,16 @@ function checkgenes(root,cond::String,datafolder,cell::String,thresholdlow::Floa
     end
 end
 
-function folder_path(folder::String,root::String,foldertype::String)
+function folder_path(folder::String,root::String,foldertype::String;make=false)
     f = folder
     if ~ispath(folder)
         f = joinpath(root,folder)
         if ~ispath(f)
             f = joinpath(root,foldertype,folder)
-            if ~ispath(f)
+            if ~ispath(f) && ~make
                 throw("$folder not found")
+            else
+                mkpath(f)
             end
         end
     end
