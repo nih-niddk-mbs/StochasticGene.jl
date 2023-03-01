@@ -415,7 +415,7 @@ function initial_pmf(t0,ejectrate,nhist)
 end
 
 """
-normalized_nullspace(M::AbstractMatrix)
+normalized_nullspace(M::SparseMatrixCSC)
 Compute the normalized null space of a nxn matrix
 of rank n-1 using QR decomposition with pivoting
 """
@@ -430,6 +430,7 @@ function normalized_nullspace(M::SparseMatrixCSC)
     for i in 1:m-1
         p[m-i] = -R[m-i,m-i+1:end]'*p[m-i+1:end]/R[m-i,m-i]
     end
+    # Permute elements according to sparse matrix result
     pp = copy(p)
     for i in eachindex(p)
         pp[F.pcol[i]] = p[i]
