@@ -92,6 +92,18 @@ function fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)
     else
         bs = 0
     end
+    a = []
+    a_ll = []
+    for i in 1:size(fit.param)[2]
+        param2 = fit.param[:,i]
+        r = StochasticGene.get_r(model)
+        r[model.fittedparam] = StochasticGene.inverse_transform(param2,model)
+        ll_temp = StochasticGene.loglikelihood(param2,data,model)[1]
+        push!(a, r)
+        push!(a_ll,ll_temp)
+    end
+    write_ll_sampledrates(a_ll,data,model,root,resultfolder)
+    write_sampledrates(a,data,model,root,resultfolder)
     finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,bs,root)
     println(now())
     get_rates(transform(stats.medparam,model),model)
