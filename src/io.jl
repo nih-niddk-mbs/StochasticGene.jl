@@ -408,6 +408,36 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
 end
 
 """
+write_ll_sampledrates(file::String,a)
+
+write loglikelihood for each sampled rates
+
+"""
+function write_ll_sampledrates(a_ll, data, model::StochasticGRmodel, root, resultfolder)
+    path = joinpath(root,resultfolder)
+    name = filename(data,model)
+    file = joinpath(path,"ll_sampled_rates"*name)
+	f = open(file, "w")
+	writedlm(f, a_ll, ',')
+	close(f)
+end
+
+"""
+write_sampledrates(file::String,a)
+
+write sampled rates
+
+"""
+function write_sampledrates(a, data, model::StochasticGRmodel, root, resultfolder)
+    path = joinpath(root,resultfolder)
+    name = filename(data,model)
+    file = joinpath(path,"sampled_rates"*name)
+	f = open(file, "w")
+	writedlm(f, a, ',')
+	close(f)
+end
+
+"""
 write_rates(file::String,fit)
 
 Write rate parameters, rows in order are
