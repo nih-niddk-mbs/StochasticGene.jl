@@ -223,6 +223,7 @@ The code assumes the rates have units of inverse minutes and the half lives in t
     - `optimize`: use optimizer to compute maximum likelihood value
     - `type`: switch used for GRS models, choices include "", "offeject"
     - `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+    - `writesamples`: write out MH samples if true, default is false
 
 
     returns swarmfile that calls a julia file that is executed on biowulf

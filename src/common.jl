@@ -457,8 +457,6 @@ end
 
 SIinit(r,model::GMmodel) = SIinit(r,model.G,model.Gtransitions)
 
-
-
 """
 transform(r,model::StochasticGRmodel)
 

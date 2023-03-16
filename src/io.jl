@@ -389,9 +389,9 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 
 
 """
-write_results(file::String,x)
+writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0)
+function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0,writesamples=false)
     if ~isdir(path)
         mkpath(path)
     end
@@ -404,6 +404,10 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
     end
     if burst != 0
         write_burstsize(joinpath(path,"burst" * name),burst)
+    end
+    if writesamples
+        write_array(joinpath(path,"ll_sampled_rates"*name),fit.ll)
+        write_array(joinpath(path,"sampled_rates"*name),permutedims(inverse_transform(fit.param,model)))
     end
 end
 
@@ -478,6 +482,11 @@ function write_burstsize(file::String,b::BurstMeasures)
     close(f)
 end
 
+"""
+write_MHsamples(file::String,samples::Matrix)
+
+"""
+write_array(file::String,d::Array) = writedlm(file,d,header=false)
 
 """
 readrates(file::String,row::Int)

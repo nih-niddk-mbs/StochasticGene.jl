@@ -4,9 +4,7 @@
 #
 
 """
-    fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datatype,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,runcycle::Bool,inlabel,label,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
-    fit(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,runcycle,inlabel,label,nsets,cv=0.,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/",yieldprior = 0.05,ejectprior = 1.0)
-
+fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -14,8 +12,14 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `nchains`: number of MCMC chains
 - `gene`: gene name
 - `cell`: cell type
-- `datatype`: data type, e.g. genetrap, scRNA, smFISH
+- `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
+- `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `datatype`: data type, e.g. genetrap, scRNA, smFISH
 - `maxtime`: float maximum time for entire run
 - `infolder`: folder pointing to results used as initial conditions
 - `resultfolder`: folder where results go
@@ -23,20 +27,27 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `inlabel`: name of input files (not including gene name but including condition)
 - `label`: = name of output files
 - `nsets`: int number of rate sets
-- `runcycle`: if true, cycle through all parameters sequentially in MCMC
+- `cv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `transient::Bool`: true means fit a time dependent transient model (T0, T30, T120)
 - `samplesteps`: int number of samples
 - `warmupsteps`: int number of warmup steps
 - `annealsteps`: in number of annealing steps
 - `temp`: MCMC temperature
 - `tempanneal`: starting temperature for annealing
 - `root`: root folder of data and Results folders
-- `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
-- `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
+- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `burst`: if true then compute burst frequency
+- `nalleles`: number of alleles, value in alleles folder will be used if it exists
+- `optimize`: use optimizer to compute maximum likelihood value
+- `type`: switch used for GRS models, choices include "", "offeject"
+- `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `writesamples`: write out MH samples if true, default is false
 - `data`: data structure
 
 """
 
-function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
+function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median",writesamples=false)
     println(now())
     gene = check_genename(gene,"[")
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
@@ -73,10 +84,15 @@ function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeff
     println("size of histogram: ",data.nRNA)
 
     options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-    fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
+    fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
 end
 
-function fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)
+"""
+fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)
+
+"""
+
+function fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)
     print_ll(data,model)
     fit,stats,measures = run_mh(data,model,options,nchains);
     optimized = 0
@@ -92,11 +108,17 @@ function fit(nchains,data,model,options,temp,resultfolder,burst,optimize,root)
     else
         bs = 0
     end
-    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,bs,root)
+    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,bs,writesamples,root)
     println(now())
     get_rates(transform(stats.medparam,model),model)
 end
 
+"""
+lossfnc(x,data,model)
+
+Compute loss function
+
+"""
 lossfnc(x,data,model) = loglikelihood(x,data,model)[1]
 
 """
@@ -203,9 +225,9 @@ finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
 
 write out run results and print out final loglikelihood and deviance
 """
-function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,root)
+function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
     writefolder = joinpath(root,resultfolder)
-    writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
+    writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst,writesamples=writesamples)
     println("final max ll: ",fit.llml)
     print_ll(transform(vec(stats.medparam),model),data,model,"median ll: ")
     println("Median fitted rates: ",stats.medparam[:,1])
