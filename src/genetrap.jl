@@ -19,7 +19,7 @@ const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9
 
 """
 
-function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
+function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",type="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false, writesamples=false)
     println(now())
     data,model = genetrap(root,gene,transitions,G,R,2,type,fittedparam,infolder,folder,label,"median",tempfish)
     println("size of histogram: ",data.nRNA)
@@ -31,7 +31,7 @@ function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,inf
     else
         bs = 0
     end
-    finalize(data,model,fit,stats,measures,1.,folder,0,bs,root)
+    finalize(data,model,fit,stats,measures,1.,folder,0,bs,writesamples,root)
     println(now())
     return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,nalleles,fittedparam,type,1,transitions,data)
 end
