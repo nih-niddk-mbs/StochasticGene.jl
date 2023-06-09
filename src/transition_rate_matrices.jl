@@ -3,6 +3,11 @@
 """
 Element
 
+transition matrix elements, 
+`a`: row, 
+`b`: column
+`index`: rate vector index
+`pm`: sign of elements
 
 """
 struct Element
@@ -360,7 +365,7 @@ function set_elements_TA!(elementsTA,elementsT,G,R,base=3)
 	end
 end
 """
-set_elements_TI!(elementsTA,elementsT)
+set_elements_TI!(elementsTI,elementsT)
 
 
 """
