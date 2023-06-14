@@ -46,7 +46,7 @@ end
 	- `verbose::Bool=false`: flag for printing state information
 
 """
-function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
+function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;activestates::Vector,range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
 	reactions = set_reactions(transitions,G,R,S)
 	tau,state = initialize(r,G,R,length(reactions),nalleles)
