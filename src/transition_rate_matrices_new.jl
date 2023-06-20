@@ -4,8 +4,8 @@
 Element
 
 transition matrix elements, 
-`a`: row, 
-`b`: column
+`a`: column, 
+`b`: row
 `index`: rate vector index
 `pm`: sign of elements
 
