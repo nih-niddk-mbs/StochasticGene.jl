@@ -80,98 +80,6 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     get_rates(transform(stats.medparam,model),model)
 end
 
-#
-#
-# lossfnc(x,data,model) = loglikelihood(x,data,model)[1]
-#
-# """
-# burstsize(fit,model::AbstractGMmodel)
-#
-# Compute burstsize and stats using MCMC chain
-#
-# """
-# function burstsize(fit,model::AbstractGMmodel)
-#     if model.G > 1
-#         b = Float64[]
-#         for p in eachcol(fit.param)
-#             r = get_rates(p,model)
-#             push!(b,r[2*model.G-1] / r[2*model.G-2])
-#         end
-#         return BurstMeasures(mean(b),std(b),median(b),mad(b), quantile(b,[.025;.5;.975]))
-#     else
-#         return 0
-#     end
-# end
-#
-#
-# """
-# check_genename(gene,p1)
-#
-# Check genename for p1
-# if p1 = "[" change to "("
-# (since swarm cannot parse "(")
-#
-# """
-# function check_genename(gene,p1)
-#     if occursin(p1,gene)
-#         if p1 == "["
-#             gene = replace(gene,"[" => "(")
-#             gene = replace(gene,"]" => ")")
-#         elseif p1 == "("
-#             gene = replace(gene,"(" => "]")
-#             gene = replace(gene,")" => "]")
-#         end
-#     end
-#     return gene
-# end
-#
-#
-# """
-# print_ll(param,data,model,message="initial ll:")
-#
-# compute and print initial loglikelihood
-# """
-# function print_ll(param,data,model,message)
-#     ll,_ = loglikelihood(param,data,model)
-#     println(message,ll)
-# end
-# function print_ll(data,model,message="initial ll: ")
-#     ll,_ = loglikelihood(get_param(model),data,model)
-#     println(message,ll)
-# end
-#
-# """
-# printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
-#
-# print out run information
-# """
-# function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
-#     println("Gene: ",gene," G: ",G," Treatment:  ",cond)
-#     println("data: ",datafolder)
-#     println("in: ", infolder," out: ",resultfolder)
-#     println("maxtime: ",maxtime)
-# end
-#
-# """
-# finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
-#
-# write out run results and print out final loglikelihood and deviance
-# """
-# function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,root)
-#     writefolder = joinpath(root,resultfolder)
-#     writeall(writefolder,fit,stats,measures,data,temp,model,optimized=optimized,burst=burst)
-#     println("final max ll: ",fit.llml)
-#     print_ll(transform(vec(stats.medparam),model),data,model,"median ll: ")
-#     println("Median fitted rates: ",stats.medparam[:,1])
-#     println("ML rates: ",inverse_transform(fit.parml,model))
-#     println("Acceptance: ",fit.accept,"/",fit.total)
-#     println("Deviance: ",deviance(fit,data,model))
-#     println("rhat: ",maximum(measures.rhat))
-#     if optimized != 0
-#         println("Optimized ML: ",Optim.minimum(optimized))
-#         println("Optimized rates: ",exp.(Optim.minimizer(optimized)))
-#     end
-# end
 
 #Prepare data structures
 """
@@ -316,15 +224,7 @@ function model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffe
     return model
 end
 
-function model_rna(data,r::Vector,G::Int,nalleles::Int,propcv,fittedparam::Array,decayprior::Float64,ejectprior,noisepriors::Array,method::Int)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r,G::Int,1,fittedparam,decayprior,ejectprior,noisepriors)
-    if method == 1
-        GMrescaledmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-    else
-        GMmultimodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method)}(G,nalleles,r,d,propcv,fittedparam,method)
-    end
-end
+
 function model_delay_rna(r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam::Array,decayprior,ejectprior,delayprior)
     # propcv = proposal_cv_rna(propcv,fittedparam)
     d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,delayprior)

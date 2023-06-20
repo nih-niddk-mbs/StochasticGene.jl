@@ -18,7 +18,7 @@ function offonPDF(T,TA,TI,t::Vector,r::Vector,G::Int,method,SIinit::Vector)
     return pdf_from_cdf(t,SI), pdf_from_cdf(t,SA)
 end
 
-function SIinit(r,G,transitions)
+function SIinit(G,transitions)
     start = 0
     for t in transitions
         if t[1] == G

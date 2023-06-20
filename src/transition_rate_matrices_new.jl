@@ -4,8 +4,8 @@
 Element
 
 transition matrix elements, 
-`a`: column, 
-`b`: row
+`a`: row, (start)
+`b`: column (finish)
 `index`: rate vector index
 `pm`: sign of elements
 
@@ -86,7 +86,7 @@ function set_elements_G!(elements,transitions,j=0,gamma=collect(1:length(transit
 	i = 1
 	for t in transitions
 		push!(elements,Element(t[1]+j, t[1]+j, gamma[i],-1))
-		push!(elements,Element(t[2]+j, t[1]+j, gamma[i],1))
+		push!(elements,Element(t[1]+j, t[2]+j, gamma[i],1))
 		i += 1
 	end
 end
@@ -126,8 +126,8 @@ function set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base:
 				sC = (zbarr==wbarr)*((zr==1)-(zr==2))*(wr==2)
 			end
 			for i=1:G
-				a = i + G*(z-1)
-				b = i + G*(w-1)
+				a = i + G*(w-1)
+                b = i + G*(z-1)
 				if abs(sB) == 1
 					push!(elementsT,Element(a,b,nu[R+1],sB))
 				end
@@ -178,172 +178,6 @@ function set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base:
 	end
 end
 
-# """
-# set_elements_R!
-#
-# returns T
-# """
-# set_elements_R!(elementsT,G,R,indices::Indices) = set_elements_R!(elementsT,G,R,indices.nu)
-#
-# function set_elements_R!(elementsT,G,R,nu::Vector)
-# 	if R == 0
-# 		set_elements_R!(elementsT,G,nu::Vector)
-# 	else
-# 		for w=1:2^R, z=1:2^R, i=1:G
-# 			a = i + G*(z-1)
-# 			b = i + G*(w-1)
-# 			zdigits = digits(z-1,base=2,pad=R)
-# 			wdigits = digits(w-1,base=2,pad=R)
-# 			z1 = zdigits[1]
-# 			w1 = wdigits[1]
-# 			zr = zdigits[R]
-# 			wr = wdigits[R]
-# 			zbar1 = zdigits[2:R]
-# 			wbar1 = wdigits[2:R]
-# 			zbarr = zdigits[1:R-1]
-# 			wbarr = wdigits[1:R-1]
-# 			s = (i==G)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
-# 			if  abs(s) == 1
-# 				push!(elementsT,Element(a,b,nu[1],s))
-# 			end
-# 			s = (zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-# 			if abs(s) == 1
-# 				push!(elementsT,Element(a,b,nu[R+1],s))
-# 			end
-# 			for j = 1:R-1
-# 				zbarj = zdigits[[1:j-1;j+2:R]]
-# 				wbarj = wdigits[[1:j-1;j+2:R]]
-# 				zj = zdigits[j]
-# 				zj1 = zdigits[j+1]
-# 				wj = wdigits[j]
-# 				wj1 = wdigits[j+1]
-# 				s = (zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)
-# 				if abs(s) == 1
-# 					push!(elementsT,Element(a,b,nu[j+1],s))
-# 				end
-# 			end
-# 		end
-# 	end
-# end
-#
-# """
-# set_elements_RS!(elementsT,G,R,ntransitions)
-#
-# return T
-# """
-#
-# set_elements_RS!(elementT,G,R,indices::Indices) = set_elements_RS!(elementT,G,R,indices.nu,indices.eta)
-#
-# function set_elements_RS!(elementsT,G,R,nu::Vector{Int},eta::Vector{Int})
-# 	for w=1:3^R,z=1:3^R
-# 		zdigits = digits(z-1,base=3,pad=R)
-# 		wdigits = digits(w-1,base=3,pad=R)
-# 		z1 = zdigits[1]
-# 		w1 = wdigits[1]
-# 		zr = zdigits[R]
-# 		wr = wdigits[R]
-# 		zbar1 = zdigits[2:R]
-# 		wbar1 = wdigits[2:R]
-# 		zbarr = zdigits[1:R-1]
-# 		wbarr = wdigits[1:R-1]
-# 		sB = (zbarr==wbarr)*(((zr==0)-(zr==1))*(wr==1)+((zr==0)-(zr==2))*(wr==2))
-# 		sC = (zbarr==wbarr)*((zr==1)-(zr==2))*(wr==2)
-# 		s = (zbar1==wbar1)*((z1==2)-(z1==0))*(w1==0)
-# 		if abs(s) == 1
-# 			push!(elementsT,Element(G*z,G*w,nu[1],s))
-# 		end
-# 		for i=1:G
-# 			a = i + G*(z-1)
-# 			b = i + G*(w-1)
-# 			if abs(sB) == 1
-# 				push!(elementsT,Element(a,b,nu[R+1],sB))
-# 			end
-# 			if abs(sC) == 1
-# 				push!(elementsT,Element(a,b,eta[R],sC))
-# 			end
-# 			# T[a,b] += B
-# 			# T[a,b] += C
-# 			for j = 1:R-1
-# 				zbarj = zdigits[[1:j-1;j+2:R]]
-# 				wbarj = wdigits[[1:j-1;j+2:R]]
-# 				zbark = zdigits[[1:j-1;j+1:R]]
-# 				wbark = wdigits[[1:j-1;j+1:R]]
-# 				zj = zdigits[j]
-# 				zj1 = zdigits[j+1]
-# 				wj = wdigits[j]
-# 				wj1 = wdigits[j+1]
-# 				s = (zbarj==wbarj)*(((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)+((zj==0)*(zj1==2)-(zj==2)*(zj1==0))*(wj==2)*(wj1==0))
-# 				if abs(s) == 1
-# 					push!(elementsT,Element(a,b,nu[j+1],s))
-# 				end
-# 				s = (zbark==wbark)*((zj==1)-(zj==2))*(wj==2)
-# 				if abs(s) == 1
-# 					push!(elementsT,Element(a,b,eta[j],s))
-# 				end
-# 				# T[a,b] += nu[j+1]*((zbarj==wbarj)*(((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)+((zj==0)*(zj1==2)-(zj==2)*(zj1==0))*(wj==2)*(wj1==0)))
-# 				# T[a,b] += eta[j]*((zbark==wbark)*((zj==1)-(zj==2))*(wj==2))
-# 			end
-# 		end
-# 	end
-# end
-
-# """
-# set_elements_RS_offeject!(G,R,ntransitions)
-#
-# """
-# set_elements_R_offeject!(elementsT,G,R,indices::Indices) = set_elements_R_offeject!(elementsT,G,R,indices.nu,indices.eta)
-#
-#
-# function set_elements_R_offeject!(elementsT,G,R,nu::Vector{Int},eta::Vector{Int})
-# 	for w=1:2^R, z=1:2^R, i=1:G
-# 		a = i + G*(z-1)
-# 		b = i + G*(w-1)
-# 		zdigits = digits(z-1,base=2,pad=R)
-# 		wdigits = digits(w-1,base=2,pad=R)
-# 		z1 = zdigits[1]
-# 		w1 = wdigits[1]
-# 		zr = zdigits[R]
-# 		wr = wdigits[R]
-# 		zbar1 = zdigits[2:R]
-# 		wbar1 = wdigits[2:R]
-# 		zbarr = zdigits[1:R-1]
-# 		wbarr = wdigits[1:R-1]
-# 		s = (i==G)*(zbar1==wbar1)*((z1==1)-(z1==0))*(w1==0)
-# 		if  abs(s) == 1
-# 			push!(elementsT,Element(a,b,nu[1],s))
-# 		end
-# 		# T[a,b] += nu[R+1]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-# 		s = (zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-# 		if  abs(s) == 1
-# 			push!(elementsT,Element(a,b,nu[R+1],s))
-# 		end
-# 		# T[a,b] += eta[nr]*(zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-# 		s= (zbarr==wbarr)*((zr==0)-(zr==1))*(wr==1)
-# 		if  abs(s) == 1
-# 			push!(elementsT,Element(a,b,eta[R],s))
-# 		end
-# 		for j = 1:R-1
-# 			zbarj = zdigits[[1:j-1;j+2:R]]
-# 			wbarj = wdigits[[1:j-1;j+2:R]]
-# 			zbark = zdigits[[1:j-1;j+1:R]]
-# 			wbark = wdigits[[1:j-1;j+1:R]]
-# 			zj = zdigits[j]
-# 			zj1 = zdigits[j+1]
-# 			wj = wdigits[j]
-# 			wj1 = wdigits[j+1]
-# 			# T[a,b] += nu[j+1]*((zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0))
-# 			s = (zbarj==wbarj)*((zj==0)*(zj1==1)-(zj==1)*(zj1==0))*(wj==1)*(wj1==0)
-# 			if  abs(s) == 1
-# 				push!(elementsT,Element(a,b,nu[j+1],s))
-# 			end
-# 			# T[a,b] += eta[j]*((zbark==wbark)*((zj==0)-(zj==1))*(wj==1))
-# 			s = (zbark==wbark)*((zj==0)-(zj==1))*(wj==1)
-# 			if  abs(s) == 1
-# 				push!(elementsT,Element(a,b,eta[j],s))
-# 			end
-# 		end
-# 	end
-# end
 """
 set_elements_TA!(elementsTA,elementsT)
 
@@ -413,8 +247,8 @@ set_elements_B(G,ejectindex) = [Element(G,G,ejectindex,1)]
 function set_elements_B(G,R,ejectindex,base=2)
 	elementsB = Vector{Element}(undef,0)
 	for w=1:base^R, z=1:base^R, i=1:G
-		a = i + G*(z-1)
-		b = i + G*(w-1)
+        a = i + G*(w-1)
+		b = i + G*(z-1)	
 		zdigits = digits(z-1,base=base,pad=R)
 		wdigits = digits(w-1,base=base,pad=R)
 		zr = zdigits[R]

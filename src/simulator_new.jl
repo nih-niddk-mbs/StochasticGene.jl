@@ -25,6 +25,11 @@ struct Reaction
 	final::Int
 end
 
+function simulator(model)
+
+
+end
+
 """
 	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
 
