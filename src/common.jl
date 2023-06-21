@@ -68,7 +68,6 @@ abstract type Model end
 abstract type StochasticGRmodel <: Model end
 abstract type AbstractGMmodel <: StochasticGRmodel end
 abstract type AbstractGRMmodel <: StochasticGRmodel end
-abstract type AbstractGMlossmodel <: AbstractGMmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 
@@ -114,17 +113,6 @@ end
 
 struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
     G::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-end
-
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
-    G::Int
-    R::Int
     nalleles::Int
     rates::RateType
     rateprior::PriorType
