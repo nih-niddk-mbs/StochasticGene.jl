@@ -138,6 +138,7 @@ end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
+    S::Int
     nalleles::Int
     type::String
     rates::RateType

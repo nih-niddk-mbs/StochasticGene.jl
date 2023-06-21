@@ -117,7 +117,7 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,t
         d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
         # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
         components = make_components(transitions,G,R,r,data.nRNA+2,type,set_indices(ntransitions,G,R))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
 
     end
 end
