@@ -35,6 +35,28 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `fixedeffects`: string indicating which rate is fixed, e.g. "eject"
 
 """
+function shrink(folder,G,fish)
+    files = readdir(folder)
+    for file in files
+        if occursin("rates",file) && occursin("_$(G)_",file)
+            ff = joinpath(folder,file)
+            println(ff)
+            rs = readdlm(ff,',')
+            f = open(ff,"w")
+            for r in eachrow(rs)
+                if fish
+                    println(r[1:2*G])
+                    writedlm(f,r[1:2*G]',',')
+                else
+                    println(r[[1:2*G;end]])
+                    writedlm(f,r[[1:2*G;end]]',',')
+                end
+            end
+            close(f)
+        end
+    end
+end
+
 function fit_rna(nchains::Int,gene::String,cell::String,datacond,G::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder,inlabel,label,nsets,runcycle::Bool=false,transient::Bool=false,samplesteps::Int=100000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
     fittedparam = make_fittedparam(G,nsets)
     fit_rna(nchains,gene,cell,fittedparam,(),datacond,G,maxtime,infolder,resultfolder,datafolder,inlabel,label,nsets,runcycle,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root)
@@ -834,8 +856,22 @@ function prune_file(list,file,outfile,header=true)
     end
     close(f)
 end
-
-
+function make_cell_files(datafolder,cell,cond)
+    f1 = open("$(cell)_halflife.csv","w")
+    f2 = open("$(cell)_alleles.csv","w")
+    genes = StochasticGene.get_genes(cond,datafolder)
+    writedlm(f1,["Gene" "Halflife"],',')
+    writedlm(f2,["gene_name" "gene_id" "#ofalleles"],',')
+    for gene in genes
+        m = StochasticGene.mean_histogram(StochasticGene.get_histogram_rna(string(gene),cond,datafolder,false))
+        if m > 1
+            writedlm(f1,[gene log(2)/60.],',')
+            writedlm(f2,[gene gene 1],',')
+        end
+    end
+    close(f1)
+    close(f2)
+end
 
 # precompile(fit_rna,(String,String,Int,Float64,String,String,String,String,String,Int,String,Bool))
 # fit_rna(nchains,gene::String,cond::String,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,sample::Int=40000,warmup=20000,anneal=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
