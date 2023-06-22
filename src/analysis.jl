@@ -825,16 +825,16 @@ function plot_histogram(gene::String,cell::String,G::String,cond::String,fish::B
     return m,data,model
 end
 
-function plot_histogram(data::RNAData{Vector{Int64}, Vector{Array}},model::GMlossmodel)
-    h=likelihoodarray(model.rates,data,model)
-    for i in eachindex(h)
-        figure()
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-        savefig(string(i))
-    end
-    return h
-end
+# function plot_histogram(data::RNAData{Vector{Int64}, Vector{Array}},model::GMlossmodel)
+#     h=likelihoodarray(model.rates,data,model)
+#     for i in eachindex(h)
+#         figure()
+#         plot(h[i])
+#         plot(normalize_histogram(data.histRNA[i]))
+#         savefig(string(i))
+#     end
+#     return h
+# end
 function plot_histogram(data::AbstractRNAData{Array{Array,1}},model)
     h=likelihoodarray(model.rates,data,model)
     figure(data.gene)

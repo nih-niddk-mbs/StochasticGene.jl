@@ -58,7 +58,6 @@ struct RNALiveCellData <: HistogramData
     bins::Array
     OFF::Array
     ON::Array
-
 end
 
 """
@@ -97,6 +96,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMfixedeffectsmodel
     G::Int
@@ -109,9 +109,10 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 
-struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: AbstractGMmodel
+struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -121,7 +122,48 @@ struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType} <: Abs
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
+
+struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
+    onstates::Vector
+end
+
+struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
+    onstates::Vector
+end
+
+struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
+    G::Int
+    nalleles::Int
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
+    onstates::Vector
+end
+
 
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -138,9 +180,10 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
 end
 
-function write_model(model)
-
-
+function write_model(model::Model)
+    for fname in fieldnames(model)
+        println("$fname =",getfield(model,fname))
+    end
 end
 
 """
@@ -356,9 +399,9 @@ function get_rates(param,model::GMrescaledmodel)
     return r
 end
 
-get_rates(param,model::GMfixedeffectsmodel) = fixed_rates(param,model)
+get_rates(param,model::AbstractGMfixedeffectsmodel) = fixed_rates(param,model)
 
-get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
+# get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
 
 function fixed_rates(param,model)
     r = get_r(model)
