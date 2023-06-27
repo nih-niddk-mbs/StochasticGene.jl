@@ -92,6 +92,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                 println(rindex)
                 println(invactions[action])
             end
+			update!()
             if action < 5
                 if action < 3
                     if action == 1
