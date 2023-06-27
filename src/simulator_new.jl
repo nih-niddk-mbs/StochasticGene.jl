@@ -1,6 +1,6 @@
 # simulator.jl
 # Functions to simulate Markov gene transcription models
-# Use next reaction method
+# Use Gibson Bruck Next Reaction method
 
 """
 	ReactionIndices
