@@ -5,6 +5,15 @@
 """
 	ReactionIndices
 
+	Structure that specifies the range of indices for each type of reaction in the rate vector
+
+	- `grange`: range for G reactions
+	- `rrange`: range for R reactions
+	- `srange`: range for S reactions
+	- `decay`: index for mRNA decay rate
+
+	(eject rate follows grange for GM models, or is last index of rrange)
+
 
 """
 struct ReactionIndices
@@ -15,6 +24,15 @@ struct ReactionIndices
 end
 """
 	Reaction
+
+	Structure that specifies a reaction
+
+	- `action`: type of reaction (e.g. G state transition, mRNA ejection, mRNA decay, etc.)
+	- `index`: index of reaction (used for selecting reaction in next reaction scheme)
+	- `upstream`: vector of upstream reactions that are affected when reaction occurs
+	- `downstream`: vector of downstream reactions
+	- `initial`: initial state of reaction
+	- `final`: final state of reaction
 """
 struct Reaction
     action::Int
@@ -25,13 +43,23 @@ struct Reaction
     final::Int
 end
 
+"""
+	set_actions()
+
+	create dictionary for index of each type of transition
+"""
+set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "eject!" => 4, "decay!" => 5, "initiate!" => 6, "transitionR!" => 7, "splice!" => 8)
+invert_dict(D) = Dict(D[k] => k for k in keys(D))
+
+set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
+
 function simulator(model)
 
 
 end
 
 """
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles, onstates::Vector;::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
 
 	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
 
@@ -43,6 +71,7 @@ end
     - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
 	- `nhist::Int`: Size of mRNA histogram
 	- `nalleles`: Number of alleles
+	- `onstates`: vector of active G states
 
 	Named arguments
 	- `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
@@ -51,7 +80,7 @@ end
 	- `verbose::Bool=false`: flag for printing state information
 
 """
-function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector, range::Vector{Float64}=Float64[], total::Int=10000000, tol::Float64=1e-6, verbose::Bool=false)
+function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int, onstates::Vector; range::Vector{Float64}=Float64[], total::Int=10000000, tol::Float64=1e-6, verbose::Bool=false)
     if R == 0
         simulator(r, G, nhist, nalleles, onstates, range, total, tol, verbose)
     else
@@ -99,7 +128,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                             offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
                         end
                         activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-                    else
+                    else # action 2
                         if count && R == 0
                             ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
                         end
@@ -108,7 +137,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                 else
                     if action == 3
                         transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-                    else
+                    else # action 4
                         if count && R > 0
                             offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
                         end
@@ -119,7 +148,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                 if action < 7
                     if action == 5
                         transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
-                    else
+                    else # action 6
                         if count && R > 0
                             ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
                         end
@@ -131,7 +160,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                             ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
                         end
                         splice!(tau, state, index, t, m, r, allele, G, R, initial)
-                    else
+                    else # action 8
                         m = decay!(tau, state, index, t, m, r)
                     end
                 end
@@ -147,10 +176,7 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
     end
 end
 
-function simulator(r::Vector{Float64}, transitions, G::Int, nhist::Int, nalleles::Int; onstates::Vector, range::Vector{Float64}=Float64[], total::Int=10000000, tol::Float64=1e-6, verbose::Bool=false)
 
-
-end
 
 function num_introns(state, allele, G, R)
     d = 0
@@ -181,15 +207,7 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
 end
 
 
-"""
-	set_actions()
 
-	create dictionary for all the possible transitions
-"""
-set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
-invert_dict(D) = Dict(D[k] => k for k in keys(D))
-
-set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
 
 function set_reactionindices(Gtransitions, R, S)
     g = 1:length(Gtransitions)
