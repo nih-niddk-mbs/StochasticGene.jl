@@ -44,11 +44,68 @@ struct Reaction
 end
 
 """
+initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+
+Returns initial `tau` (proposed reaction time), `states` occupancy of all states in the system)
+`tau` is an nreactions X nalleles matrix
+`states` is an G + max(R,1) + 1 X nalleles matrix
+In all models, first G rows are for G states, and the last row is the number of free mRNA
+In GM models, the rows after the G state is an auxiliary state, in GRM models, the next R rows are R states.
+In GRM models these states are set to 0 for no pre-mRNA and  1 for pre-mRNA but in GRSM models they are 0,1,or 2, with 2 indicating the presence of the intron reporter and 1
+indicating the pre-mRNA without the intron.
+- 
+
+Arguments
+	- `r`: vector of rates
+	- `G`: number of gene states
+    - `R`: number of pre-RNA steps (set to 0 for GM models)
+    - `nreactions`:
+	- `nalleles`: Number of alleles
+    - `initstate`: Index of initial occupied G state
+	- `initreaction`: Index of initial reaction
+
+
+"""
+function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+    tau = fill(Inf, nreactions, nalleles)
+    states = zeros(Int, G + max(R, 1)+1, nalleles)
+    for n in 1:nalleles
+        tau[initreaction, n] = -log(rand()) / r[1]
+        states[initstate, n] = 1
+    end
+    return tau, states
+end
+"""
+mhist, mhist0, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
+
+- `nhist`: length of mRNA histogram
+- `tol`: tolerance for histogram
+
+- `mhist`: mRNA histogram, initially set to zeros
+- `mhist0`: auxiliary vector for comparison
+- `steps`: maximum number of simulation steps
+- `t`: initial time set to zero
+- `ts`: set to zero
+- `t0`: set to zero
+- `tsample`:
+- `err`:
+"""
+initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
+
+
+"""
 	set_actions()
 
-	create dictionary for index of each type of transition
+	dictionary for index of each type of transition function
+
+    - `transitionG!`: move forward or backwards one G state 
+    - `eject!`: emit an mRNA, either from active G state in GM models or last R state in GR models
+    - `decay!`: removal of one mRNA
+    - `initiate!`: Load first R (1 for GRM models) or RS state (2 for GRSM models)
+    - `transitionR!`: move to next R state (carry S state in GRSM model)
+    - `splice!`: eject splice state (only in GRS model, state goes from 2 to 1)
 """
-set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "eject!" => 4, "decay!" => 5, "initiate!" => 6, "transitionR!" => 7, "splice!" => 8)
+set_actions() = Dict("transitionG!" => 1, "eject!" => 2, "decay!" => 3, "initiate!" => 4, "transitionR!" => 5, "splice!" => 6)
 invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
@@ -67,11 +124,11 @@ end
 	- `r`: vector of rates
 	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 	- `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+    - `R`: number of pre-RNA steps (set to 0 for GM models)
+    - `S`: number of splice sites (set to 0 for GM models and R for GRS models)
 	- `nhist::Int`: Size of mRNA histogram
 	- `nalleles`: Number of alleles
-	- `onstates`: vector of active G states
+	- `onstates`: vector of active states (for ON and OFF time distributions)
 
 	Named arguments
 	- `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
@@ -272,7 +329,6 @@ function set_reactions(Gtransitions, G, R, S)
     return reactions
 end
 
-initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
 
 update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
 """
@@ -286,19 +342,7 @@ function update_mhist!(mhist, m, dt, nhist)
         mhist[nhist+1] += dt
     end
 end
-"""
-initialize
 
-"""
-function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
-    tau = fill(Inf, nreactions, nalleles)
-    states = zeros(Int, G + max(R, 1), nalleles)
-    for n in 1:nalleles
-        tau[initreaction, n] = -log(rand()) / r[1]
-        states[initstate, n] = 1
-    end
-    return tau, states
-end
 """
 	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
 
