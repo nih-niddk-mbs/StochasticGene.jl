@@ -311,23 +311,23 @@ function set_reactions(Gtransitions, G, R, S)
     end
     if R > 0
         # set downstream to splice reaction
-        push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
+        push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1,initiate!){typeof(initiate!)})
     end
     i = G
     for r in indices.rrange
         d = Int[]
         if r < length(Gtransitions) + R
             i += 1
-            push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
+            push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1,transitionR!){typeof(transitionR!)})
         end
     end
-    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[nG+R+S+2], G + R, 0))
+    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[nG+R+S+2], G + R, 0,eject!){typeof(eject!)})
     j = G
     for s in indices.srange
         j += 1
-        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
+        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0,splice!){typeof(splice!)})
     end
-    push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
+    push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0,decay!){typeof(decay)})
     return reactions
 end
 
