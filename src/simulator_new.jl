@@ -34,13 +34,14 @@ end
 	- `initial`: initial state of reaction
 	- `final`: final state of reaction
 """
-struct Reaction
+struct Reaction{FunctionType}
     action::Int
     index::Int
     upstream::Vector{Int64}
     downstream::Vector{Int64}
     initial::Int
     final::Int
+	f::FunctionType
 end
 
 """
@@ -297,15 +298,16 @@ function set_reactions(Gtransitions, G, R, S)
                 push!(d, s)
             end
         end
-        if gfinal == G
-            push!(d, length(Gtransitions) + 1)
-            push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
-        elseif ginitial == G
-            push!(u, length(Gtransitions) + 1)
-            push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
-        else
-            push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
-        end
+		push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal,transitionG!){typeof(transitionG!)})
+        # if gfinal == G
+        #     push!(d, length(Gtransitions) + 1)
+        #     push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal,activateG!){typeof(activateG!)})
+        # elseif ginitial == G
+        #     push!(u, length(Gtransitions) + 1)
+        #     push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
+        # else
+        #     push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal,transitionG!){typeof(transitionG!)})
+        # end
     end
     if R > 0
         # set downstream to splice reaction
