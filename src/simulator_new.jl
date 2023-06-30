@@ -76,6 +76,20 @@ function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
     end
     return tau, states
 end
+
+"""
+build_heap(tau)
+
+left child is located at index 2*k
+right child is located at index 2*k+1
+parent is located at index div(k,2)
+"""
+function build_heap(tau)
+    binary_heap = vec(tau)
+
+
+
+end
 """
 mhist, mhist0, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
 
@@ -179,51 +193,6 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
                 println(rindex)
                 println(invactions[action])
             end
-			update!()
-            if action < 5
-                if action < 3
-                    if action == 1
-                        if count && R == 0
-                            offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-                        end
-                        activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-                    else # action 2
-                        if count && R == 0
-                            ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-                        end
-                        deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-                    end
-                else
-                    if action == 3
-                        transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-                    else # action 4
-                        if count && R > 0
-                            offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-                        end
-                        initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
-                    end
-                end
-            else
-                if action < 7
-                    if action == 5
-                        transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
-                    else # action 6
-                        if count && R > 0
-                            ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-                        end
-                        m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
-                    end
-                else
-                    if action == 7
-                        if count && R > 0
-                            ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-                        end
-                        splice!(tau, state, index, t, m, r, allele, G, R, initial)
-                    else # action 8
-                        m = decay!(tau, state, index, t, m, r)
-                    end
-                end
-            end
         end  # while
         counts = max(sum(mhist), 1)
         mhist /= counts
@@ -235,7 +204,52 @@ function simulator(r::Vector{Float64}, transitions, G::Int, R::Int, S::Int, nhis
     end
 end
 
-
+function update!()
+    if action < 5
+        if action < 3
+            if action == 1
+                if count && R == 0
+                    offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+                end
+                activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            else # action 2
+                if count && R == 0
+                    ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+                end
+                deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            end
+        else
+            if action == 3
+                transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            else # action 4
+                if count && R > 0
+                    offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+                end
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+            end
+        end
+    else
+        if action < 7
+            if action == 5
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
+            else # action 6
+                if count && R > 0
+                    ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+                end
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
+            end
+        else
+            if action == 7
+                if count && R > 0
+                    ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+                end
+                splice!(tau, state, index, t, m, r, allele, G, R, initial)
+            else # action 8
+                m = decay!(tau, state, index, t, m, r)
+            end
+        end
+    end
+end
 
 function num_introns(state, allele, G, R)
     d = 0
