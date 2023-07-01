@@ -85,11 +85,17 @@ right child is located at index 2*k+1
 parent is located at index div(k,2)
 """
 function build_heap(tau)
-    binary_heap = vec(tau)
+    binary_heap = vec(collect(1:length(tau)))
+	hepify(binary_heap)
+end
 
+function hepify(a)
+	
 
 
 end
+
+
 """
 mhist, mhist0, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
 
