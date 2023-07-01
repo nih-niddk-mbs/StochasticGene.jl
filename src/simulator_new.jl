@@ -47,9 +47,10 @@ end
 """
 initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
 
-Returns initial `tau` (proposed reaction time), `states` occupancy of all states in the system)
-`tau` is an nreactions X nalleles matrix
-`states` is an G + max(R,1) + 1 X nalleles matrix
+Returns tau,states
+- `tau` is an nreactions X nalleles matrix of proposed initial next reaction times
+- `states` is an G + max(R,1) + 1 X nalleles matrix of occupancy of all states in the system
+
 In all models, first G rows are for G states, and the last row is the number of free mRNA
 In GM models, the rows after the G state is an auxiliary state, in GRM models, the next R rows are R states.
 In GRM models these states are set to 0 for no pre-mRNA and  1 for pre-mRNA but in GRSM models they are 0,1,or 2, with 2 indicating the presence of the intron reporter and 1
@@ -80,19 +81,50 @@ end
 """
 build_heap(tau)
 
-left child is located at index 2*k
-right child is located at index 2*k+1
-parent is located at index div(k,2)
+Returns an array containing a binary minimum heap of a priority index of tau
+
+- `tau`: matrix of proposed times for next reaction
+
+returned array is structured such that
+parent is located at index div(i,2)
+left child is located at index 2*i
+right child is located at index 2*i+1
+
 """
 function build_heap(tau)
-    binary_heap = vec(collect(1:length(tau)))
-	hepify(binary_heap)
+    n = length(tau)
+    binary_heap = vec(collect(1:n))
+    for i in div(n,2):-1:1
+	    min_hepify!(binary_heap,tau,i)
+    end
 end
 
-function hepify(a)
-	
+"""
+min_hepify!(a,tau,i)
+
+- `a`: binary heap of indices of tau
+- `tau`: matrix of proposed next reaction times
+- `i`: index of a to be percolated down (based on tau[a])
 
 
+"""
+function min_hepify!(a,tau,i)
+    left = 2*i
+    right = 2*i + 1
+    smallest = i
+
+    if left <= length(a) && tau[a[left]] < tau[a[smallest]]
+        smallest = left
+    end
+
+    if right <= length(a) && tau[a[right]] < tau[a[smallest]]
+        smallest = right
+    end
+
+    if smallest != i
+        swap(a[i],a[smallest])
+        min_heapify(a,tau,smallest)
+    end
 end
 
 
