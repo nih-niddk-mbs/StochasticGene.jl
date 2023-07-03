@@ -123,42 +123,42 @@ function gt_histograms(r,transitions,G,R,S,nhist,nalleles,range,method=1,type=""
     histF = steady_state(M,components.mcomponents.nT,nalleles,nhist)
     return modelOFF, modelON, histF
 end
-"""
-steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
+# """
+# steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
 
-Iterative algorithm for computing null space of truncated transition rate matrix
-of Master equation of GR model to give steady state of mRNA in GRM model
-for single allele
+# Iterative algorithm for computing null space of truncated transition rate matrix
+# of Master equation of GR model to give steady state of mRNA in GRM model
+# for single allele
 
-currently not used
-"""
-function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
-    total = size(P,2)
-    steps = 0
-    err = 1.
-    A = T - B
-    while err > tol && steps < stepmax
-        P0 = copy(P)
-        P[:,1] = -A\P[:,2]
-        for m = 2:total-1
-            P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
-        end
-        P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
-        P /=sum(P)
-        err = norm((P-P0))
-        steps += 1
-    end
-    return P  # marginalize over GR states with marginalize(P) = sum(P,dims=1)
-end
+# currently not used
+# """
+# function steady_state(nhist::Int,P::Matrix,T::Matrix,B::Matrix,tol = 1e-8,stepmax=10000)
+#     total = size(P,2)
+#     steps = 0
+#     err = 1.
+#     A = T - B
+#     while err > tol && steps < stepmax
+#         P0 = copy(P)
+#         P[:,1] = -A\P[:,2]
+#         for m = 2:total-1
+#             P[:,m] = @inbounds (-A + UniformScaling(m-1))\((B*P[:,m-1]) + m*P[:,m+1])
+#         end
+#         P[:,total] = (-A + UniformScaling(total-1))\((B*P[:,total-1]))
+#         P /=sum(P)
+#         err = norm((P-P0))
+#         steps += 1
+#     end
+#     return P  # marginalize over GR states with marginalize(P) = sum(P,dims=1)
+# end
 
-function checkP(A,B,P,total)
-    err = abs.(A*P[:,1])
-    for m = 2:total-1
-        err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
-    end
-    err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
-    sum(err)/total
-end
+# function checkP(A,B,P,total)
+#     err = abs.(A*P[:,1])
+#     for m = 2:total-1
+#         err += abs.(((A - UniformScaling(m-1))* P[:,m] + B*P[:,m-1] + m*P[:,m+1]))
+#     end
+#     err += abs.(((A - UniformScaling(total-1))* P[:,total] + B*P[:,total-1]))
+#     sum(err)/total
+# end
 
 """
 transient(ts::Vector,r,n,nhist,nalleles,P0)
