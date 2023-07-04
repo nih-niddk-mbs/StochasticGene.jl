@@ -256,7 +256,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         index = mod(tauindex,nalleles) + 1
         allele = div(tauindex,nreactions) + 1
         action, initial, final, upstream, downstream  = get_fields(reactions[index])
-        update!(tau,state, index, t, r, allele, G, R, upstream, downstream, initial, final,action)
+        update!(queue,tau,state,index,t,r,allele,G,R,upstream,downstream,initial,final,action)
         dth = t - t0
         t0 = t
         update_mhist!(mhist, state[end], dth, nhist)
@@ -283,25 +283,25 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 end
 
 
-function update!(tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final, action)
+function update!(queue, tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final, action)
     if action < 4
         if action == 1
-            transitionG!(tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final)
+            transitionG!(queue,tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final)
         else
             if action == 2
-                eject!(tau, state, index, t, r, allele, G, R, S, upstream, downstream)
+                eject!(queue,tau, state, index, t, r, allele, G, R, S, upstream, downstream)
             else
-                decay!(tau, state, index, t, r)
+                decay!(queue,tau, state, index, t, r)
             end
         end
     else
         if action == 4
-            initiate!(tau, state, index, t, r, allele, G, R, S, downstream)
+            initiate!(queue,tau, state, index, t, r, allele, G, R, S, downstream)
         else
             if action == 5
-                transitionR!(tau, state, index, t, r, allele, G, R, S, upstream, downstream, initial, final)
+                transitionR!(queue,tau, state, index, t, r, allele, G, R, S, upstream, downstream, initial, final)
             else
-                splice!(tau, state, index, t, r, allele, G, R, initial)
+                splice!(queue,tau, state, index, t, r, allele, G, R, initial)
             end
         end
     end
@@ -407,7 +407,7 @@ end
 	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
 
 """
-function transitionG!(tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final)
+function transitionG!(queue, tau, state, index, t, r, allele, G, R, upstream, downstream, initial, final)
     tau[index, allele] = Inf
     state[final, allele] = 1
     state[initial, allele] = 0
