@@ -54,22 +54,22 @@ min_hepify!(a,tau,i)
 
 
 """
-function min_heapify!(a,tau,i)
+function min_heapify!(heap,node,tau,i)
     left = 2*i
     right = 2*i + 1
     smallest = i
 
-    if left <= length(a) && tau[a[left]] < tau[a[smallest]]
+    if left <= length(heap) && tau[heap[left]] < tau[heap[smallest]]
         smallest = left
     end
 
-    if right <= length(a) && tau[a[right]] < tau[a[smallest]]
+    if right <= length(heap) && tau[heap[right]] < tau[heap[smallest]]
         smallest = right
     end
 
     if smallest != i
-        swap!(a,i,smallest)
-        min_heapify!(a,tau,smallest)
+        swap!(heap,node,i,smallest)
+        min_heapify!(heap,tau,smallest)
     end
 end
 
@@ -88,45 +88,53 @@ right child is located at index 2*i+1
 """
 function build_heap(tau)
     n = length(tau)
-    binary_heap = vec(collect(1:n))
+    heap = vec(collect(1:n))
+    node = similar(heap)
     for i in div(n,2):-1:1
-	    min_heapify!(binary_heap,tau,i)
+	    min_heapify!(heap,node,tau,i)
     end
-    return binary_heap
+    for (j,h) in enumerate(heap)
+        node[h] = j
+    end
+    return heap,node
+end
+"""
+update_queue!(heap,node,tau,i,i1)
+
+
+"""
+function update_queue!(heap,node,tau,index,taunew)
+    tau[heap[index]] = taunew
+    update_queue!(heap,node,tau,index)
 end
 
 
-
-function update_queue!(a,tau,i,i1)
-    a[i] = a[i1]
-    update(tau,a,i)
-end
-
-
-function update_queue!(a,tau,i)
+function update_queue!(heap,node,tau,i)
     ip = div(i,2)
     ic = min_child(a,tau,i)
-    if tau[a[i]] < tau[a[ip]]
+    if ip > 0 && tau[heap[i]] < tau[heap[ip]]
         swap(a,i,ip)
-        update_queue!(a,tau,i)
-    elseif tau[a[i]] > tau[a[ic]]
-        swap!(a,i,ic)
-        update_queue!(a,tau,i)
+        update_queue!(heap,node,tau,ip)
+    elseif tau[heap[i]] > tau[heap[ic]]
+        swap!(heap,node,i,ic)
+        update_queue!(heap,node,tau,ic)
     else
         nothing
     end
 end
 
-function min_child(a,tau,i)
+function min_child(heap,tau,i)
     l = 2*i
     r = 2*i + 1
-    tau[a[l]] < tau[a[r]] ? l : r
+    tau[heap[l]] < tau[heap[r]] ? l : r
 end
 
-function swap!(a,i,ic)
-    t = a[i]
-    a[i] = a[ic]
-    a[ic] = t
+function swap!(heap,node,i,ic)
+    t = heap[i]
+    heap[i] = heap[ic]
+    heap[ic] = t
+    node[heap[i]] = ic
+    node[heap[ic]] = i
 end
 
 """
