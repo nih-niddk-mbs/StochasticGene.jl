@@ -414,24 +414,42 @@ function update_mhist!(mhist, m, dt, nhist)
     end
 end
 
+
+function update_tau!(heap,tau,node,nreactions,index,allele,taunew)
+    ind = linear_index(index, allele,nreactions)
+    tau[ind] = taunew
+    update_heap!(heap,node,tau,ind,taunew)
+end
+
+function update_tau!(heap,tau,node,nreactions,index,taunew)
+    tau[end] = taunew
+    update_heap!(heap,node,tau,end,taunew)
+end
+
+
 """
 	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
 
 """
 function transitionG!(heap, tau, state, index, nreactions, t, r, allele, G, R, upstream, downstream, initial, final)
-    tau[linear_index(index, allele,nreactions)] = Inf
+    update_tau!(heap,tau,node,nreactions,index,allele,Inf)
+    # ind = linear_index(index, allele,nreactions)
+    # tau[ind] = Inf
+    # update_heap!(heap,node,tau,ind,Inf)
     state[linear_index(final, allele,nreactions)] = 1
     state[linear_index(initial, allele,nreactions)] = 0
     for d in downstream
-        taunew = -log(rand()) / r[d] + t
-        index = linear_index(d, allele,nreactions)
-        tau[index] = taunew
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,d,allele,-log(rand()) / r[d] + t)
+        # taunew = -log(rand()) / r[d] + t
+        # ind = linear_index(d, allele,nreactions)
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     end
     for u in upstream
-        index = linear_index(u, allele,nreactions)
-        tau[index] = Inf
-        update!(heap,node,tau,index,Inf)
+        update_tau!(heap,tau,node,nreactions,u,allele,Inf)
+        # ind = linear_index(u, allele,nreactions)
+        # tau[ind] = Inf
+        # update!(heap,node,tau,ind,Inf)
     end
 end
 # """
@@ -462,18 +480,24 @@ end
 
 """
 function initiate!(tau, state, index, nreactions, t, r, allele, G, R, S, downstream)
-    tau[linear_index(index, allele,nreactions)] = Inf
+    update_tau!(heap,tau,node,nreactions,index,allele,Inf)
+    # ind = linear_index(index, allele,nreactions)
+    # tau[ind] = Inf
+    # update_heap!(heap,node,tau,ind,Inf)
     state[linear_index(G+1, allele,nreactions)] = 2
     if R < 2 || state[linear_index(G+2, allele,nreactions)] < 1
-        taunew = -log(rand()) / (r[index+1]) + t
-        index = linear_index(index+1, allele,nreactions)
-        tau[index] = taunew
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,index+1,allele,-log(rand()) / (r[index+1]) + t)
+        # taunew = -log(rand()) / (r[index+1]) + t
+        # ind = linear_index(index+1, allele,nreactions)
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     end
     if S > 0
-
-        tau[linear_index(downstream[1], allele,nreactions)] = -log(rand()) / (r[downstream[1]]) + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,donwstream[1],allele,-log(rand()) / (r[downstream[1]]) + t)
+        # taunew = -log(rand()) / (r[downstream[1]]) + t
+        # ind = linear_index(downstream[1], allele,nreactions)
+        # tau[linear_index(downstream[1], allele,nreactions)] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     end
 end
 """
@@ -481,26 +505,45 @@ end
 
 """
 function transitionR!(tau, state, index, nreactions, t, r, allele, G, R, S, u, d, initial, final)
-    tau[linear_index(index, allele, nreactions)] = Inf
+    update_tau!(heap,tau,node,nreactions,index,allele,Inf)
+    # ind = linear_index(index, allele,nreactions)
+    # tau[ind] = Inf
+    # update_heap!(heap,node,tau,ind,Inf)
     if S > 0 && isfinite(tau[index+S, allele])
-        tau[linear_index(index+S+1, allele,nreactions)] = tau[linear_index(index+S, allele,nreactions)]
-        update_heap!(heap,node,tau,index,taunew)
-        tau[index+S, allele] = Inf
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,index+S+1,allele,tau[linear_index(index+S, allele,nreactions)])
+        update_tau!(heap,tau,node,nreactions,index+S,allele,Inf)
+
+        # ind = linear_index(index+S+1, allele,nreactions)
+        # indS = linear_index(index+S, allele,nreactions)
+        # taunew = tau[indS]
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
+        # tau[indS] = Inf
+        # update_heap!(heap,node,tau,indS,Inf)
     end
     if state[linear_index(initial-1, allele,nreactions)] > 0
-        tau[linear_index(u[1], allele,nreactions)] = -log(rand()) / r[u[1]] + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,u[1],allele,-log(rand()) / r[u[1]] + t)
+        # taunew = -log(rand()) / r[u[1]] + t
+        # ind = linear_index(u[1], allele,nreactions)
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     else
-        tau[u[1], allele] = Inf
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,u[1],allele,Inf)
+        # ind = linear_index(u[1],allele,nreactions)
+        # tau[ind] = Inf
+        # update_heap!(heap,node,tau,ind,Inf)
     end
     if final == G + R || state[final+1, allele] < 1
-        tau[d[1], allele] = -log(rand()) / r[d[1]] + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,d[1],allele,-log(rand()) / r[d[1]] + t)
+        # taunew = -log(rand()) / r[d[1]] + t
+        # ind = linear_index(d[1], allele,nreactions)
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     else
-        tau[d[1], allele] = Inf
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,d[1],allele,Inf)
+        # ind = linear_index(d[1], allele,nreactions)
+        # tau[ind] = Inf
+        # update_heap!(heap,node,tau,ind,Inf)
     end
     state[final, allele] = state[initial, allele]
     state[initial, allele] = 0
@@ -514,20 +557,29 @@ function eject!(tau, state, index, t, r, allele, G, R, S, upstream, downstream)
     m += 1
     set_decay!(tau, downstream[end], t, m, r)
     if S > 0 && isfinite(tau[index+R, allele])
-        tau[index+R, allele] = Inf
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,index+R,allele,Inf)
+        # ind = linear_index(index+R, allele,nreactions)
+        # tau[inde] = Inf
+        # update_heap!(heap,node,tau,ind,Inf)
     end
     if R > 0
-        tau[index, allele] = Inf
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,index,allele,Inf)
+        # ind = linear_index(index, allele,nreactions)
+        # tau[index, allele] = Inf
+        # update_heap!(heap,node,tau,ind,Inf)
         state[G+R, allele] = 0
         if state[G+R-1, allele] > 0
-            tau[upstream[1], allele] = -log(rand()) / (r[upstream[1]]) + t
-            update_heap!(heap,node,tau,index,taunew)
+            taunew = -log(rand()) / (r[upstream[1]]) + t
+            ind = linear_index(upstream[1], allele,nreactions)
+            tau[ind] = -log(rand()) / (r[upstream[1]]) + t
+            update_heap!(heap,node,tau,ind,taunew)
         end
     else
-        tau[index, allele] = -log(rand()) / (r[index]) + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions,index,allele, -log(rand()) / (r[index]) + t)
+        # taunew = -log(rand()) / (r[index]) + t
+        # ind = linear_index(index, allele,nreactions)
+        # tau[ind] = taunew
+        # update_heap!(heap,node,tau,ind,taunew)
     end
     state[end] = m
 end
@@ -537,19 +589,20 @@ splice!
 """
 function splice!(tau, state, index, t, m, r, allele, G, R, initial)
     state[initial, allele] -= 1
-    tau[index, allele] = Inf
-    update_heap!(heap,node,tau,index,taunew)
+    update_tau!(heap,tau,node,nreactions,index,allele,Inf)
+    # tau[index, allele] = Inf
+    # update_heap!(heap,node,tau,index,Inf)
 end
 """
 decay!
 
 """
 function decay!(tau, state, index, t, r)
-    m = state[end]
-    m -= 1
-    tau[index, 1] = -log(rand()) / (m * r[index]) + t
-    update_heap!(heap,node,tau,index,taunew)
-    state[end] = m
+    m = state[end] -= 1
+    update_tau!(heap,tau,node,nreactions, -log(rand()) / (state[end] * r[index]) + t)
+    # taunew = -log(rand()) / (m * r[index]) + t
+    # tau[index, 1] = taunew
+    # update_heap!(heap,node,tau,index,taunew)
 end
 
 """
@@ -559,10 +612,14 @@ update tau matrix for decay rate
 """
 function set_decay!(tau, index, t, m, r)
     if m == 1
-        tau[index, 1] = -log(rand()) / r[index] + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions, -log(rand()) / r[index] + t)
+        # taunew = -log(rand()) / r[index] + t
+        # tau[index, 1] = taunew
+        # update_heap!(heap,node,tau,index,taunew)
     else
-        tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
-        update_heap!(heap,node,tau,index,taunew)
+        update_tau!(heap,tau,node,nreactions, (m - 1) / m * (tau[end] - t) + t)
+        # taunew = = (m - 1) / m * (tau[index, 1] - t) + t
+        # tau[index, 1] = taunew
+        # update_heap!(heap,node,tau,index,taunew)
     end
 end
