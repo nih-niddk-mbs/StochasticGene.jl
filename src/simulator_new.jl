@@ -100,6 +100,8 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 	mhist /= counts
 	if onoff
 		return histofftdd/max(sum(histofftdd),1), histontdd/max(sum(histontdd),1),mhist[1:nhist]
+	elseif trace
+		return trace
 	else
 		return mhist[1:nhist]
 	end
