@@ -94,6 +94,9 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 				ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
 			end
 		end
+		if trace
+			tracelog[i] = state[onstates]
+		end
 
 	end  # while
 	counts = max(sum(mhist),1)
