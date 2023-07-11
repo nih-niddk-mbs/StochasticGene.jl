@@ -258,24 +258,37 @@ Augment summary file with burst size (for G > 1), model predicted moments, and f
 ```
 
 ```
-simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 
-Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+    If trace is set to true, it returns a nascent mRNA trace
 
-Arguments
-	- `r`: vector of rates
-	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-	- `G`: number of gene states
-  - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-  - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
-	- `nhist::Int`: Size of mRNA histogram
-	- `nalleles`: Number of alleles
+	Arguments
+	  - `r`: vector of rates
+	  - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and 
+    ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+	  - `G`: number of gene states
+    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+    - `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
+	  - `nhist::Int`: Size of mRNA histogram
+	  - `nalleles`: Number of alleles
 
-Named arguments
-	- `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
-	- `total::Int=10000000`: maximum number of simulation steps
-	- `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram
-	- `verbose::Bool=false`: flag for printing state information
+	Named arguments
+    - `onstates::Vector`: a vector of ON G states
+	  - `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
+	  - `totalsteps::Int=10000000`: maximum number of simulation steps
+	  - `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram (not used when outputting traces)
+    - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made. May need to try different totalsteps to get
+    desired length of trace
+    - `verbose::Bool=false`: flag for printing state information
+
+
+  ### Examples
+
+  julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
+
+  julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],range=collect(1.:100.))
+
 
 ```
 
@@ -289,8 +302,9 @@ Arguments
   - `oldroot`: old data folder e.g. HCT_T120_FISH
   - `rep`: name of replicate folder e.g. rep1
 
-```
-
 ### Example
 
-new_FISH("data/HCT_T120_8genes_FISH_rep1","data/HCT_T120_8genes_FISH","rep1")
+julia> new_FISH("data/HCT_T120_8genes_FISH_rep1","data/HCT_T120_8genes_FISH","rep1")
+
+
+```
