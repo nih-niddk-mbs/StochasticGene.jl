@@ -21,6 +21,10 @@ end
 """
 MComponents
 
+matrix components,
+
+M matrix components (truncated infinite state transition matrix including RNA decay)
+
 """
 struct MComponents
     elementsT::Vector{Element}
@@ -33,6 +37,8 @@ end
 
 """
 TComponents
+
+T state matrix components (finite state transition matrix (no RNA decay))
 
 """
 struct TComponents
@@ -183,9 +189,9 @@ set_elements_TA!(elementsTA,elementsT)
 
 
 """
-function set_elements_TA!(elementsTA,elementsT,G)
+function set_elements_TA!(elementsTA,elementsT,onstates::Vector)
 	for e in elementsT
-		if e.b == G
+		if e.a ∈ onstates
 			push!(elementsTA,e)
 		end
 	end
@@ -203,9 +209,9 @@ set_elements_TI!(elementsTI,elementsT)
 
 
 """
-function set_elements_TI!(elementsTI,elementsT,G)
+function set_elements_TI!(elementsTI,elementsT,onstates::Vector)
 	for e in elementsT
-		if e.b < G
+		if e.a ∉ onstates
 			push!(elementsTI,e)
 		end
 	end
