@@ -1,6 +1,6 @@
 # simulator.jl
 # Functions to simulate Markov gene transcription models
-# Use next reaction method
+# Use simplified next reaction method
 
 """
 	ReactionIndices
@@ -26,7 +26,7 @@ struct Reaction
 end
 
 """
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,count=false,verbose=false)
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 
 	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
 
@@ -46,16 +46,16 @@ end
 	- `verbose::Bool=false`: flag for printing state information
 
 """
-function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
+function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
 	reactions = set_reactions(transitions,G,R,S)
 	tau,state = initialize(r,G,R,length(reactions),nalleles)
 	tIA = zeros(Float64,nalleles)
 	tAI = zeros(Float64,nalleles)
 	if length(range) < 1
-		count = false
+		onoff = false
 	else
-		count = true
+		onoff = true
 		ndt = length(range)
 		dt = range[2]-range[1]
 		histofftdd = zeros(Int,ndt)
@@ -79,63 +79,64 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 		end
 		if verbose
 			println(state)
-			println(num_introns(state,allele,G,R))
+			if R >0
+				println(num_introns(state,allele,G,R))
+			end
 			println(tau)
 			println(rindex)
 			println(invactions[action])
 		end
-		if action < 5
-			if action < 3
-				if action == 1
-					if count && R == 0
-						offtime!(histofftdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-					end
-					activateG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
-			else
-			   		if count && R == 0
-						ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-					end
-					deactivateG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
-				end
-			else
-				if action == 3
-					transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
-				else
-					if count && R > 0
-						offtime!(histofftdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-					end
-					initiate!(tau,state,index,t,m,r,allele,G,R,S,downstream)
-				end
-			end
-		else
-			if action < 7
-				if action == 5
-					transitionR!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final)
-				else
-					if count && R > 0
-						ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-					end
-					m = eject!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream)
-				end
-			else
-				if action == 7
-					if count && R > 0
-						ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-					end
-					splice!(tau,state,index,t,m,r,allele,G,R,initial)
-				else
-					m = decay!(tau,state,index,t,m,r)
-				end
+		m = update!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final,action)
+		if onoff
+			if initial ∈ onstates && final ∉ onstates && final > 0
+				offtime!(histofftdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
+			elseif initial ∉ onstates && final ∈ onstates && final > 0
+				ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
 			end
 		end
+
 	end  # while
 	counts = max(sum(mhist),1)
 	mhist /= counts
-	if count
-		return histofftdd/sum(histofftdd), histontdd/sum(histontdd),mhist[1:nhist]
+	if onoff
+		return histofftdd/max(sum(histofftdd),1), histontdd/max(sum(histontdd),1),mhist[1:nhist]
 	else
 		return mhist[1:nhist]
 	end
+end
+
+
+function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+    if action < 5
+        if action < 3
+            if action == 1
+                activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            else
+                deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            end
+        else
+            if action == 3
+                transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+            else
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+            end
+        end
+    else
+        if action < 7
+            if action == 5
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
+            else
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
+            end
+        else
+            if action == 7
+                splice!(tau, state, index, t, m, r, allele, G, R, initial)
+            else
+                m = decay!(tau, state, index, t, m, r)
+            end
+        end
+    end
+    return m
 end
 
 function num_introns(state,allele,G,R)
@@ -147,13 +148,13 @@ function num_introns(state,allele,G,R)
 end
 
 function ontime!(histon,tIA,tAI,t,dt,ndt,state,allele,G,R)
-	if num_introns(state,allele,G,R) == 1
+	if R == 0 || num_introns(state,allele,G,R) == 1
 		firstpassagetime!(histon,tAI,tIA,t,dt,ndt,allele)
 	end
 end
 
 function offtime!(histoff,tIA,tAI,t,dt,ndt,state,allele,G,R)
-	if num_introns(state,allele,G,R) == 0
+	if R == 0 || num_introns(state,allele,G,R) == 0
 		firstpassagetime!(histoff,tIA,tAI,t,dt,ndt,allele)
 	end
 end
