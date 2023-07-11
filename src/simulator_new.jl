@@ -29,6 +29,7 @@ end
 	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 
 	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+    If trace is set to true, it returns a nascent mRNA trace
 
 	Arguments
 	- `r`: vector of rates
@@ -46,7 +47,7 @@ end
 	- `verbose::Bool=false`: flag for printing state information
 
 """
-function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;trace::Vector{Float64},onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
+function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;trace::Bool=false,onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 	mhist,mhist0,m,steps,t,ts,t0,tsample,err = initialize_sim(r,nhist,tol)
 	reactions = set_reactions(transitions,G,R,S)
 	tau,state = initialize(r,G,R,length(reactions),nalleles)
@@ -61,6 +62,9 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 		histofftdd = zeros(Int,ndt)
 		histontdd  = zeros(Int,ndt)
 	end
+    if trace
+        tracelog = Vector(undef,0)
+    end
 	if verbose
 		invactions = invert_dict(set_actions())
 	end
@@ -95,7 +99,8 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 			end
 		end
 		if trace
-			tracelog[i] = state[onstates]
+            println(state)
+			push!(tracelog,(t,state[:,1]))
 		end
 
 	end  # while
@@ -104,10 +109,27 @@ function simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::In
 	if onoff
 		return histofftdd/max(sum(histofftdd),1), histontdd/max(sum(histontdd),1),mhist[1:nhist]
 	elseif trace
-		return trace
+        make_trace(tracelog,G,R,S,onstates,100)
 	else
 		return mhist[1:nhist]
 	end
+end
+
+function make_trace(tracelog,G,R,S,onstates,interval=100)
+    trace = Int[]
+    frame = interval
+    state = tracelog[1][2]
+    for a in tracelog
+        if a[1] <= frame
+            state = a[2]
+        else
+            frame += interval
+        end
+        intensity = any(state[onstates] .== 1)
+        println(state[onstates])
+        push!(trace,intensity)
+    end
+    return trace
 end
 
 
