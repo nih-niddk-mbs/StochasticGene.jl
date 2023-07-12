@@ -150,7 +150,6 @@ function make_trace(tracelog, G, R, onstates, interval=100.0)
         end
         trace = vcat(trace,[frame intensity(state,onstates,G,R)])
         frame += interval
-        i += 1
     end
     return trace
 end
