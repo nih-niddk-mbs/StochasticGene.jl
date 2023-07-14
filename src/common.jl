@@ -68,12 +68,12 @@ struct TraceData <: AbstractTraceData
     trace::Vector{Float64}
 end
 
-struct TraceRNAData <: AbstractTraceData
+struct TraceRNAData{hType} <: AbstractTraceData
     name::String
     gene::String
     trace::Vector{Float64}
     nRNA::Int
-    histRNA::Vector
+    histRNA::hType
 end
 
 """
@@ -402,7 +402,7 @@ get_rates(param,model::GMrescaledmodel)
 gammas are scaled by nu
 """
 function get_rates(param,model::GMrescaledmodel)
-    param = inverse_transform(param)
+    param = inverse_transform(param,model)
     r = get_r(model)
     n = get_n(model)
     nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
