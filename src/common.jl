@@ -15,7 +15,7 @@ abstract type HistogramData <: ExperimentalData end
 
 abstract type AbstractRNAData{hType} <: HistogramData end
 
-abstract type AbstractTraceData <: ExperimentalData
+abstract type AbstractTraceData <: ExperimentalData end
 
 """
 Data structures

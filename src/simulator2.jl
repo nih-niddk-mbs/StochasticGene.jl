@@ -16,7 +16,7 @@ tau = matrix that keeps track of the putative reaction times of each transition,
 t = time of next reaction and reaction[1] is which reaction and reaction[2] is which allele
 
 """
-
+"""
 Inputs:  G,R,S, Gtransitions
 
 Initialize
@@ -70,7 +70,7 @@ find final state of downstream reactions
 reactants:  G1,G2,G3...,R1,R2,R3...,S1,S2,S3...,M
 reactions: [G1,G2],[G2,G3],[G3,R1],[R1,R2],[S1,L],...,[R3,M],[M,M-]
 
-
+"""
 
 if propensity[reaction] == 0
 	tau = Inf
@@ -78,6 +78,7 @@ else
 	tau = -log(rand())/r[reaction]
 end
 
+"""
 tau[reaction]
 
 swap
@@ -91,7 +92,7 @@ dependson[tau[index]]
 affects[index]
 
 Rstate = Array{Array{Int,1},1}(undef,nalleles)
-
+"""
 
 function affects(reactions)
 	affected = Int[]
@@ -201,9 +202,9 @@ end
 function update_propensity!(propensity,oldstate,newstate,downstream,upstream)
 	if occursin("m",newstate)
 		if newstate == "m"
-			propensity[decay reaction,nallele] += 1
+			propensity[decayeaction,nallele] += 1
 		elseif newstate == "m-1"
-			protensity[decay reaction,nallele ] -= 1
+			protensity[decaytreaction,nallele ] -= 1
 		end
 	else
 		for i in ui
@@ -292,10 +293,7 @@ function greverse!(tau,reaction,t,r,nallele)
 end
 
 
-
-
-end
-
+"""
 G = 2
 R = 3
 S = 3
@@ -307,6 +305,8 @@ Mtransitions = ([m,m+1],[m,m-1])
 
 
 ntransitions = length(Gtransitions) + length(Rtransitions) + length(Stransitions) + length(Mtransitions)
+
+"""
 
 struct Transition
 	index
