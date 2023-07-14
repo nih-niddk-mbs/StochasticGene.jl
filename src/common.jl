@@ -15,6 +15,8 @@ abstract type HistogramData <: ExperimentalData end
 
 abstract type AbstractRNAData{hType} <: HistogramData end
 
+abstract type AbstractTraceData <: ExperimentalData
+
 """
 Data structures
 
@@ -58,6 +60,20 @@ struct RNALiveCellData <: HistogramData
     bins::Array
     OFF::Array
     ON::Array
+end
+
+struct TraceData <: AbstractTraceData
+    name::String
+    gene::String
+    trace::Vector{Float64}
+end
+
+struct TraceRNAData <: AbstractTraceData
+    name::String
+    gene::String
+    trace::Vector{Float64}
+    nRNA::Int
+    histRNA::Vector
 end
 
 """
