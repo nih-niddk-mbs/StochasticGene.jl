@@ -88,7 +88,7 @@ function steady_state(M,nT,nalleles)
 end
 
 function steady_state(r,transitions,G,R,nhist,nalleles,type="")
-    ntransitions = length(transitions)
+    # ntransitions = length(transitions)
     components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,R))
     M = make_mat_M(mcomponents.mcomponents,r)
     steady_state(M,components.mcomponents.nT,nalleles,nhist)
@@ -231,11 +231,11 @@ function time_evolve_diff(t,M::AbstractMatrix,P0)
     tspan = (0.,t[end])
     prob = ODEProblem(fglobal,P0,tspan)
     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
-    sol = solve(prob,saveat=t, lsoda())
+    sol = solve(prob, lsoda(),saveat=t)
     return sol'
 end
 
-fglobal(u,p,t) = M_global*u
+fglobal(u::Vector,p,t) = M_global*u
 
 function time_evolve_delay(t,r0,r1,delay,n,P0)
     tspan = (0.,t[end])
@@ -243,7 +243,7 @@ function time_evolve_delay(t,r0,r1,delay,n,P0)
     p  = [r0;r1;delay;n;nhist]
     P0 = [P0;1.]
     prob = ODEProblem(fdelay!,P0,tspan,p)
-    sol = solve(prob,saveat=t)
+    sol = solve(prob, lsoda(),saveat=t)
     return sol'
 end
 
