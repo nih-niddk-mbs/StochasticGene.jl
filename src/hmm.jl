@@ -1,17 +1,20 @@
 ### hmm.jl
 ### Fit models directly to intensity traces
 
-function forward()
+function forward(a,b,p0)
     α[1] = p0 .* b[1]
-    for t = 2:T
+    for t in 2:T-1
         α[t+1] = α[t] * a .* b[t+1]
     end
-
-    sum.(α)
-
+    return α, sum(α)
 end
 
-backward()
+function backward(a,b)
+    for t in T-1:-1:2
+        β[t] = a * (b[t+1].*β[t+1]
+    end
+    return β
+end
 
 function kolmogorov_forward(T::Matrix,interval)
     global T_global = copy(T)
