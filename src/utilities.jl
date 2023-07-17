@@ -548,6 +548,16 @@ function make_histogram(r)
     h
 end
 
+function logsumexp(u,v)
+    w = max(u,v)
+    w + log(exp(u-w)+exp(v-w))
+end
+
+function logsumexp(v::Vector)
+    w = maximum(v)
+    w + log(sum(exp.(v .- w)))
+end
+
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"
