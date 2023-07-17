@@ -87,9 +87,14 @@ end
 
 function viterbi(loga,logb,p0,T)
     ϕ = similar(logb)
+    ψ = similar(ϕ)
     ϕ[1] = log.(p0) + log.(logb[1])
+    ψ[1] = 0
     for t in 2:T
-        ϕ[t] = maximum(ϕ[t-1] + loga) + logb[t]
+        for j in 1:N
+         m[j],ψ[t][j] = findmax(ϕ[t-1][j] + loga[:,j])
+         ϕ[t] = m[j] + logb[t][j]
+        end
     end
     maximum(ϕ[T])
 end
