@@ -36,6 +36,34 @@ function forward(a,b,p0,T)
     return α, sum(α)
 end
 
+forward(a,b,p0,N,T) = forward_log(log.(a),log.(b),log.(p0),N,T)
+
+function forward_log(loga, logb, p0, N, T)
+    ϕ = similar(logb)
+    ψ = similar(ϕ)
+    ϕ[1] = logp0 .+ logb[1]
+    ψ[1] = 0
+    for t in 2:T
+        for j in 1:N
+            ϕ[t][j] = logsumexp(ϕ[t-1][j] + loga[:, j]) + logb[t][j]
+        end
+    end
+    maximum(ϕ[T])
+end
+
+function forward_log(loga,logb,logp0,N,T)
+    logα = similar(logb)
+    logα[1] = logp0 .+ logb[1]
+    for t in 1:T-1
+        for i in 1:N
+         for j in 1:N
+              logα[t+1][j] = logα[t][i] + loga[i,j] + logb[t+1][j]
+         end
+        end
+    end
+    return α, sum(α)
+end
+
 """
 forward_scaled(a,b,p0)
 
@@ -85,10 +113,10 @@ function backward_scaled(a,b,c,T)
     return β, β̂
 end
 
-function viterbi(loga,logb,p0,T)
+function viterbi(loga,logb,logp0,N,T)
     ϕ = similar(logb)
     ψ = similar(ϕ)
-    ϕ[1] = log.(p0) + log.(logb[1])
+    ϕ[1] = logp0 .+ logb[1]
     ψ[1] = 0
     for t in 2:T
         for j in 1:N
