@@ -95,7 +95,7 @@ backward(a,b)
 function backward(a, b, T)
     β = similar(b)
     β[T] = 1
-    for t in T-1:-1:2
+    for t in T-1:-1:1
         β[t] = a * (b[t+1] .* β[t+1])
     end
     return β
@@ -104,15 +104,15 @@ end
 function backward_log(loga, logb, logp0, N, T)
     ϕ = similar(logb)
     ψ = zeros(N)
-    ϕ[1] = logp0 .+ logb[1]
-    for t in T-1:-1:2
+    ϕ[T] = logp0 .+ logb[1]
+    for t in T-1:-1:1
         for k in 1:N
         for j in 1:N
-            ψ[j] = loga[j, k] + logb[t][k] + ϕ[t-1][k]
+            ψ[j] = loga[j, k] + logb[t+1][k] + ϕ[t+1][k]
         end
         ϕ[t][k] = logsumexp(ψ)
     end
-    logsumexp(ϕ[T])
+    logsumexp(ϕ[1])
 end
 
 """
