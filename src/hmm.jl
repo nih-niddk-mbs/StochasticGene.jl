@@ -17,6 +17,20 @@ function kolmogorov_forward(Q::Matrix, interval)
     return sol'
 end
 
+function expected_transitions(α,a,b,β,T)
+    ξ = Array{Matrix{Float64}}(undef,T)
+    γ = Array{Vector{Float64}}(undef,T)
+    for t in eachindex(ξ)
+        ξ[t] = α[t]' * a * (b[t+1] .* β[t+1])
+        ξ[t] ./= sum(ξ[t])
+        γ[t] = ξ[t] ./ sum(ξ,dims=2)
+    end
+    return ξ, γ
+end
+
+expected_rate(ξ,γ) = sum(ξ) ./ sum(γ)
+
+
 """
 fkf(u::Matrix,p,t)
 
