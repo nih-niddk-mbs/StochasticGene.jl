@@ -1,5 +1,21 @@
 
-
+using Distributions
+using StatsBase
+using Statistics
+using DelimitedFiles
+using Dates
+using Distributed
+using LinearAlgebra
+using Plots
+using SparseArrays
+using DifferentialEquations
+using LSODA
+using DataFrames
+using FFTW
+using Downloads
+using CSV
+using MultivariateStats
+using Optim
 """
 Element
 

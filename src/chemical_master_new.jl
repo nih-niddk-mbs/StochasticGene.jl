@@ -235,7 +235,7 @@ function time_evolve_diff(t,M::AbstractMatrix,P0)
     return sol'
 end
 
-fevolve(u::Vector,p,t) = M_global'*u
+fevolve(u::Vector,p,t) = M_global*u
 
 function time_evolve_delay(t,r0,r1,delay,n,P0)
     tspan = (0.,t[end])

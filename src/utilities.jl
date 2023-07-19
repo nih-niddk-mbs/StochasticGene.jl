@@ -550,12 +550,20 @@ end
 
 function logsumexp(u,v)
     w = max(u,v)
-    w + log(exp(u-w)+exp(v-w))
+    if w == -Inf
+        return -Inf
+    else
+        return w + log(exp(u-w)+exp(v-w))
+    end
 end
 
 function logsumexp(v::Vector)
     w = maximum(v)
-    w + log(sum(exp.(v .- w)))
+    if w == -Inf
+        return -Inf
+    else
+        return w + log(sum(exp.(v .- w)))
+    end
 end
 
 #
