@@ -114,7 +114,7 @@ function forward_log(a, b, p0, N, T)
             ϕ[k,t] = logsumexp(ψ)
         end
     end
-    ϕ, logsumexp(ϕ[T])
+    ϕ, logsumexp(ϕ[:,T])
 end
 
 """
