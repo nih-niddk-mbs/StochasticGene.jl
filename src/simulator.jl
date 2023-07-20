@@ -74,7 +74,6 @@ function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nh
 	end
     if traceinterval > 0
         tracelog = [(t,state[:,1])]
-		println(t,":",state[:,1])
     end
 	if verbose
 		invactions = invert_dict(set_actions())
@@ -109,7 +108,6 @@ function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nh
 				ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
 			end
 		end
-		println(t,":",state[:,1])
 		if traceinterval > 0
 			push!(tracelog,(t,state[:,1]))
 		end
