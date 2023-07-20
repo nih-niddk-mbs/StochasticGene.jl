@@ -47,32 +47,43 @@ function kolmogorov_forward(Q, interval)
     sol = solve(prob, lsoda(), save_everystep=false)
     return sol
 end
-
-function expected_transitions(α, a, b, β, N, T)
-    ξ = fill(zeros(N,N),T-1)
-    γ = fill(zeros(N),T-1)
-    for t in 1:T-1
-        for i = 1:N
-            for j = 1:N
-                ξ[t][i,j] = α[t][i] * a[i,j] * b[t+1][j] * β[t+1][j]
-            end
-            γ[t][i] = sum(ξ[t][i,:])
-        end
-        ξ[t]
-    end
-    return ξ, γ
-end
-
-expected_rate(ξ, γ) = sum(ξ) ./ sum(γ)
-
-
-
-
 """
 fkf(u::Matrix,p,t)
 
 """
 fkf(u::Matrix, p, t) = u * Q_global
+
+"""
+expected_transitions(α, a, b, β, N, T)
+
+"""
+function expected_transitions(α, a, b, β, N, T)
+    ξ = Array{Float64}(undef,N,N,T-1)
+    γ = Array{Float64}(undef,N,T-1)
+    for t in 1:T-1
+        for j = 1:N
+            for i = 1:N
+                ξ[i,j,t] = α[i,t] * a[i,j] * b[j,t+1] * β[j,t+1]
+            end
+        end
+        γ[:,t] = sum(ξ[:,:,t],dims=2)
+        S = sum(ξ[:,:,t])
+        ξ[:,:,t] = S == 0. ? zeros(N,N) : ξ[:,:,t] / S
+    end
+    return ξ, γ
+end
+
+function expected_rate(ξ, γ,N) 
+    a = zeros(N,N)
+    ξS = sum(ξ,dims=3)
+    γS = sum(γ,dims=2)
+    for i in 1:N, j in 1:N
+        a[i,j] = ξS[i,j] / γS[i]
+    end
+    return a
+end
+
+
 
 """
 forward(a,b,p0)
@@ -87,19 +98,60 @@ function forward(a, b, p0, T)
 end
 
 function forward_loop(a, b, p0, N, T)
-    α = Matrix{Float64}(undef, N, T)
+    # α = Matrix{Float64}(undef, N, T)
+    α = zeros(N,T)
     α[:, 1] = p0 .* b[:,1]
     for t in 1:T-1
-        m = zeros(N)
         for j in 1:N
             for i in 1:N
-                m[j] += α[i, t] * a[i, j]
+                α[j, t+1] += α[i, t] * a[i, j] * b[j,t+1]
             end
-            α[j, t+1] = m[j] * b[j,t+1]
         end
     end
     return α, sum(α)
 end
+
+"""
+forward_scaled(a,b,p0)
+
+"""
+function forward_scaled(a, b, p0, N, T)
+    α = Matrix{Float64}(undef,N,T)
+    α̂ = Matrix{Float64}(undef,N,T)
+    c = Vector{Float64}(undef,T)
+    C = Vector{Float64}(undef,T)
+    α[:, 1] = p0 .* b[:,1]
+    c[1] = 1 / sum(α[:,1])
+    C[1] = c[1]
+    α̂[:,1] = 
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                α[i, t] += α̂[j, t-1] * a[i, j] * b[j,t]
+            end
+        end
+        c[t] = 1/ sum(α[:,t])
+        C[t] *= c[t]
+        α̂[:,t] = C[t] * α[:,t]
+    end
+    return α, α̂, c, C
+end
+
+# function forward_scaled(a, b, p0, T)
+#     c = zeros(T)
+#     C = similar(c)
+#     α = [(p0 .* b[1])']
+#     α̂ = copy(α)
+#     c[1] = 1 / sum(α[1])
+#     C[1] = c[1]
+#     for t in 2:T
+#         push!(α, α̂[t-1] * (a .* b[t]))
+#         c[t] = 1 / sum(α[t])
+#         C[t] *= c[t]
+#         push!(α̂, C[t] * α[t])
+#     end
+#     return α, α̂, c, C
+# end
 
 function forward_log(a, b, p0, N, T)
     loga = log.(a)
@@ -117,25 +169,7 @@ function forward_log(a, b, p0, N, T)
     ϕ, logsumexp(ϕ[:,T])
 end
 
-"""
-forward_scaled(a,b,p0)
 
-"""
-function forward_scaled(a, b, p0, T)
-    c = zeros(T)
-    C = similar(c)
-    α = [(p0 .* b[1])']
-    α̂ = copy(α)
-    c[1] = 1 / sum(α[1])
-    C[1] = c[1]
-    for t in 2:T
-        push!(α, α̂[t-1] * (a .* b[t]))
-        c[t] = 1 / sum(α[t])
-        C[t] *= c[t]
-        push!(α̂, C[t] * α[t])
-    end
-    return α, α̂, c, C
-end
 
 """
 backward(a,b)
@@ -148,7 +182,18 @@ function backward(a, b, T)
     end
     return reverse(β)
 end
-
+function backward_loop(a, b, N, T)
+    β = zeros(N,T)
+    β[:, T] = [1.,1.]
+    for t in T-1:-1:1
+        for i in 1:N
+            for j in 1:N
+                β[i, t+1] += a[i, j] * b[j,t+1] *β[j,t+1]
+            end
+        end
+    end
+    return β, sum(β)
+end
 function backward_log(a, b, N, T)
     loga = log.(a)
     ψ = zeros(N)
