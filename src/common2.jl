@@ -325,14 +325,14 @@ model.method=1 specifies finite difference solution otherwise use eigendecomposi
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
 
     h=likelihoodarray(r,data,model,maximum(data.nRNA))
-    trim(h,data.nRNA)
+    trim_hist(h,data.nRNA)
 end
 # function likelihoodarray(r,data::TransientRNAData,model::AbstractGMlossmodel)
 #     yieldfactor = r[end]
 #     nh = nhist_loss(maximum(data.nRNA),yieldfactor)
 #     h = likelihoodarray(r[1:end-1],data,model,yieldfactor,nh)
 #     # technical_loss!(h,yieldfactor)
-#     trim(h,data.nRNA)
+#     trim_hist(h,data.nRNA)
 # end
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
     n = model.G-1
@@ -341,7 +341,7 @@ function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T
         M = make_mat_M(model.components[i],r[(i-1)*2*model.G+1 : i*2*model.G])
         h[i] = steady_state(M,model.G,model.nalleles,data.nRNA[i])
     end
-    trim(h,data.nRNA)
+    trim_hist(h,data.nRNA)
 end
 # function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMlossmodel) where {T1 <: Array, T2 <: Array}
 #     yieldfactor = r[end]
@@ -350,7 +350,7 @@ end
 #     for i in eachindex(data.nRNA)
 #         h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],yieldfactor,n,data.nRNA[i],model.nalleles)
 #     end
-#     trim(h,data.nRNA)
+#     trim_hist(h,data.nRNA)
 # end
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
     G = model.G

@@ -21,7 +21,9 @@ end
 function set_b(trace)
     b = Vector[]
     for t in eachrow(trace)
-        push!(b,[mod(t[2]+1,2),t[2]])
+        d = Normal(t[2],.01)
+        # push!(b,[mod(t[2]+1,2),t[2]])
+        push!(b,pdf(d,mod(t[2]+1,2)))
     end
     return b
 end
@@ -42,13 +44,17 @@ function kolmogorov_forward(Q, interval)
     return sol
 end
 
-function expected_transitions(α, a, b, β, T)
-    ξ = Array{Matrix{Float64}}(undef, T)
-    γ = Array{Vector{Float64}}(undef, T)
-    for t in eachindex(ξ)
-        ξ[t] = α[t]' * a * (b[t+1] .* β[t+1])
+function expected_transitions(α, a, b, β, N, T)
+    ξ = fill(zeros(N,N),T-1)
+    γ = fill(zeros(N),T-1)
+    for t in 1:T-1
+        for i = 1:N
+            for j = 1:N
+                ξ[t][i,j] = α[t][i] * a[i,j] * b[t+1][j] * β[t+1][j]
+            end
+            γ[t][i] = sum(ξ[t][i,:])
+        end
         ξ[t] ./= sum(ξ[t])
-        γ[t] = ξ[t] ./ sum(ξ, dims=2)
     end
     return ξ, γ
 end
@@ -137,27 +143,28 @@ backward(a,b)
 
 """
 function backward(a, b, T)
-    β = similar(b)
-    β[T] = 1
-    for t in T-1:-1:1
-        β[t] = a * (b[t+1] .* β[t+1])
+    β = [[1.,1.]]
+    for t in 1:T-1
+        push!(β, a * (b[T-t+1] .* β[t]))
     end
-    return β
+    return reverse(β)
 end
 
-function backward_log(loga, logb, logp0, N, T)
-    ϕ = similar(logb)
+function backward_log(a, b, N, T)
+    loga = log.(a)
     ψ = zeros(N)
-    ϕ[T] = logp0 .+ logb[1]
-    for t in T-1:-1:1
+    ϕt = zeros(N)
+    ϕ = [[0.,0.]]
+    for t in 1:T-1
         for k in 1:N
             for j in 1:N
-                ψ[j] = loga[j, k] + logb[t+1][k] + ϕ[t+1][k]
+                ψ[j] = loga[j, k] + log.(b[T-t+1][k]) + ϕ[t][k]
             end
-            ϕ[t][k] = logsumexp(ψ)
+            ϕt[k] = logsumexp(ψ)
         end
+        push!(ϕ,ϕt)
     end
-    logsumexp(ϕ[1])
+    ϕ, logsumexp(ϕ[T])
 end
 
 """
@@ -165,11 +172,11 @@ backward_scaled(a,b)
 
 """
 function backward_scaled(a, b, c, T)
-    β = similar(b)
-    β[T] = 1
-    for t in T-1:-1:2
-        β[t] = a * (b[t+1] .* β̂[t+1])
-        β̂[t] = c[t] * β[t]
+    β = [c[T] .* [1,1]]
+    β̂ = [c[T] .* [1,1]]
+    for t in 1:T-1
+        push!(β, a * (b[T-t+1].* β̂[1]))
+        β̂[t+1] = c[T-t] * β[t+1]
     end
     return β, β̂
 end

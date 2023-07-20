@@ -290,7 +290,7 @@ model.method=1 specifies finite difference solution otherwise use eigendecomposi
 """
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
     h=likelihoodarray(r,data,model,maximum(data.nRNA))
-    trim(h,data.nRNA)
+    trim_hist(h,data.nRNA)
 end
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
     # n = model.G-1
@@ -301,7 +301,7 @@ function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T
         #
         # h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],n,data.nRNA[i],model.nalleles)
     end
-    trim(h,data.nRNA)
+    trim_hist(h,data.nRNA)
 end
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
     G = model.G

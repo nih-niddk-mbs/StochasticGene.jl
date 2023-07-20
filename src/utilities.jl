@@ -192,10 +192,10 @@ Kullback-Leibler distance
 KL(x,y) = sum(x .* (log.(max.(x,eps(Float64))) - log.(max.(y,eps(Float64)))))
 
 """
-trim(h::Array,nh::Array)
+trim_hist(h::Array,nh::Array)
 
 """
-function trim(h::Array,nh::Array)
+function trim_hist(h::Array,nh::Array)
     for i in eachindex(h)
         h[i] = h[i][1:nh[i]]
     end
