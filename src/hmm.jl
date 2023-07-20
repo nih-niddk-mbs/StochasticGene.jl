@@ -21,9 +21,9 @@ end
 function set_b(trace)
     b = Vector[]
     for t in eachrow(trace)
-        d = Normal(t[2],.01)
-        # push!(b,[mod(t[2]+1,2),t[2]])
-        push!(b,pdf(d,mod(t[2]+1,2)))
+        # d = Normal(t[2],.01)
+        push!(b,[mod(t[2]+1,2),t[2]])
+        # push!(b,pdf(d,mod(t[2]+1,2)))
     end
     return b
 end
@@ -54,7 +54,7 @@ function expected_transitions(α, a, b, β, N, T)
             end
             γ[t][i] = sum(ξ[t][i,:])
         end
-        ξ[t] ./= sum(ξ[t])
+        ξ[t]
     end
     return ξ, γ
 end
@@ -84,22 +84,48 @@ end
 
 function forward_loop(a, b, p0, N, T)
     α = [p0 .* b[1]]
-    m = zeros(N)
-    αt = zeros(N)
     for t in 1:T-1
+        m = zeros(N)
         for j in 1:N
-            m[j] = 0
             for i in 1:N
-                m[j] += α[t][i] * a[i, j]
+                m[j] += α[t][i] * a[i, j] * b[t+1][j]
             end
-            αt[j] = m[j] * b[t+1][j]
         end
-        push!(α,αt)
+        push!(α,m)
     end
     return α, sum(α)
 end
 
-forward(a, b, p0, N, T) = forward_log(log.(a), log.(b), log.(p0), N, T)
+function forward_loop2(a, b, p0, N, T)
+    α = fill(zeros(N),T)
+    α[1] = p0 .* b[1]
+    for t in 1:T-1
+        m = zeros(N)
+        for j in 1:N
+            for i in 1:N
+                m[j] += α[t][i] * a[i, j] * b[t+1][j]
+            end
+        end
+        α[t+1] = m
+    end
+    return α, sum(α)
+end
+
+function forward_loop1(a, b, p0, N, T)
+    v = zeros(T,N)
+    v[1,:] = p0 .* b[1]
+    for t in 1:T-1
+        m = zeros(N)
+        for j in 1:N
+            for i in 1:N
+                m[j] += v[t,i] * a[i, j]
+            end
+            v[t+1,j] = m[j] * b[t+1][j]
+        end
+    end
+    return v
+end
+
 
 function forward_log(a, b, p0, N, T)
     loga = log.(a)
