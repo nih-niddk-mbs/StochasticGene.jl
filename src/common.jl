@@ -365,19 +365,19 @@ end
 SIinit(model::GMmodel) = SIinit(model.G,model.Gtransitions)
 
 """
-transform(r,model::StochasticGRmodel)
+transform_rates(r,model::StochasticGRmodel)
 
 transform rates to real domain
 """
-transform(r,model::StochasticGRmodel) = log.(r)
+transform_rates(r,model::StochasticGRmodel) = log.(r)
 
 """
-inverse_transform(x,model::StochasticGRmodel)
+inverse_transform_rates(x,model::StochasticGRmodel)
 
 transform MH parameters on real domain back to rate domain
 
 """
-inverse_transform(p,model::StochasticGRmodel) = exp.(p)
+inverse_transform_rates(p,model::StochasticGRmodel) = exp.(p)
 
 """
 get_rates(param,model)
@@ -385,7 +385,7 @@ replace fitted rates with new values and return
 """
 function get_rates(param,model::AbstractGMmodel)
     r = get_r(model)
-    r[model.fittedparam] = inverse_transform(param,model)
+    r[model.fittedparam] = inverse_transform_rates(param,model)
     return r
 end
 function get_rates(param,model::GRSMmodel)
@@ -402,7 +402,7 @@ get_rates(param,model::GMrescaledmodel)
 gammas are scaled by nu
 """
 function get_rates(param,model::GMrescaledmodel)
-    param = inverse_transform(param,model)
+    param = inverse_transform_rates(param,model)
     r = get_r(model)
     n = get_n(model)
     nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
@@ -422,7 +422,7 @@ get_rates(param,model::AbstractGMfixedeffectsmodel) = fixed_rates(param,model)
 function fixed_rates(param,model)
     r = get_r(model)
     n = get_n(model)
-    r[model.fittedparam] = inverse_transform(param,model)
+    r[model.fittedparam] = inverse_transform_rates(param,model)
     for effect in model.fixedeffects
         for ind in 2: length(effect)
             r[effect[ind]] = r[effect[1]]
@@ -439,13 +439,13 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::StochasticGRmodel) = transform(model.rates[model.fittedparam],model)
+get_param(model::StochasticGRmodel) = transform_rates(model.rates[model.fittedparam],model)
 
 function get_param(model::GMrescaledmodel)
     r = copy(model.rates)
     n = 2*model.G - 1
     r[1:n-1] /= r[n]
-    transform(r[model.fittedparam],model)
+    transform_rates(r[model.fittedparam],model)
 end
 
 """

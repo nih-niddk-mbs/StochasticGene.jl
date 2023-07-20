@@ -407,7 +407,7 @@ function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRm
     end
     if writesamples
         write_array(joinpath(path,"ll_sampled_rates"*name),fit.ll)
-        write_array(joinpath(path,"sampled_rates"*name),permutedims(inverse_transform(fit.param,model)))
+        write_array(joinpath(path,"sampled_rates"*name),permutedims(inverse_transform_rates(fit.param,model)))
     end
 end
 
@@ -423,8 +423,8 @@ last accepted
 function write_rates(file::String,fit::Fit,stats,model)
     f = open(file,"w")
     writedlm(f,[get_rates(fit.parml,model)],',')
-    writedlm(f,[get_rates(transform(stats.meanparam,model),model)],',')
-    writedlm(f,[get_rates(transform(stats.medparam,model),model)],',')
+    writedlm(f,[get_rates(transform_rates(stats.meanparam,model),model)],',')
+    writedlm(f,[get_rates(transform_rates(stats.medparam,model),model)],',')
     writedlm(f,[get_rates(fit.param[:,end],model)],',')
     close(f)
 end

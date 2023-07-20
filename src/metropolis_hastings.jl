@@ -408,7 +408,7 @@ compute_stats(fit::Fit)
 Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
 """
 function compute_stats(paramin::Array{Float64,2},model)
-    param = inverse_transform(paramin,model)
+    param = inverse_transform_rates(paramin,model)
     meanparam = mean(param,dims=2)
     stdparam = std(param,dims=2)
     corparam = cor(param')
