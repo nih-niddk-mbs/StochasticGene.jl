@@ -73,7 +73,8 @@ function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nh
 		histontdd  = zeros(Int,ndt)
 	end
     if traceinterval > 0
-        tracelog = Vector(undef,0)
+        tracelog = [(t,state[:,1])]
+		println(t,":",state[:,1])
     end
 	if verbose
 		invactions = invert_dict(set_actions())
@@ -108,6 +109,7 @@ function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nh
 				ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
 			end
 		end
+		println(t,":",state[:,1])
 		if traceinterval > 0
 			push!(tracelog,(t,state[:,1]))
 		end
@@ -135,16 +137,13 @@ Return array of frame times and intensities
 
 """
 function make_trace(tracelog, G, R, onstates, interval=100.0)
-     n = length(tracelog)
+    n = length(tracelog)
     trace = Matrix(undef,0,2)
-    frame = interval
-    time = tracelog[1][1]
     state = tracelog[1][2]
     frame = interval
     i = 2
     while i < n 
         while tracelog[i][1] <= frame  && i < n
-            time = tracelog[i][1]
             state = tracelog[i][2]
             i += 1
         end
