@@ -18,12 +18,16 @@ end
 
 
 """
-function set_b(trace)
-    b = Vector[]
+set_b(trace) = set_b(trace,2,size(trace)[1])
+
+function set_b(trace,N,T)
+    b = Matrix{Float64}(undef, N, T)
+    i = 1
     for t in eachrow(trace)
-        # d = Normal(t[2],.01)
-        push!(b,[mod(t[2]+1,2),t[2]])
+        b[:,i] = [mod(t[2]+1,2),t[2]]
+        # push!(b,[mod(t[2]+1,2),t[2]])
         # push!(b,pdf(d,mod(t[2]+1,2)))
+        i += 1
     end
     return b
 end
@@ -77,69 +81,38 @@ forward(a,b,p0)
 function forward(a, b, p0, T)
     α = [(p0 .* b[1])']
     for t in 1:T-1
-        push!(α,α[t] * (a .* b[t+1]))
+        push!(α,α[t] * (a .* b[:,t+1]))
     end
     return α, sum(α)
 end
 
 function forward_loop(a, b, p0, N, T)
-    α = [p0 .* b[1]]
+    α = Matrix{Float64}(undef, N, T)
+    α[:, 1] = p0 .* b[:,1]
     for t in 1:T-1
         m = zeros(N)
         for j in 1:N
             for i in 1:N
-                m[j] += α[t][i] * a[i, j] * b[t+1][j]
+                m[j] += α[i, t] * a[i, j]
             end
+            α[j, t+1] = m[j] * b[j,t+1]
         end
-        push!(α,m)
     end
     return α, sum(α)
 end
-
-function forward_loop2(a, b, p0, N, T)
-    α = fill(zeros(N),T)
-    α[1] = p0 .* b[1]
-    for t in 1:T-1
-        m = zeros(N)
-        for j in 1:N
-            for i in 1:N
-                m[j] += α[t][i] * a[i, j] * b[t+1][j]
-            end
-        end
-        α[t+1] = m
-    end
-    return α, sum(α)
-end
-
-function forward_loop1(a, b, p0, N, T)
-    v = zeros(T,N)
-    v[1,:] = p0 .* b[1]
-    for t in 1:T-1
-        m = zeros(N)
-        for j in 1:N
-            for i in 1:N
-                m[j] += v[t,i] * a[i, j]
-            end
-            v[t+1,j] = m[j] * b[t+1][j]
-        end
-    end
-    return v
-end
-
 
 function forward_log(a, b, p0, N, T)
     loga = log.(a)
-    ϕt = zeros(N)
     ψ = zeros(N)
-    ϕ = [log.(p0) .+ log.(b[1])]
+    ϕ = Matrix{Float64}(undef, N, T)
+    ϕ[:,1] = log.(p0) .+ log.(b[:,1])
     for t in 2:T
         for k in 1:N
             for j in 1:N
-                ψ[j] = ϕ[t-1][j] + loga[j, k] + log.(b[t][k])
+                ψ[j] = ϕ[j,t-1] + loga[j, k] + log.(b[k,t])
             end
-            ϕt[k] = logsumexp(ψ)
+            ϕ[k,t] = logsumexp(ψ)
         end
-        push!(ϕ,ϕt)
     end
     ϕ, logsumexp(ϕ[T])
 end
