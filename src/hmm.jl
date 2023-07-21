@@ -96,12 +96,19 @@ function expected_transitions(α, a, b, β, N, T)
     return ξ, γ
 end
 """
-expected_a(ξ, γ, N)
 expected_a(a, b, p0, N, T)
+expected_a(ξ, γ, N)
+
 
 returns the expected probability matrix a
 """
-function expected_rate(ξ, γ, N::Int)
+function expected_a(a, b, p0, N, T)
+    α, C = forward(a, b, p0, N, T)
+    β = backward(a, b, C, N, T)
+    ξ, γ = expected_transitions(α, a, b, β, N, T)
+    expected_rate(ξ, γ, N)
+end
+function expected_a(ξ, γ, N::Int)
     a = zeros(N, N)
     ξS = sum(ξ, dims=3)
     γS = sum(γ, dims=2)
@@ -109,13 +116,6 @@ function expected_rate(ξ, γ, N::Int)
         a[i, j] = ξS[i, j] / γS[i]
     end
     return a
-end
-
-function expected_a(a, b, p0, N, T)
-    α, C = forward_scaled(a, b, p0, N, T)
-    β = backward_scaled(a, b, C, N, T)
-    ξ, γ = expected_transitions(α, a, b, β, N, T)
-    expected_rate(ξ, γ, N)
 end
 
 function expected_a_loop(a, b, p0, N, T)
@@ -126,56 +126,43 @@ function expected_a_loop(a, b, p0, N, T)
 end
 
 """
-forward(a,b,p0)
+forward(a, b, p0, N, T)
+
+returns α, C using scaled forward algorithm
 
 """
-function forward(a, b, p0, T)
-    α = [(p0 .* b[1])']
-    for t in 1:T-1
-        push!(α,α[t] * (a .* b[:,t+1]))
-    end
-    return α, sum(α)
-end
-
-function forward_loop(a, b, p0, N, T)
-    # α = Matrix{Float64}(undef, N, T)
+function forward(a, b, p0, N, T)
     α = zeros(N,T)
-    α[:, 1] = p0 .* b[:,1]
-    for t in 1:T-1
-        for j in 1:N
-            for i in 1:N
-                α[j, t+1] += α[i, t] * a[i, j] * b[j,t+1]
-            end
-        end
-    end
-    return α, sum(α)
-end
-
-"""
-forward_scaled(a,b,p0)
-
-"""
-function forward_scaled(a, b, p0, N, T)
-    α = Matrix{Float64}(undef,N,T)
-    α̂ = Matrix{Float64}(undef,N,T)
-    c = Vector{Float64}(undef,T)
     C = Vector{Float64}(undef,T)
     α[:, 1] = p0 .* b[:,1]
-    c[1] = 1 / sum(α[:,1])
-    C[1] = c[1]
-    α̂[:,1] = 
+    C[1] = 1 / sum(α[:,1])
+    α[:,1] *= C[1]
     for t in 2:T
         for j in 1:N
             for i in 1:N
-                α[i, t] += α̂[j, t-1] * a[i, j] * b[j,t]
+                α[j, t] += α[i, t-1] * a[i, j] * b[j,t]
             end
         end
-        c[t] = 1/ sum(α[:,t])
-        C[t] *= c[t]
-        α̂[:,t] = C[t] * α[:,t]
+        C[t] = 1/ sum(α[:,t])
+        α[:,t] *= C[t]
     end
     return α, C
 end
+
+function forward_loop(a, b, p0, N, T)
+    α = zeros(N,T)
+    α[:, 1] = p0 .* b[:,1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                α[j, t] += α[i, t-1] * a[i, j] * b[j,t]
+            end
+        end
+    end
+    return α
+end
+
+
 
 
 """
@@ -267,7 +254,7 @@ function backward_log(a, b, N, T)
             ϕ[i, t] = logsumexp(ψ)
         end
     end
-    ϕ
+    return ϕ
 end
 
 """
@@ -314,6 +301,6 @@ function viterbi(a, b, p0, N, T)
     for t in T-1:-1:1
         q[t] = ψ[q[t+1], t+1]
     end
-    q
+    return q
 end
 
