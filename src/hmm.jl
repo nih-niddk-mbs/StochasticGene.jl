@@ -66,14 +66,17 @@ function expected_transitions(α, a, b, β, N, T)
                 ξ[i,j,t] = α[i,t] * a[i,j] * b[j,t+1] * β[j,t+1]
             end
         end
-        γ[:,t] = sum(ξ[:,:,t],dims=2)
         S = sum(ξ[:,:,t])
         ξ[:,:,t] = S == 0. ? zeros(N,N) : ξ[:,:,t] / S
+        γ[:,t] = sum(ξ[:,:,t],dims=2)
     end
     return ξ, γ
 end
+"""
+expected_rate(ξ, γ,N)
 
-function expected_rate(ξ, γ,N) 
+"""
+function expected_rate(ξ,γ,N::Int) 
     a = zeros(N,N)
     ξS = sum(ξ,dims=3)
     γS = sum(γ,dims=2)
@@ -82,8 +85,13 @@ function expected_rate(ξ, γ,N)
     end
     return a
 end
-
-
+function expected_rate(a,b,p0)
+    α,_ = forward_loop(a,b,p0,N,T)
+    β,_ = backward_loop(a, b, N, T)
+    ξ,γ = expected_transitions(α, a, b, β, N, T)
+    expected_rate(ξ,γ,N) 
+end
+    
 
 """
 forward(a,b,p0)
@@ -188,7 +196,7 @@ function backward_loop(a, b, N, T)
     for t in T-1:-1:1
         for i in 1:N
             for j in 1:N
-                β[i, t+1] += a[i, j] * b[j,t+1] *β[j,t+1]
+                β[i, t] += a[i, j] * b[j,t+1] *β[j,t+1]
             end
         end
     end
