@@ -106,7 +106,6 @@ function forward(a, b, p0, T)
 end
 
 function forward_loop(a, b, p0, N, T)
-    # α = Matrix{Float64}(undef, N, T)
     α = zeros(N,T)
     α[:, 1] = p0 .* b[:,1]
     for t in 1:T-1
@@ -124,22 +123,22 @@ forward_scaled(a,b,p0)
 
 """
 function forward_scaled(a, b, p0, N, T)
-    α = Matrix{Float64}(undef,N,T)
+    α = zeros(N,T)
     α̂ = Matrix{Float64}(undef,N,T)
     c = Vector{Float64}(undef,T)
     C = Vector{Float64}(undef,T)
     α[:, 1] = p0 .* b[:,1]
     c[1] = 1 / sum(α[:,1])
     C[1] = c[1]
-    α̂[:,1] = 
+    α̂[:,1] = C[1] * α[:, 1]
     for t in 2:T
         for j in 1:N
             for i in 1:N
-                α[i, t] += α̂[j, t-1] * a[i, j] * b[j,t]
+                α[j, t] += α̂[i, t-1] * a[i, j] * b[j,t]
             end
         end
-        c[t] = 1/ sum(α[:,t])
-        C[t] *= c[t]
+        c[t] = 1 / sum(α[:,t])
+        C[t] = C[t-1]*c[t]
         α̂[:,t] = C[t] * α[:,t]
     end
     return α, α̂, c, C
