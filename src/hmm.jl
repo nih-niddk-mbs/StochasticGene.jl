@@ -37,19 +37,45 @@ return b = P(Observation | State)
 `T`: number of observations
 
 """
-set_b(trace) = set_b(trace, 2, size(trace)[1])
+set_b(trace) = set_b(trace, 2, size(trace)[1],prob_novar,[2])
 
-function set_b(trace, N, T)
+function set_b(trace, N, T,prob,params)
     b = Matrix{Float64}(undef, N, T)
-    i = 1
-    for t in eachrow(trace)
-        b[:, i] = [mod(t[2] + 1, 2), t[2]]
-        # push!(b,[mod(t[2]+1,2),t[2]])
-        # push!(b,pdf(d,mod(t[2]+1,2)))
-        i += 1
+    t = 1
+    for obs in eachrow(trace)
+        for j in 1:N
+            b[j,t] = prob(obs[2],j,params)
+        end
+        t += 1
     end
     return b
 end
+
+function prob_novar(obs,state::Int,onstate)
+    if (obs > .5 && state ∈ onstate) || (obs < .5 && state ∉ onstate)
+        return 1.
+    else
+        return 0.
+    end
+end
+
+function prob_Poisson(obs,state,rate)
+    d = Poisson(rate[state])
+    pdf(d,obs)
+end
+
+
+function set_b_og(trace)
+    T,N = size(trace)
+    b = Matrix{Float64}(undef, N, T)
+    t = 1
+    for obs in eachrow(trace)
+        b[:, t] = [mod(obs[2] + 1, 2), obs[2]]
+        t += 1
+    end
+    return b
+end
+
 
 
 """
@@ -78,7 +104,9 @@ fkf(u::Matrix, p, t) = u * Q_global
 """
 expected_transitions(α, a, b, β, N, T)
 
-returns ξ = and γ = 
+returns ξ and γ 
+ξ[i,j,t] = P(q[t] = S[i], q[t+1] = S[j] | O, λ)
+γ[i,t] = ∑_j ξ[i,j,t]
 """
 function expected_transitions(α, a, b, β, N, T)
     ξ = Array{Float64}(undef, N, N, T - 1)
@@ -95,10 +123,27 @@ function expected_transitions(α, a, b, β, N, T)
     end
     return ξ, γ
 end
+
+function expected_transitions_log(logα, a, b, logβ, N, T)
+    ξ = Array{Float64}(undef, N, N, T - 1)
+    γ = Array{Float64}(undef, N, T - 1)
+    for t in 1:T-1
+        for j = 1:N
+            for i = 1:N
+                ξ[i, j, t] = logα[i, t] + log(a[i, j]) + log(b[j, t+1]) + logβ[j, t+1]
+            end
+        end
+        S = logsumexp(ξ[:, :, t])
+        ξ[:, :, t] .-= S
+        for i in 1:N
+             γ[i, t] = logsumexp(ξ[i, :, t])
+        end
+    end
+    return ξ, γ
+end
 """
 expected_a(a, b, p0, N, T)
 expected_a(ξ, γ, N)
-
 
 returns the expected probability matrix a
 """
@@ -106,7 +151,7 @@ function expected_a(a, b, p0, N, T)
     α, C = forward(a, b, p0, N, T)
     β = backward(a, b, C, N, T)
     ξ, γ = expected_transitions(α, a, b, β, N, T)
-    expected_rate(ξ, γ, N)
+    expected_a(ξ, γ, N)
 end
 function expected_a(ξ, γ, N::Int)
     a = zeros(N, N)
@@ -114,6 +159,28 @@ function expected_a(ξ, γ, N::Int)
     γS = sum(γ, dims=2)
     for i in 1:N, j in 1:N
         a[i, j] = ξS[i, j] / γS[i]
+    end
+    return a
+end
+function expected_a_log(a, b, p0, N, T)
+    α = forward_log(a, b, p0, N, T)
+    β = backward_log(a, b,  N, T)
+    ξ, γ = expected_transitions_log(α, a, b, β, N, T)
+    expected_a_log(ξ, γ, N)
+end
+
+function expected_a_log(ξ, γ, N::Int)
+    a = zeros(N, N)
+    ξS = zeros(N,N)
+    γS = zeros(N)
+    for i in 1:N
+        for j in 1:N
+            ξS[i,j] = logsumexp(ξ[i,j,:])
+        end
+        γS[i] = logsumexp(γ[i,:])
+    end
+    for i in 1:N, j in 1:N
+        a[i, j] = ξS[i, j] - γS[i]
     end
     return a
 end
@@ -128,7 +195,9 @@ end
 """
 forward(a, b, p0, N, T)
 
-returns α, C using scaled forward algorithm
+returns forward variable α, and scaling parameter array C using scaled forward algorithm
+α[i,t] = P(O1,...,OT,qT=Si,λ)
+Ct = Prod_t 1/∑_i α[i,t]
 
 """
 function forward(a, b, p0, N, T)
@@ -218,7 +287,9 @@ end
 """
 backward_scaled(a,b)
 
-return β = using scaled backward algorithm
+return backward variable β using scaled backward algorithm
+
+β[i,T] = P(O[t+1]...O[t] | qT = Si,λ)
 
 """
 function backward(a, b, C, N, T)

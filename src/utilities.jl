@@ -548,6 +548,12 @@ function make_histogram(r)
     h
 end
 
+"""
+logsumexp(u,v)
+
+returns log of the sum of exponentials of u and v
+
+"""
 function logsumexp(u,v)
     w = max(u,v)
     if w == -Inf
@@ -557,7 +563,13 @@ function logsumexp(u,v)
     end
 end
 
-function logsumexp(v::Vector)
+"""
+logsumexp(v)
+
+returns log of the sum of exponentials of elements of v
+
+"""
+function logsumexp(v)
     w = maximum(v)
     if w == -Inf
         return -Inf
