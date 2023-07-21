@@ -128,23 +128,51 @@ end
 """
 forward(a,b,p0)
 
-return α and C using scaled forward algorithm
+"""
+function forward(a, b, p0, T)
+    α = [(p0 .* b[1])']
+    for t in 1:T-1
+        push!(α,α[t] * (a .* b[:,t+1]))
+    end
+    return α, sum(α)
+end
+
+function forward_loop(a, b, p0, N, T)
+    # α = Matrix{Float64}(undef, N, T)
+    α = zeros(N,T)
+    α[:, 1] = p0 .* b[:,1]
+    for t in 1:T-1
+        for j in 1:N
+            for i in 1:N
+                α[j, t+1] += α[i, t] * a[i, j] * b[j,t+1]
+            end
+        end
+    end
+    return α, sum(α)
+end
 
 """
-function forward(a, b, p0, N, T)
-    α = zeros(N, T)
-    C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / sum(α[:, 1])
-    α[:, 1] *= C[1]
+forward_scaled(a,b,p0)
+
+"""
+function forward_scaled(a, b, p0, N, T)
+    α = Matrix{Float64}(undef,N,T)
+    α̂ = Matrix{Float64}(undef,N,T)
+    c = Vector{Float64}(undef,T)
+    C = Vector{Float64}(undef,T)
+    α[:, 1] = p0 .* b[:,1]
+    c[1] = 1 / sum(α[:,1])
+    C[1] = c[1]
+    α̂[:,1] = 
     for t in 2:T
         for j in 1:N
             for i in 1:N
-                α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
+                α[i, t] += α̂[j, t-1] * a[i, j] * b[j,t]
             end
         end
-        C[t] = 1 / sum(α[:, t])
-        α[:, t] *= C[t]
+        c[t] = 1/ sum(α[:,t])
+        C[t] *= c[t]
+        α̂[:,t] = C[t] * α[:,t]
     end
     return α, C
 end
