@@ -227,7 +227,7 @@ time_evolve_diff(t,M::Matrix,P0)
 Solve transient problem using DifferentialEquations.jl
 """
 function time_evolve_diff(t,M::AbstractMatrix,P0)
-    global M_global = copy(M)
+    global Q_evolve = copy(M)
     tspan = (0.,t[end])
     prob = ODEProblem(fevolve,P0,tspan)
     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
@@ -235,7 +235,7 @@ function time_evolve_diff(t,M::AbstractMatrix,P0)
     return sol'
 end
 
-fevolve(u::Vector,p,t) = M_global*u
+fevolve(u::Vector,p,t) = Q_evolve*u
 
 function time_evolve_delay(t,r0,r1,delay,n,P0)
     tspan = (0.,t[end])

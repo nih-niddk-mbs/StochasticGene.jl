@@ -88,7 +88,7 @@ returns initial condition and solution at time = interval
 - `interval`: interval between frames (total integration time)
 """
 function kolmogorov_forward(Q, interval)
-    global Q_global = copy(Q)
+    global Q_kf = copy(Q)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf, Matrix(I, size(Q)), tspan)
     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
@@ -99,7 +99,7 @@ end
 fkf(u::Matrix,p,t)
 
 """
-fkf(u::Matrix, p, t) = u * Q_global
+fkf(u::Matrix, p, t) = u * Q_kf
 
 """
 expected_transitions(α, a, b, β, N, T)
