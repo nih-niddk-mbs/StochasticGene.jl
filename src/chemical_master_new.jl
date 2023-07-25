@@ -1,7 +1,132 @@
+### chemical_master.jl
+#
+# Functions to solve the chemical master equation
+# operates on the transpose of the Markov process transition rate matrix
+
+
+### Functions to compute steady state mRNA histograms
+"""
+steady_state(r,transitions,G,R,nhist,nalleles,type="")
+
+return steady state mRNA histogram for G,R model
+    calls steady_state(M,nT,nalleles)
+
+-`r`: transition rates
+-`transitions`: tuple of G state transitions
+-`G`: number of G states
+-`R`: number of R states
+-`nhists`: number of mRNA histogram bins
+-`nalleles`: number of alleles (alleles are assumed to be uncoupled)
+-`type`: parameter to specify type of kinetics if necessary
+
+"""
+function steady_state(r,transitions,G,R,nhist,nalleles,type="")
+    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,R))
+    M = make_mat_M(mcomponents.mcomponents,r)
+    steady_state(M,components.mcomponents.nT,nalleles,nhist)
+end
+"""
+steady_state(r,transitions,G,nhist,nalleles)
+
+returns steaday state mRNA histogram for G models
+    calls steady_state(M,nT,nalleles)
+
+"""
+function steady_state(r,transitions,G,nhist,nalleles)
+    components = make_components_M(transitions,G,nhist+2,r[end])
+    M = make_mat_M(components,r)
+    steady_state(M,G,nalleles,nhist)
+end
+"""
+steady_state(M,nT,nalleles,nhist)
+
+return steady state mRNA histogram for G and GR models
+
+computes null space of the truncated full transition matrix.
+
+-`M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
+-`nT`: dimension of state transitions
+
+"""
+steady_state(M,nT,nalleles,nhist) = steady_state(M,nT,nalleles)[1:nhist]
+
+function steady_state(M,nT,nalleles)
+     P = normalized_nullspace(M)
+     mhist = marginalize(P,nT)
+     allele_convolve(mhist,nalleles)
+end
+
+
+### Functions to compute ON and OFF time histograms
+
+"""
+ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
+
+returns ON dwell time histogram (PDF) of GRS model
+Found by computing accumulated probability into OFF states
+where transitions out of OFF states are zeroed, starting from first instance of ON state
+weighted by steady state distribution (i.e. solving a first passage time problem)
+Chemical master equation is solved  using DifferentialEquations.jl LSODA method
+
+Type of model is specified by TA matrix
+
+-`tin` end time of dwell time histogram
+-`G`: number of G states
+-`R`: number of R states
+
+"""
+function ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
+    t = [0;tin]
+    SAinit = init_prob(pss,G-1,R)
+    SA = time_evolve(t,TA,SAinit,method)
+    accumulate(SA,G-1,R)  # accumulated prob into OFF states
+end
+
+"""
+ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
+
+returns ON time histogram for G model
+    ON states can be any subset of G states
+
+"""
+function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
+    t = [0;tin]
+    SAinit = zeros(G)
+    SAinit[G] = 1
+    SA = time_evolve(t,TA,SAinit,method)
+    return sum(SA[:,1:G-1],dims=2)[:,1]
+end
+
+"""
+offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
+
+returns OFF dwell time distributions of GRS model
+using same algorithm as for ON time
+
+"""
+function offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
+    t = [0;tin]
+    nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
+    TI = TI[nonzerosI,nonzerosI]
+    SIinit = init_prob(pss,r,G-1,R,nonzerosI)
+    SI = time_evolve(t,TI,SIinit,method)
+    accumulate(SI,G-1,R,nonzerosI,length(pss)) # accumulated prob into ON states
+end
+"""
+offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
+
+returns OFF time histogram
+"""
+function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
+    t = [0;tin]
+    SI = time_evolve(t,TI,SIinit,method)
+    return SI[:,G]
+end
+
 """
 offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
 
-Active (ON) and Inactive (OFF) time distributions for GRSM model
+ON and OFF time distributions for GRSM model
 Takes difference of ON and OFF time CDF to produce PDF
 method = 1 uses DifferentialEquations.jl
 """
@@ -38,67 +163,8 @@ function pdf_from_cdf(t,S)
     P/sum(P)
 end
 
-"""
-ontimeCDF(tin::Vector,n::Int,nr::Int,rin::Vector,TA::Matrix,pss::Vector)
-offtimeCDF(tin::Vector,n::Int,nr::Int,r::Vector,TI::Matrix,pss::Vector)
 
-ON(OFF) dwell time distributions of GRS model
-Found by computing accumulated probability into OFF(ON) states
-where transitions out of OFF(ON) states are zeroed, starting from first instance of ON(OFF) state
-weighted by steady state distribution (i.e. solving a first passage time problem)x
-"""
-function ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
-    t = [0;tin]
-    SAinit = init_prob(pss,G-1,R)
-    SA = time_evolve(t,TA,SAinit,method)
-    accumulate(SA,G-1,R)  # accumulated prob into OFF states
-end
-function offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
-    t = [0;tin]
-    nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
-    TI = TI[nonzerosI,nonzerosI]
-    SIinit = init_prob(pss,r,G-1,R,nonzerosI)
-    SI = time_evolve(t,TI,SIinit,method)
-    accumulate(SI,G-1,R,nonzerosI,length(pss)) # accumulated prob into ON states
-end
-function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
-    t = [0;tin]
-    SAinit = zeros(G)
-    SAinit[G] = 1
-    SA = time_evolve(t,TA,SAinit,method)
-    return sum(SA[:,1:G-1],dims=2)[:,1]
-end
-function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
-    t = [0;tin]
-    SI = time_evolve(t,TI,SIinit,method)
-    return SI[:,G]
-end
 
-"""
-steady_state(M,nT,nalleles,nhist)
-
-Steady State of mRNA
-"""
-steady_state(M,nT,nalleles,nhist) = steady_state(M,nT,nalleles)[1:nhist]
-
-function steady_state(M,nT,nalleles)
-     P = normalized_nullspace(M)
-     mhist = marginalize(P,nT)
-     allele_convolve(mhist,nalleles)
-end
-
-function steady_state(r,transitions,G,R,nhist,nalleles,type="")
-    # ntransitions = length(transitions)
-    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,R))
-    M = make_mat_M(mcomponents.mcomponents,r)
-    steady_state(M,components.mcomponents.nT,nalleles,nhist)
-end
-
-function steady_state(r,transitions,G,nhist,nalleles)
-    components = make_components_M(transitions,G,nhist+2,r[end])
-    M = make_mat_M(components,r)
-    steady_state(M,G,nalleles,nhist)
-end
 
 function gt_histograms(r,transitions,G,R,S,nhist,nalleles,range,onstates,method=1,type="")
     ntransitions = length(transitions)
