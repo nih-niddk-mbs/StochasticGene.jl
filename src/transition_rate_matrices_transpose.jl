@@ -71,9 +71,12 @@ set_indices(ntransitions,G,R,S) = Indices(collect(1:ntransitions),collect(ntrans
 
 
 """
-set_elements_G!
+set_elements_G!(elements,transitions,G,R,base,gamma)
 
+set G state transition elements
 
+-`elements`: Vector of Element structures
+-`transitions`: tupe of G state transitions
 """
 function set_elements_G!(elements,transitions,G,R,base,gamma)
 	nT = G*base^R
@@ -101,6 +104,11 @@ set_elements_RS!(elementT,G,R,indices::Indices) = set_elements_RS!(elementT,G,R,
 set_elements_RS!(elementsT,G,R,nu::Vector{Int},eta::Vector{Int}) = set_elements_RS!(elementsT,G,R,R,nu,eta,3)
 
 
+"""
+set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
+
+set matrix elements in elementsT for GRS state transition matrix
+"""
 function set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
 	if R > 0
 		if type == "offeject"
@@ -312,7 +320,7 @@ make_components(transitions,G,R,r,total,indices::Indices)
 make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices)
 make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
 
-make the appropriate matrix components
+make the appropriate matrix components for given data type
 
 """
 make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices) = make_components(transitions,G,R,r,data.nRNA,indices)
