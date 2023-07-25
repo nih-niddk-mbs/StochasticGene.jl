@@ -316,7 +316,7 @@ make the appropriate matrix components
 
 """
 make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices) = make_components(transitions,G,R,r,data.nRNA,indices)
-make_components(transitions,G,r,data::RNALiveCellData,indices::Indices) = make_components(transitions,G,r,data.nRNA+2,indices)
+make_components(transitions,G,r,data::RNALiveCellData,indices::Indices,onstates) = make_components(transitions,G,r,data.nRNA+2,indices,onstates)
 make_components(transitions,nT,r,data::RNAData) = make_components_M(transitions,nT,data.nRNA+2,r[2*nT])
 make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices) = make_components(transitions,G,R,r,data.nRNA+2,type,indices)
 

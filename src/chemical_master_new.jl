@@ -100,12 +100,12 @@ function steady_state(r,transitions,G,nhist,nalleles)
     steady_state(M,G,nalleles,nhist)
 end
 
-function gt_histograms(r,transitions,G,R,S,nhist,nalleles,range,method=1,type="")
+function gt_histograms(r,transitions,G,R,S,nhist,nalleles,range,onstates,method=1,type="")
     ntransitions = length(transitions)
     if R > 0
         components = make_components(transitions,G,R,r,nhist+2,type,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
     else
-        components = make_components(transitions,G,r,nhist+2,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2))
+        components = make_components(transitions,G,r,nhist+2,Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + 2*R + 1),ntransitions + 2*R + 2),onstates)
     end
 
     # if type == "offdecay"

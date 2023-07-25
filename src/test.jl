@@ -1,8 +1,8 @@
 include("/Users/carsonc/github/StochasticGene/src/common.jl")
-include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices2.jl")
-include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices.jl")
-include("/Users/carsonc/github/StochasticGene/src/chemical_master2.jl")
-include("/Users/carsonc/github/StochasticGene/src/GillespieSimulator.jl")
+include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices_transpose.jl")
+# include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices.jl")
+include("/Users/carsonc/github/StochasticGene/src/chemical_master_new.jl")
+include("/Users/carsonc/github/StochasticGene/src/simulator.jl")
 include("/Users/carsonc/github/StochasticGene/src/utilities.jl")
 
 using DifferentialEquations
