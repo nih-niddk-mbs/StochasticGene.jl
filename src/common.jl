@@ -109,6 +109,8 @@ fittedparam: indices of rates to be fitted
     randomeffects: indices of rates that are fixed to each other, in the form of a 2tuple of vectors
     with index 1 the tied index vector and 2 the corresponding fitted index vector
 method: numerical method for solving Master equation
+-`Gtransitions`:  tuple of vectors of G state transitions
+-`onstates`: vector of onstates for GM models
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
