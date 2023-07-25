@@ -52,6 +52,14 @@ struct RNAMixedData{hType} <: AbstractRNAData{hType}
     histRNA::hType
 end
 
+struct RNAOnOfflData <: HistogramData
+    name::String
+    gene::String
+    bins::Array
+    OFF::Array
+    ON::Array
+end
+
 struct RNALiveCellData <: HistogramData
     name::String
     gene::String
