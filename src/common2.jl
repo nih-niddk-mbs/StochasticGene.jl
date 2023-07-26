@@ -3,17 +3,17 @@
 """
 Abstract Experimental Data types
 """
-abstract type ExperimentalData end
+abstract type AbstractExperimentalData end
 """
 Base for data in the form of samples
 """
-abstract type SampleData <: ExperimentalData end
+abstract type AbstractSampleData <: AbstractExperimentalData end
 """
 Base for data in the form of a distribution
 """
-abstract type HistogramData <: ExperimentalData end
+abstract type AbstractHistogramData <: AbstractExperimentalData end
 
-abstract type AbstractRNAData{hType} <: HistogramData end
+abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 
 """
 Data structures
@@ -49,14 +49,14 @@ struct RNAMixedData{hType} <: AbstractRNAData{hType}
     fish::Array{Bool,1}
     histRNA::hType
 end
-struct LiveCellData <: HistogramData
+struct LiveCellData <: AbstractHistogramData
     name::String
     gene::String
     bins::Array
     OFF::Array
     ON::Array
 end
-struct RNALiveCellData <: HistogramData
+struct RNALiveCellData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
@@ -66,7 +66,7 @@ struct RNALiveCellData <: HistogramData
     ON::Array
 
 end
-struct MultiRNALiveCellData <: HistogramData
+struct MultiRNALiveCellData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Array
@@ -80,9 +80,9 @@ end
 Abstract model types
 """
 abstract type Model end
-abstract type StochasticGRmodel <: Model end
-abstract type AbstractGMmodel <: StochasticGRmodel end
-abstract type AbstractGRMmodel <: StochasticGRmodel end
+abstract type AbstractStochasticGRmodel <: Model end
+abstract type AbstractGMmodel <: AbstractStochasticGRmodel end
+abstract type AbstractGRMmodel <: AbstractStochasticGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 
@@ -488,7 +488,7 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::StochasticGRmodel) = model.rates[model.fittedparam]
+get_param(model::AbstractStochasticGRmodel) = model.rates[model.fittedparam]
 
 # function get_param(model::GMrescaledmodel)
 #     r = copy(model.rates)
@@ -513,7 +513,7 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::StochasticGRmodel)
+function logprior(param,model::AbstractStochasticGRmodel)
     d = model.rateprior
     p=0
     for i in eachindex(param)

@@ -389,9 +389,9 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 
 
 """
-writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0)
+writeall(path::String,fit,stats,measures,data,temp,model::AbstractStochasticGRmodel;optimized=0,burst=0)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::StochasticGRmodel;optimized=0,burst=0,writesamples=false)
+function writeall(path::String,fit,stats,measures,data,temp,model::AbstractStochasticGRmodel;optimized=0,burst=0,writesamples=false)
     if ~isdir(path)
         mkpath(path)
     end

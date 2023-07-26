@@ -60,12 +60,11 @@ end
 run_mh(data,model,options)
 
 Run Metropolis-Hastings MCMC algorithm and compute statistics of results
-data is a HistogramData structure
-and must have a datahistogram function
+data is an AbstractExperimentalData structure
 model is a StochasticGR model with a logprior function
 model and data must have a likelihoodfn function
 """
-function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions)
+function run_mh(data::AbstractHistogramData,model::AbstractStochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param,model)
@@ -81,7 +80,7 @@ end
 run_mh(data,model,options,nchains)
 
 """
-function run_mh(data::HistogramData,model::StochasticGRmodel,options::MHOptions,nchains)
+function run_mh(data::AbstractHistogramData,model::AbstractStochasticGRmodel,options::MHOptions,nchains)
     if nchains == 1
         return run_mh(data,model,options)
     else
@@ -280,7 +279,7 @@ return proposal distribution specified by location and scale
 
 """
 
-proposal_scale(cv::Float64,model::StochasticGRmodel) = sqrt(log(1+cv^2))
+proposal_scale(cv::Float64,model::AbstractStochasticGRmodel) = sqrt(log(1+cv^2))
 
 proposal_dist(param::Float64,cv::Float64,model) = Normal(param,proposal_scale(cv,model))
 function proposal_dist(param::Vector,cv::Float64,model)
@@ -489,7 +488,7 @@ loglikelihood(param,data,model)
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
-function loglikelihood(param,data,model)
+function loglikelihood(param,data::AbstractHistogramData,model)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
     return crossentropy(predictions,hist),predictions
@@ -532,16 +531,16 @@ deviance(fit,data,model)
 
 Deviance
 """
-# deviance(predictions::Array,data::HistogramData) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
-deviance(predictions::Array,data::HistogramData) = deviance(predictions,datapdf(data))
+# deviance(predictions::Array,data::AbstractHistogramData) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
+deviance(predictions::Array,data::AbstractHistogramData) = deviance(predictions,datapdf(data))
 
 # (crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
-function deviance(fit::Fit,data::HistogramData,model)
+function deviance(fit::Fit,data::AbstractHistogramData,model)
     h=likelihoodfn(fit.parml,data,model)
     deviance(h,data)
 end
 
-function deviance(data::HistogramData,model::StochasticGRmodel)
+function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
     h = likelihoodfn(model.rates[model.fittedparam],data,model)
     deviance(h,data)
 end

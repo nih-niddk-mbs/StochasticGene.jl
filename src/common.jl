@@ -3,19 +3,19 @@
 """
 Abstract Experimental Data types
 """
-abstract type ExperimentalData end
+abstract type AbstractExperimentalData end
 """
 Base for data in the form of samples
 """
-abstract type SampleData <: ExperimentalData end
+abstract type AbstractSampleData <: AbstractExperimentalData end
 """
 Base for data in the form of a distribution
 """
-abstract type HistogramData <: ExperimentalData end
+abstract type AbstractHistogramData <: AbstractExperimentalData end
 
-abstract type AbstractRNAData{hType} <: HistogramData end
+abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 
-abstract type AbstractTraceData <: ExperimentalData end
+abstract type AbstractTraceData <: AbstractExperimentalData end
 
 """
 Data structures
@@ -52,7 +52,7 @@ struct RNAMixedData{hType} <: AbstractRNAData{hType}
     histRNA::hType
 end
 
-struct RNAOnOfflData <: HistogramData
+struct RNAOnOfflData <: AbstractHistogramData
     name::String
     gene::String
     bins::Array
@@ -60,7 +60,7 @@ struct RNAOnOfflData <: HistogramData
     ON::Array
 end
 
-struct RNALiveCellData <: HistogramData
+struct RNALiveCellData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
@@ -87,10 +87,10 @@ end
 """
 Abstract model types
 """
-abstract type Model end
-abstract type StochasticGRmodel <: Model end
-abstract type AbstractGMmodel <: StochasticGRmodel end
-abstract type AbstractGRMmodel <: StochasticGRmodel end
+abstract type AbstractModel end
+abstract type AbstractAbstractStochasticGRmodel <: AbstractModel end
+abstract type AbstractGMmodel <: AbstractAbstractStochasticGRmodel end
+abstract type AbstractGRMmodel <: AbstractAbstractStochasticGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 
@@ -375,19 +375,19 @@ end
 SIinit(model::GMmodel) = SIinit(model.G,model.Gtransitions)
 
 """
-transform_rates(r,model::StochasticGRmodel)
+transform_rates(r,model::AbstractStochasticGRmodel)
 
 transform rates to real domain
 """
-transform_rates(r,model::StochasticGRmodel) = log.(r)
+transform_rates(r,model::AbstractStochasticGRmodel) = log.(r)
 
 """
-inverse_transform_rates(x,model::StochasticGRmodel)
+inverse_transform_rates(x,model::AbstractStochasticGRmodel)
 
 transform MH parameters on real domain back to rate domain
 
 """
-inverse_transform_rates(p,model::StochasticGRmodel) = exp.(p)
+inverse_transform_rates(p,model::AbstractStochasticGRmodel) = exp.(p)
 
 """
 get_rates(param,model)
@@ -449,7 +449,7 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::StochasticGRmodel) = transform_rates(model.rates[model.fittedparam],model)
+get_param(model::AbstractStochasticGRmodel) = transform_rates(model.rates[model.fittedparam],model)
 
 function get_param(model::GMrescaledmodel)
     r = copy(model.rates)
@@ -474,7 +474,7 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::StochasticGRmodel)
+function logprior(param,model::AbstractStochasticGRmodel)
     d = model.rateprior
     p=0
     for i in eachindex(param)

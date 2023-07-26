@@ -233,7 +233,9 @@ function finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burs
     println("Median fitted rates: ",stats.medparam[:,1])
     println("ML rates: ",inverse_transform_rates(fit.parml,model))
     println("Acceptance: ",fit.accept,"/",fit.total)
-    println("Deviance: ",deviance(fit,data,model))
+    if typeof(data) <: AbstractHistogramData
+         println("Deviance: ",deviance(fit,data,model))
+    end
     println("rhat: ",maximum(measures.rhat))
     if optimized != 0
         println("Optimized ML: ",Optim.minimum(optimized))
