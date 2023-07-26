@@ -89,8 +89,8 @@ Abstract model types
 """
 abstract type AbstractModel end
 abstract type AbstractStochasticGRmodel <: AbstractModel end
-abstract type AbstractGMmodel <: AbstractAbstractStochasticGRmodel end
-abstract type AbstractGRMmodel <: AbstractAbstractStochasticGRmodel end
+abstract type AbstractGMmodel <: AbstractStochasticGRmodel end
+abstract type AbstractGRMmodel <: AbstractStochasticGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 
