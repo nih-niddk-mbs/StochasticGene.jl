@@ -53,6 +53,13 @@ function ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,meth
     SA = time_evolve(t,TA,SAinit,method)
     accumulate(SA,G-1,R)  # accumulated prob into OFF states
 end
+function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
+    t = [0;tin]
+    SAinit = zeros(G)
+    SAinit[G-1] = 1
+    SA = time_evolve(t,TA,SAinit,method)
+    return sum(SA[:,1:G-2],dims=2)[:,1]
+end
 function offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
     t = [0;tin]
     nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
@@ -61,17 +68,11 @@ function offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::
     SI = time_evolve(t,TI,SIinit,method)
     accumulate(SI,G-1,R,nonzerosI,length(pss)) # accumulated prob into ON states
 end
-function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
-    t = [0;tin]
-    SAinit = zeros(G)
-    SAinit[G] = 1
-    SA = time_evolve(t,TA,SAinit,method)
-    return sum(SA[:,1:G-1],dims=2)[:,1]
-end
+
 function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
     t = [0;tin]
     SI = time_evolve(t,TI,SIinit,method)
-    return SI[:,G]
+    return SI[:,G-1]
 end
 
 """
@@ -89,7 +90,7 @@ end
 
 function steady_state(r,transitions,G,R,nhist,nalleles,type="")
     ntransitions = length(transitions)
-    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),R))
+    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,G,R))
     M = make_mat_M(mcomponents.mcomponents,r)
     steady_state(M,components.mcomponents.nT,nalleles,nhist)
 end
@@ -262,16 +263,16 @@ time_evolve_diff(t,M::Matrix,P0)
 
 Solve transient problem using DifferentialEquations.jl
 """
-function time_evolve_diff(t,M::AbstractMatrix,P0)
-    global M_global = copy(M)
+function time_evolve_diff(t,Q::AbstractMatrix,P0)
+    global Q_evolve = copy(Q)
     tspan = (0.,t[end])
-    prob = ODEProblem(fglobal,P0,tspan)
+    prob = ODEProblem(fevolve,P0,tspan)
     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
-    sol = solve(prob,saveat=t, lsoda())
+    sol = solve(prob,lsoda(),saveat=t)
     return sol'
 end
 
-fglobal(u,p,t) = M_global*u
+fevolve(u,p,t) = Q_evolve*u
 
 function time_evolve_delay(t,r0,r1,delay,n,P0)
     tspan = (0.,t[end])
@@ -279,7 +280,7 @@ function time_evolve_delay(t,r0,r1,delay,n,P0)
     p  = [r0;r1;delay;n;nhist]
     P0 = [P0;1.]
     prob = ODEProblem(fdelay!,P0,tspan,p)
-    sol = solve(prob,saveat=t)
+    sol = solve(prob,lsoda(),saveat=t)
     return sol'
 end
 

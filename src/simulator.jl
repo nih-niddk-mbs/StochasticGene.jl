@@ -28,11 +28,8 @@ end
 """
 	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
 
-	Simulate any GRSM model. 
-	
-	Returns steady state mRNA histogram 
-	Returns OFF time, ON time, and mRNA histograms if range not a null vector will 	
-	Returns a nascent mRNA trace if argument trace is set to true
+	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+    If trace is set to true, it returns a nascent mRNA trace
 
 	Arguments
 	- `r`: vector of rates
@@ -106,9 +103,9 @@ function simulator(r::Vector{Float64},transitions::Tuple,G::Int,R::Int,S::Int,nh
 		m = update!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final,action)
 		if onoff
 			if initial ∈ onstates && final ∉ onstates && final > 0
-				offtime!(histofftdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
-			elseif initial ∉ onstates && final ∈ onstates && final > 0
 				ontime!(histontdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
+			elseif initial ∉ onstates && final ∈ onstates && final > 0
+				offtime!(histofftdd,tIA,tAI,t,dt,ndt,state,allele,G,R)
 			end
 		end
 		if traceinterval > 0

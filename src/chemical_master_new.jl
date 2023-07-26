@@ -92,9 +92,9 @@ returns ON time histogram for G model
 function ontimeCDF(tin::Vector,G::Int,TA::AbstractMatrix,method)
     t = [0;tin]
     SAinit = zeros(G)
-    SAinit[G] = 1
+    SAinit[G-1] = 1
     SA = time_evolve(t,TA,SAinit,method)
-    return sum(SA[:,1:G-1],dims=2)[:,1]
+    return sum(SA[:,1:G-2],dims=2)[:,1]
 end
 
 """
@@ -120,7 +120,7 @@ returns OFF time histogram
 function offtimeCDF(tin::Vector,r::Vector,G::Int,TI::AbstractMatrix,SIinit::Vector,method)
     t = [0;tin]
     SI = time_evolve(t,TI,SIinit,method)
-    return SI[:,G]
+    return SI[:,G-1]
 end
 
 """
