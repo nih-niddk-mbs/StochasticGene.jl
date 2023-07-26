@@ -1,3 +1,22 @@
+
+using Distributions
+using StatsBase
+using Statistics
+using DelimitedFiles
+using Dates
+using Distributed
+using LinearAlgebra
+using Plots
+using SparseArrays
+using DifferentialEquations
+using LSODA
+using DataFrames
+using FFTW
+using Downloads
+using CSV
+using MultivariateStats
+using Optim
+
 include("/Users/carsonc/github/StochasticGene/src/common.jl")
 include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices_transpose.jl")
 # include("/Users/carsonc/github/StochasticGene/src/transition_rate_matrices.jl")
@@ -5,8 +24,29 @@ include("/Users/carsonc/github/StochasticGene/src/chemical_master_new.jl")
 include("/Users/carsonc/github/StochasticGene/src/simulator.jl")
 include("/Users/carsonc/github/StochasticGene/src/utilities.jl")
 
-using DifferentialEquations
-using LSODA
+test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
+
+function test_cm(r,transitions,G,nhist,nalleles,onstates,range)
+	components=make_components(transitions,G,r,nhist,set_indices(length(transitions)),onstates)
+	T = make_mat_T(components.tcomponents,r)
+	TA = make_mat_TA(components.tcomponents,r)
+	TI = make_mat_TI(components.tcomponents,r)
+	M = make_mat_M(components.mcomponents,r)
+	modelOFF, modelON = offonPDF(T,TA,TI,range,r,G,1,SIinit(G,transitions))
+	histF = steady_state(M,components.mcomponents.nT,nalleles,nhist)
+	modelOFF,modelON,histF
+end
+
+
+
+
+function test(r,transitions,G,nhist,nalleles,onstates,range)
+	OFF,ON,mhist = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
+	modelOFF,modelON,histF = test_cm(r,transitions,G,nhist,nalleles,onstates,range)
+	OFF,ON,mhist,modelOFF,modelON,histF
+end
+
+
 
 
 function make_components_T(transitions,G,R,r)

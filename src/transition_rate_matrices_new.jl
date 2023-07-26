@@ -84,12 +84,12 @@ struct Indices
 end
 
 """
-set_indices(ntransitions,G,R,S)
-set_indices(ntransitions,G,R)
+set_indices(ntransitions,R,S)
+set_indices(ntransitions,R)
 
 """
-set_indices(ntransitions,G,R) = set_indices(ntransitions,G,R,R)
-set_indices(ntransitions,G,R,S) = Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + R + S + 1),ntransitions + R + S + 2)
+set_indices(ntransitions,R) = set_indices(ntransitions,R,R)
+set_indices(ntransitions,R,S) = Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + R + S + 1),ntransitions + R + S + 2)
 
 
 """

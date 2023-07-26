@@ -89,7 +89,7 @@ end
 
 function steady_state(r,transitions,G,R,nhist,nalleles,type="")
     ntransitions = length(transitions)
-    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,R))
+    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),R))
     M = make_mat_M(mcomponents.mcomponents,r)
     steady_state(M,components.mcomponents.nT,nalleles,nhist)
 end

@@ -21,7 +21,7 @@ return steady state mRNA histogram for G,R model
 
 """
 function steady_state(r,transitions,G,R,nhist,nalleles,type="")
-    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),G,R))
+    components = make_components(transitions,G,R,r,nhist+2,type,set_indices(length(transitions),R))
     M = make_mat_M(mcomponents.mcomponents,r)
     steady_state(M,components.mcomponents.nT,nalleles,nhist)
 end
@@ -452,23 +452,20 @@ of rank n-1 using QR decomposition with pivoting
 function normalized_nullspace(M::SparseMatrixCSC)
     m = size(M, 1)
     p = zeros(m)
-    if rank(M) == m
-        return p
-    else
-        F = qr(M)   #QR decomposition
-        R = F.R    
-        # Back substitution to solve R*p = 0
-        p[end] = 1.0
-        for i in 1:m-1
-            p[m-i] = -R[m-i, m-i+1:end]' * p[m-i+1:end] / R[m-i, m-i]
-        end
-        # Permute elements according to sparse matrix result
-        pp = copy(p)
-        for i in eachindex(p)
-            pp[F.pcol[i]] = p[i]
-        end
-        pp / sum(pp)
+    F = qr(M)   #QR decomposition
+    R = F.R
+    # Back substitution to solve R*p = 0
+    p[end] = 1.0
+    for i in 1:m-1
+        p[m-i] = -R[m-i, m-i+1:end]' * p[m-i+1:end] / R[m-i, m-i]
     end
+    # Permute elements according to sparse matrix result
+    pp = copy(p)
+    for i in eachindex(p)
+        pp[F.pcol[i]] = p[i]
+    end
+    pp / sum(pp)
+
 end
 """
     allele_convolve(mhist,nalleles)

@@ -88,7 +88,7 @@ end
 Abstract model types
 """
 abstract type AbstractModel end
-abstract type AbstractAbstractStochasticGRmodel <: AbstractModel end
+abstract type AbstractStochasticGRmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractAbstractStochasticGRmodel end
 abstract type AbstractGRMmodel <: AbstractAbstractStochasticGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
@@ -206,7 +206,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
 end
 
-function write_model(model::Model)
+function write_model(model::AbstractModel)
     for fname in fieldnames(model)
         println("$fname =",getfield(model,fname))
     end

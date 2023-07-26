@@ -62,12 +62,13 @@ struct Indices
 end
 
 """
-set_indices(ntransitions,G,R,S)
-set_indices(ntransitions,G,R)
+set_indices(ntransitions,R,S)
+set_indices(ntransitions,R)
 
 """
-set_indices(ntransitions,G,R) = set_indices(ntransitions,G,R,R)
-set_indices(ntransitions,G,R,S) = Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + R + S + 1),ntransitions + R + S + 2)
+set_indices(ntransitions) = Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2)
+set_indices(ntransitions,R) = set_indices(ntransitions,R,R)
+set_indices(ntransitions,R,S) = Indices(collect(1:ntransitions),collect(ntransitions+1:ntransitions + R + 1 ),collect(ntransitions + R + 2:ntransitions + R + S + 1),ntransitions + R + S + 2)
 
 
 """
@@ -298,7 +299,7 @@ end
 make_components_TAI
 
 """
-function make_components_TAI(elementsT,onstates::Vector)
+function make_components_TAI(elementsT,G::Int,onstates::Vector)
 	elementsTA = Vector{Element}(undef,0)
 	elementsTI = Vector{Element}(undef,0)
 	set_elements_TA!(elementsTA,elementsT,onstates)
@@ -343,7 +344,7 @@ make_components(transitions,G,R,r,total,indices::Indices) = MTComponents(make_co
 function make_components(transitions,G,r,total::Int,indices::Indices,onstates::Vector)
 	elementsT = set_elements_T(transitions,indices.gamma)
 	S,Sm,Sp = make_mat_S(total,r[indices.decay])
-	MTComponents(MComponents(elementsT,set_elements_B(G,indices.nu[1]),G,S,Sm,Sp),make_components_TAI(elementsT,onstates))
+	MTComponents(MComponents(elementsT,set_elements_B(G,indices.nu[1]),G,S,Sm,Sp),make_components_TAI(elementsT,G,onstates))
 end
 
 
