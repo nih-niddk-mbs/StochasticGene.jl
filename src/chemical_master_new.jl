@@ -137,10 +137,14 @@ function offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1
     return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
 end
 
-function offonPDF(TA, TI, t::Vector, G::Int, transitions, onstates, method=1)
-    SA = ontimeCDF(t, TA, offstates(G, onstates), init_prob_SA(G, onstates, transitions), method)
-    SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions), method)
-    println(typeof(SI))
+function offonPDF(T,TA, TI, t::Vector, G::Int, transitions, onstates, method=1)
+    off = offstates(G, onstates)
+    SA = ontimeCDF(t, TA, off, init_prob_SA(G, onstates, transitions), method)
+    if length(off) > 1
+        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions,normalized_nullspace(T)), method)
+    else
+        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions), method)
+    end
     return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
 end
 
@@ -156,7 +160,7 @@ end
 
 
 
-function gt_histograms(r, transitions, G, R, S, nhist, nalleles, range, onstates, method=1, type="")
+function gt_histograms(r, transitions, G, R, nhist, nalleles, range, onstates, method=1, type="")
     ntransitions = length(transitions)
     if R > 0
         components = make_components(transitions, G, R, r, nhist + 2, type, Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+2*R+1), ntransitions + 2 * R + 2))
@@ -173,7 +177,7 @@ function gt_histograms(r, transitions, G, R, S, nhist, nalleles, range, onstates
     if R > 0
         modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R, method)
     else
-        modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, method, SIinit(r, G, transitions))
+        modelOFF,modelON = offonPDF(TA,TI,range,G,transitions,onstates)
     end
     M = make_mat_M(components.mcomponents, r)
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
@@ -290,6 +294,19 @@ function init_prob_SI(G, onstates, transitions)
     Sinit = zeros(G)
     Sinit[minimum(start)] = 1
     return Sinit
+end
+
+function init_prob_SI(G, onstates, transitions,pss::Vector)
+    start = Int[]
+    for t in transitions
+        if t[1] ∈ onstates && t[2] ∉ onstates
+            push!(start, t[2])
+        end
+    end
+    Sinit = zeros(G)
+    Sinit[start] = pss[start]
+    println(Sinit)
+    return Sinit /sum(Sinit)
 end
 
 
