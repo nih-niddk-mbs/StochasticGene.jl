@@ -65,7 +65,7 @@ function test_cm(r,transitions,G,nhist,nalleles,onstates,range)
 	TA = make_mat_TA(components.tcomponents,r)
 	TI = make_mat_TI(components.tcomponents,r)
 	M = make_mat_M(components.mcomponents,r)
-	modelOFF,modelON = offonPDF(T,TA,TI,range,G,transitions,onstates)
+	modelOFF,modelON = offonPDF(T,TA,TI,range,r,G,transitions,onstates)
 	histF = steady_state(M,components.mcomponents.nT,nalleles,nhist)
 	modelOFF,modelON,histF
 end

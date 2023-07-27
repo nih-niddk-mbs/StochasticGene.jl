@@ -137,11 +137,11 @@ function offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1
     return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
 end
 
-function offonPDF(T,TA, TI, t::Vector, G::Int, transitions, onstates, method=1)
+function offonPDF(T,TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
     off = offstates(G, onstates)
     SA = ontimeCDF(t, TA, off, init_prob_SA(G, onstates, transitions), method)
     if length(off) > 1
-        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions,normalized_nullspace(T)), method)
+        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions,r), method)
     else
         SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions), method)
     end
@@ -233,7 +233,7 @@ end
 init_SI(pss,r,n,nr,nonzeros)
 Initial condition for first passage time calculation of inactive (OFF) state
 (Sum over all states with no R step introns occupied weighted by equilibrium state
-of all states with a single R step intron not)
+of all states with a single R step intron)
 """
 function init_SI(pss::Vector, r, n, nr, nonzeros)
     l = length(pss)
@@ -296,16 +296,19 @@ function init_prob_SI(G, onstates, transitions)
     return Sinit
 end
 
-function init_prob_SI(G, onstates, transitions,pss::Vector)
+function init_prob_SI(G, onstates, transitions,r::Vector)
     start = Int[]
-    for t in transitions
+    tindex = Int[]
+    for (i,t) in enumerate(transitions)
         if t[1] ∈ onstates && t[2] ∉ onstates
             push!(start, t[2])
+            push!(tindex,i)
         end
     end
     Sinit = zeros(G)
-    Sinit[start] = pss[start]
-    println(Sinit)
+    for (i,s) in enumerate(start)
+        Sinit[s] = r[tindex[i]]
+    end
     return Sinit /sum(Sinit)
 end
 
