@@ -118,28 +118,28 @@ scRNA or FISH mRNA data, and burst correlations between alleles
 """
 function metropolis_hastings(data,model,options)
     param,d = initial_proposal(model)
-    ll,predictions = loglikelihood(param,data,model)
+    ll,logpredictions = loglikelihood(param,data,model)
     maxtime = options.maxtime
     totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
     parml = param
     llml = ll
     proposalcv = model.proposal
     if options.annealsteps > 0
-        param,parml,ll,llml,predictions,temp = anneal(predictions,param,parml,ll,llml,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),maxtime*options.annealsteps/totalsteps)
+        param,parml,ll,llml,logpredictions,temp = anneal(logpredictions,param,parml,ll,llml,d,model.proposal,data,model,options.annealsteps,options.temp,options.tempanneal,time(),maxtime*options.annealsteps/totalsteps)
     end
     if options.warmupsteps > 0
-        param,parml,ll,llml,d,proposalcv,predictions = warmup(predictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
+        param,parml,ll,llml,d,proposalcv,logpredictions = warmup(logpredictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
     end
-    fit=sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
+    fit=sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
     waic = compute_waic(fit.ppd,fit.pwaic,data)
     return fit, waic
 end
 
 """
-function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+function anneal(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
 """
-function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,tempanneal,t1,maxtime)
+function anneal(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,tempanneal,t1,maxtime)
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     prior = logprior(param,model)
     step = 0
@@ -148,28 +148,28 @@ function anneal(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
     proposalcv = .02
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
-        _,predictions,param,ll,prior,d = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,tempanneal)
+        _,logpredictions,param,ll,prior,d = mhstep(logpredictions,param,ll,prior,d,proposalcv,model,data,tempanneal)
         if ll < llml
             llml,parml = ll,param
         end
         parout[:,step] = param
         tempanneal = anneal * tempanneal + annealrate * temp
     end
-    return param,parml,ll,llml,predictions,temp
+    return param,parml,ll,llml,logpredictions,temp
 end
 
 """
-warmup(predictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
+warmup(logpredictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
 """
-function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+function warmup(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     prior = logprior(param,model)
     step = 0
     accepttotal = 0
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
-        accept,predictions,param,ll,prior,d = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        accept,logpredictions,param,ll,prior,d = mhstep(logpredictions,param,ll,prior,d,proposalcv,model,data,temp)
         if ll < llml
             llml,parml = ll,param
         end
@@ -182,31 +182,31 @@ function warmup(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
         proposalcv = covparam
         println(proposalcv)
     end
-    return param,parml,ll,llml,d,proposalcv,predictions
+    return param,parml,ll,llml,d,proposalcv,logpredictions
 end
 
 """
-sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
 """
-function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+function sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
     llout = Array{Float64,1}(undef,samplesteps)
-    pwaic = (0,log.(max.(predictions,eps(Float64))),zeros(length(predictions)))
-    ppd = zeros(length(predictions))
+    pwaic = (0,log.(max.(logpredictions,eps(Float64))),zeros(length(logpredictions)))
+    ppd = zeros(length(logpredictions))
     accepttotal = 0
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     prior = logprior(param,model)
     step = 0
     while  step < samplesteps && time() - t1 < maxtime
         step += 1
-        accept,predictions,param,ll,prior,d = mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+        accept,logpredictions,param,ll,prior,d = mhstep(logpredictions,param,ll,prior,d,proposalcv,model,data,temp)
         if ll < llml
             llml,parml = ll,param
         end
         parout[:,step] = param
         llout[step] = ll
         accepttotal += accept
-        pwaic = update_waic(ppd,pwaic,predictions)
+        pwaic = update_waic(ppd,pwaic,logpredictions)
     end
     pwaic = step > 1 ? pwaic[3]/(step -1) :  pwaic[3]
     ppd /= step
@@ -214,23 +214,23 @@ function sample(predictions,param,parml,ll,llml,d,proposalcv,data,model,samplest
 end
 
 """
-mhstep(predictions,param,ll,prior,d,sigma,model,data,temp)
+mhstep(logpredictions,param,ll,prior,d,sigma,model,data,temp)
 
 ll is negative log likelihood
 """
-function mhstep(predictions,param,ll,prior,d,proposalcv,model,data,temp)
+function mhstep(logpredictions,param,ll,prior,d,proposalcv,model,data,temp)
     paramt,dt = proposal(d,proposalcv,model)
     priort = logprior(paramt,model)
-    llt,predictionst = loglikelihood(paramt,data,model)
-    mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
+    llt,logpredictionst = loglikelihood(paramt,data,model)
+    mhstep(logpredictions,logpredictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
 end
 
-function mhstep(predictions,predictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
+function mhstep(logpredictions,logpredictionst,ll,llt,param,paramt,prior,priort,d,dt,temp)
     # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
     if rand() < exp((ll + prior - llt - priort)/temp)
-        return 1,predictionst,paramt,llt,priort,dt
+        return 1,logpredictionst,paramt,llt,priort,dt
     else
-        return 0,predictions,param,ll,prior,d
+        return 0,logpredictions,param,ll,prior,d
     end
 end
 """
@@ -313,12 +313,12 @@ Metropolis-Hastings correction factor for asymmetric proposal distribution
 mhfactor(param,d,paramt,dt) = logpdf(dt,param)-logpdf(d,paramt) #pdf(dt,param)/pdf(d,paramt)
 
 """
-update_waic(ppd,pwaic,predictions)
+update_waic(ppd,pwaic,logpredictions)
 
 """
-function update_waic(ppd,pwaic,predictions)
-    ppd .+= predictions
-    var_update(pwaic,log.(max.(predictions,eps(Float64))))
+function update_waic(ppd,pwaic,logpredictions)
+    ppd .+= logpredictions
+    var_update(pwaic,log.(max.(logpredictions,eps(Float64))))
 end
 # Functions for parallel computing on multiple chains
 """
@@ -491,24 +491,20 @@ provided for each data and model type
 function loglikelihood(param,data::AbstractHistogramData,model)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
-    return crossentropy(predictions,hist),predictions
+    logpredictions = llog.(max.(predictions,eps(eltype(predictions))))
+    return crossentropy(logpredictions,hist), logpredictions
 end
 
 """
-crossentropy(predictions::Array{T},data::Array{T}) where {T}
+crossentropy(logpredictions::Array{T},data::Array{T}) where {T}
 
 compute crosscentropy between data histogram and likelilhood
 """
-function crossentropy(predictions::Array{T1},hist::Array{T2}) where {T1,T2}
-        lltot = hist' * log.(max.(predictions,eps(T1)))
+function crossentropy(logpredictions::Array{T1},hist::Array{T2}) where {T1,T2}
+        lltot = hist' * logpredictions
         isfinite(lltot) ? -lltot : Inf
 end
 
-"""
-sumloglikelihood(predictions,data)
-
-sumloglikelihood(predictions,data::RNACountData) = -sum(log.(max.(predictions[data.CountRNA],eps(T1))))
-"""
 
 """
 hist_entropy(hist)
@@ -526,18 +522,18 @@ function hist_entropy(hist::Array{Array,1})
     return l
 end
 """
-deviance(predictions,data)
+deviance(logpredictions::Array,data::AbstractHistogramData)
 deviance(fit,data,model)
 
 Deviance
 """
-# deviance(predictions::Array,data::AbstractHistogramData) = -2*datahistogram(data)'*(log.(max.(predictions,eps(Float64))) - log.(max.(datapdf(data),eps(Float64))))
-deviance(predictions::Array,data::AbstractHistogramData) = deviance(predictions,datapdf(data))
 
-# (crossentropy(predictions,datahistogram(data)) - hist_entropy(datahistogram(data)))
+deviance(logpredictions::Array,data::AbstractHistogramData) = deviance(logpredictions,datapdf(data))
+
+
 function deviance(fit::Fit,data::AbstractHistogramData,model)
-    h=likelihoodfn(fit.parml,data,model)
-    deviance(h,data)
+    predictions=likelihoodfn(fit.parml,data,model)
+    deviance(log.(max.(predictions,eps(Float64))),data)
 end
 
 function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
@@ -545,4 +541,6 @@ function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
     deviance(h,data)
 end
 
-deviance(predictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,eps(Float64)))-log.(max.(predictions,eps(Float64))))
+deviance(logpredictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,eps(Float64)))-logpredictions)
+
+# log.(max.(predictions,eps(Float64)))
