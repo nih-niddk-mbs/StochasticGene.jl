@@ -73,6 +73,7 @@ end
 struct TraceData <: AbstractTraceData
     name::String
     gene::String
+    interval::Float64
     trace::Vector{Float64}
 end
 

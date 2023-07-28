@@ -72,15 +72,42 @@ end
 
 test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
 
+function make_trace(r,transitions,G,R,onstates,interval,prob)
+
+	simulator(r,transitions,G,R,0,nhist,nalleles,onstates=onstates,traceinterval=interval)
+
+end
 
 
+function test_data(trace,interval)
+	traceData("trace","test",interval,trace)
+end
 
+function test_model(r,transitions,G,nhist,onstates,f=Normal,cv=1.)
+	components=make_components(transitions,G,r,nhist,set_indices(length(transitions)),onstates)
+	fittedparam=collect(1:length(transitions)-2)
+	decayprior = ejectprior = 1.
+	nsets = 1
+	d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)
+	GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,1,r,d,propcv,fittedparam,method,transitions,components,onstates)
+end
+function test_options(samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.)
 
+	 MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
 
+end
 
+function loglikelihood(param,data::AbstractTraceData,model)
+    loglikelihoodfn(param,data,model)
+    
+end
 
+function loglikelihood(param,data::AbstractTraceData,model)
+	r = get_rates(param,model)
+	loglikelihood(r,model.Gtransitions,data.interval,data.trace)
+end
 
-
+fit,stats,measures = run_mh(data,model,options,nchains);
 
 # function make_components_T(transitions,G,R,r)
 # 	elementsT = set_elements_T(transitions,G,R,2)

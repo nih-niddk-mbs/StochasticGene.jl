@@ -64,7 +64,7 @@ data is an AbstractExperimentalData structure
 model is a StochasticGR model with a logprior function
 model and data must have a likelihoodfn function
 """
-function run_mh(data::AbstractHistogramData,model::AbstractStochasticGRmodel,options::MHOptions)
+function run_mh(data::AbstractExperimentalData,model::AbstractStochasticGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param,model)
@@ -80,7 +80,7 @@ end
 run_mh(data,model,options,nchains)
 
 """
-function run_mh(data::AbstractHistogramData,model::AbstractStochasticGRmodel,options::MHOptions,nchains)
+function run_mh(data::AbstractExperimentalData,model::AbstractStochasticGRmodel,options::MHOptions,nchains)
     if nchains == 1
         return run_mh(data,model,options)
     else

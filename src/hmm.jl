@@ -4,6 +4,14 @@
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 
 
+function loglikelihood(r,transitions,interval,trace)
+    M,T = size(trace)
+    a,p0 = make_ap(r,transitions,interval,G)
+    b = set_b(trace)
+    l = forward_log(a, b, p0, G, T)
+    logsumexp(l[:,T])
+end
+
 
 """
 make_ap(r, transitions, interval, G, R=0, S=0)
@@ -39,11 +47,11 @@ return b = P(Observation | State)
 """
 set_b(trace) = set_b(trace, 2, size(trace)[1],prob_novar,[2])
 
-function set_b(trace, N, T,prob,params)
-    b = Matrix{Float64}(undef, N, T)
+function set_b(trace, M, T,prob,params)
+    b = Matrix{Float64}(undef, M, T)
     t = 1
     for obs in eachrow(trace)
-        for j in 1:N
+        for j in 1:M
             b[j,t] = prob(obs[2],j,params)
         end
         t += 1
@@ -51,8 +59,8 @@ function set_b(trace, N, T,prob,params)
     return b
 end
 
-function prob_novar(obs,state::Int,onstate)
-    if (obs > .5 && state ∈ onstate) || (obs < .5 && state ∉ onstate)
+function prob_nonoise(obs,state::Int,onstates)
+    if (obs > .5 && state ∈ onstates) || (obs < .5 && state ∉ onstates)
         return 1.
     else
         return 0.
@@ -218,22 +226,6 @@ function forward(a, b, p0, N, T)
     return α, C
 end
 
-function forward_loop(a, b, p0, N, T)
-    α = zeros(N,T)
-    α[:, 1] = p0 .* b[:,1]
-    for t in 2:T
-        for j in 1:N
-            for i in 1:N
-                α[j, t] += α[i, t-1] * a[i, j] * b[j,t]
-            end
-        end
-    end
-    return α
-end
-
-
-
-
 """
 forward_log(a, b, p0, N, T)
 forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
@@ -252,7 +244,6 @@ function forward_log(a, b, p0, N, T)
     forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     return ϕ
 end
-
 function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
     for t in 2:T
