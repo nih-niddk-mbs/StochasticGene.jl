@@ -3,13 +3,21 @@
 ###
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 
+function loglikelihood(param,data::AbstractTraceData,model)
+	r = get_rates(param,model)
+	loglikelihood(r,model.Gtransitions,data.interval,data.trace)
+end
 
 function loglikelihood(r, transitions, interval, trace)
-    T = length(trace)
-    a, p0 = make_ap(r, transitions, interval, G)
-    b = set_b(trace)
-    l = forward_log(a, b, p0, G, T)
-    logsumexp(l[:, T])
+    logpredictions = Array{Float64}(undef,0)
+    for t in trace
+        T = length(t)
+        a, p0 = make_ap(r, transitions, interval, G)
+        b = set_b(t)
+        l = forward_log(a, b, p0, G, T)
+        push!(logpredictions,logsumexp(l[:, T]))
+    end
+    logsumexp(logpredictions), logpredictions
 end
 
 
