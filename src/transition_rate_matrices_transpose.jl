@@ -1,3 +1,9 @@
+### transition_rate_matrices_transpose.jl
+###
+### Functions to compute the transition rate matrix for Stochastic transitions
+### Matrices are the transpose to the convention for Kolmogorov forward equations
+### i.e. reaction directions go from column to row
+###
 
 
 """

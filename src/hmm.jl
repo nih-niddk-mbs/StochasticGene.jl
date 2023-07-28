@@ -36,6 +36,7 @@ Arguments:
 - `R`: number of R states
 - `S`: number of S states
 
+Q is the transpose of the Markov process transition rate matrix
 
 """
 function make_ap(r, transitions, interval, G, R=0, S=0)
