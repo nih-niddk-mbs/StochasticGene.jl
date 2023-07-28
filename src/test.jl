@@ -75,10 +75,13 @@ end
 
 test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
 
-function make_trace(r,transitions,G,R,onstates,interval,steps)
-	trace = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)
-	for t in trace
-		t += randn()
+function make_trace(r,transitions,G,R,onstates,interval,steps,ntrials)
+	trace = Array{Array{Float64}}(undef,ntrials)
+	for i in eachindex(trace)
+		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)[1:end-1,2]
+		# for t in eachindex(trace[i])
+		# 	# trace[i][t] += rand() * .0
+		# end
 	end
 	trace
 end
@@ -102,11 +105,7 @@ function test_options(samplesteps::Int=100000,warmupsteps=0,annealsteps=0,maxtim
 
 end
 
-function loglikelihood(param,data::AbstractTraceData,model)
-	r = get_rates(param,model)
-	ll = loglikelihood(r,model.Gtransitions,data.interval,data.trace)
-	ll, ll
-end
+
 
 # fit,stats,measures = run_mh(data,model,options,nchains);
 
