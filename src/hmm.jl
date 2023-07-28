@@ -17,7 +17,7 @@ function loglikelihood(r, transitions, interval, trace)
         l = forward_log(a, b, p0, G, T)
         push!(logpredictions,logsumexp(l[:, T]))
     end
-    logsumexp(logpredictions), logpredictions
+    -logsumexp(logpredictions), -logpredictions
 end
 
 
@@ -40,7 +40,7 @@ Arguments:
 """
 function make_ap(r, transitions, interval, G, R=0, S=0)
     Q = make_mat(set_elements_T(transitions, collect(1:length(transitions))), r, G)
-    kolmogorov_forward(Q, interval)[2], normalized_nullspace(sparse(Q'))
+    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
 end
 
 """

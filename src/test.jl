@@ -55,6 +55,22 @@ julia> OFFsim,ONsim,mRNAsim,OFFchem,ONchem,mRNAchem = test(r,transitions,G,20,1,
 
 """
 
+"""
+r = [0.05,.1,.001,.001];
+transitions = ([1,2],[2,1]);
+G = 2;
+R = 0;
+onstates = [2];
+trace=make_trace(r,transitions,G,R,onstates,1.,50,10);
+interval = 1
+data = test_data(trace,interval);
+model = test_model(r,transitions,G,onstates);
+options = test_options(1000);
+@time fit,waic = metropolis_hastings(data,model,options);
+fit,stats,measures = run_mh(data,model,options);
+
+"""
+
 
 function test(r,transitions,G,nhist,nalleles,onstates,range)
 	OFF,ON,mhist = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
@@ -92,7 +108,7 @@ end
 
 function test_model(r,transitions,G,onstates,propcv=.05,f=Normal,cv=1.)
 	components=make_components(transitions,G,r,2,set_indices(length(transitions)),onstates)
-	fittedparam=collect(1:length(transitions)-2)
+	fittedparam=collect(1:length(transitions))
 	decayprior = ejectprior = 1.
 	nsets = 1
 	d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)

@@ -238,11 +238,18 @@ computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
 
 Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
 """
-function compute_waic(ppd::Array{T},pwaic::Array{T},data) where {T}
+function compute_waic(ppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
     hist = datahistogram(data)
     se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
     lppd = hist'*log.(max.(ppd,eps(T)))
     pwaic = hist'*pwaic
+    return -2*(lppd-pwaic), 2*se
+end
+
+function compute_waic(ppd::Array{T},pwaic::Array{T},data::AbstractTraceData) where {T}
+    se = var(ppd)+var(pwaic)
+    lppd = sum(ppd)
+    pwaic = sum(pwaic)
     return -2*(lppd-pwaic), 2*se
 end
 """

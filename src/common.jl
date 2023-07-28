@@ -74,13 +74,13 @@ struct TraceData <: AbstractTraceData
     name::String
     gene::String
     interval::Float64
-    trace::Vector{Float64}
+    trace::Vector
 end
 
 struct TraceRNAData{hType} <: AbstractTraceData
     name::String
     gene::String
-    trace::Vector{Float64}
+    trace::Vector
     nRNA::Int
     histRNA::hType
 end
