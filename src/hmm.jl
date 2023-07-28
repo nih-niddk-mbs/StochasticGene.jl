@@ -8,7 +8,7 @@ function loglikelihood(param,data::AbstractTraceData,model)
 	loglikelihood(r,model.Gtransitions,data.interval,data.trace)
 end
 
-function loglikelihood(r, transitions, interval, trace)
+function loglikelihood(r, G, onstates, transitions, interval, trace)
     logpredictions = Array{Float64}(undef,0)
     for t in trace
         T = length(t)
@@ -56,11 +56,11 @@ return b = P(Observation | State)
 """
 set_b(trace) = set_b(trace, 2, size(trace)[1], prob_nonoise, [2])
 
-function set_b(trace, M, T, prob, params)
-    b = Matrix{Float64}(undef, M, T)
+function set_b(trace, N, T, prob, params,onstates)
+    b = Matrix{Float64}(undef, N, T)
     t = 1
     for obs in trace
-        for j in 1:M
+        for j in 1:N
             b[j, t] = prob(obs, j, params)
         end
         t += 1
@@ -76,9 +76,16 @@ function prob_nonoise(obs, state::Int, onstates)
     end
 end
 
-function prob_Poisson(obs, state, rate)
-    d = Poisson(rate[state])
+function prob_Poisson(obs, state, lambda)
+    d = Poisson(lambda[state])
     pdf(d, obs)
+end
+
+function prob_GaussianMixture(obs,state,params)
+    MixtureModel(Normal, [params[1], params[2], (3.0, 2.5)], [0.2, 0.5, 0.3])
+
+
+
 end
 
 function set_b_og(trace)

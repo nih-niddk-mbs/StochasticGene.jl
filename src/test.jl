@@ -62,12 +62,12 @@ G = 2;
 R = 0;
 onstates = [2];
 trace=make_trace(r,transitions,G,R,onstates,1.,50,10);
-interval = 1
+interval = 5/3
 data = test_data(trace,interval);
 model = test_model(r,transitions,G,onstates);
 options = test_options(1000);
 @time fit,waic = metropolis_hastings(data,model,options);
-fit,stats,measures = run_mh(data,model,options);
+@time fit,stats,measures = run_mh(data,model,options);
 
 """
 
@@ -95,9 +95,13 @@ function make_trace(r,transitions,G,R,onstates,interval,steps,ntrials)
 	trace = Array{Array{Float64}}(undef,ntrials)
 	for i in eachindex(trace)
 		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)[1:end-1,2]
-		# for t in eachindex(trace[i])
-		# 	# trace[i][t] += rand() * .0
-		# end
+		for t in eachindex(trace[i])
+			if trace[i][t] < .5
+				trace[i][t] = 30 + 14*randn()
+			else
+				trace[i][t] = 230 + 14*randn() + 75*randn()
+			end
+		end
 	end
 	trace
 end
