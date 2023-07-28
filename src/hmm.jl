@@ -4,12 +4,12 @@
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 
 
-function loglikelihood(r,transitions,interval,trace)
-    M,T = size(trace)
-    a,p0 = make_ap(r,transitions,interval,G)
+function loglikelihood(r, transitions, interval, trace)
+    T = length(trace)
+    a, p0 = make_ap(r, transitions, interval, G)
     b = set_b(trace)
     l = forward_log(a, b, p0, G, T)
-    logsumexp(l[:,T])
+    logsumexp(l[:, T])
 end
 
 
@@ -45,37 +45,36 @@ return b = P(Observation | State)
 `T`: number of observations
 
 """
-set_b(trace) = set_b(trace, 2, size(trace)[1],prob_novar,[2])
+set_b(trace) = set_b(trace, 2, size(trace)[1], prob_nonoise, [2])
 
-function set_b(trace, M, T,prob,params)
+function set_b(trace, M, T, prob, params)
     b = Matrix{Float64}(undef, M, T)
     t = 1
-    for obs in eachrow(trace)
+    for obs in trace
         for j in 1:M
-            b[j,t] = prob(obs[2],j,params)
+            b[j, t] = prob(obs, j, params)
         end
         t += 1
     end
     return b
 end
 
-function prob_nonoise(obs,state::Int,onstates)
-    if (obs > .5 && state ∈ onstates) || (obs < .5 && state ∉ onstates)
-        return 1.
+function prob_nonoise(obs, state::Int, onstates)
+    if (obs > 0.5 && state ∈ onstates) || (obs < 0.5 && state ∉ onstates)
+        return 1.0
     else
-        return 0.
+        return 0.0
     end
 end
 
-function prob_Poisson(obs,state,rate)
+function prob_Poisson(obs, state, rate)
     d = Poisson(rate[state])
-    pdf(d,obs)
+    pdf(d, obs)
 end
 
-
 function set_b_og(trace)
-    T,N = size(trace)
-    b = Matrix{Float64}(undef, N, T)
+    T, M = size(trace)
+    b = Matrix{Float64}(undef, M, T)
     t = 1
     for obs in eachrow(trace)
         b[:, t] = [mod(obs[2] + 1, 2), obs[2]]
@@ -83,8 +82,6 @@ function set_b_og(trace)
     end
     return b
 end
-
-
 
 """
 kolmogorov_forward(Q::Matrix,interval)
@@ -144,7 +141,7 @@ function expected_transitions_log(logα, a, b, logβ, N, T)
         S = logsumexp(ξ[:, :, t])
         ξ[:, :, t] .-= S
         for i in 1:N
-             γ[i, t] = logsumexp(ξ[i, :, t])
+            γ[i, t] = logsumexp(ξ[i, :, t])
         end
     end
     return ξ, γ
@@ -172,20 +169,20 @@ function expected_a(ξ, γ, N::Int)
 end
 function expected_a_log(a, b, p0, N, T)
     α = forward_log(a, b, p0, N, T)
-    β = backward_log(a, b,  N, T)
+    β = backward_log(a, b, N, T)
     ξ, γ = expected_transitions_log(α, a, b, β, N, T)
     expected_a_log(ξ, γ, N)
 end
 
 function expected_a_log(ξ, γ, N::Int)
     a = zeros(N, N)
-    ξS = zeros(N,N)
+    ξS = zeros(N, N)
     γS = zeros(N)
     for i in 1:N
         for j in 1:N
-            ξS[i,j] = logsumexp(ξ[i,j,:])
+            ξS[i, j] = logsumexp(ξ[i, j, :])
         end
-        γS[i] = logsumexp(γ[i,:])
+        γS[i] = logsumexp(γ[i, :])
     end
     for i in 1:N, j in 1:N
         a[i, j] = ξS[i, j] - γS[i]
@@ -209,19 +206,19 @@ Ct = Prod_t 1/∑_i α[i,t]
 
 """
 function forward(a, b, p0, N, T)
-    α = zeros(N,T)
-    C = Vector{Float64}(undef,T)
-    α[:, 1] = p0 .* b[:,1]
-    C[1] = 1 / sum(α[:,1])
-    α[:,1] *= C[1]
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
     for t in 2:T
         for j in 1:N
             for i in 1:N
-                α[j, t] += α[i, t-1] * a[i, j] * b[j,t]
+                α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
             end
         end
-        C[t] = 1/ sum(α[:,t])
-        α[:,t] *= C[t]
+        C[t] = 1 / sum(α[:, t])
+        α[:, t] *= C[t]
     end
     return α, C
 end

@@ -22,6 +22,9 @@ include("transition_rate_matrices_transpose.jl")
 include("chemical_master_new.jl")
 include("simulator.jl")
 include("utilities.jl")
+include("metropolis_hastings_trace.jl")
+include("rna.jl")
+include("hmm.jl")
 
 
 
@@ -72,42 +75,40 @@ end
 
 test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
 
-function make_trace(r,transitions,G,R,onstates,interval,prob)
-
-	simulator(r,transitions,G,R,0,nhist,nalleles,onstates=onstates,traceinterval=interval)
-
+function make_trace(r,transitions,G,R,onstates,interval,steps)
+	trace = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)
+	for t in trace
+		t += randn()
+	end
+	trace
 end
-
 
 function test_data(trace,interval)
-	traceData("trace","test",interval,trace)
+	TraceData("trace","test",interval,trace)
 end
 
-function test_model(r,transitions,G,nhist,onstates,f=Normal,cv=1.)
-	components=make_components(transitions,G,r,nhist,set_indices(length(transitions)),onstates)
+function test_model(r,transitions,G,onstates,propcv=.05,f=Normal,cv=1.)
+	components=make_components(transitions,G,r,2,set_indices(length(transitions)),onstates)
 	fittedparam=collect(1:length(transitions)-2)
 	decayprior = ejectprior = 1.
 	nsets = 1
 	d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)
 	GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,1,r,d,propcv,fittedparam,method,transitions,components,onstates)
 end
-function test_options(samplesteps::Int=100000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.)
+
+function test_options(samplesteps::Int=100000,warmupsteps=0,annealsteps=0,maxtime=1000.,temp=1.,tempanneal=100.)
 
 	 MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
 
 end
 
 function loglikelihood(param,data::AbstractTraceData,model)
-    loglikelihoodfn(param,data,model)
-    
-end
-
-function loglikelihood(param,data::AbstractTraceData,model)
 	r = get_rates(param,model)
-	loglikelihood(r,model.Gtransitions,data.interval,data.trace)
+	ll = loglikelihood(r,model.Gtransitions,data.interval,data.trace)
+	ll, ll
 end
 
-fit,stats,measures = run_mh(data,model,options,nchains);
+# fit,stats,measures = run_mh(data,model,options,nchains);
 
 # function make_components_T(transitions,G,R,r)
 # 	elementsT = set_elements_T(transitions,G,R,2)
