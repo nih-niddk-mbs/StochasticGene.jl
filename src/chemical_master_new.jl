@@ -77,7 +77,7 @@ Type of model is specified by TA matrix
 """
 function ontimeCDF(tin::Vector, G::Int, R::Int, TA::AbstractMatrix, pss::Vector, method)
     t = [0; tin]
-    SAinit = init_prob_SA(pss, G - 1, R)
+    SAinit = init_SA(pss, G - 1, R)
     SA = time_evolve(t, TA, SAinit, method)
     accumulate(SA, G - 1, R)  # accumulated prob into OFF states
 end
@@ -108,7 +108,7 @@ function offtimeCDF(tin::Vector, r::Vector, G::Int, R::Int, TI::AbstractMatrix, 
     t = [0; tin]
     nonzerosI = nonzero_rows(TI)  # only keep nonzero rows to reduce singularity of matrix
     TI = TI[nonzerosI, nonzerosI]
-    SIinit = init_prob_SI(pss, r, G - 1, R, nonzerosI)
+    SIinit = init_SI(pss, r, G - 1, R, nonzerosI)
     SI = time_evolve(t, TI, SIinit, method)
     accumulate(SI, G - 1, R, nonzerosI, length(pss)) # accumulated prob into ON states
 end
@@ -139,11 +139,11 @@ end
 
 function offonPDF(T,TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
     off = offstates(G, onstates)
-    SA = ontimeCDF(t, TA, off, init_prob_SA(G, onstates, transitions), method)
+    SA = ontimeCDF(t, TA, off, init_SA(G, onstates, transitions), method)
     if length(off) > 1
-        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions,r), method)
+        SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions,r), method)
     else
-        SI = offtimeCDF(t, TI, onstates, init_prob_SI(G, onstates, transitions), method)
+        SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions), method)
     end
     return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
 end
@@ -193,12 +193,12 @@ end
 offstates(G, onstates) = setdiff(collect(1:G), onstates)
 
 """
-init_prob_SA(pss,n,nr)
+init_SA(pss,n,nr)
 Initial condition for first passage time calculation of active (ON) state
 (Sum over all states with first R step occupied weighted by equilibrium state
 of all states with all R steps not occupied with reporters)
 """
-function init_prob_SA(pss::Vector, n, nr)
+function init_SA(pss::Vector, n, nr)
     l = length(pss)
     base = findbase(l, n, nr)
     SAinit = zeros(l)
@@ -218,7 +218,7 @@ function init_prob_SA(pss::Vector, n, nr)
     end
     SAinit / sum(SAinit)
 end
-function init_prob_SA(G, onstates, transitions)
+function init_SA(G, onstates, transitions)
     start = Int[]
     for t in transitions
         if t[1] ∉ onstates && t[2] ∈ onstates
@@ -284,7 +284,7 @@ function init_SI(pss::Vector, r, n, nr, nonzeros)
 end
 
 
-function init_prob_SI(G, onstates, transitions)
+function init_SI(G::Int, onstates, transitions)
     start = Int[]
     for t in transitions
         if t[1] ∈ onstates && t[2] ∉ onstates
@@ -296,7 +296,7 @@ function init_prob_SI(G, onstates, transitions)
     return Sinit
 end
 
-function init_prob_SI(G, onstates, transitions,r::Vector)
+function init_SI(G::Int, onstates, transitions,r::Vector)
     start = Int[]
     tindex = Int[]
     for (i,t) in enumerate(transitions)

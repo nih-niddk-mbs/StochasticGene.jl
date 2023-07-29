@@ -117,7 +117,7 @@ end
 
 function test(r, transitions, G, R, nhist, nalleles, onstates, range)
     OFF, ON, mhist = simulator(r, transitions, G, R, 0, nhist, nalleles, onstates=onstates, range=range)
-    modelOFF, modelON, histF = test_cm(r, transitions, G, nhist, nalleles, onstates, range)
+    modelOFF, modelON, histF = test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
@@ -125,13 +125,17 @@ function test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
 	if R == 0
     	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
 	else
-		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions)))
+		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions),R))
 	end
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-    modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, transitions, onstates)
+	if R == 0
+		 modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, transitions, onstates)
+	else
+		modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R)
+	end
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
     modelOFF, modelON, histF
 end

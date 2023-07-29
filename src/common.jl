@@ -518,3 +518,39 @@ end
 #     end
 #     return p
 # end
+"""
+get_gamma(r,n,nr)
+G state forward and backward transition rates
+for use in transition rate matrices of Master equation
+(different from gamma used in Gillespie algorithms)
+"""
+function get_gamma(r,n)
+    gammaf = zeros(n+2)
+    gammab = zeros(n+2)
+    for i = 1:n
+        gammaf[i+1] = r[2*(i-1)+1]
+        gammab[i+1] = r[2*i]
+    end
+    return gammaf, gammab
+end
+"""
+get_nu(r,n,nr)
+R step forward transition rates
+"""
+get_nu(r,n,nr) =r[2*n+1 : 2*n+nr+1]
+"""
+get_eta(r,n,nr)
+Intron ejection rates at each R step
+"""
+# function get_eta(r,n,nr)
+#     eta = zeros(nr)
+#     if length(r) > 2*n + 2*nr
+#         eta[1] = r[2*n + 1 + nr + 1]
+#         for i = 2:nr
+#             eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
+#         end
+#     end
+#     return eta
+# end
+
+get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
