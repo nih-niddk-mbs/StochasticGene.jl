@@ -56,6 +56,9 @@ julia> OFFsim,ONsim,mRNAsim,OFFchem,ONchem,mRNAchem = test(r,transitions,G,20,1,
 """
 
 """
+eg fit model to trace
+
+
 r = [0.05,.1,.001,.001];
 transitions = ([1,2],[2,1]);
 G = 2;
@@ -73,97 +76,60 @@ options = test_options(1000);
 """
 
 
-function test(r,transitions,G,nhist,nalleles,onstates,range)
-	OFF,ON,mhist = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
-	modelOFF,modelON,histF = test_cm(r,transitions,G,nhist,nalleles,onstates,range)
-	OFF,ON,mhist,modelOFF,modelON,histF
+
+function make_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+    trace = Array{Array{Float64}}(undef, ntrials)
+    for i in eachindex(trace)
+        trace[i] = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totalsteps=steps, par=par)[1:end-1, 2]
+    end
+    trace
 end
 
-function test_cm(r,transitions,G,nhist,nalleles,onstates,range)
-	components=make_components(transitions,G,r,nhist,set_indices(length(transitions)),onstates)
-	T = make_mat_T(components.tcomponents,r)
-	TA = make_mat_TA(components.tcomponents,r)
-	TI = make_mat_TI(components.tcomponents,r)
-	M = make_mat_M(components.mcomponents,r)
-	modelOFF,modelON = offonPDF(T,TA,TI,range,r,G,transitions,onstates)
-	histF = steady_state(M,components.mcomponents.nT,nalleles,nhist)
-	modelOFF,modelON,histF
+function test_data(trace, interval)
+    TraceData("trace", "test", interval, trace)
 end
 
-test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
-
-function make_trace(r,par,transitions,G,R,onstates,interval,steps,ntrials)
-	trace = Array{Array{Float64}}(undef,ntrials)
-	for i in eachindex(trace)
-		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps,par=par)[1:end-1,2]
-	end
-	trace
+function test_model(r, par, transitions, G, onstates, propcv=0.05, f=Normal, cv=1.0)
+    components = make_components(transitions, G, r, 2, set_indices(length(transitions)), onstates)
+    ntransitions = length(transitions)
+	npars = length(par)
+    fittedparam = [1:ntransitions; ntransitions+3:ntransitions+2+npars]
+	r = vcat(r, par)
+    d = test_prior(r, fittedparam)
+    GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 end
 
-function test_data(trace,interval)
-	TraceData("trace","test",interval,trace)
-end
+function test_options(samplesteps::Int=100000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=100.0)
 
-function test_model(r,par,transitions,G,onstates,propcv=.05,f=Normal,cv=1.)
-	components=make_components(transitions,G,r,2,set_indices(length(transitions)),onstates)
-	fittedparam=collect(1:length(transitions))
-	decayprior = ejectprior = 1.
-	nsets = 1
-	d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)
-	r = vcat(r,par)
-	GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,1,r,d,propcv,fittedparam,method,transitions,components,onstates)
-end
-
-function test_options(samplesteps::Int=100000,warmupsteps=0,annealsteps=0,maxtime=1000.,temp=1.,tempanneal=100.)
-
-	 MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
+    MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
 
 end
 
+"""
+    test_prior(r,fittedparam,f=Normal)
 
+TBW
+"""
+function test_prior(r,fittedparam,f=Normal)
+	rcv = ones(length(r))
+	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
+end
 
-# fit,stats,measures = run_mh(data,model,options,nchains);
+function test(r, transitions, G, R, nhist, nalleles, onstates, range)
+    OFF, ON, mhist = simulator(r, transitions, G, 0, 0, nhist, nalleles, onstates=onstates, range=range)
+    modelOFF, modelON, histF = test_cm(r, transitions, G, nhist, nalleles, onstates, range)
+    OFF, ON, mhist, modelOFF, modelON, histF
+end
 
-# function make_components_T(transitions,G,R,r)
-# 	elementsT = set_elements_T(transitions,G,R,2)
-# 	make_components_TAI(elementsT,G,R,2)
-# end
+function test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
+    components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions)), onstates)
+    T = make_mat_T(components.tcomponents, r)
+    TA = make_mat_TA(components.tcomponents, r)
+    TI = make_mat_TI(components.tcomponents, r)
+    M = make_mat_M(components.mcomponents, r)
+    modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, transitions, onstates)
+    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
+    modelOFF, modelON, histF
+end
 
-# function mat_trm2(transitions,G,R,r)
-# 	components = make_components_T(transitions,G,R,r)
-# 	T = make_mat_T(components,r)
-# 	TA = make_mat_TA(components,r)
-# 	TI = make_mat_TI(components,r)
-# 	return T,TA,TI
-# end
-
-
-# function trm2(transitions,G,R,r,bins,nhist)
-# 		T,TA,TI = mat_trm2(transitions,G,R,r)
-#         modelOFF, modelON = offonPDF(T,TA,TI,bins,r,G-1,R,1)
-# 		components = make_components_M(transitions,G,R,nhist,r[2*G+R],2)
-#         M = make_mat_M(components,r)
-#         histF = steady_state(M,components.nT,1,nhist)
-#     	return modelOFF, modelON, histF
-# end
-
-# function sims(G,R,r,bins,nhist)
-# 	SI,SA = telegraphprefast(bins,G-1,R,r,10000000,10000,1)
-# 	hist = telegraphprefast(G-1,R,r,10000000,1e8,nhist,1)
-# 	return pdf_from_cdf(bins,SI), pdf_from_cdf(bins,SA),hist
-# end
-
-
-# function mat_GR_DT(r,n,nr)
-#     gammap,gamman = get_gamma(r,n)
-#     nu = get_nu(r,n,nr)
-#     T,B = transition_rate_mat(n,nr,gammap,gamman,nu)
-#     T,TA,TI = transition_rate_mat(T,n,nr,2)
-# 	return sparse(T),sparse(TA),sparse(TI)
-# end
-# function trm(G,R,r,bins,nhist)
-# 		T,TA,TI = mat_GR_DT(r,G-1,R)
-#         modelOFF, modelON = offonPDF(T,TA,TI,bins,r,G-1,R,1)
-#         histF = steady_state(r,G-1,R,nhist,1)
-#     return modelOFF, modelON, histF
-# end
+test_sim(r, transitions, G, R, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, 0, nhist, nalleles, onstates=onstates, range=range)
