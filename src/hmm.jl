@@ -41,8 +41,14 @@ Q is the transpose of the Markov process transition rate matrix
 
 """
 function make_logap(r, transitions, interval, G, R=0, S=0)
+    a,p0 = make_ap(r, transitions, interval, G, R, S)
+    log.(a), log.(p0)
+end
+
+
+function make_ap(r, transitions, interval, G, R=0, S=0)
     Q = make_mat(set_elements_T(transitions, collect(1:length(transitions))), r, G)
-    log.(kolmogorov_forward(sparse(Q'), interval)[2]), log.(normalized_nullspace(Q))
+    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
 end
 
 """
