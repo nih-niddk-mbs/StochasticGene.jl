@@ -39,33 +39,45 @@ Arguments:
 Q is the transpose of the Markov process transition rate matrix
 
 """
-function make_ap(r, transitions, interval, G, R=0, S=0)
+function make_logap(r, transitions, interval, G, R=0, S=0)
     Q = make_mat(set_elements_T(transitions, collect(1:length(transitions))), r, G)
-    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
+    log.(kolmogorov_forward(sparse(Q'), interval)[2]), log.(normalized_nullspace(Q))
 end
 
 """
-set_b(trace, N, T)
+set_logb(trace, N, T)
 
-return b = P(Observation | State)
+returns matrix logb = P(Observation_i | State_j)
 
-`trace`: Tx2 matrix of intensities.  Col 1 = time, Col 2 = intensity
-`N`: number of hidden states
-`T`: number of observations
+-`trace`: Tx2 matrix of intensities.  Col 1 = time, Col 2 = intensity
+-`N`: number of hidden states
+-`T`: number of observations
 
 """
-set_b(trace) = set_b(trace, 2, size(trace)[1], prob_nonoise, [2])
 
-function set_b(trace, N, T, prob, params,onstates)
-    b = Matrix{Float64}(undef, N, T)
+function set_logb(trace, N, T, prob, params,onstates)
+    d = prob(params, onstates, N)
+    logb = Matrix{Float64}(undef, N, T)
     t = 1
     for obs in trace
         for j in 1:N
-            b[j, t] = prob(obs, j, params)
+            logb[j, t] = logpdf(d[j],obs)
         end
         t += 1
     end
-    return b
+    return logb
+end
+
+function prob_GaussianMixture(par,onstates,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        if i ∈ onstates
+            d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
+        else
+            d[i] = Normal(par[1],par[2])
+        end
+    end
+    d
 end
 
 function prob_nonoise(obs, state::Int, onstates)
@@ -81,12 +93,7 @@ function prob_Poisson(obs, state, lambda)
     pdf(d, obs)
 end
 
-function prob_GaussianMixture(obs,state,params)
-    MixtureModel(Normal, [params[1], params[2], (3.0, 2.5)], [0.2, 0.5, 0.3])
 
-
-
-end
 
 function set_b_og(trace)
     T, M = size(trace)
@@ -248,10 +255,7 @@ returns log α
 (computations are numerically stable)
 
 """
-function forward_log(a, b, p0, N, T)
-    loga = log.(a)
-    logb = log.(b)
-    logp0 = log.(p0)
+function forward_log(loga, logb, logp0, N, T)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
     forward_log!(ϕ, ψ, loga, logb, logp0, N, T)

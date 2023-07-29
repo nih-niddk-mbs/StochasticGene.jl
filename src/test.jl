@@ -93,6 +93,8 @@ test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transition
 
 function make_trace(r,transitions,G,R,onstates,interval,steps,ntrials)
 	trace = Array{Array{Float64}}(undef,ntrials)
+	par = b_indices(G,R,N)
+	d = prob_GaussianMixture(par,onstates,N)
 	for i in eachindex(trace)
 		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)[1:end-1,2]
 		for t in eachindex(trace[i])

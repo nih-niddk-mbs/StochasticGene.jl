@@ -122,6 +122,9 @@ function set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base:
 			S = 0
 			base = 2
 		end
+		if S == 0
+			base = 2
+		end
 		for w=1:base^R,z=1:base^R
 			zdigits = digits(z-1,base=base,pad=R)
 			wdigits = digits(w-1,base=base,pad=R)
