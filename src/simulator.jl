@@ -64,9 +64,9 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     tau, state = initialize(r, G, R, length(reactions), nalleles)
     tIA = zeros(Float64, nalleles)
     tAI = zeros(Float64, nalleles)
-	if R > 0
-		onstates = collect(G+1:G+R)
-	end
+    if R > 0
+        onstates = collect(G+1:G+R)
+    end
     if length(range) < 1
         onoff = false
     else
@@ -81,7 +81,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     if verbose
         invactions = invert_dict(set_actions())
-		println(onstates)
+        println(onstates)
     end
     while err > tol && steps < totalsteps
         steps += 1
@@ -97,7 +97,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             ts = t
         end
         if verbose
-			println("---")
+            println("---")
             println(state)
             if R > 0
                 println(num_introns(state, allele, G, R))
@@ -105,26 +105,23 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println(tau)
             println(rindex)
             println(invactions[action])
-			println(initial,"->",final)
+            println(initial, "->", final)
         end
         m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
         if onoff
-			if R == 0
-            if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
-                ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
-            elseif initial ∉ onstates && final ∈ onstates && final > 0 # turn on
-                offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R)
+            if R == 0
+                if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
+                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+                elseif initial ∉ onstates && final ∈ onstates && final > 0 # turn on
+                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+                end
+            else
+                if (action == 6 || action == 7) && num_introns(state, allele, G, R) == 0 # turn off
+                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+                elseif action == 4 && num_introns(state, allele, G, R) == 1   ##turn on
+                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+                end
             end
-		else
-			if  (action == 6 || action == 7) &&  num_introns(state, allele, G, R) == 0 # turn off
-                # ontime!(histontdd, tIA, tAI, t, dt, ndt, state, allele, G, R); println("off")
-				firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-            elseif action == 4  && num_introns(state, allele, G, R) == 1   ##turn on
-                # offtime!(histofftdd, tIA, tAI, t, dt, ndt, state, allele, G, R); println("on")
-				firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-            end
-		end
-
         end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
@@ -181,7 +178,7 @@ For R > 0, intensity is the number of introns in the nascent mRNA
 """
 function intensity(state, onstates, G, R, d, par)
     if R == 0
-        return rand(d[sum(state[onstates] .== 1) + 1])
+        return rand(d[sum(state[onstates] .== 1)+1])
     else
         s = sum(state[G+1:G+R] .> 1)
         return (s - 1) * par[3] + rand(d[Int(s > 0)])
@@ -239,17 +236,17 @@ function num_introns(state, allele, G, R)
     d
 end
 
-function ontime!(histon, tIA, tAI, t, dt, ndt, state, allele, G, R)
-    if R == 0 || num_introns(state, allele, G, R) == 1
-        firstpassagetime!(histon, tAI, tIA, t, dt, ndt, allele)
-    end
-end
+# function ontime!(histon, tIA, tAI, t, dt, ndt, state, allele, G, R)
+#     if R == 0 || num_introns(state, allele, G, R) == 1
+#         firstpassagetime!(histon, tAI, tIA, t, dt, ndt, allele)
+#     end
+# end
 
-function offtime!(histoff, tIA, tAI, t, dt, ndt, state, allele, G, R)
-    if R == 0 || num_introns(state, allele, G, R) == 0
-        firstpassagetime!(histoff, tIA, tAI, t, dt, ndt, allele)
-    end
-end
+# function offtime!(histoff, tIA, tAI, t, dt, ndt, state, allele, G, R)
+#     if R == 0 || num_introns(state, allele, G, R) == 0
+#         firstpassagetime!(histoff, tIA, tAI, t, dt, ndt, allele)
+#     end
+# end
 
 function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     t1[allele] = t

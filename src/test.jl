@@ -89,13 +89,22 @@ function test_data(trace, interval)
     TraceData("trace", "test", interval, trace)
 end
 
-function test_model(r, par, transitions, G, onstates, propcv=0.05, f=Normal, cv=1.0)
-    components = make_components(transitions, G, r, 2, set_indices(length(transitions)), onstates)
+function test_model(r::Vector, par::Vector, transitions::Tuple, G, R, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.0)
     ntransitions = length(transitions)
 	npars = length(par)
     fittedparam = [1:ntransitions; ntransitions+3:ntransitions+2+npars]
+	fittedparam = [1:ntransitions+R; ntransitions+R+3:ntransitions+R+2+npars]
 	r = vcat(r, par)
-    d = test_prior(r, fittedparam)
+	test_model(r, transitions, G, R, fittedparam, onstates, nhist, propcv, f,cv)
+ end
+
+function test_model(r::Vector, transitions::Tuple, G, R, fittedparam, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.)
+	if R == 0
+    	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
+	else
+		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions),R))
+	end
+    d = test_prior(r, fittedparam,f,cv)
     GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 end
 
@@ -110,8 +119,8 @@ end
 
 TBW
 """
-function test_prior(r,fittedparam,f=Normal)
-	rcv = ones(length(r))
+function test_prior(r,fittedparam,f=Normal,cv = 1.)
+	rcv = cv * ones(length(r))
 	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
 end
 
