@@ -10,7 +10,7 @@ end
 
 function loglikelihood(r, G, onstates, transitions, interval, trace)
     logpredictions = Array{Float64}(undef,0)
-    b_ind = 2*G+1:2*G+5
+    b_ind = 2*G+1:2*G+4
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, transitions, interval, G)
@@ -63,7 +63,7 @@ returns matrix logb = P(Observation_i | State_j)
 """
 
 function set_logb(trace, N, params,onstates)
-    d = prob_GaussianMixture(params, onstates, N)
+    d = prob_Gaussian(params, onstates, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
@@ -80,6 +80,18 @@ function prob_GaussianMixture(par,onstates,N)
     for i in 1:N
         if i ∈ onstates
             d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
+        else
+            d[i] = Normal(par[1],par[2])
+        end
+    end
+    d
+end
+
+function prob_Gaussian(par,onstates,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        if i ∈ onstates
+            d[i] = Normal(par[3], par[4])
         else
             d[i] = Normal(par[1],par[2])
         end

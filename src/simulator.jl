@@ -26,7 +26,7 @@ struct Reaction
 end
 
 """
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75, 0.2], verbose::Bool=false)
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75], verbose::Bool=false)
 
 	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
     If trace is set to true, it returns a nascent mRNA trace
@@ -58,7 +58,7 @@ end
 
     
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, tol::Float64=1e-6, traceinterval::Float64=0.0, par=[50, 20, 250, 75, 0.2], verbose::Bool=false)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, tol::Float64=1e-6, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
@@ -135,13 +135,13 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 75, 0.5])
+function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 75])
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     i = 2
-    d = prob_GaussianMixture(par, onstates, 2)
+    d = prob_Gaussian(par, onstates, 2)
     while i < n
         while tracelog[i][1] <= frame && i < n
             state = tracelog[i][2]
