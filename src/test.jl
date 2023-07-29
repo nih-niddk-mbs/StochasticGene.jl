@@ -116,13 +116,17 @@ function test_prior(r,fittedparam,f=Normal)
 end
 
 function test(r, transitions, G, R, nhist, nalleles, onstates, range)
-    OFF, ON, mhist = simulator(r, transitions, G, 0, 0, nhist, nalleles, onstates=onstates, range=range)
+    OFF, ON, mhist = simulator(r, transitions, G, R, 0, nhist, nalleles, onstates=onstates, range=range)
     modelOFF, modelON, histF = test_cm(r, transitions, G, nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
 function test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
-    components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions)), onstates)
+	if R == 0
+    	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
+	else
+		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions)))
+	end
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
