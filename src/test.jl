@@ -61,10 +61,11 @@ transitions = ([1,2],[2,1]);
 G = 2;
 R = 0;
 onstates = [2];
-trace=make_trace(r,transitions,G,R,onstates,1.,50,10);
 interval = 5/3
+par=[30, 14, 200, 75, 0.2]
+trace=make_trace(r,transitions,G,R,onstates,interval,50,10);
 data = test_data(trace,interval);
-model = test_model(r,transitions,G,onstates);
+model = test_model(r,par,transitions,G,onstates);
 options = test_options(1000);
 @time fit,waic = metropolis_hastings(data,model,options);
 @time fit,stats,measures = run_mh(data,model,options);
@@ -91,19 +92,10 @@ end
 
 test_sim(r,transitions,G,nhist,nalleles,onstates,range) = simulator(r,transitions,G,0,0,nhist,nalleles,onstates=onstates,range=range)
 
-function make_trace(r,transitions,G,R,onstates,interval,steps,ntrials)
+function make_trace(r,par,transitions,G,R,onstates,interval,steps,ntrials)
 	trace = Array{Array{Float64}}(undef,ntrials)
-	par = b_indices(G,R,N)
-	d = prob_GaussianMixture(par,onstates,N)
 	for i in eachindex(trace)
-		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps)[1:end-1,2]
-		for t in eachindex(trace[i])
-			if trace[i][t] < .5
-				trace[i][t] = 30 + 14*randn()
-			else
-				trace[i][t] = 230 + 14*randn() + 75*randn()
-			end
-		end
+		trace[i] = simulator(r,transitions,G,R,0,1,1,onstates=onstates,traceinterval=interval,totalsteps=steps,par=par)[1:end-1,2]
 	end
 	trace
 end
@@ -112,12 +104,13 @@ function test_data(trace,interval)
 	TraceData("trace","test",interval,trace)
 end
 
-function test_model(r,transitions,G,onstates,propcv=.05,f=Normal,cv=1.)
+function test_model(r,par,transitions,G,onstates,propcv=.05,f=Normal,cv=1.)
 	components=make_components(transitions,G,r,2,set_indices(length(transitions)),onstates)
 	fittedparam=collect(1:length(transitions))
 	decayprior = ejectprior = 1.
 	nsets = 1
 	d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)
+	r = vcat(r,par)
 	GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,1,r,d,propcv,fittedparam,method,transitions,components,onstates)
 end
 

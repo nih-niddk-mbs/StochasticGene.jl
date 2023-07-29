@@ -5,16 +5,17 @@
 
 function loglikelihood(param,data::AbstractTraceData,model)
 	r = get_rates(param,model)
-	loglikelihood(r,model.Gtransitions,data.interval,data.trace)
+	loglikelihood(r,model.G,model.onstates,transitions,data.interval,data.trace)
 end
 
 function loglikelihood(r, G, onstates, transitions, interval, trace)
     logpredictions = Array{Float64}(undef,0)
+    b_ind = 2*G+1:2*G+5
     for t in trace
         T = length(t)
-        a, p0 = make_ap(r, transitions, interval, G)
-        b = set_b(t)
-        l = forward_log(a, b, p0, G, T)
+        loga, logp0 = make_logap(r, transitions, interval, G)
+        logb = set_logb(t,G,r[b_ind],onstates)
+        l = forward_log(loga, logb, logp0, G, T)
         push!(logpredictions,logsumexp(l[:, T]))
     end
     -logsumexp(logpredictions), -logpredictions
@@ -55,9 +56,9 @@ returns matrix logb = P(Observation_i | State_j)
 
 """
 
-function set_logb(trace, N, T, prob, params,onstates)
-    d = prob(params, onstates, N)
-    logb = Matrix{Float64}(undef, N, T)
+function set_logb(trace, N, params,onstates)
+    d = prob_GaussianMixture(params, onstates, N)
+    logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
         for j in 1:N
