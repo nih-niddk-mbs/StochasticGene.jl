@@ -1,20 +1,11 @@
 # simulator.jl
 # Functions to simulate Markov gene transcription models
-# Use simplified next reaction method
+# Uses simplified next reaction method
 
-"""
-	ReactionIndices
-
-
-"""
-struct ReactionIndices
-    grange::UnitRange{Int64}
-    rrange::UnitRange{Int64}
-    srange::UnitRange{Int64}
-    decay::Int
-end
 """
 	Reaction
+
+	structure for reaction type
 """
 struct Reaction
     action::Int
@@ -23,6 +14,19 @@ struct Reaction
     downstream::Vector{Int64}
     initial::Int
     final::Int
+end
+
+
+"""
+	ReactionIndices
+
+	structure for rate indices of reaction types
+"""
+struct ReactionIndices
+    grange::UnitRange{Int64}
+    rrange::UnitRange{Int64}
+    srange::UnitRange{Int64}
+    decay::Int
 end
 
 """
@@ -119,10 +123,10 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                 end
             else
-                if (action == 6 || action == 7) && num_reporters(state, allele, G, R) == 1 # turn off
-                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele); #println("off")
+                if num_reporters(state, allele, G, R) == 1 && ((action == 6 && state[G+R] == 2) || action == 7 )  # turn off
+                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele); if verbose; println("off"); end;
                 elseif action == 4 && num_reporters(state, allele, G, R) == 0   # turn on
-                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele); #println("on")
+                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele); if verbose; println("on"); end;
                 end
             end
         end
@@ -240,18 +244,6 @@ function num_reporters(state, allele, G, R)
     d
 end
 
-# function ontime!(histon, tIA, tAI, t, dt, ndt, state, allele, G, R)
-#     if R == 0 || num_reporters(state, allele, G, R) == 1
-#         firstpassagetime!(histon, tAI, tIA, t, dt, ndt, allele)
-#     end
-# end
-
-# function offtime!(histoff, tIA, tAI, t, dt, ndt, state, allele, G, R)
-#     if R == 0 || num_reporters(state, allele, G, R) == 0
-#         firstpassagetime!(histoff, tIA, tAI, t, dt, ndt, allele)
-#     end
-# end
-
 function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     t1[allele] = t
     t12 = (t - t2[allele]) / dt
@@ -272,7 +264,7 @@ end
 """
 set_reactions(Gtransitions,G,R,S,indices,actions)
 
-create a vector of Reactions
+create a vector of Reaction structures all the possible reactions
 """
 function set_reactions(Gtransitions, G, R, S)
     actions = set_actions()
@@ -323,8 +315,17 @@ function set_reactions(Gtransitions, G, R, S)
     return reactions
 end
 
+"""
+initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
+
+"""
 initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
 
+"""
+    update_error(mhist, mhist0)
+
+TBW
+"""
 update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
 """
 update_mhist!(mhist,m,dt,nhist)
@@ -338,7 +339,9 @@ function update_mhist!(mhist, m, dt, nhist)
     end
 end
 """
-initialize
+initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+
+return initial proposed next reaction times and states
 
 """
 function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
@@ -352,6 +355,8 @@ function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
 end
 """
 	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
+
+	update tau and state for G transition
 
 """
 function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
