@@ -124,17 +124,19 @@ function test_prior(r,fittedparam,f=Normal,cv = 1.)
 	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
 end
 
-function test(r, transitions, G, R, nhist, nalleles, onstates, range)
-    OFF, ON, mhist = simulator(r, transitions, G, R, 0, nhist, nalleles, onstates=onstates, range=range)
-    modelOFF, modelON, histF = test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
+function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
+    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
+    modelOFF, modelON, histF = test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
+function test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
 	if R == 0
     	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
-	else
+	elseif S==0
 		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions),R))
+	else
+		components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions),R,R))
 	end
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
@@ -149,4 +151,23 @@ function test_cm(r, transitions, G, R, nhist, nalleles, onstates, range)
     modelOFF, modelON, histF
 end
 
-test_sim(r, transitions, G, R, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, 0, nhist, nalleles, onstates=onstates, range=range)
+test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
+
+function read_tracefiles(path::String,cond::String,threshold::Float64=.98,maxlength = 1800)
+    xr = zeros(maxlength)
+    lx = 0
+    for (root,dirs,files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            if occursin(cond,target) && occursin("cellular",target)
+                # println(target)
+                x1 = readdlm(target)[:,1]
+                x1 = truncate_histogram(x1,threshold,maxlength)
+                lx = length(x1)
+                # println(lx)
+                xr[1:min(lx,maxlength)] += x1[1:min(lx,maxlength)]
+            end
+        end
+    end
+    return truncate_histogram(xr,1.0,maxlength)
+end

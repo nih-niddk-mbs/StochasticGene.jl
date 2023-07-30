@@ -26,6 +26,14 @@ struct Reaction
 end
 
 """
+	set_actions()
+
+	create dictionary for all the possible transitions
+"""
+set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
+invert_dict(D) = Dict(D[k] => k for k in keys(D))
+
+"""
 	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75], verbose::Bool=false)
 
 	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
@@ -64,9 +72,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     tau, state = initialize(r, G, R, length(reactions), nalleles)
     tIA = zeros(Float64, nalleles)
     tAI = zeros(Float64, nalleles)
-    if R > 0
-        onstates = collect(G+1:G+R)
-    end
     if length(range) < 1
         onoff = false
     else
@@ -81,7 +86,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     if verbose
         invactions = invert_dict(set_actions())
-        println(onstates)
     end
     while err > tol && steps < totalsteps
         steps += 1
@@ -100,14 +104,13 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println("---")
             println(state)
             if R > 0
-                println(num_introns(state, allele, G, R))
+                println(num_reporters(state, allele, G, R))
             end
             println(tau)
             println(rindex)
             println(invactions[action])
             println(initial, "->", final)
         end
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
         if onoff
             if R == 0
                 if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
@@ -116,13 +119,14 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                 end
             else
-                if (action == 6 || action == 7) && num_introns(state, allele, G, R) == 0 # turn off
-                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-                elseif action == 4 && num_introns(state, allele, G, R) == 1   ##turn on
-                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+                if (action == 6 || action == 7) && num_reporters(state, allele, G, R) == 1 # turn off
+                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele); #println("off")
+                elseif action == 4 && num_reporters(state, allele, G, R) == 0   # turn on
+                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele); #println("on")
                 end
             end
         end
+		m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -135,53 +139,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         make_trace(tracelog, G, R, onstates, traceinterval, par)
     else
         return mhist[1:nhist]
-    end
-end
-
-"""
-make_trace(tracelog, G, R, onstates, interval=100.0)
-
-Return array of frame times and intensities
-
-- `tracelog`: Vector if Tuples of (time,state of allele 1)
-- `interval`: Number of minutes between frames
-- `onstates`: Vector of G on states
-- `G` and `R` as defined in simulator
-
-"""
-function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 75])
-    n = length(tracelog)
-    trace = Matrix(undef, 0, 2)
-    state = tracelog[1][2]
-    frame = interval
-    i = 2
-    d = prob_Gaussian(par, onstates, 2)
-    while i < n
-        while tracelog[i][1] <= frame && i < n
-            state = tracelog[i][2]
-            i += 1
-        end
-        trace = vcat(trace, [frame intensity(state, onstates, G, R, d, par)])
-        frame += interval
-    end
-    return trace
-end
-
-"""
-intensity(state,onstates,G,R)
-
-Returns the trace intensity given the state of a system
-
-For R = 0, the intensity is occupancy of any onstates
-For R > 0, intensity is the number of introns in the nascent mRNA
-
-"""
-function intensity(state, onstates, G, R, d, par)
-    if R == 0
-        return rand(d[sum(state[onstates] .== 1)+1])
-    else
-        s = sum(state[G+1:G+R] .> 1)
-        return (s - 1) * par[3] + rand(d[Int(s > 0)])
     end
 end
 
@@ -228,7 +185,54 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
     return m
 end
 
-function num_introns(state, allele, G, R)
+"""
+make_trace(tracelog, G, R, onstates, interval=100.0)
+
+Return array of frame times and intensities
+
+- `tracelog`: Vector if Tuples of (time,state of allele 1)
+- `interval`: Number of minutes between frames
+- `onstates`: Vector of G on states
+- `G` and `R` as defined in simulator
+
+"""
+function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 75])
+    n = length(tracelog)
+    trace = Matrix(undef, 0, 2)
+    state = tracelog[1][2]
+    frame = interval
+    i = 2
+    d = prob_Gaussian(par, onstates, 2)
+    while i < n
+        while tracelog[i][1] <= frame && i < n
+            state = tracelog[i][2]
+            i += 1
+        end
+        trace = vcat(trace, [frame intensity(state, onstates, G, R, d, par)])
+        frame += interval
+    end
+    return trace
+end
+
+"""
+intensity(state,onstates,G,R)
+
+Returns the trace intensity given the state of a system
+
+For R = 0, the intensity is occupancy of any onstates
+For R > 0, intensity is the number of reporters in the nascent mRNA
+
+"""
+function intensity(state, onstates, G, R, d, par)
+    if R == 0
+        return rand(d[sum(state[onstates] .== 1)+1])
+    else
+        s = sum(state[G+1:G+R] .> 1)
+        return (s - 1) * par[3] + rand(d[Int(s > 0)])
+    end
+end
+
+function num_reporters(state, allele, G, R)
     d = 0
     for i in G+1:G+max(R, 1)
         d = d + Int(state[i, allele] > 1)
@@ -237,13 +241,13 @@ function num_introns(state, allele, G, R)
 end
 
 # function ontime!(histon, tIA, tAI, t, dt, ndt, state, allele, G, R)
-#     if R == 0 || num_introns(state, allele, G, R) == 1
+#     if R == 0 || num_reporters(state, allele, G, R) == 1
 #         firstpassagetime!(histon, tAI, tIA, t, dt, ndt, allele)
 #     end
 # end
 
 # function offtime!(histoff, tIA, tAI, t, dt, ndt, state, allele, G, R)
-#     if R == 0 || num_introns(state, allele, G, R) == 0
+#     if R == 0 || num_reporters(state, allele, G, R) == 0
 #         firstpassagetime!(histoff, tIA, tAI, t, dt, ndt, allele)
 #     end
 # end
@@ -255,15 +259,6 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
         hist[ceil(Int, t12)] += 1
     end
 end
-
-
-"""
-	set_actions()
-
-	create dictionary for all the possible transitions
-"""
-set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
-invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
 
@@ -414,7 +409,7 @@ end
 function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
     tau[index, allele] = Inf
     if S > 0 && isfinite(tau[index+S, allele])
-        tau[index+S+1, allele] = tau[index+S, allele]
+        tau[index+S+1, allele] = -log(rand()) / (r[index+S+1]) + t
         tau[index+S, allele] = Inf
     end
     if state[initial-1, allele] > 0
@@ -437,8 +432,8 @@ eject!
 function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
     m += 1
     set_decay!(tau, downstream[end], t, m, r)
-    if S > 0 && isfinite(tau[index+R, allele])
-        tau[index+R, allele] = Inf
+    if S > 0 && isfinite(tau[index+S, allele])
+        tau[index+S, allele] = Inf
     end
     if R > 0
         tau[index, allele] = Inf
@@ -456,7 +451,7 @@ splice!
 
 """
 function splice!(tau, state, index, t, m, r, allele, G, R, initial)
-    state[initial, allele] -= 1
+    state[initial, allele] = 1
     tau[index, allele] = Inf
 end
 """

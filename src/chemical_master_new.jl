@@ -240,8 +240,8 @@ function init_SI(pss::Vector, r, n, nr, nonzeros)
     base = findbase(l, n, nr)
     SIinit = zeros(l)
     nu = get_nu(r, n, nr)
-    eta = get_eta(r, n, nr)
     if base == 3
+        eta = get_eta(r, n, nr)
         # Start of OFF state by ejection
         for i in 1:n+1, z in 1:2^(nr-1)
             exons = digits(z - 1, base=2, pad=nr - 1)
@@ -268,16 +268,6 @@ function init_SI(pss::Vector, r, n, nr, nonzeros)
             apss = i + (n + 1) * decimal(vcat(zeros(Int, nr - 1), 1), 2)
             SIinit[ainit] += pss[apss] * nu[nr+1]
         end
-        # Start of OFF state by splicing
-        # for i in 1:n+1
-        #     ainit = i
-        #     for j in 1:nr
-        #         introns = zeros(Int,nr)
-        #         introns[j] = 1
-        #         apss  = i + (n+1)*decimal(introns,2)
-        #         SIinit[ainit] += pss[apss]*eta[j]
-        #     end
-        # end
     end
     SIinit = SIinit[nonzeros]
     SIinit / sum(SIinit)
