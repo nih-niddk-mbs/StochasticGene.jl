@@ -191,7 +191,19 @@ struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Comp
     onstates::Vector
 end
 
-
+struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
+    G::Int
+    R::Int
+    nalleles::Int
+    type::String
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
+end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
@@ -394,18 +406,22 @@ inverse_transform_rates(p,model::AbstractStochasticGRmodel) = exp.(p)
 get_rates(param,model)
 replace fitted rates with new values and return
 """
-function get_rates(param,model::AbstractGMmodel)
+function get_rates(param,model::AbstractStochasticGRmodel;inverse=true)
     r = get_r(model)
-    r[model.fittedparam] = inverse_transform_rates(param,model)
+    if inverse
+        r[model.fittedparam] = inverse_transform_rates(param,model)
+    else
+        r[model.fittedparam] = param
+    end
     return r
 end
-function get_rates(param,model::GRSMmodel)
-    r = get_r(model)
-    r[model.fittedparam] = exp.(param)
-    # setr(r,model)
-    return r
-end
-get_rates(param,model::GMtransientmodel) = exp.(param[1:2*model.G])
+# function get_rates(param,model::GRSMmodel)
+#     r = get_r(model)
+#     r[model.fittedparam] = inverse_transform_rates(param,model)
+#     # setr(r,model)
+#     return r
+# end
+get_rates(param,model::GMtransientmodel) = inverse_transform_rates(param[1:2*model.G],model)
 
 """
 get_rates(param,model::GMrescaledmodel)
@@ -484,6 +500,44 @@ function logprior(param,model::AbstractStochasticGRmodel)
     return p
 end
 
+"""
+get_gamma(r,n,nr)
+G state forward and backward transition rates
+for use in transition rate matrices of Master equation
+(different from gamma used in Gillespie algorithms)
+"""
+function get_gamma(r,n)
+    gammaf = zeros(n+2)
+    gammab = zeros(n+2)
+    for i = 1:n
+        gammaf[i+1] = r[2*(i-1)+1]
+        gammab[i+1] = r[2*i]
+    end
+    return gammaf, gammab
+end
+"""
+get_nu(r,n,nr)
+R step forward transition rates
+"""
+get_nu(r,n,nr) =r[2*n+1 : 2*n+nr+1]
+"""
+get_eta(r,n,nr)
+Intron ejection rates at each R step
+"""
+get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
+
+# function get_eta(r,n,nr)
+#     eta = zeros(nr)
+#     if length(r) > 2*n + 2*nr
+#         eta[1] = r[2*n + 1 + nr + 1]
+#         for i = 2:nr
+#             eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
+#         end
+#     end
+#     return eta
+# end
+
+
 # """
 # logprior(param,model::GRSModel)
 # Compute log prior using distributions in Model.rateprior
@@ -518,39 +572,3 @@ end
 #     end
 #     return p
 # end
-"""
-get_gamma(r,n,nr)
-G state forward and backward transition rates
-for use in transition rate matrices of Master equation
-(different from gamma used in Gillespie algorithms)
-"""
-function get_gamma(r,n)
-    gammaf = zeros(n+2)
-    gammab = zeros(n+2)
-    for i = 1:n
-        gammaf[i+1] = r[2*(i-1)+1]
-        gammab[i+1] = r[2*i]
-    end
-    return gammaf, gammab
-end
-"""
-get_nu(r,n,nr)
-R step forward transition rates
-"""
-get_nu(r,n,nr) =r[2*n+1 : 2*n+nr+1]
-"""
-get_eta(r,n,nr)
-Intron ejection rates at each R step
-"""
-# function get_eta(r,n,nr)
-#     eta = zeros(nr)
-#     if length(r) > 2*n + 2*nr
-#         eta[1] = r[2*n + 1 + nr + 1]
-#         for i = 2:nr
-#             eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
-#         end
-#     end
-#     return eta
-# end
-
-get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
