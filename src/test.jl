@@ -92,7 +92,6 @@ end
 function test_model(r::Vector, par::Vector, transitions::Tuple, G, R, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.0)
     ntransitions = length(transitions)
 	npars = length(par)
-    fittedparam = [1:ntransitions; ntransitions+3:ntransitions+2+npars]
 	fittedparam = [1:ntransitions+R; ntransitions+R+3:ntransitions+R+2+npars]
 	r = vcat(r, par)
 	test_model(r, transitions, G, R, fittedparam, onstates, nhist, propcv, f,cv)
@@ -153,21 +152,16 @@ end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
 
-function read_tracefiles(path::String,cond::String,threshold::Float64=.98,maxlength = 1800)
-    xr = zeros(maxlength)
-    lx = 0
+function read_tracefiles(path::String,cond::String)
+    traces = Vector[]
     for (root,dirs,files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
-            if occursin(cond,target) && occursin("cellular",target)
+            if occursin(cond,target)
                 # println(target)
-                x1 = readdlm(target)[:,1]
-                x1 = truncate_histogram(x1,threshold,maxlength)
-                lx = length(x1)
-                # println(lx)
-                xr[1:min(lx,maxlength)] += x1[1:min(lx,maxlength)]
+                push!(traces, readdlm(target)[:,3])
             end
         end
     end
-    return truncate_histogram(xr,1.0,maxlength)
+    return traces
 end
