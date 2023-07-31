@@ -26,8 +26,6 @@ include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
 
-
-
 """
 test(r,transitions,G,nhist,nalleles,onstates,range)
 
@@ -75,8 +73,6 @@ options = test_options(1000);
 
 """
 
-
-
 function make_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
@@ -98,13 +94,16 @@ function test_model(r::Vector, par::Vector, transitions::Tuple, G, R, onstates=[
  end
 
 function test_model(r::Vector, transitions::Tuple, G, R, fittedparam, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.)
+	d = test_prior(r, fittedparam,f,cv)
+	method = 1
 	if R == 0
     	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
+		components = make_components_T(transitions, G,set_indices(length(transitions)))
+		return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 	else
-		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions),R))
+		components = make_components_T(transitions, G, R, r, nhist, set_indices(length(transitions),R))
+		return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,"",r,d,propcv,fittedparam,method,transitions,components,on_states(G,R))
 	end
-    d = test_prior(r, fittedparam,f,cv)
-    GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 end
 
 function test_options(samplesteps::Int=100000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=100.0)
