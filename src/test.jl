@@ -81,7 +81,7 @@ function make_trace_vector(r, par, transitions, G, R, onstates, interval, steps,
     trace
 end
 
-simulate_trace(r,transitions,G,R,interval,steps,onstates=[G]) = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totalsteps=steps, par=r[end-3:end])[1:end-1, 2]
+simulate_trace(r,transitions,G,R,interval,totaltime,onstates=[G]) = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 function test_data(trace, interval)
     TraceData("trace", "test", interval, trace)
@@ -90,12 +90,12 @@ end
 function test_model(r::Vector, par::Vector, transitions::Tuple, G, R; onstates=[G], propcv=0.05, f=Normal, cv=1.0)
     ntransitions = length(transitions)
 	npars = length(par)
-	fittedparam = [1:ntransitions+R; ntransitions+R+3:ntransitions+R+2+npars]
+	fittedparam = [1:ntransitions+R+1; ntransitions+R+3:ntransitions+R+2+npars]
 	r = vcat(r, par)
-	test_model(r, transitions, G, R, fittedparam, onstates, propcv, f,cv)
+	test_model(r, transitions, G, R, fittedparam, onstates=onstates, propcv=propcv, f=f,cv=cv)
  end
 
-function test_model(r::Vector, transitions::Tuple, G, R, fittedparam, onstates=[G], propcv=0.05, f=Normal, cv=1.)
+function test_model(r::Vector, transitions::Tuple, G, R, fittedparam; onstates=[G], propcv=0.05, f=Normal, cv=1.)
 	d = test_prior(r, fittedparam,f,cv)
 	method = 1
 	if R == 0

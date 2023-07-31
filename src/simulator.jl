@@ -70,7 +70,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
     
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, tol::Float64=1e-6, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, totaltime::Float64 =0.,tol::Float64=1e-6, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
@@ -91,7 +91,11 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if verbose
         invactions = invert_dict(set_actions())
     end
-    while err > tol && steps < totalsteps
+	if totaltime > 0.
+		err = 0.
+		totalsteps = 0
+	end
+    while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
         t, rindex = findmin(tau)
         index = rindex[1]
@@ -123,14 +127,20 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                 end
             else
-                if num_reporters(state, allele, G, R) == 1 && ((action == 6 && state[G+R] == 2) || action == 7 )  # turn off
-                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele); if verbose; println("off"); end;
+                if num_reporters(state, allele, G, R) == 1 && ((action == 6 && state[G+R] == 2) || action == 7)  # turn off
+                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+                    if verbose
+                        println("off")
+                    end
                 elseif action == 4 && num_reporters(state, allele, G, R) == 0   # turn on
-                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele); if verbose; println("on"); end;
+                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+                    if verbose
+                        println("on")
+                    end
                 end
             end
         end
-		m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -145,6 +155,46 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         return mhist[1:nhist]
     end
 end
+
+"""
+initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+
+return initial proposed next reaction times and states
+
+"""
+function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+    tau = fill(Inf, nreactions, nalleles)
+    states = zeros(Int, G + max(R, 1), nalleles)
+    for n in 1:nalleles
+        tau[initreaction, n] = -log(rand()) / r[1]
+        states[initstate, n] = 1
+    end
+    return tau, states
+end
+"""
+initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
+
+"""
+initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
+
+"""
+    update_error(mhist, mhist0)
+
+TBW
+"""
+update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
+"""
+update_mhist!(mhist,m,dt,nhist)
+
+"""
+function update_mhist!(mhist, m, dt, nhist)
+    if m + 1 <= nhist
+        mhist[m+1] += dt
+    else
+        mhist[nhist+1] += dt
+    end
+end
+
 
 """
 update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
@@ -206,16 +256,16 @@ function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        onstates = collect(G+1:G+R)
+        onstates = on_states(G, R)
     end
     i = 2
-    d = prob_Gaussian(par, onstates, 2)
+    d = prob_Gaussian(par, onstates, G * 2^R)
     while i < n
         while tracelog[i][1] <= frame && i < n
             state = tracelog[i][2]
             i += 1
         end
-        trace = vcat(trace, [frame intensity(state, onstates, G, R, d, par)])
+        trace = vcat(trace, [frame intensity(state, G, R, d)])
         frame += interval
     end
     return trace
@@ -230,12 +280,24 @@ For R = 0, the intensity is occupancy of any onstates
 For R > 0, intensity is the number of reporters in the nascent mRNA
 
 """
-function intensity(state, onstates, G, R, d, par)
+function intensity(state,G, R, d)
+	stateindex = state_index(state,G,R)
+	max(rand(d[stateindex]),0)
+end
+
+function state_index(state, G, R, S=0)
+    Gstate = argmax(state[1:G])
     if R == 0
-        return max(rand(d[sum(state[onstates] .== 1)+1]),0)
+        return Gstate
     else
-        s = sum(state[G+1:G+R] .> 1)
-        return rand(d[Int(s > 0)+1])
+        if S > 0
+            base = 3
+            Rstates = state[G+1:end]
+        else
+            base = 2
+            Rstates = Int.(state[G+1:end] .> 0)
+        end
+        return (Gstate - 1) * base^R + decimal(Rstates, base) + 1
     end
 end
 
@@ -318,44 +380,7 @@ function set_reactions(Gtransitions, G, R, S)
     return reactions
 end
 
-"""
-initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
 
-"""
-initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
-
-"""
-    update_error(mhist, mhist0)
-
-TBW
-"""
-update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
-"""
-update_mhist!(mhist,m,dt,nhist)
-
-"""
-function update_mhist!(mhist, m, dt, nhist)
-    if m + 1 <= nhist
-        mhist[m+1] += dt
-    else
-        mhist[nhist+1] += dt
-    end
-end
-"""
-initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
-
-return initial proposed next reaction times and states
-
-"""
-function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
-    tau = fill(Inf, nreactions, nalleles)
-    states = zeros(Int, G + max(R, 1), nalleles)
-    for n in 1:nalleles
-        tau[initreaction, n] = -log(rand()) / r[1]
-        states[initstate, n] = 1
-    end
-    return tau, states
-end
 """
 	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
 
