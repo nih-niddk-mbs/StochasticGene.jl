@@ -3,14 +3,19 @@
 ###
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 
-function loglikelihood(param,data::AbstractTraceData,model)
+function loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 	r = get_rates(param,model)
-	loglikelihood(r,model.G,model.onstates,transitions,data.interval,data.trace)
+	loglikelihood(r,model.G,model.onstates,model.Gtransitions,data.interval,data.trace)
+end
+
+function loglikelihood(param,data::AbstractTraceData,model::GRMmodel)
+	r = get_rates(param,model)
+	loglikelihood(r,model.G,model*2^R,model.onstates,model.components.elements_T,data.interval,data.trace)
 end
 
 function loglikelihood(r, G, onstates, transitions, interval, trace)
     logpredictions = Array{Float64}(undef,0)
-    b_ind = 2*G+1:2*G+4
+    b_ind = b_indices(length(transitions),nbpars)
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, transitions, interval, G)
@@ -21,6 +26,29 @@ function loglikelihood(r, G, onstates, transitions, interval, trace)
     -logsumexp(logpredictions), -logpredictions
 end
 
+function loglikelihood(r, nT, onstates, transitions, interval, trace,nbpars=4)
+    logpredictions = Array{Float64}(undef,0)
+    b_ind = b_indices(length(transitions),R,nbpars)
+    for t in trace
+        T = length(t)
+        loga, logp0 = make_logap(r, elements_T, interval, nT)
+        logb = set_logb(t,G,r[end-3:end],onstates)
+        l = forward_log(loga, logb, logp0, G, T)
+        push!(logpredictions,logsumexp(l[:, T]))
+    end
+    -logsumexp(logpredictions), -logpredictions
+end
+
+b_indices(ntransitions,nbpars) = ntransitions+3:ntransitions+2+nbpars
+
+b_indices(ntransitions,R,nbpars) = ntransitions+R+3:ntransitions+R+2+nbpars
+
+function on_states(G,R)
+
+
+
+
+end
 
 """
 make_ap(r, transitions, interval, G, R=0, S=0)
@@ -40,16 +68,43 @@ Arguments:
 Q is the transpose of the Markov process transition rate matrix
 
 """
-function make_logap(r, transitions, interval, G, R=0, S=0)
-    a,p0 = make_ap(r, transitions, interval, G, R, S)
+
+
+"""
+    make_logap(r, transitions, interval, G)
+
+TBW
+"""
+function make_logap(r, transitions, interval, G)
+    a,p0 = make_ap(r, transitions, interval, G)
     log.(a), log.(p0)
 end
 
+function make_logap(r, interval, elements_T, nT)
+    a,p0 =  make_ap(r, interval, elements_T, nT )
+    log.(a), log.(p0)
+end
 
-function make_ap(r, transitions, interval, G, R=0, S=0)
+"""
+    make_ap(r, transitions, interval, G)
+
+TBW
+"""
+function make_ap(r, transitions, interval, G)
     Q = make_mat(set_elements_T(transitions, collect(1:length(transitions))), r, G)
     kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
 end
+
+"""
+    make_ap(r, transitions, interval, elements_T)
+
+TBW
+"""
+function make_ap(r, interval, elements_T, nT )
+    Q = make_mat(elements_T, r, nT)
+    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
+end
+
 
 """
 set_logb(trace, N, T)
@@ -111,8 +166,6 @@ function prob_Poisson(obs, state, lambda)
     d = Poisson(lambda[state])
     pdf(d, obs)
 end
-
-
 
 function set_b_og(trace)
     T, M = size(trace)

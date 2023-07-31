@@ -51,7 +51,6 @@ struct RNAMixedData{hType} <: AbstractRNAData{hType}
     fish::Array{Bool,1}
     histRNA::hType
 end
-
 struct RNAOnOfflData <: AbstractHistogramData
     name::String
     gene::String
@@ -59,7 +58,6 @@ struct RNAOnOfflData <: AbstractHistogramData
     OFF::Array
     ON::Array
 end
-
 struct RNALiveCellData <: AbstractHistogramData
     name::String
     gene::String
@@ -69,14 +67,12 @@ struct RNALiveCellData <: AbstractHistogramData
     OFF::Array
     ON::Array
 end
-
 struct TraceData <: AbstractTraceData
     name::String
     gene::String
     interval::Float64
     trace::Vector
 end
-
 struct TraceRNAData{hType} <: AbstractTraceData
     name::String
     gene::String
@@ -138,7 +134,6 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     components::ComponentType
     onstates::Vector
 end
-
 struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
@@ -151,7 +146,6 @@ struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,Compone
     components::ComponentType
     onstates::Vector
 end
-
 struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
@@ -164,7 +158,6 @@ struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,Compone
     components::ComponentType
     onstates::Vector
 end
-
 struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
@@ -177,7 +170,6 @@ struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Com
     components::ComponentType
     onstates::Vector
 end
-
 struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
@@ -190,7 +182,6 @@ struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Comp
     components::ComponentType
     onstates::Vector
 end
-
 struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
@@ -203,6 +194,7 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -217,6 +209,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 
 function write_model(model::AbstractModel)
