@@ -81,27 +81,28 @@ function make_trace_vector(r, par, transitions, G, R, onstates, interval, steps,
     trace
 end
 
+simulate_trace(r,transitions,G,R,interval,steps,onstates=[G]) = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totalsteps=steps, par=r[end-3:end])[1:end-1, 2]
+
 function test_data(trace, interval)
     TraceData("trace", "test", interval, trace)
 end
 
-function test_model(r::Vector, par::Vector, transitions::Tuple, G, R, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.0)
+function test_model(r::Vector, par::Vector, transitions::Tuple, G, R; onstates=[G], propcv=0.05, f=Normal, cv=1.0)
     ntransitions = length(transitions)
 	npars = length(par)
 	fittedparam = [1:ntransitions+R; ntransitions+R+3:ntransitions+R+2+npars]
 	r = vcat(r, par)
-	test_model(r, transitions, G, R, fittedparam, onstates, nhist, propcv, f,cv)
+	test_model(r, transitions, G, R, fittedparam, onstates, propcv, f,cv)
  end
 
-function test_model(r::Vector, transitions::Tuple, G, R, fittedparam, onstates=[G], nhist = 10, propcv=0.05, f=Normal, cv=1.)
+function test_model(r::Vector, transitions::Tuple, G, R, fittedparam, onstates=[G], propcv=0.05, f=Normal, cv=1.)
 	d = test_prior(r, fittedparam,f,cv)
 	method = 1
 	if R == 0
-    	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
-		components = make_components_T(transitions, G,set_indices(length(transitions)))
+		components = make_components_T(transitions, G)
 		return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 	else
-		components = make_components_T(transitions, G, R, r, nhist, set_indices(length(transitions),R))
+		components = make_components_T(transitions, G, R)
 		return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,"",r,d,propcv,fittedparam,method,transitions,components,on_states(G,R))
 	end
 end
@@ -151,16 +152,21 @@ end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
 
-function read_tracefiles(path::String,cond::String)
+function read_tracefiles(path::String,cond::String,col=3)
     traces = Vector[]
     for (root,dirs,files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
             if occursin(cond,target)
                 # println(target)
-                push!(traces, readdlm(target)[:,3])
+                push!(traces, read_tracefile(path::String,col))
             end
         end
     end
     return traces
 end
+
+read_tracefile(target::String,col=3) = readdlm(target)[:,col]
+
+
+

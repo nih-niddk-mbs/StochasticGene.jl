@@ -176,12 +176,12 @@ function warmup(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,sampl
         parout[:,step] = param
         accepttotal += accept
     end
-    covparam = cov(parout[:,1:step]')*(2.4)^2 / length(param)
-    if isposdef(covparam) && step > 1000 && accepttotal/step > .25
-        d=proposal_dist(param,covparam,model)
-        proposalcv = covparam
-        println(proposalcv)
-    end
+    # covparam = cov(parout[:,1:step]')*(2.4)^2 / length(param)
+    # if isposdef(covparam) && step > 1000 && accepttotal/step > .25
+    #     d=proposal_dist(param,covparam,model)
+    #     proposalcv = covparam
+    #     println(proposalcv)
+    # end
     return param,parml,ll,llml,d,proposalcv,logpredictions
 end
 
@@ -285,9 +285,6 @@ proposal_dist(param,cv)
 return proposal distribution specified by location and scale
 
 """
-
-proposal_scale(cv::Float64,model::AbstractStochasticGRmodel) = sqrt(log(1+cv^2))
-
 proposal_dist(param::Float64,cv::Float64,model) = Normal(param,proposal_scale(cv,model))
 function proposal_dist(param::Vector,cv::Float64,model)
     d = Vector{Normal{Float64}}(undef,0)
@@ -311,6 +308,13 @@ function proposal_dist(param::Vector,cov::Matrix,model)
         return MvNormal(param,sqrt.(abs.(diag(cov))))
     end
 end
+
+"""
+    proposal_scale(cv::Float64,model::AbstractStochasticGRmodel)
+
+return variance of normal distribution of log(parameter)
+"""
+proposal_scale(cv::Float64,model::AbstractStochasticGRmodel) = sqrt(log(1+cv^2))
 
 
 """

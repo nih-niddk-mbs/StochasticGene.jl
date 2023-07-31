@@ -205,6 +205,9 @@ function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
+    if R > 0
+        onstates = collect(G+1:G+R)
+    end
     i = 2
     d = prob_Gaussian(par, onstates, 2)
     while i < n
@@ -229,10 +232,10 @@ For R > 0, intensity is the number of reporters in the nascent mRNA
 """
 function intensity(state, onstates, G, R, d, par)
     if R == 0
-        return rand(d[sum(state[onstates] .== 1)+1])
+        return max(rand(d[sum(state[onstates] .== 1)+1]),0)
     else
         s = sum(state[G+1:G+R] .> 1)
-        return (s - 1) * par[3] + rand(d[Int(s > 0)])
+        return rand(d[Int(s > 0)+1])
     end
 end
 

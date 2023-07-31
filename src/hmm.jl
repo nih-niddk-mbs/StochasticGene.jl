@@ -5,49 +5,51 @@
 
 function loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 	r = get_rates(param,model)
-	loglikelihood(r,model.G,model.onstates,model.Gtransitions,data.interval,data.trace)
+	# loglikelihood(r,model.G,model.onstates,model.Gtransitions,data.interval,data.trace)
+    loglikelihood(r,model.G,model.onstates,model.components.elementsT,data.interval,data.trace)
 end
 
 function loglikelihood(param,data::AbstractTraceData,model::GRMmodel)
 	r = get_rates(param,model)
-	loglikelihood(r,model.G,model*2^R,model.onstates,model.components.elements_T,data.interval,data.trace)
+	loglikelihood(r,model.G*2^model.R,model.onstates,model.components.elementsT,data.interval,data.trace)
 end
 
-function loglikelihood(r, G, onstates, transitions, interval, trace)
+# function loglikelihood(r, G, onstates, transitions, interval, trace)
+#     logpredictions = Array{Float64}(undef,0)
+#     b_ind = b_indices(length(transitions))
+#     for t in trace
+#         T = length(t)
+#         loga, logp0 = make_logap(r, transitions, interval, G)
+#         logb = set_logb(t,G,r[b_ind],onstates)
+#         l = forward_log(loga, logb, logp0, G, T)
+#         push!(logpredictions,logsumexp(l[:, T]))
+#     end
+#     -logsumexp(logpredictions), -logpredictions
+# end
+
+# function loglikelihood(r, nT, onstates, transitions, interval, trace,nbpars=4)
+#     logpredictions = Array{Float64}(undef,0)
+#     b_ind = b_indices(length(transitions),R,nbpars)
+#     for t in trace
+#         T = length(t)
+#         loga, logp0 = make_logap(r, elements_T, interval, nT)
+#         logb = set_logb(t,G,r[end-3:end],onstates)
+#         l = forward_log(loga, logb, logp0, G, T)
+#         push!(logpredictions,logsumexp(l[:, T]))
+#     end
+#     -logsumexp(logpredictions), -logpredictions
+# end
+
+function loglikelihood(r, nT, onstates, elementsT, interval, trace)
     logpredictions = Array{Float64}(undef,0)
-    b_ind = b_indices(length(transitions),nbpars)
     for t in trace
         T = length(t)
-        loga, logp0 = make_logap(r, transitions, interval, G)
-        logb = set_logb(t,G,r[b_ind],onstates)
-        l = forward_log(loga, logb, logp0, G, T)
+        loga, logp0 = make_logap(r, interval,elementsT,nT)
+        logb = set_logb(t,nT,r[end-3:end],onstates)
+        l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions,logsumexp(l[:, T]))
     end
     -logsumexp(logpredictions), -logpredictions
-end
-
-function loglikelihood(r, nT, onstates, transitions, interval, trace,nbpars=4)
-    logpredictions = Array{Float64}(undef,0)
-    b_ind = b_indices(length(transitions),R,nbpars)
-    for t in trace
-        T = length(t)
-        loga, logp0 = make_logap(r, elements_T, interval, nT)
-        logb = set_logb(t,G,r[end-3:end],onstates)
-        l = forward_log(loga, logb, logp0, G, T)
-        push!(logpredictions,logsumexp(l[:, T]))
-    end
-    -logsumexp(logpredictions), -logpredictions
-end
-
-b_indices(ntransitions,nbpars) = ntransitions+3:ntransitions+2+nbpars
-
-b_indices(ntransitions,R,nbpars) = ntransitions+R+3:ntransitions+R+2+nbpars
-
-function on_states(G,R)
-
-
-
-
 end
 
 """
@@ -68,41 +70,30 @@ Arguments:
 Q is the transpose of the Markov process transition rate matrix
 
 """
-
+function make_ap(r, interval, elementsT, nT )
+    Qtr = make_mat(elementsT, r, nT) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
+end
 
 """
     make_logap(r, transitions, interval, G)
 
 TBW
 """
-function make_logap(r, transitions, interval, G)
-    a,p0 = make_ap(r, transitions, interval, G)
+function make_logap(r, interval, elementsT, nT)
+    a,p0 =  make_ap(r, interval, elementsT, nT )
     log.(a), log.(p0)
 end
 
-function make_logap(r, interval, elements_T, nT)
-    a,p0 =  make_ap(r, interval, elements_T, nT )
-    log.(a), log.(p0)
-end
 
 """
-    make_ap(r, transitions, interval, G)
+    make_ap(r, interval, elementsT, nT )
 
-TBW
+returns transition probability matrix a and steady state distribution p0
 """
-function make_ap(r, transitions, interval, G)
-    Q = make_mat(set_elements_T(transitions, collect(1:length(transitions))), r, G)
-    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
-end
-
-"""
-    make_ap(r, transitions, interval, elements_T)
-
-TBW
-"""
-function make_ap(r, interval, elements_T, nT )
-    Q = make_mat(elements_T, r, nT)
-    kolmogorov_forward(sparse(Q'), interval)[2], normalized_nullspace(Q)
+function make_ap(r, interval, elementsT, nT )
+    Qtr = make_mat(elementsT, r, nT)
+    kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
 end
 
 

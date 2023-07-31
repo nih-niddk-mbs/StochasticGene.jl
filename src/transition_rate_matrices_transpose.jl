@@ -67,6 +67,24 @@ struct Indices
     decay::Int
 end
 
+
+"""
+    on_states(G,R,base=2)
+
+return vector of on state indices for GR and GRS models
+"""
+function on_states(G,R,base=2)
+	onstates = Int[]
+	j = 1
+	for i in 1:G, z in 1:base^R
+		if any(digits(z - 1, base=base, pad=R) .== base-1)
+			push!(onstates,j)
+		end
+		j += 1
+	end
+	onstates
+end
+
 """
 set_indices(ntransitions,R,S)
 set_indices(ntransitions,R)
@@ -333,8 +351,8 @@ function make_components_T(transitions, G, R)
     TComponents(G * 2^R, elements_T, Element[], Element[])
 end
 
-function make_components_T(transitions, G, indices)
-    elementsT = set_elements_T(transitions, set_indices(length(transitions)).gamma)
+function make_components_T(transitions, G)
+    elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
     TComponents(G, elements_T, Element[], Element[])
 end
 
