@@ -3,6 +3,11 @@
 ###
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 
+"""
+    loglikelihood(param,data::AbstractTraceData,model::GMmodel)
+
+return negative loglikelihood of all traces and each trace
+"""
 function loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 	r = get_rates(param,model)
 	# loglikelihood(r,model.G,model.onstates,model.Gtransitions,data.interval,data.trace)
@@ -23,7 +28,7 @@ function loglikelihood(r, nT, onstates, elementsT, interval, trace)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions,logsumexp(l[:, T]))
     end
-    -logsumexp(logpredictions), -logpredictions
+    -sum(logpredictions), -logpredictions
 end
 
 """

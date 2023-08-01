@@ -24,7 +24,7 @@ struct Fit <: Results
     ll::Array
     parml::Array
     llml::Float64
-    ppd::Array
+    lppd::Array
     pwaic::Array
     prior::Float64
     accept::Int
@@ -131,7 +131,7 @@ function metropolis_hastings(data,model,options)
         param,parml,ll,llml,d,proposalcv,logpredictions = warmup(logpredictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
     end
     fit=sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
-    waic = compute_waic(fit.ppd,fit.pwaic,data)
+    waic = compute_waic(fit.lppd,fit.pwaic,data)
     return fit, waic
 end
 
@@ -192,7 +192,7 @@ sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,te
 function sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
     llout = Array{Float64,1}(undef,samplesteps)
     pwaic = (0,log.(max.(logpredictions,eps(Float64))),zeros(length(logpredictions)))
-    ppd = zeros(length(logpredictions))
+    lppd = fill(-Inf,length(logpredictions))
     accepttotal = 0
     parout = Array{Float64,2}(undef,length(param),samplesteps)
     prior = logprior(param,model)
@@ -206,11 +206,11 @@ function sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,sampl
         parout[:,step] = param
         llout[step] = ll
         accepttotal += accept
-        pwaic = update_waic(ppd,pwaic,logpredictions)
+        lppd, pwaic = update_waic(lppd,pwaic,logpredictions)
     end
     pwaic = step > 1 ? pwaic[3]/(step -1) :  pwaic[3]
-    ppd /= step
-    Fit(parout[:,1:step],llout[1:step],parml,llml,ppd,pwaic,prior,accepttotal,step)
+    lppd .-= log(step)
+    Fit(parout[:,1:step],llout[1:step],parml,llml,lppd,pwaic,prior,accepttotal,step)
 end
 
 """
@@ -234,31 +234,27 @@ function mhstep(logpredictions,logpredictionst,ll,llt,param,paramt,prior,priort,
     end
 end
 """
-update_waic(ppd,pwaic,logpredictions)
+update_waic(lppd,pwaic,logpredictions)
 
 """
-function update_waic(ppd,pwaic,logpredictions)
-    ppd .+= logpredictions
-    var_update(pwaic,logpredictions)
+function update_waic(lppd,pwaic,logpredictions)
+    lppd = logsumexp.(lppd,-logpredictions)
+    lppd, var_update(pwaic,-logpredictions)
 end
 """
-computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
+computewaic(lppd::Array{T},pwaic::Array{T},data) where {T}
 
-Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
+Compute WAIC and SE of WAIC using lppd and pwaic computed in metropolis_hastings()
 """
-function compute_waic(ppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
+function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
     hist = datahistogram(data)
-    se = sqrt(sum(hist)*(var(ppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
-    lppd = hist'*log.(max.(ppd,eps(T)))
-    pwaic = hist'*pwaic
-    return -2*(lppd-pwaic), 2*se
+    se = sqrt(sum(hist)*(var(lppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
+    return -2*hist'(lppd-pwaic), 2*se
 end
 
-function compute_waic(ppd::Array{T},pwaic::Array{T},data::AbstractTraceData) where {T}
-    se = var(ppd)+var(pwaic)
-    lppd = sum(ppd)
-    pwaic = sum(pwaic)
-    return -2*(lppd-pwaic), 2*se
+function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceData) where {T}
+    se = sqrt(length(lppd)*(var(lppd)+var(pwaic)))
+    return -2*sum(lppd-pwaic), 2*se
 end
 """
 aic(fit)
@@ -398,7 +394,7 @@ function merge_fit(fits::Array{Fit,1})
     param = merge_param(fits)
     ll = merge_ll(fits)
     parml,llml = find_ml(fits)
-    ppd = fits[1].ppd
+    lppd = fits[1].lppd
     pwaic = fits[1].pwaic
     prior = fits[1].prior
     accept = fits[1].accept
@@ -407,10 +403,10 @@ function merge_fit(fits::Array{Fit,1})
         accept += fits[i].accept
         total += fits[i].total
         prior += fits[i].prior
-        ppd += fits[i].ppd
+        lppd = logsumexp(llpd,fits[i].lppd)
         pwaic += fits[i].pwaic
     end
-    Fit(param,ll,parml,llml,ppd/length(fits),pwaic/length(fits),prior/length(fits),accept,total)
+    Fit(param,ll,parml,llml,lppd-log(length(fits)),pwaic/length(fits),prior/length(fits),accept,total)
 end
 
 """

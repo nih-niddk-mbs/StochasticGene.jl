@@ -92,7 +92,7 @@ function trace_model(r::Vector, par::Vector, transitions::Tuple, G, R; onstates=
 	npars = length(par)
 	fittedparam = [1:ntransitions+R+1; ntransitions+R+3:ntransitions+R+2+npars]
 	r = vcat(r, par)
-	test_model(r, transitions, G, R, fittedparam, onstates=onstates, propcv=propcv, f=f,cv=cv)
+	trace_model(r, transitions, G, R, fittedparam, onstates=onstates, propcv=propcv, f=f,cv=cv)
  end
 
 function trace_model(r::Vector, transitions::Tuple, G, R, fittedparam; onstates=[G], propcv=0.05, f=Normal, cv=1.)
