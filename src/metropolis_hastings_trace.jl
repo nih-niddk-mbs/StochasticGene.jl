@@ -234,6 +234,14 @@ function mhstep(logpredictions,logpredictionst,ll,llt,param,paramt,prior,priort,
     end
 end
 """
+update_waic(ppd,pwaic,logpredictions)
+
+"""
+function update_waic(ppd,pwaic,logpredictions)
+    ppd .+= logpredictions
+    var_update(pwaic,logpredictions)
+end
+"""
 computewaic(ppd::Array{T},pwaic::Array{T},data) where {T}
 
 Compute WAIC and SE of WAIC using ppd and pwaic computed in metropolis_hastings()
@@ -323,14 +331,7 @@ Metropolis-Hastings correction factor for asymmetric proposal distribution
 """
 mhfactor(param,d,paramt,dt) = logpdf(dt,param)-logpdf(d,paramt) #pdf(dt,param)/pdf(d,paramt)
 
-"""
-update_waic(ppd,pwaic,logpredictions)
 
-"""
-function update_waic(ppd,pwaic,logpredictions)
-    ppd .+= logpredictions
-    var_update(pwaic,log.(max.(logpredictions,eps(Float64))))
-end
 # Functions for parallel computing on multiple chains
 """
 extract_chain(sdspawn)
