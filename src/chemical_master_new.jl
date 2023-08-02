@@ -124,9 +124,9 @@ function offtimeCDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, m
 end
 
 """
-offonPDF(t::Vector,r::Vector,n::Int,nr::Int)
+offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1)
 
-ON and OFF time distributions for GRSM model
+returns OFF and ON dwell time histograms for GR(S) model
 Takes difference of ON and OFF time CDF to produce PDF
 method = 1 uses DifferentialEquations.jl
 """
@@ -137,7 +137,12 @@ function offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1
     return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
 end
 
-function offonPDF(T,TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
+"""
+    offonPDF(T,TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
+
+returns OFF and ON dwell time histograms for G model
+"""
+function offonPDF(TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
     off = offstates(G, onstates)
     SA = ontimeCDF(t, TA, off, init_SA(G, onstates, transitions), method)
     if length(off) > 1

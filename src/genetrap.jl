@@ -8,10 +8,10 @@ Fit GRSM models to live cell and smFISH data
 """
 Gene information
 """
-const genes = ["CANX";"DNAJC5";"ERRFI1";"KPNB1";"MYH9";"Rab7a";"RHOA";"RPAP3";"Sec16A";"SLC2A1"]
-const genelength = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);("RHOA", 52948);("KPNB1", 33730);("MYH9", 106741);("DNAJC5", 40930);("CANX", 32710);("Rab7a", 88663);("RPAP3", 44130)])
-const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
-const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
+# const genes = ["CANX";"DNAJC5";"ERRFI1";"KPNB1";"MYH9";"Rab7a";"RHOA";"RPAP3";"Sec16A";"SLC2A1"]
+# const genelength = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);("RHOA", 52948);("KPNB1", 33730);("MYH9", 106741);("DNAJC5", 40930);("CANX", 32710);("Rab7a", 88663);("RPAP3", 44130)])
+# const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
+# const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
 
 
 """
@@ -101,7 +101,7 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,t
         d = prior_rna(r,G,1,fittedparam,decayrate,1.)
         # components = make_components(transitions,G,data.nRNA+2,decayrate)
         components = make_components(transitions,G,r,data.nRNA+2,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2))
-        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,0.05,fittedparam,method,transitions,components)
+        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,0.05,fittedparam,method,transitions,components,onstates)
     else
         propcv=[.02*ones(2*(G-1));.02;.02*ones(R);.02*ones(R)]
         Gprior=(.01,10)
@@ -118,6 +118,39 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,t
         # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
         components = make_components(transitions,G,R,r,data.nRNA+2,type,set_indices(ntransitions,R))
         return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
+
+    end
+end
+
+function model_histograms(r,transitions,G::Int,R::Int,nalleles::Int,fittedparam,data,onstates=[G])
+    ntransitions = length(transitions)
+    method = 1
+    proposal = .05
+    if R == 0
+        decayrate = r[2*G]
+        if r == 0
+            r = setrate(G,1,decayrate,.1)[1]
+        end
+        d = prior_rna(r,G,1,fittedparam,decayrate,1.)
+        # components = make_components(transitions,G,data.nRNA+2,decayrate)
+        components = make_components(transitions,G,r,data.nRNA+2,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2),onstates)
+        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,proposal,fittedparam,method,transitions,components,onstates)
+    else
+        propcv=[.02*ones(2*(G-1));.02;.02*ones(R);.02*ones(R)]
+        Gprior=(.01,10)
+        Sprior=(.1,10)
+        Rcv=10.
+        rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
+
+        if r == 0
+            r = rm
+            println(r)
+        end
+        # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
+        d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
+        # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
+        components = make_components(transitions,G,R,r,data.nRNA+2,type,set_indices(ntransitions,R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,type,r,d,propcv,fittedparam,method,transitions,components)
 
     end
 end

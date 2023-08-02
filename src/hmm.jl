@@ -61,7 +61,7 @@ TBW
 """
 function make_logap(r, interval, elementsT, nT)
     a,p0 =  make_ap(r, interval, elementsT, nT )
-    log.(a), log.(p0)
+    log.(max.(a,0)), log.(p0)
 end
 
 

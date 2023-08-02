@@ -48,8 +48,10 @@ struct Stats
 end
 
 """
-Structure for convergence criteria
+Structure for computed measures
 
+-`waic`: Watanabe-Akaike information criterion
+-`rhat`: r-hat convergence diagnostic
 """
 struct Measures
     waic::Tuple
@@ -59,9 +61,14 @@ end
 """
 run_mh(data,model,options)
 
+returns fit, stats, measures
+
 Run Metropolis-Hastings MCMC algorithm and compute statistics of results
-data is an AbstractExperimentalData structure
-model is a StochasticGR model with a logprior function
+
+-`data`: AbstractExperimentalData structure
+-`model`: AbstractStochasticGRmodel structure with a logprior function
+-`options`: MHOptions structure
+
 model and data must have a likelihoodfn function
 """
 function run_mh(data::AbstractExperimentalData,model::AbstractStochasticGRmodel,options::MHOptions)
@@ -96,6 +103,9 @@ end
 """
 run_chains(data,model,options,nchains)
 
+returns an array of Futures
+
+Runs multiple chains of MCMC alorithm
 """
 function run_chains(data,model,options,nchains)
     sd = Array{Future,1}(undef,nchains)
@@ -107,6 +117,8 @@ end
 
 """
 metropolis_hastings(param,data,model,options)
+
+returns fit structure and waic tuple
 
 Metropolis-Hastings MCMC algorithm
 param = array of parameters to be fit
@@ -138,6 +150,10 @@ end
 """
 function anneal(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
 
+returns variables necessary to continue MCMC (param,parml,ll,llml,logpredictions,temp)
+
+runs MCMC with temperature dropping from tempanneal towards temp
+
 """
 function anneal(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,tempanneal,t1,maxtime)
     parout = Array{Float64,2}(undef,length(param),samplesteps)
@@ -160,6 +176,10 @@ end
 
 """
 warmup(logpredictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
+
+returns param,parml,ll,llml,d,proposalcv,logpredictions
+
+runs MCMC for options.warmupstep number of samples and does not collect results
 
 """
 function warmup(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
@@ -187,6 +207,10 @@ end
 
 """
 sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+
+returns Fit structure
+
+ll is negative loglikelihood
 
 """
 function sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
@@ -216,6 +240,9 @@ end
 """
 mhstep(logpredictions,param,ll,prior,d,sigma,model,data,temp)
 
+returns 1,logpredictionst,paramt,llt,priort,dt if accept
+        1,logpredictionst,paramt,llt,priort,dt if not
+
 ll is negative log likelihood
 """
 function mhstep(logpredictions,param,ll,prior,d,proposalcv,model,data,temp)
@@ -236,6 +263,8 @@ end
 """
 update_waic(lppd,pwaic,logpredictions)
 
+returns llpd and pwaic, which are the running sum and variance of -logpredictions
+(- sign needed because logpredictions is negative loglikelihood)
 """
 function update_waic(lppd,pwaic,logpredictions)
     lppd = logsumexp.(lppd,-logpredictions)
@@ -244,28 +273,34 @@ end
 """
 computewaic(lppd::Array{T},pwaic::Array{T},data) where {T}
 
-Compute WAIC and SE of WAIC using lppd and pwaic computed in metropolis_hastings()
+returns  WAIC and SE of WAIC 
+
+using lppd and pwaic computed in metropolis_hastings()
 """
 function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
     hist = datahistogram(data)
-    se = sqrt(sum(hist)*(var(lppd,weights(hist),corrected=false)+var(pwaic,weights(hist),corrected=false)))
-    return -2*hist'(lppd-pwaic), 2*se
+    se = sqrt(sum(hist)*var(lppd-pwaic,weights(hist),corrected=false))
+    return -2*hist'*(lppd-pwaic), 2*se
 end
 
 function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceData) where {T}
-    se = sqrt(length(lppd)*(var(lppd)+var(pwaic)))
+    se = sqrt(length(lppd))*std(lppd-pwaic)
     return -2*sum(lppd-pwaic), 2*se
 end
 """
-aic(fit)
+aic(fit::Fit)
+aic(nparams::Int,llml)
 
-AIC
+-`llml`: negative of maximum loglikelihood
+
+returns AIC
 """
 aic(fit::Fit) = 2*length(fit.parml) + 2*fit.llml
 aic(nparams::Int,llml) = 2*nparams + 2*llml
 
 """
 initial_proposal(model)
+
 return parameters to be fitted and an initial proposal distribution
 
 """
@@ -276,6 +311,7 @@ function initial_proposal(model)
 end
 """
 proposal(d,cv)
+
 return rand(d) and proposal distribution for cv (vector or covariance)
 
 """
@@ -286,6 +322,7 @@ end
 
 """
 proposal_dist(param,cv)
+
 return proposal distribution specified by location and scale
 
 """
@@ -314,7 +351,7 @@ function proposal_dist(param::Vector,cov::Matrix,model)
 end
 
 """
-    proposal_scale(cv::Float64,model::AbstractStochasticGRmodel)
+proposal_scale(cv::Float64,model::AbstractStochasticGRmodel)
 
 return variance of normal distribution of log(parameter)
 """
@@ -332,6 +369,7 @@ mhfactor(param,d,paramt,dt) = logpdf(dt,param)-logpdf(d,paramt) #pdf(dt,param)/p
 """
 extract_chain(sdspawn)
 
+returns array of tuples of fetched futures from multiple chains
 """
 function extract_chain(sdspawn)
     chain = Array{Tuple,1}(undef,length(sdspawn))
@@ -342,6 +380,8 @@ function extract_chain(sdspawn)
 end
 """
 collate_fit(chain)
+
+returns array of Fit structures from multiple chains
 collate fits from multiple metropolis_hastings chains
 into and array of Fit structures
 
@@ -355,8 +395,9 @@ function collate_fit(chain)
 end
 """
 collate_waic(chain)
-collate waic results from multiple chains
-into a 2D array
+
+return 2D array of collated waic from multiple chains
+
 """
 function collate_waic(chain)
     waic = Array{Float64,2}(undef,length(chain),3)
@@ -368,11 +409,23 @@ function collate_waic(chain)
     return waic
     # mean(waic,dims=1),median(waic,dims=1), mad(waic[:,1],normalize=false),waic
 end
+
+
+"""
+    pooled_waic(chain)
+
+returns pooled waic and se from multiple chains
+"""
 function pooled_waic(chain)
     waic = collate_waic(chain)
     return pooled_mean(waic[:,1],waic[:,3]), pooled_std(waic[:,2],waic[:,3])
 end
 
+"""
+    merge_param(fits::Vector)
+
+returns pooled params from multiple chains
+"""
 function merge_param(fits::Vector)
     param = fits[1].param
     for i in 2:length(fits)
@@ -380,6 +433,11 @@ function merge_param(fits::Vector)
     end
     return param
 end
+"""
+    merge_ll(fits::Vector)
+
+returns pooled negative loglikelihood from multiple chains
+"""
 function merge_ll(fits::Vector)
     ll = fits[1].ll
     for i in 2:length(fits)
@@ -388,6 +446,12 @@ function merge_ll(fits::Vector)
     return ll
 end
 
+"""
+    merge_fit(chain::Array{Tuple,1})
+    merge_fit(fits::Array{Fit,1})
+
+returns Fit structure merged from multiple runs
+"""
 merge_fit(chain::Array{Tuple,1}) = merge_fit(collate_fit(chain))
 
 function merge_fit(fits::Array{Fit,1})
@@ -411,6 +475,8 @@ end
 
 """
 compute_stats(fit::Fit)
+
+returns Stats structure
 
 Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
 """
@@ -437,7 +503,7 @@ compute_rhat(chain::Array{Tuple,1})
 compute_rhat(fits::Array{Fit,1})
 compute_rhat(params::Vector{Array})
 
-
+returns r-hat measure
 """
 compute_rhat(chain::Array{Tuple,1}) = compute_rhat(collate_fit(chain))
 
@@ -467,20 +533,20 @@ function compute_rhat(params::Vector{Array})
     sqrt.((N-1)/N .+ B./W/N)
 end
 
-
 """
  chainlength(params)
 
+ returns integer half of the minimum number of MCMC runs
 """
 function chainlength(params)
     N = minimum(size.(params,2))
-    N = iseven(N) ? N : N-1
     div(N,2)
 end
 
 """
 find_ml(fits)
-find the maximum likelihood out of multiple chains
+
+returns the negative maximum likelihood out of all the chains
 """
 function find_ml(fits::Array)
     llml = Array{Float64,1}(undef,length(fits))
@@ -493,14 +559,15 @@ end
 """
 loglikelihood(param,data,model)
 
+returns negative loglikelihood of all data and vector of the prediction histogram negative loglikelihood
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
 function loglikelihood(param,data::AbstractHistogramData,model)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
-    logpredictions = llog.(max.(predictions,eps(eltype(predictions))))
-    return crossentropy(logpredictions,hist), logpredictions
+    logpredictions = log.(max.(predictions,0))
+    return crossentropy(logpredictions,hist), -logpredictions
 end
 
 """
@@ -512,15 +579,13 @@ function crossentropy(logpredictions::Array{T1},hist::Array{T2}) where {T1,T2}
         lltot = hist' * logpredictions
         isfinite(lltot) ? -lltot : Inf
 end
-
-
 """
 hist_entropy(hist)
 
-Compute entropy of a normalized histogram
+returns entropy of a normalized histogram
 """
 function hist_entropy(hist::Array{Float64,1})
-    -hist' * (log.(normalize_histogram(max.(hist,eps(Float64)))))
+    -hist' * log.(normalize_histogram(max.(hist,0)))
 end
 function hist_entropy(hist::Array{Array,1})
     l = 0
@@ -533,7 +598,9 @@ end
 deviance(logpredictions::Array,data::AbstractHistogramData)
 deviance(fit,data,model)
 
-Deviance
+returns Deviance
+
+use log of data histogram as loglikelihood of over fit model
 """
 
 deviance(logpredictions::Array,data::AbstractHistogramData) = deviance(logpredictions,datapdf(data))
@@ -541,7 +608,7 @@ deviance(logpredictions::Array,data::AbstractHistogramData) = deviance(logpredic
 
 function deviance(fit::Fit,data::AbstractHistogramData,model)
     predictions=likelihoodfn(fit.parml,data,model)
-    deviance(log.(max.(predictions,eps(Float64))),data)
+    deviance(log.(max.(predictions,0)),data)
 end
 
 function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
@@ -549,6 +616,4 @@ function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
     deviance(h,data)
 end
 
-deviance(logpredictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,eps(Float64)))-logpredictions)
-
-# log.(max.(predictions,eps(Float64)))
+deviance(logpredictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,0))-logpredictions)

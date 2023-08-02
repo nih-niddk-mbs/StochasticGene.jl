@@ -371,7 +371,7 @@ function likelihoodtuple(r,data::RNALiveCellData,model::GMmodel)
         T = make_mat_T(model.components.tcomponents,r)
         TA = make_mat_TA(model.components.tcomponents,r)
         TI = make_mat_TI(model.components.tcomponents,r)
-        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.method,SIinit(r,model))
+        modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.onstates)
         M = make_mat_M(model.components.mcomponents,r)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     return modelOFF, modelON, histF
