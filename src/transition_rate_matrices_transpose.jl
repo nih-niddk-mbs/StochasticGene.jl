@@ -85,6 +85,19 @@ function on_states(G,R,base=2)
 	onstates
 end
 
+function on_states(G,R,base=2)
+	onstates = Tuple[]
+	j = 1
+	for i in 1:G, z in 1:base^R
+		n = sum(digits(z - 1, base=base, pad=R) .== base-1)
+		if n > 0
+			push!(onstates,(j,n))
+		end
+		j += 1
+	end
+	onstates
+end
+
 """
 set_indices(ntransitions,R,S)
 set_indices(ntransitions,R)

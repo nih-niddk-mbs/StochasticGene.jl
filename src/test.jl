@@ -87,11 +87,10 @@ function trace_data(trace, interval)
     TraceData("trace", "test", interval, trace)
 end
 
-function trace_model(r::Vector, par::Vector, transitions::Tuple, G, R; onstates=[G], propcv=0.05, f=Normal, cv=1.0)
+function trace_model(r::Vector, transitions::Tuple, G, R; onstates=[G], propcv=0.05, f=Normal, cv=1.0)
     ntransitions = length(transitions)
 	npars = length(par)
 	fittedparam = [1:ntransitions+R+1; ntransitions+R+3:ntransitions+R+2+npars]
-	r = vcat(r, par)
 	trace_model(r, transitions, G, R, fittedparam, onstates=onstates, propcv=propcv, f=f,cv=cv)
  end
 
@@ -207,7 +206,7 @@ function fit_histograms_test()
 	nalleles = 2
 	onstates = [2]
 	bins = collect(0:2:200)
-	r = 
+	r = [0.02, 0.1, 0.5, 0.2, 0.01]
 
 
 
@@ -219,6 +218,9 @@ function fit_histograms_test()
 end
 
 function fit_trace_test()
+    r = [0.02, 0.1, 0.5, 0.2, 0.01]
+
+  
 
 
 
