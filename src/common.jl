@@ -273,15 +273,15 @@ function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {
     end
     return hconcat
 end
-function likelihoodfn(param::Vector,data::RNALiveCellData,model::GRSMmodel)
+function likelihoodfn(param::Vector,data::RNALiveCellData,model)
     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
     return [modelOFF;modelON;histF]
 end
 
-function likelihoodfn(param::Vector,data::RNALiveCellData,model::GMmodel)
-    modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
-    return [modelOFF;modelON;histF]
-end
+# function likelihoodfn(param::Vector,data::RNALiveCellData,model::GMmodel)
+#     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
+#     return [modelOFF;modelON;histF]
+# end
 
 likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) =
     steady_state(get_rates(param,model),model.G,model.R,data.nRNA,model.nalleles)
@@ -351,7 +351,7 @@ function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     return h
 end
 
-function likelihoodtuple(rin,data::RNALiveCellData,model::GRSMmodel)
+function likelihoodtuple(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         r = copy(rin)
         if model.type == "offdecay"
             r[end-1] *= survival_fraction(nu,eta,model.R)

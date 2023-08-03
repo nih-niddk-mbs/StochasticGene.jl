@@ -184,7 +184,7 @@ make model structure
 
 """
 
-function model_rna(data,gene::String,cell::String,G::Int,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate::Float64,fprior=Normal,priorcv=10.,verbose=true)
+function model_rna(data,gene::String,cell::String,G::Int,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate::Float64,fprior=Normal,priorcv=10.,onstates=[G],verbose=true)
     if decayrate < 0
         decayrate = get_decay(gene,cell,root)
     end
@@ -206,20 +206,20 @@ function model_rna(data,gene::String,cell::String,G::Int,cv,fittedparam,fixedeff
         ejectrate = yieldprior
     end
     r = getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets,root,verbose)
-    model = model_rna(data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,transitions,decayrate,ejectrate,fprior,priorcv)
+    model = model_rna(data,r,G,nalleles,nsets,cv,fittedparam,fixedeffects,transitions,decayrate,ejectrate,fprior,priorcv,onstates)
     return model
 end
 
-function model_rna(data,r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam,fixedeffects,transitions,decayprior,ejectprior,f=Normal,cv=10.)
+function model_rna(data,r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedparam,fixedeffects,transitions,decayprior,ejectprior,f=Normal,cv=10.,onstates=[G])
     d = prior_rna(r,G,nsets,fittedparam,decayprior,ejectprior,f,cv)
-    model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions)
+    model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions,onstates)
 end
-function model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions,method=0)
+function model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions,method=0,onstates=[G])
     components = make_components_M(transitions,G,data.nRNA+2,r[end])
     if length(fixedeffects) > 0
-        model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method,transitions,components)
+        model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method,transitions,components,onstates)
     else
-        model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,propcv,fittedparam,method,transitions,components)
+        model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,propcv,fittedparam,method,transitions,components,onstates)
     end
     return model
 end

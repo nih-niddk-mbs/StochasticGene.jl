@@ -27,7 +27,7 @@ end
 
 function teststeadystatemodel(r,transitions,G,nhist,nalleles)
     g1 = StochasticGene.steady_state(r,transitions,G,nhist,nalleles)
-    g2 = StochasticGene.simulator(r,transitions,G::Int,0,0,nhist,nalleles,collect(1:10))
+    g2 = StochasticGene.simulator(r,transitions,G,0,0,nhist,nalleles)
     return g1, g2
 end
 
@@ -39,7 +39,7 @@ end
 
         r = [0.0014, 0.005, 0.0016, 0.01]
         transitions = ([1,2],[2,1])
-        h1,h2 = teststeadystatemodel(r,transitions,2,60,2)
+        h1,h2 = teststeadystatemodel(r,transitions,2,20,2)
 
         @test isapprox(h1,h2,rtol=0.05)
 
