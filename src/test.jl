@@ -123,6 +123,25 @@ function trace_prior(r,fittedparam,f=Normal,cv = 1.)
 	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
 end
 
+function read_tracefiles(path::String,cond::String,col=3)
+    traces = Vector[]
+    for (root,dirs,files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            if occursin(cond,target)
+                # println(target)
+                push!(traces, read_tracefile(target,col))
+            end
+        end
+    end
+    return traces
+end
+
+read_tracefile(target::String,col=3) = readdlm(target)[:,col]
+
+
+
+
 function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
     modelOFF, modelON, histF = test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
@@ -152,21 +171,76 @@ end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
 
-function read_tracefiles(path::String,cond::String,col=3)
-    traces = Vector[]
-    for (root,dirs,files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin(cond,target)
-                # println(target)
-                push!(traces, read_tracefile(target,col))
-            end
-        end
-    end
-    return traces
+
+
+
+function fit_rna_test(root=".")
+    G = 2
+    gene = "CENPL"
+    cell = "HCT116"
+    fish = false
+    nalleles = 2
+    nsets = 1
+    propcv = 0.05
+    fittedparam = [1,2,3]
+    fixedeffects = ()
+    transitions = ([1,2],[2,1])
+    ejectprior = 0.05
+    r = [0.01, 0.1, 1.0, 0.01006327034802035]
+    decayrate = 0.01006327034802035
+    datacond = "MOCK"
+    datafolder = "data/HCT116_testdata"
+    label = "scRNA_test"
+    data = data_rna(gene,datacond,datafolder,fish,label)
+    model = model_rna(data,r,G,nalleles,nsets,propcv,fittedparam,fixedeffects,transitions,decayrate,ejectprior)
+    options = MHOptions(100000,0,0,30.,1.,100.)
+    fit,stats,measures = run_mh(data,model,options,1);
+    return stats.meanparam, fit.llml, model
 end
 
-read_tracefile(target::String,col=3) = readdlm(target)[:,col]
+
+function fit_histograms_test()
+	G = 2
+	R = 1
+	S = 0
+	nhist = 20
+	nalleles = 2
+	onstates = [2]
+	bins = collect(0:2:200)
+	r = 
 
 
 
+	OFF,ON,mhist = test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
+	data = RNALiveCellData("test","test",nhist,mhist,bins[2:end],OFF[1:end-1],ON[1:end-1])
+	model = model_histogram(r,transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
+	options = MHOptions(10000, 0, 0, 10000., 1., 1.)
+	fit,stats,measures = run_mh(data,model,options);
+end
+
+function fit_trace_test()
+
+
+
+end
+
+
+function model_histogram(r,transitions,G::Int,R::Int,S::Int,nalleles::Int,fittedparam,data,onstates=[G],propcv = .05,cv=1.)
+    ntransitions = length(transitions)
+    method = 1
+    if R == 0
+        decayrate = r[2*G]
+        d = prior_rna(r,G,1,fittedparam,decayrate,1.)
+        components = make_components(transitions,G,r,data.nRNA,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2),onstates)
+        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,proposal,fittedparam,method,transitions,components,onstates)
+	elseif S == 0
+        if typeof(cv) <: Real
+            rcv = fill(cv,length(r))
+        end
+        d = distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
+        components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components,on_states(G,R))
+	else
+
+    end
+end
