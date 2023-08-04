@@ -100,11 +100,13 @@ function set_logb(trace, N, params,onstates)
     return logb
 end
 
-function prob_GaussianMixture(par,onstates,N)
+
+
+function prob_Gaussian(par,onstates,N)
     d = Array{Distribution{Univariate, Continuous}}(undef,N)
     for i in 1:N
         if i ∈ onstates
-            d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
+            d[i] = Normal(par[3], par[4])
         else
             d[i] = Normal(par[1],par[2])
         end
@@ -112,10 +114,11 @@ function prob_GaussianMixture(par,onstates,N)
     d
 end
 
-function prob_Gaussian(par,onstates,N)
+function prob_Gaussian(par,onstates,N,)
     d = Array{Distribution{Univariate, Continuous}}(undef,N)
     for i in 1:N
         if i ∈ onstates
+            n = sum(digits(mod(i,base^R), base=base, pad=R) .== base-1)
             d[i] = Normal(par[3], par[4])
         else
             d[i] = Normal(par[1],par[2])
@@ -130,6 +133,18 @@ function prob_nonoise(obs, state::Int, onstates)
     else
         return 0.0
     end
+end
+
+function prob_GaussianMixture(par,onstates,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        if i ∈ onstates
+            d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
+        else
+            d[i] = Normal(par[1],par[2])
+        end
+    end
+    d
 end
 
 function prob_Poisson(obs, state, lambda)
