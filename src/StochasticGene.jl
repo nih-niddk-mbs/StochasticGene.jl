@@ -40,7 +40,7 @@ export
 
 ### Source files
 
-# Type system
+# Type system and common functions
 include("common.jl")
 
 # commonly used functions
@@ -58,6 +58,9 @@ include("chemical_master.jl")
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_matrices.jl")
 
+# functions for fitting time series traces
+include("trace.jl")
+
 # Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
 include("simulator.jl")
 include("telegraphsplice.jl")
@@ -68,21 +71,14 @@ include("fit.jl")
 # functions specific for Gene Trap experiments of Wan et al.
 include("genetrap.jl")
 
-# functions for scRNA and FISH experiments
+# functions for scRNA and FISH experiments of Trzaskoma et al.
 include("rna.jl")
 
-# functions for post fit analysis and plotting
+# functions for post fit analysis and plots
 include("analysis.jl")
 
 # functions for use on NIH cluster Biowulf
 include("biowulf.jl")
-
-
-# include("/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/code/GillespieSimulatorExInt.jl")
-# include("scRNA.jl")
-# include("tff1.jl")
-
-
 
 """
 A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.

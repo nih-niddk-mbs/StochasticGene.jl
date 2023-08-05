@@ -150,7 +150,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if onoff
         return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
     elseif traceinterval > 0.0
-        make_trace(tracelog, G, R, onstates, traceinterval, par)
+        make_trace(tracelog, G, R, S, onstates, traceinterval, par)
     else
         return mhist[1:nhist]
     end

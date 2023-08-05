@@ -25,6 +25,7 @@ include("utilities.jl")
 include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
+include("trace.jl")
 
 """
 test(r,transitions,G,nhist,nalleles,onstates,range)
@@ -73,74 +74,6 @@ options = test_options(1000);
 
 """
 
-function simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
-    trace = Array{Array{Float64}}(undef, ntrials)
-    for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totalsteps=steps, par=par)[1:end-1, 2]
-    end
-    trace
-end
-
-simulate_trace(r,transitions,G,R,interval,totaltime,onstates=[G]) = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
-
-function trace_data(trace, interval)
-    TraceData("trace", "test", interval, trace)
-end
-
-function trace_model(r::Vector, transitions::Tuple, G, R; onstates=[G], propcv=0.05, f=Normal, cv=1.0)
-    ntransitions = length(transitions)
-	npars = length(par)
-	fittedparam = [1:ntransitions+R+1; ntransitions+R+3:ntransitions+R+2+npars]
-	trace_model(r, transitions, G, R, fittedparam, onstates=onstates, propcv=propcv, f=f,cv=cv)
- end
-
-function trace_model(r::Vector, transitions::Tuple, G, R, fittedparam; onstates=[G], propcv=0.05, f=Normal, cv=1.)
-	d = trace_prior(r, fittedparam,f,cv)
-	method = 1
-	if R == 0
-		components = make_components_T(transitions, G)
-		return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
-	else
-		components = make_components_T(transitions, G, R)
-		return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,"",r,d,propcv,fittedparam,method,transitions,components,on_states(G,R))
-	end
-end
-
-function trace_options(samplesteps::Int=100000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=100.0)
-
-    MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-
-end
-
-"""
-    trace_prior(r,fittedparam,f=Normal)
-
-TBW
-"""
-function trace_prior(r,fittedparam,f=Normal,cv = 1.)
-	rcv = cv * ones(length(r))
-	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
-end
-
-function read_tracefiles(path::String,cond::String,col=3)
-    traces = Vector[]
-    for (root,dirs,files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin(cond,target)
-                # println(target)
-                push!(traces, read_tracefile(target,col))
-            end
-        end
-    end
-    return traces
-end
-
-read_tracefile(target::String,col=3) = readdlm(target)[:,col]
-
-
-
-
 function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
     modelOFF, modelON, histF = test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
@@ -169,9 +102,6 @@ function test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
 end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
-
-
-
 
 function fit_rna_test(root=".")
     G = 2
@@ -205,25 +135,38 @@ function fit_histograms_test()
 	nhist = 20
 	nalleles = 2
 	onstates = [2]
-	bins = collect(0:2:200)
+	bins = collect(0:2:200.)
 	r = [0.02, 0.1, 0.5, 0.2, 0.01]
-
-
-
+	transitions =  ([1,2],[2,1])
+	fittedparam = [1,2,3,4]
+	propcv = 0.05
+	cv = 10.
 	OFF,ON,mhist = test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
 	data = RNALiveCellData("test","test",nhist,mhist,bins[2:end],OFF[1:end-1],ON[1:end-1])
-	model = model_histogram(r,transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
-	options = MHOptions(10000, 0, 0, 10000., 1., 1.)
+	model = model_histogram([.1,.1,.1,.1,.01],transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
+	options = MHOptions(10000, 0, 0, 0, 1., 1.)
 	fit,stats,measures = run_mh(data,model,options);
 end
 
 function fit_trace_test()
-    r = [0.02, 0.1, 0.5, 0.2, 0.01]
-
-  
-
-
-
+	G = 2
+	R = 1
+	S = 0
+	onstates = [2]
+	r = [0.02, 0.1, 0.5, 0.2, .01]
+	par = [30,10,200,65]
+	transitions =  ([1,2],[2,1])
+	steps = 1000
+	ntrials = 10
+	fittedparam = [1,2,3,4,6,7,8,9]
+	propcv = 0.05
+	cv = 10.
+	interval = 1.
+	traces = simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+	data = trace_data(traces, interval)
+	model = trace_model([.1,.1,.1,.1,.01,20,5,100,10], transitions, G, R)
+	options = trace_options(1000);
+	fit,stats,measures = run_mh(data,model,options);
 end
 
 
@@ -241,7 +184,7 @@ function model_histogram(r,transitions,G::Int,R::Int,S::Int,nalleles::Int,fitted
         end
         d = distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
         components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components,on_states(G,R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components)
 	else
 
     end

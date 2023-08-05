@@ -1,99 +1,99 @@
 ### hmm.jl
-### Fit Markov models directly to intensity traces
+### Fit discrete HMMs and continuous hidden Markov process models directly to intensity traces
 ###
 ### Notation in discrete HMM algorithms follows Rabier, 1989
+###
+### Functions for forward, backward, and Viterbi HMM algorihms
+### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
+###
 
 """
     loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 
-return negative loglikelihood of all traces and each trace
+return negative loglikelihood of combined time series traces and each trace
+
+assume Gaussian observation probability model with four parameters
 """
-function loglikelihood(param,data::AbstractTraceData,model::GMmodel)
-	r = get_rates(param,model)
-    loglikelihood(r,model.G,model.onstates,model.components.elementsT,data.interval,data.trace)
+function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(G, model.onstates)
+    ll_Gaussian(r, model.G, reporters, model.components.elementsT, data.interval, data.trace)
 end
 
-function loglikelihood(param,data::AbstractTraceData,model::GRMmodel)
-	r = get_rates(param,model)
-	loglikelihood(r,model.G,model.R,model.S,model.components.elementsT,data.interval,data.trace)
+function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.R, 0)
+    base = 2
+    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
 end
 
-function loglikelihood(r, nT, onstates, elementsT, interval, trace)
-    logpredictions = Array{Float64}(undef,0)
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.R, model.S)
+    base = 3
+    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
+end
+
+# function loglikelihood(r, nT, onstates, elementsT, interval, trace)
+#     logpredictions = Array{Float64}(undef, 0)
+#     for t in trace
+#         T = length(t)
+#         loga, logp0 = make_logap(r, interval, elementsT, nT)
+#         logb = set_logb(t, nT, r[end-3:end], onstates)
+#         l = forward_log(loga, logb, logp0, nT, T)
+#         push!(logpredictions, logsumexp(l[:, T]))
+#     end
+#     -sum(logpredictions), -logpredictions
+# end
+
+function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
     for t in trace
         T = length(t)
-        loga, logp0 = make_logap(r, interval,elementsT,nT)
-        logb = set_logb(t,nT,r[end-3:end],onstates)
+        loga, logp0 = make_logap(r, interval, elementsT, nT)
+        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters)
         l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions,logsumexp(l[:, T]))
+        push!(logpredictions, logsumexp(l[:, T]))
     end
     -sum(logpredictions), -logpredictions
 end
 
-function loglikelihood(r, G,R,S, interval, trace)
-    logpredictions = Array{Float64}(undef,0)
-    reporters = num_reporters(G,R,S)
-    base = S > 0 ? 3 : 2S
-    nT = G*base^R
-    for t in trace
-        T = length(t)
-        loga, logp0 = make_logap(r, interval,elementsT,nT)
-        logb = set_logb(t,nT,r[end-3:end],reporters)
-        l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions,logsumexp(l[:, T]))
-    end
-    -sum(logpredictions), -logpredictions
-end
-
 """
-make_ap(r, transitions, interval, G, R=0, S=0)
+make_ap(r, interval, elementsT, nT )
 
 Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
-a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GM model
-p0 is nullspace of transition rate matrix Q
+a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GRSM model
+p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
 
 Arguments:
 - `r`: transition rates
-- `transitions`: Tuple of G state transitions
 - `interval`: time interval between intensity observations
-- `G`: number of G states
-- `R`: number of R states
-- `S`: number of S states
+- `elementsT`: structure of T matrix elements
+- `N`: number of HMM states
 
-Q is the transpose of the Markov process transition rate matrix
+Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(r, interval, elementsT, nT )
-    Qtr = make_mat(elementsT, r, nT) ##  transpose of the Markov process transition rate matrix Q
+function make_ap(r, interval, elementsT, N)
+    Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
 end
-
 """
     make_logap(r, transitions, interval, G)
 
-TBW
+return log of a and p0
 """
-function make_logap(r, interval, elementsT, nT)
-    a,p0 =  make_ap(r, interval, elementsT, nT )
-    log.(max.(a,0)), log.(p0)
+function make_logap(r, interval, elementsT, N)
+    a, p0 = make_ap(r, interval, elementsT, N)
+    log.(max.(a, 0)), log.(p0)
 end
 
 
 """
-    make_ap(r, interval, elementsT, nT )
+set_logb_Gaussian(trace, N, params, reporters)
 
-returns transition probability matrix a and steady state distribution p0
-"""
-function make_ap(r, interval, elementsT, nT )
-    Qtr = make_mat(elementsT, r, nT)
-    kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
-end
-
-
-"""
-set_logb(trace, N, onstates, params)
-
-returns matrix logb = P(Observation_i | State_j)
+returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
 -`trace`: Tx2 matrix of intensities.  Col 1 = time, Col 2 = intensity
 -`N`: number of hidden states
@@ -101,13 +101,13 @@ returns matrix logb = P(Observation_i | State_j)
 
 """
 
-function set_logb(trace, N, reporters, params)
+function set_logb_Gaussian(trace, N, params, reporters)
     d = prob_Gaussian(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
         for j in 1:N
-            logb[j, t] = logpdf(d[j],obs)
+            logb[j, t] = logpdf(d[j], obs)
         end
         t += 1
     end
@@ -126,29 +126,36 @@ function set_logb_nonoise(trace, N, onstates)
     end
 end
 
-function prob_Gaussian(par,onstates::Vector,N)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+"""
+    prob_Gaussian(par, reporters, N)
+
+return Gaussian Distribution 
+mean = background + number of reporters * reporter mean
+variance = sum of variances of background and reporters
+
+- `par`: 4 dimemsional vector of mean and std parameters
+- `reporters`: number of reporters per HMM state
+-`N`: number of HMM states
+"""
+function prob_Gaussian(par, reporters, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        if i ∈ onstates
-            d[i] = Normal(par[3], par[4])
-        else
-            d[i] = Normal(par[1],par[2])
-        end
+        d[i] = Normal(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2))
     end
     d
 end
 
-function prob_Gaussian(par,reporters,N)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
-    for i in 1:N
-        d[i] = Normal(par[1] + reporters[i]*par[3], sqrt(par[2]^2 + reporters[i]*par[4]^2))
-    end
-    d
-end
-
-
-
-
+# function prob_Gaussian(par, onstates::Vector, N)
+#     d = Array{Distribution{Univariate,Continuous}}(undef, N)
+#     for i in 1:N
+#         if i ∈ onstates
+#             d[i] = Normal(par[3], par[4])
+#         else
+#             d[i] = Normal(par[1], par[2])
+#         end
+#     end
+#     d
+# end
 # function prob_GaussianMixture(par,onstates,N)
 #     d = Array{Distribution{Univariate, Continuous}}(undef,N)
 #     for i in 1:N

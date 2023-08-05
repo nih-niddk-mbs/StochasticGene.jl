@@ -6,6 +6,26 @@
 
 ### Functions to compute steady state mRNA histograms
 """
+steady_state(M,nT,nalleles,nhist)
+steady_state(M,nT,nalleles)
+
+return steady state mRNA histogram for G and GR models
+
+computes null space of the truncated full transition matrix.
+
+-`M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
+-`nT`: dimension of state transitions
+
+"""
+steady_state(M, nT, nalleles, nhist) = steady_state(M, nT, nalleles)[1:nhist]
+
+function steady_state(M, nT, nalleles)
+    P = normalized_nullspace(M)
+    mhist = marginalize(P, nT)
+    allele_convolve(mhist, nalleles)
+end
+
+"""
 steady_state(r,transitions,G,R,nhist,nalleles,type="")
 
 return steady state mRNA histogram for G,R model
@@ -36,24 +56,6 @@ function steady_state(r, transitions, G, nhist, nalleles)
     components = make_components_M(transitions, G, nhist + 2, r[end])
     M = make_mat_M(components, r)
     steady_state(M, G, nalleles, nhist)
-end
-"""
-steady_state(M,nT,nalleles,nhist)
-
-return steady state mRNA histogram for G and GR models
-
-computes null space of the truncated full transition matrix.
-
--`M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
--`nT`: dimension of state transitions
-
-"""
-steady_state(M, nT, nalleles, nhist) = steady_state(M, nT, nalleles)[1:nhist]
-
-function steady_state(M, nT, nalleles)
-    P = normalized_nullspace(M)
-    mhist = marginalize(P, nT)
-    allele_convolve(mhist, nalleles)
 end
 
 
@@ -120,7 +122,7 @@ returns OFF time histogram
 function offtimeCDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1)
     t = [0; tin]
     SI = time_evolve(t, TI, SIinit, method)
-    return sum(SI[:, onstates],dims=2)[:,1]
+    return sum(SI[:, onstates], dims=2)[:, 1]
 end
 
 """
@@ -146,7 +148,7 @@ function offonPDF(TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onst
     off = offstates(G, onstates)
     SA = ontimeCDF(t, TA, off, init_SA(G, onstates, transitions), method)
     if length(off) > 1
-        SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions,r), method)
+        SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions, r), method)
     else
         SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions), method)
     end
@@ -182,7 +184,7 @@ function gt_histograms(r, transitions, G, R, nhist, nalleles, range, onstates, m
     if R > 0
         modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R, method)
     else
-        modelOFF,modelON = offonPDF(TA,TI,range,G,transitions,onstates)
+        modelOFF, modelON = offonPDF(TA, TI, range, G, transitions, onstates)
     end
     M = make_mat_M(components.mcomponents, r)
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
@@ -291,20 +293,20 @@ function init_SI(G::Int, onstates, transitions)
     return Sinit
 end
 
-function init_SI(G::Int, onstates, transitions,r::Vector)
+function init_SI(G::Int, onstates, transitions, r::Vector)
     start = Int[]
     tindex = Int[]
-    for (i,t) in enumerate(transitions)
+    for (i, t) in enumerate(transitions)
         if t[1] ∈ onstates && t[2] ∉ onstates
             push!(start, t[2])
-            push!(tindex,i)
+            push!(tindex, i)
         end
     end
     Sinit = zeros(G)
-    for (i,s) in enumerate(start)
+    for (i, s) in enumerate(start)
         Sinit[s] = r[tindex[i]]
     end
-    return Sinit /sum(Sinit)
+    return Sinit / sum(Sinit)
 end
 
 

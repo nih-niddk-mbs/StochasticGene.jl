@@ -1,8 +1,12 @@
 ### transition_rate_matrices_transpose.jl
 ###
-### Functions to compute the transition rate matrix for Stochastic transitions
+### Functions to compute the transpose of the transition rate matrix for Stochastic transitions
 ### Matrices are the transpose to the convention for Kolmogorov forward equations
-### i.e. reaction directions go from column to row
+### i.e. reaction directions go from column to row,
+### Notation:  M = transpose of transition rate matrix of full (countably infinite) stochastic process including mRNA kinetics
+### Q = finite transition rate matrix for GRS continuous Markov process
+### T = Q'
+### transpose of Q is more convenient for solving chemical master equation
 ###
 
 
@@ -27,6 +31,7 @@ end
 """
 MComponents
 
+structure for matrix components for matrix M
 """
 struct MComponents
     elementsT::Vector{Element}
@@ -40,6 +45,7 @@ end
 """
 TComponents
 
+structure for elements of matrix T, onstate transition matrix TA, and off state transitinon matrix TI
 """
 struct TComponents
     nT::Int
@@ -51,6 +57,7 @@ end
 """
  MTComponents
 
+ structure for M and T components
 """
 struct MTComponents
     mcomponents::MComponents
@@ -59,6 +66,7 @@ end
 """
 Indices
 
+index ranges for rates
 """
 struct Indices
     gamma::Vector{Int}
@@ -68,47 +76,154 @@ struct Indices
 end
 
 
+
+"""
+    make_components(transitions, G, R, S, r, total::Int, indices::Indices, type::String="")
+
+return MTComponent structure
+"""
+function make_components(transitions, G, R, S, r, total::Int, indices::Indices, onstates=[G], type::String="")
+    if S > 0
+        return make_components(transitions, G, R, r, total, type, indices)
+    elseif R > 0
+        return make_components(transitions, G, R, r, total, indices)
+    else
+        return make_components(transitions, G, r, total, indices, onstates)
+    end
+end
+"""
+    make_components(transitions, G, R, r, total, indices::Indices)
+
+
+"""
+function make_components(transitions, G, R, r, total, indices::Indices)
+    MTComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
+end
+"""
+    make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
+
+
+"""
+function make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
+    elementsT = set_elements_T(transitions, indices.gamma)
+    S, Sm, Sp = make_mat_S(total, r[indices.decay])
+    MTComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, S, Sm, Sp), make_components_TAI(elementsT, G, onstates))
+end
+"""
+    make_components(transitions, G, R, r, total::Int, type::String, indices::Indices)
+
+
+"""
+function make_components(transitions, G, R, r, total::Int, type::String, indices::Indices)
+    if type == "offeject"
+        elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
+    else
+        elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
+    end
+    S, Sm, Sp = make_mat_S(total, r[indices.decay])
+    MTComponents(MComponents(elementsT, set_elements_B(G, R, indices.nu[R+1]), G * 2^R, S, Sm, Sp), make_components_TAI(set_elements_T(transitions, G, R, 3, set_elements_RS!, indices), G, R, 3))
+end
+
+"""
+make_components_M
+
+"""
+function make_components_M(transitions, nT, total, decay)
+    ntransitions = length(transitions)
+    elementsT = set_elements_T(transitions, collect(1:ntransitions))
+    elementsB = set_elements_B(nT, ntransitions + 1)
+    S, Sm, Sp = make_mat_S(total, decay)
+    MComponents(elementsT, elementsB, nT, S, Sm, Sp)
+end
+
+"""
+    make_components_M(transitions, G, R, total, decay, base, indices)
+
+TBW
+"""
+function make_components_M(transitions, G, R, total, decay, base, indices)
+    if R == 0
+        return make_components_M(transitions, G, total, decay)
+    else
+        elementsT = set_elements_T(transitions, G, R, base, set_elements_R!, indices)
+        elementsB = set_elements_B(G, R, indices.nu[R+1])
+        S, Sm, Sp = make_mat_S(total, decay)
+        return MComponents(elementsT, elementsB, G * base^R, S, Sm, Sp)
+    end
+end
+
+"""
+make_components_TAI
+
+return TComponent structure
+"""
+function make_components_TAI(elementsT, G::Int, onstates::Vector)
+    elementsTA = Vector{Element}(undef, 0)
+    elementsTI = Vector{Element}(undef, 0)
+    set_elements_TA!(elementsTA, elementsT, onstates)
+    set_elements_TI!(elementsTI, elementsT, onstates)
+    TComponents(G, elementsT, elementsTA, elementsTI)
+end
+function make_components_TAI(elementsT, G::Int, R, base)
+    elementsTA = Vector{Element}(undef, 0)
+    elementsTI = Vector{Element}(undef, 0)
+    set_elements_TA!(elementsTA, elementsT, G, R, base)
+    set_elements_TI!(elementsTI, elementsT, G, R, base)
+    TComponents(G * base^R, elementsT, elementsTA, elementsTI)
+end
+
+"""
+    make_components_T(transitions, G, R)
+
+return TComponent structure
+"""
+function make_components_T(transitions, G, R)
+    elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
+    TComponents(G * 2^R, elements_T, Element[], Element[])
+end
+
+function make_components_T(transitions, G)
+    elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
+    TComponents(G, elements_T, Element[], Element[])
+end
 """
     on_states(G,R,base=2)
 
 return vector of on state indices for GR and GRS models
 """
-function on_states(G::Int,R::Int,S::Int=0)
-	base = S > 0 ? 3 : 2
-	onstates = Int[]
-	j = 1
-	for i in 1:G, z in 1:base^R
-		if any(digits(z - 1, base=base, pad=R) .== base-1)
-			push!(onstates,j)
-		end
-		j += 1
-	end
-	onstates
+function on_states(G::Int, R::Int, S::Int=0)
+    base = S > 0 ? 3 : 2
+    onstates = Int[]
+    j = 1
+    for i in 1:G, z in 1:base^R
+        if any(digits(z - 1, base=base, pad=R) .== base - 1)
+            push!(onstates, j)
+        end
+        j += 1
+    end
+    onstates
 end
-
 """
     num_reporters(G::Int,R::Int,S::Int=0)
 
 return number of reporters for all state indices
 """
-function num_reporters(G::Int,R::Int,S::Int=0)
-	base = S > 0 ? 3 : 2
-	reporters = Int[]
-	for i in 1:G, z in 1:base^R
-		push!(reporters,sum(digits(z - 1, base=base, pad=R) .== base-1))
-	end
-	reporters
+function num_reporters(G::Int, R::Int, S::Int=0)
+    base = S > 0 ? 3 : 2
+    reporters = Int[]
+    for i in 1:G, z in 1:base^R
+        push!(reporters, sum(digits(z - 1, base=base, pad=R) .== base - 1))
+    end
+    reporters
 end
 
-function num_reporters(G::Int,onstates::Vector)
-	reporters = Int[]
-	for i in 1:G
-		push!(reporters, i ∈ onstates ? 1 : 0)
-	end
-	reporters
+function num_reporters(G::Int, onstates::Vector)
+    reporters = Int[]
+    for i in 1:G
+        push!(reporters, i ∈ onstates ? 1 : 0)
+    end
+    reporters
 end
-
-
 """
 set_indices(ntransitions,R,S)
 set_indices(ntransitions,R)
@@ -117,8 +232,6 @@ set_indices(ntransitions,R)
 set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 set_indices(ntransitions, R) = set_indices(ntransitions, R, 0)
 set_indices(ntransitions, R, S) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+S+1), ntransitions + R + S + 2)
-
-
 """
 set_elements_G!(elements,transitions,G,R,base,gamma)
 
@@ -151,8 +264,6 @@ set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, 
 set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
 set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
 set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_elements_RS!(elementsT, G, R, R, nu, eta, 3)
-
-
 """
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
 
@@ -296,8 +407,6 @@ function set_elements_T(transitions, G, R, base, f!, indices::Indices)
     f!(elementsT, G, R, indices)
     elementsT
 end
-
-
 """
 set_elements_B
 
@@ -323,109 +432,6 @@ function set_elements_B(G, R, ejectindex, base=2)
     end
     return elementsB
 end
-
-"""
-make_components_M
-
-"""
-function make_components_M(transitions, nT, total, decay)
-    ntransitions = length(transitions)
-    elementsT = set_elements_T(transitions, collect(1:ntransitions))
-    elementsB = set_elements_B(nT, ntransitions + 1)
-    S, Sm, Sp = make_mat_S(total, decay)
-    MComponents(elementsT, elementsB, nT, S, Sm, Sp)
-end
-function make_components_M(transitions, G, R, total, decay, base, indices)
-    if R == 0
-        return make_components_M(transitions, G, total, decay)
-    else
-        elementsT = set_elements_T(transitions, G, R, base, set_elements_R!, indices)
-        elementsB = set_elements_B(G, R, indices.nu[R+1])
-        S, Sm, Sp = make_mat_S(total, decay)
-        return MComponents(elementsT, elementsB, G * base^R, S, Sm, Sp)
-    end
-end
-
-"""
-make_components_TAI
-
-"""
-function make_components_TAI(elementsT, G::Int, onstates::Vector)
-    elementsTA = Vector{Element}(undef, 0)
-    elementsTI = Vector{Element}(undef, 0)
-    set_elements_TA!(elementsTA, elementsT, onstates)
-    set_elements_TI!(elementsTI, elementsT, onstates)
-    TComponents(G, elementsT, elementsTA, elementsTI)
-end
-function make_components_TAI(elementsT, G::Int, R, base)
-    elementsTA = Vector{Element}(undef, 0)
-    elementsTI = Vector{Element}(undef, 0)
-    set_elements_TA!(elementsTA, elementsT, G, R, base)
-    set_elements_TI!(elementsTI, elementsT, G, R, base)
-    TComponents(G * base^R, elementsT, elementsTA, elementsTI)
-end
-
-"""
-    make_components_T(transitions, G, R)
-
-TBW
-"""
-function make_components_T(transitions, G, R)
-    elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
-    TComponents(G * 2^R, elements_T, Element[], Element[])
-end
-
-function make_components_T(transitions, G)
-    elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
-    TComponents(G, elements_T, Element[], Element[])
-end
-
-"""
-# make_components(transitions,nT,r,data::RNAData)
-# make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices)
-# make_components(transitions,G,R,r,total,indices::Indices)
-# make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices)
-# make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
-
-# make the appropriate matrix components for given data type
-
-# """
-# make_components(transitions, G, R, r, data::RNALiveCellData, indices::Indices) = make_components(transitions, G, R, r, data.nRNA, indices)
-# make_components(transitions, G, r, data::RNALiveCellData, indices::Indices, onstates) = make_components(transitions, G, r, data.nRNA + 2, indices, onstates)
-# make_components(transitions, nT, r, data::RNAData) = make_components_M(transitions, nT, data.nRNA + 2, r[2*nT])
-# make_components(transitions, G, R, r, data::RNALiveCellData, type::String, indices::Indices) = make_components(transitions, G, R, r, data.nRNA + 2, type, indices)
-
-
-function make_components(transitions, nT, r, data::RNAData{T1,T2}) where {T1<:Array,T2<:Array}
-    c = Array{Mcomponents}(undef, 0)
-    for i in eachindex(data.nRNA)
-        push!(c, make_components_M(transitions, nT, data.nRNA[i], r[2*nT*i]))
-    end
-    c
-end
-
-make_components(transitions, G, R, S, r, total::Int, type::String, indices::Indices)
-
-
-make_components(transitions, G, R, r, total, indices::Indices) = MTComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
-
-function make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
-    elementsT = set_elements_T(transitions, indices.gamma)
-    S, Sm, Sp = make_mat_S(total, r[indices.decay])
-    MTComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, S, Sm, Sp), make_components_TAI(elementsT, G, onstates))
-end
-
-
-function make_components(transitions, G, R, r, total::Int, type::String, indices::Indices)
-    if type == "offeject"
-        elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
-    else
-        elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
-    end
-    S, Sm, Sp = make_mat_S(total, r[indices.decay])
-    MTComponents(MComponents(elementsT, set_elements_B(G, R, indices.nu[R+1]), G * 2^R, S, Sm, Sp), make_components_TAI(set_elements_T(transitions, G, R, 3, set_elements_RS!, indices), G, R, 3))
-end
-
 """
 make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 
@@ -439,8 +445,7 @@ end
 """
 make_mat(elements,rates,nT)
 
-create a matrix T of size nTxnT with matrix elements in vector elements
-
+return an nTxnT sparse matrix T
 """
 function make_mat(elements::Vector, rates::Vector, nT::Int)
     T = spzeros(nT, nT)
