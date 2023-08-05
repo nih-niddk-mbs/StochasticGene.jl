@@ -250,13 +250,13 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, onstates, interval=100.0, par=[30, 14, 200, 75])
+function make_trace(tracelog, G, R, S, onstates, interval=100.0, par=[30, 14, 200, 75])
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        onstates = on_states(G, R)
+        onstates = on_states(G, R, S)
     end
     i = 2
     d = prob_Gaussian(par, onstates, G * 2^R)

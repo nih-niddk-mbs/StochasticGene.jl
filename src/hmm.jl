@@ -10,13 +10,12 @@ return negative loglikelihood of all traces and each trace
 """
 function loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 	r = get_rates(param,model)
-	# loglikelihood(r,model.G,model.onstates,model.Gtransitions,data.interval,data.trace)
     loglikelihood(r,model.G,model.onstates,model.components.elementsT,data.interval,data.trace)
 end
 
 function loglikelihood(param,data::AbstractTraceData,model::GRMmodel)
 	r = get_rates(param,model)
-	loglikelihood(r,model.G*2^model.R,model.onstates,model.components.elementsT,data.interval,data.trace)
+	loglikelihood(r,model.G,model.R,model.S,model.components.elementsT,data.interval,data.trace)
 end
 
 function loglikelihood(r, nT, onstates, elementsT, interval, trace)
@@ -25,6 +24,21 @@ function loglikelihood(r, nT, onstates, elementsT, interval, trace)
         T = length(t)
         loga, logp0 = make_logap(r, interval,elementsT,nT)
         logb = set_logb(t,nT,r[end-3:end],onstates)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions,logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
+
+function loglikelihood(r, G,R,S, interval, trace)
+    logpredictions = Array{Float64}(undef,0)
+    reporters = num_reporters(G,R,S)
+    base = S > 0 ? 3 : 2S
+    nT = G*base^R
+    for t in trace
+        T = length(t)
+        loga, logp0 = make_logap(r, interval,elementsT,nT)
+        logb = set_logb(t,nT,r[end-3:end],reporters)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions,logsumexp(l[:, T]))
     end
@@ -77,7 +91,7 @@ end
 
 
 """
-set_logb(trace, N, T)
+set_logb(trace, N, onstates, params)
 
 returns matrix logb = P(Observation_i | State_j)
 
@@ -87,8 +101,8 @@ returns matrix logb = P(Observation_i | State_j)
 
 """
 
-function set_logb(trace, N, params,onstates)
-    d = prob_Gaussian(params, onstates, N)
+function set_logb(trace, N, reporters, params)
+    d = prob_Gaussian(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
@@ -100,68 +114,59 @@ function set_logb(trace, N, params,onstates)
     return logb
 end
 
-
-
-function prob_Gaussian(par,onstates,N)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
-    for i in 1:N
-        if i ∈ onstates
-            d[i] = Normal(par[3], par[4])
-        else
-            d[i] = Normal(par[1],par[2])
-        end
-    end
-    d
-end
-
-function prob_Gaussian(par,onstates,N,)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
-    for i in 1:N
-        if i ∈ onstates
-            n = sum(digits(mod(i,base^R), base=base, pad=R) .== base-1)
-            d[i] = Normal(par[3], par[4])
-        else
-            d[i] = Normal(par[1],par[2])
-        end
-    end
-    d
-end
-
-function prob_nonoise(obs, state::Int, onstates)
-    if (obs > 0.5 && state ∈ onstates) || (obs < 0.5 && state ∉ onstates)
-        return 1.0
-    else
-        return 0.0
-    end
-end
-
-function prob_GaussianMixture(par,onstates,N)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
-    for i in 1:N
-        if i ∈ onstates
-            d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
-        else
-            d[i] = Normal(par[1],par[2])
-        end
-    end
-    d
-end
-
-function prob_Poisson(obs, state, lambda)
-    d = Poisson(lambda[state])
-    pdf(d, obs)
-end
-
-function set_b_og(trace)
-    T, M = size(trace)
-    b = Matrix{Float64}(undef, M, T)
+function set_logb_nonoise(trace, N, onstates)
+    logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
-    for obs in eachrow(trace)
-        b[:, t] = [mod(obs[2] + 1, 2), obs[2]]
-        t += 1
+    for obs in trace
+        if (obs > 0.5 && state ∈ onstates) || (obs < 0.5 && state ∉ onstates)
+            logb[j, t] = 0.0
+        else
+            logb[j, t] = -Inf
+        end
     end
-    return b
 end
+
+function prob_Gaussian(par,onstates::Vector,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        if i ∈ onstates
+            d[i] = Normal(par[3], par[4])
+        else
+            d[i] = Normal(par[1],par[2])
+        end
+    end
+    d
+end
+
+function prob_Gaussian(par,reporters,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        d[i] = Normal(par[1] + reporters[i]*par[3], sqrt(par[2]^2 + reporters[i]*par[4]^2))
+    end
+    d
+end
+
+
+
+
+# function prob_GaussianMixture(par,onstates,N)
+#     d = Array{Distribution{Univariate, Continuous}}(undef,N)
+#     for i in 1:N
+#         if i ∈ onstates
+#             d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
+#         else
+#             d[i] = Normal(par[1],par[2])
+#         end
+#     end
+#     d
+# end
+
+# function prob_Poisson(obs, state, lambda)
+#     d = Poisson(lambda[state])
+#     pdf(d, obs)
+# end
+
+
 
 """
 kolmogorov_forward(Q::Matrix,interval)

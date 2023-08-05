@@ -194,7 +194,6 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
 end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -209,7 +208,6 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
 end
 
 function write_model(model::AbstractModel)

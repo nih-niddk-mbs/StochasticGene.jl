@@ -73,7 +73,8 @@ end
 
 return vector of on state indices for GR and GRS models
 """
-function on_states(G,R,base=2)
+function on_states(G::Int,R::Int,S::Int=0)
+	base = S > 0 ? 3 : 2
 	onstates = Int[]
 	j = 1
 	for i in 1:G, z in 1:base^R
@@ -85,18 +86,28 @@ function on_states(G,R,base=2)
 	onstates
 end
 
-# function on_states(G,R,base=2)
-# 	onstates = Tuple[]
-# 	j = 1
-# 	for i in 1:G, z in 1:base^R
-# 		n = sum(digits(z - 1, base=base, pad=R) .== base-1)
-# 		if n > 0
-# 			push!(onstates,(j,n))
-# 		end
-# 		j += 1
-# 	end
-# 	onstates
-# end
+"""
+    num_reporters(G::Int,R::Int,S::Int=0)
+
+return number of reporters for all state indices
+"""
+function num_reporters(G::Int,R::Int,S::Int=0)
+	base = S > 0 ? 3 : 2
+	reporters = Int[]
+	for i in 1:G, z in 1:base^R
+		push!(reporters,sum(digits(z - 1, base=base, pad=R) .== base-1))
+	end
+	reporters
+end
+
+function num_reporters(G::Int,onstates::Vector)
+	reporters = Int[]
+	for i in 1:G
+		push!(reporters, i ∈ onstates ? 1 : 0)
+	end
+	reporters
+end
+
 
 """
 set_indices(ntransitions,R,S)
@@ -370,19 +381,19 @@ function make_components_T(transitions, G)
 end
 
 """
-make_components(transitions,nT,r,data::RNAData)
-make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices)
-make_components(transitions,G,R,r,total,indices::Indices)
-make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices)
-make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
+# make_components(transitions,nT,r,data::RNAData)
+# make_components(transitions,G,R,r,data::RNALiveCellData,indices::Indices)
+# make_components(transitions,G,R,r,total,indices::Indices)
+# make_components(transitions,G,R,r,data::RNALiveCellData,type::String,indices::Indices)
+# make_components(transitions,G,R,r,total::Int,type::String,indices::Indices)
 
-make the appropriate matrix components for given data type
+# make the appropriate matrix components for given data type
 
-"""
-make_components(transitions, G, R, r, data::RNALiveCellData, indices::Indices) = make_components(transitions, G, R, r, data.nRNA, indices)
-make_components(transitions, G, r, data::RNALiveCellData, indices::Indices, onstates) = make_components(transitions, G, r, data.nRNA + 2, indices, onstates)
-make_components(transitions, nT, r, data::RNAData) = make_components_M(transitions, nT, data.nRNA + 2, r[2*nT])
-make_components(transitions, G, R, r, data::RNALiveCellData, type::String, indices::Indices) = make_components(transitions, G, R, r, data.nRNA + 2, type, indices)
+# """
+# make_components(transitions, G, R, r, data::RNALiveCellData, indices::Indices) = make_components(transitions, G, R, r, data.nRNA, indices)
+# make_components(transitions, G, r, data::RNALiveCellData, indices::Indices, onstates) = make_components(transitions, G, r, data.nRNA + 2, indices, onstates)
+# make_components(transitions, nT, r, data::RNAData) = make_components_M(transitions, nT, data.nRNA + 2, r[2*nT])
+# make_components(transitions, G, R, r, data::RNALiveCellData, type::String, indices::Indices) = make_components(transitions, G, R, r, data.nRNA + 2, type, indices)
 
 
 function make_components(transitions, nT, r, data::RNAData{T1,T2}) where {T1<:Array,T2<:Array}
@@ -392,6 +403,8 @@ function make_components(transitions, nT, r, data::RNAData{T1,T2}) where {T1<:Ar
     end
     c
 end
+
+make_components(transitions, G, R, S, r, total::Int, type::String, indices::Indices)
 
 
 make_components(transitions, G, R, r, total, indices::Indices) = MTComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
