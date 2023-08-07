@@ -450,7 +450,7 @@ function fixed_rates(param,model)
 end
 
 get_r(model) = copy(model.rates)
-get_n(model) = 2*model.G - 1
+get_n(model::AbsractGMmodel) = 2*model.G - 1
 
 """
 get_param(model)

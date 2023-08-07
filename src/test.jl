@@ -80,7 +80,7 @@ function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
+function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
 	if R == 0
     	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
 	elseif S==0
@@ -128,45 +128,25 @@ function fit_rna_test(root=".")
 end
 
 
-function fit_histograms_test()
-	G = 2
-	R = 1
-	S = 0
-	nhist = 20
-	nalleles = 2
-	onstates = [2]
-	bins = collect(0:2:200.)
-	r = [0.02, 0.1, 0.5, 0.2, 0.01]
-	transitions =  ([1,2],[2,1])
-	fittedparam = [1,2,3,4]
-	propcv = 0.05
-	cv = 10.
-	OFF,ON,mhist = test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
+function test_fit_histograms(;rtarget = [0.02, 0.1, 0.5, 0.2, 0.01],rinit=[.1,.1,.1,.1,.01],nsamples = 1000,G=2,R=1,S=0,nhist=20,nalleles=2,onstates=[G],bins=collect(0:1.:200.),transitions =  ([1,2],[2,1]),fittedparam = [1,2,3,4],propcv = 0.05,cv = 10.)
+	
+	OFF,ON,mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
 	data = RNALiveCellData("test","test",nhist,mhist,bins[2:end],OFF[1:end-1],ON[1:end-1])
-	model = model_histogram([.1,.1,.1,.1,.01],transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
-	options = MHOptions(10000, 0, 0, 0, 1., 1.)
+	model = model_histogram(rinit,transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
+	options = MHOptions(nsamples, 0, 0, 10000., 1., 1.)
 	fit,stats,measures = run_mh(data,model,options);
+	fit,stats,measures,data,model,options
 end
 
-function fit_trace_test()
-	G = 2
-	R = 1
-	S = 0
-	onstates = [2]
-	r = [0.02, 0.1, 0.5, 0.2, .01]
+
+function test_fit_trace(;rtarget = [0.02, 0.1, 0.5, 0.2, .01],rinit=[.1,.1,.1,.1,.01,20,5,100,10],nsamples = 1000,G = 2,R = 1,S = 0,onstates = [G],transitions =  ([1,2],[2,1]),steps = 1000,ntrials = 10,fittedparam = [1,2,3,4,6,7,8,9],propcv = 0.05,cv = 10.,interval = 2.)
 	par = [30,10,200,65]
-	transitions =  ([1,2],[2,1])
-	steps = 1000
-	ntrials = 10
-	fittedparam = [1,2,3,4,6,7,8,9]
-	propcv = 0.05
-	cv = 10.
-	interval = 1.
-	traces = simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+	traces = simulate_trace_vector(rtarget, par, transitions, G, R, onstates, interval, steps, ntrials)
 	data = trace_data(traces, interval)
-	model = trace_model([.1,.1,.1,.1,.01,20,5,100,10], transitions, G, R)
-	options = trace_options(1000);
+	model = trace_model(rinit, transitions, G, R)
+	options = trace_options(nsamples);
 	fit,stats,measures = run_mh(data,model,options);
+	fit,stats,measures,data,model,options
 end
 
 
@@ -186,6 +166,8 @@ function model_histogram(r,transitions,G::Int,R::Int,S::Int,nalleles::Int,fitted
         components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
         return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components)
 	else
-
+		d = distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
+        components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components)
     end
 end

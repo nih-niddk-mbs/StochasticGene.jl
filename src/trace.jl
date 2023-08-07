@@ -5,10 +5,10 @@
 
 TBW
 """
-function simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+function simulate_trace_vector(r, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totalsteps=steps, par=par)[1:end-1, 2]
+        trace[i] = simulator(r, transitions, G, R, S, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=par)[1:end-1, 2]
     end
     trace
 end
@@ -18,7 +18,7 @@ end
 
 TBW
 """
-simulate_trace(r,transitions,G,R,interval,totaltime,onstates=[G]) = simulator(r, transitions, G, R, 0, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
+simulate_trace(r,transitions,G,R,S,interval,totaltime,onstates=[G]) = simulator(r, transitions, G, R, S, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)
