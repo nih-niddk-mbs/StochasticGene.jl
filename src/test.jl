@@ -132,7 +132,7 @@ function test_fit_histograms(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[0.1, 
 
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
-    model = model_histogram(rinit, transitions, G, R, S, nalleles, fittedparam, data, onstates, propcv, cv)
+    model = histogram_model(rinit, transitions, G, R, S, nalleles, fittedparam, data, onstates, propcv, cv)
     options = MHOptions(nsamples, 0, 0, 10000.0, 1.0, 1.0)
     fit, stats, measures = run_mh(data, model, options)
     fit, stats, measures, data, model, options
@@ -150,7 +150,7 @@ function test_fit_trace(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[0.1, 0.1, 
 end
 
 
-function model_histogram(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, fittedparam, data, onstates=[G], propcv=0.05, cv=1.0)
+function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, fittedparam, data, onstates=[G], propcv=0.05, cv=1.0)
     ntransitions = length(transitions)
     method = 1
     if R == 0
