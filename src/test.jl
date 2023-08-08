@@ -76,7 +76,7 @@ options = test_options(1000);
 
 function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
-    modelOFF, modelON, histF = test_cm(r, transitions, G, R, S, nhist, nalleles, onstates, range)
+    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
@@ -93,7 +93,7 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
 	if R == 0
-		 modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, transitions, onstates)
+		 modelOFF, modelON = offonPDF(TA, TI, range, r, G, transitions, onstates)
 	else
 		modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R)
 	end
