@@ -256,10 +256,12 @@ function make_trace(tracelog, G, R, S, onstates, interval=100.0, par=[30, 14, 20
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        onstates = on_states(G, R, S)
+        reporters = num_reporters(G, R, S)
+    else
+        reporters = num_reporters(G,onstates)
     end
     i = 2
-    d = prob_Gaussian(par, onstates, G * 2^R)
+    d = prob_Gaussian(par, reporters, G * 2^R)
     while i < n
         while tracelog[i][1] <= frame && i < n
             state = tracelog[i][2]

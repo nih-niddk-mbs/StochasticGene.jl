@@ -74,29 +74,29 @@ options = test_options(1000);
 
 """
 
-function test(r, transitions, G, R, S,nhist, nalleles, onstates, range)
+function test(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
     modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
 function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
-	if R == 0
-    	components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
-	elseif S==0
-		components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions),R))
-	else
-		components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions),R,R))
-	end
+    if R == 0
+        components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
+    elseif S == 0
+        components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions), R))
+    else
+        components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions), R, R))
+    end
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-	if R == 0
-		 modelOFF, modelON = offonPDF(TA, TI, range, r, G, transitions, onstates)
-	else
-		modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R)
-	end
+    if R == 0
+        modelOFF, modelON = offonPDF(TA, TI, range, r, G, transitions, onstates)
+    else
+        modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R)
+    end
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
     modelOFF, modelON, histF
 end
@@ -111,63 +111,63 @@ function fit_rna_test(root=".")
     nalleles = 2
     nsets = 1
     propcv = 0.05
-    fittedparam = [1,2,3]
+    fittedparam = [1, 2, 3]
     fixedeffects = ()
-    transitions = ([1,2],[2,1])
+    transitions = ([1, 2], [2, 1])
     ejectprior = 0.05
     r = [0.01, 0.1, 1.0, 0.01006327034802035]
     decayrate = 0.01006327034802035
     datacond = "MOCK"
     datafolder = "data/HCT116_testdata"
     label = "scRNA_test"
-    data = data_rna(gene,datacond,datafolder,fish,label)
-    model = model_rna(data,r,G,nalleles,nsets,propcv,fittedparam,fixedeffects,transitions,decayrate,ejectprior)
-    options = MHOptions(100000,0,0,30.,1.,100.)
-    fit,stats,measures = run_mh(data,model,options,1);
+    data = data_rna(gene, datacond, datafolder, fish, label)
+    model = model_rna(data, r, G, nalleles, nsets, propcv, fittedparam, fixedeffects, transitions, decayrate, ejectprior)
+    options = MHOptions(100000, 0, 0, 30.0, 1.0, 100.0)
+    fit, stats, measures = run_mh(data, model, options, 1)
     return stats.meanparam, fit.llml, model
 end
 
 
-function test_fit_histograms(;rtarget = [0.02, 0.1, 0.5, 0.2, 0.01],rinit=[.1,.1,.1,.1,.01],nsamples = 1000,G=2,R=1,S=0,nhist=20,nalleles=2,onstates=[G],bins=collect(0:1.:200.),transitions =  ([1,2],[2,1]),fittedparam = [1,2,3,4],propcv = 0.05,cv = 10.)
-	
-	OFF,ON,mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
-	data = RNALiveCellData("test","test",nhist,mhist,bins[2:end],OFF[1:end-1],ON[1:end-1])
-	model = model_histogram(rinit,transitions,G,R,S,nalleles,fittedparam,data,onstates,propcv,cv)
-	options = MHOptions(nsamples, 0, 0, 10000., 1., 1.)
-	fit,stats,measures = run_mh(data,model,options);
-	fit,stats,measures,data,model,options
+function test_fit_histograms(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[0.1, 0.1, 0.1, 0.1, 0.01], nsamples=1000, G=2, R=1, S=0, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), transitions=([1, 2], [2, 1]), fittedparam=[1, 2, 3, 4], propcv=0.05, cv=10.0)
+
+    OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
+    data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
+    model = model_histogram(rinit, transitions, G, R, S, nalleles, fittedparam, data, onstates, propcv, cv)
+    options = MHOptions(nsamples, 0, 0, 10000.0, 1.0, 1.0)
+    fit, stats, measures = run_mh(data, model, options)
+    fit, stats, measures, data, model, options
 end
 
 
-function test_fit_trace(;rtarget = [0.02, 0.1, 0.5, 0.2, .01],rinit=[.1,.1,.1,.1,.01,20,5,100,10],nsamples = 1000,G = 2,R = 1,S = 0,onstates = [G],transitions =  ([1,2],[2,1]),steps = 1000,ntrials = 10,fittedparam = [1,2,3,4,6,7,8,9],propcv = 0.05,cv = 10.,interval = 2.)
-	par = [30,10,200,65]
-	traces = simulate_trace_vector(rtarget, par, transitions, G, R, onstates, interval, steps, ntrials)
-	data = trace_data(traces, interval)
-	model = trace_model(rinit, transitions, G, R)
-	options = trace_options(nsamples);
-	fit,stats,measures = run_mh(data,model,options);
-	fit,stats,measures,data,model,options
+function test_fit_trace(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[0.1, 0.1, 0.1, 0.1, 0.01, 20, 5, 100, 10], nsamples=1000, G=2, R=1, S=0, onstates=[G], transitions=([1, 2], [2, 1]), totaltime=1000., ntrials=10, fittedparam=[1, 2, 3, 4, 6, 7, 8, 9], propcv=0.05, cv=10.0, interval=2.0)
+    par = [30, 10, 200, 65]
+    traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
+    data = trace_data(traces, interval)
+    model = trace_model(rinit, transitions, G, R, S, fittedparam)
+    options = trace_options(nsamples)
+    fit, stats, measures = run_mh(data, model, options)
+    fit, stats, measures, data, model, options
 end
 
 
-function model_histogram(r,transitions,G::Int,R::Int,S::Int,nalleles::Int,fittedparam,data,onstates=[G],propcv = .05,cv=1.)
+function model_histogram(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, fittedparam, data, onstates=[G], propcv=0.05, cv=1.0)
     ntransitions = length(transitions)
     method = 1
     if R == 0
         decayrate = r[2*G]
-        d = prior_rna(r,G,1,fittedparam,decayrate,1.)
-        components = make_components(transitions,G,r,data.nRNA,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2),onstates)
-        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,proposal,fittedparam,method,transitions,components,onstates)
-	elseif S == 0
+        d = prior_rna(r, G, 1, fittedparam, decayrate, 1.0)
+        components = make_components(transitions, G, r, data.nRNA, Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2), onstates)
+        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)
+    elseif S == 0
         if typeof(cv) <: Real
-            rcv = fill(cv,length(r))
+            rcv = fill(cv, length(r))
         end
-        d = distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
-        components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components)
-	else
-		d = distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
-        components = make_components(transitions,G,R,r,data.nRNA,set_indices(ntransitions,R))
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,nalleles,"",r,d,propcv,fittedparam,method,transitions,components)
+        d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+        components = make_components(transitions, G, R, r, data.nRNA, set_indices(ntransitions, R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
+    else
+        d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+        components = make_components(transitions, G, R, r, data.nRNA, set_indices(ntransitions, R))
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
     end
 end

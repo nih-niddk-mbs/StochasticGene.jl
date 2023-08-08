@@ -173,6 +173,17 @@ end
 
 return TComponent structure
 """
+function make_components_T(transitions, G, R, S)
+	if S > 0
+		elements_T = set_elements_T(transitions, G, R, 3, set_elements_R!, set_indices(length(transitions), R))
+		return TComponents(G * 3^R, elements_T, Element[], Element[])
+	elseif R > 0
+		return make_components_T(transitions,G,R)
+	else
+		return make_components_T(transitions, G)
+	end
+end
+
 function make_components_T(transitions, G, R)
     elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
     TComponents(G * 2^R, elements_T, Element[], Element[])
