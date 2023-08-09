@@ -103,28 +103,12 @@ end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
 
-function fit_rna_test(root=".")
-    G = 2
-    gene = "CENPL"
-    cell = "HCT116"
-    fish = false
-    nalleles = 2
-    nsets = 1
-    propcv = 0.05
-    fittedparam = [1, 2, 3]
-    fixedeffects = ()
-    transitions = ([1, 2], [2, 1])
-    ejectprior = 0.05
-    r = [0.01, 0.1, 1.0, 0.01006327034802035]
-    decayrate = 0.01006327034802035
-    datacond = "MOCK"
-    datafolder = "data/HCT116_testdata"
-    label = "scRNA_test"
+function fit_rna_test(; gene = "CENPL",cell = "HCT116", fish = false,G = 2,nalleles = 2,nsets = 1,propcv = 0.05,fittedparam = [1, 2, 3],fixedeffects = (),transitions = ([1, 2], [2, 1]), ejectprior = 0.05, r = [0.01, 0.1, 1.0, 0.01006327034802035],decayrate = 0.01006327034802035,datacond = "MOCK",datafolder = "data/HCT116_testdata",label = "scRNA_test",root=".")
     data = data_rna(gene, datacond, datafolder, fish, label)
     model = model_rna(data, r, G, nalleles, nsets, propcv, fittedparam, fixedeffects, transitions, decayrate, ejectprior)
     options = MHOptions(100000, 0, 0, 30.0, 1.0, 100.0)
     fit, stats, measures = run_mh(data, model, options, 1)
-    return stats.meanparam, fit.llml, model
+    return stats.medparam, fit.llml, model
 end
 
 
