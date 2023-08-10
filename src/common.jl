@@ -517,6 +517,8 @@ Intron ejection rates at each R step
 """
 get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
 
+num_rates(transitions,R,S) = length(transitions) + R + S + 2
+
 # function get_eta(r,n,nr)
 #     eta = zeros(nr)
 #     if length(r) > 2*n + 2*nr
