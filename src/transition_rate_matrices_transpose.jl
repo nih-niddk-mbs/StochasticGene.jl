@@ -235,8 +235,17 @@ set_indices(ntransitions,R)
 
 """
 set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
-set_indices(ntransitions, R) = set_indices(ntransitions, R, 0)
-set_indices(ntransitions, R, S) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+S+1), ntransitions + R + S + 2)
+set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
+function set_indices(ntransitions, R, S) 
+	if S > 0
+		Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+S+1), ntransitions + R + S + 2)
+	elseif R > 0
+		set_indices(ntransitions, R)
+	else
+		set_indices(ntransitions)
+	end
+end
+
 """
 set_elements_G!(elements,transitions,G,R,base,gamma)
 

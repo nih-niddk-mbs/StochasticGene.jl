@@ -566,7 +566,7 @@ provided for each data and model type
 function loglikelihood(param,data::AbstractHistogramData,model)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
-    logpredictions = log.(max.(predictions,0))
+    logpredictions = log.(max.(predictions,eps()))
     return crossentropy(logpredictions,hist), -logpredictions
 end
 

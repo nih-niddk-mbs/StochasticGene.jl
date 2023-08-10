@@ -81,13 +81,14 @@ function test(r, transitions, G, R, S, nhist, nalleles, onstates, range)
 end
 
 function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
-    if R == 0
-        components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
-    elseif S == 0
-        components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions), R))
-    else
-        components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions), R, R))
-    end
+    # if R == 0
+    #     components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
+    # elseif S == 0
+    #     components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions), R))
+    # else
+    #     components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions), R, R))
+    # end
+	make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, R), onstates, "")
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
@@ -103,7 +104,7 @@ end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
 
-function test_fit_rna(; gene = "CENPL",cell = "HCT116", fish = false,G = 2,nalleles = 2,nsets = 1,propcv = 0.05,fittedparam = [1, 2, 3],fixedeffects = (),transitions = ([1, 2], [2, 1]), ejectprior = 0.05, r = [0.01, 0.1, 1.0, 0.01006327034802035],decayrate = 0.01006327034802035,datacond = "MOCK",datafolder = "data/HCT116_testdata",label = "scRNA_test",root=".")
+function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsets=1, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datafolder="data/HCT116_testdata", label="scRNA_test", root=".")
     data = data_rna(gene, datacond, datafolder, fish, label)
     model = model_rna(data, r, G, nalleles, nsets, propcv, fittedparam, fixedeffects, transitions, decayrate, ejectprior)
     options = MHOptions(100000, 0, 0, 1000.0, 1.0, 1.0)
@@ -112,10 +113,9 @@ function test_fit_rna(; gene = "CENPL",cell = "HCT116", fish = false,G = 2,nalle
 end
 
 
-function test_fit_histograms(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[ones(num_rates(transitions,R,S)-1);rtarget[end]], nsamples=1000, G=2, R=1, S=0, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), transitions=([1, 2], [2, 1]), fittedparam=collect(1:num_rates(transitions,R,S)-1), propcv=0.05, cv=10.0)
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[ones(num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
-    println(rinit)
     model = histogram_model(rinit, transitions, G, R, S, nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fit, stats, measures = run_mh(data, model, options)
@@ -123,7 +123,7 @@ function test_fit_histograms(; rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], rinit=[ones(
 end
 
 
-function test_fit_trace(; G=2, R=1, S=0,transitions=([1, 2], [2, 1]),rtarget=[0.02, 0.1, 0.5, 0.2, 0.01], par=[50,20,200,65], rinit=[ones(num_rates(transitions,R,S)); [20, 5, 100, 10]], nsamples=1000,  onstates=[G],  totaltime=1000., ntrials=10, fittedparam=[collect(1:num_rates(transitions,R,S)-1);num_rates(transitions,R,S)+1:num_rates(transitions,R,S)+4], propcv=0.05, cv=10.0, interval=2.0)
+function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 20, 200, 65], rinit=[ones(num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=2.0)
     traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)
@@ -133,10 +133,10 @@ function test_fit_trace(; G=2, R=1, S=0,transitions=([1, 2], [2, 1]),rtarget=[0.
 end
 
 
-function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, nhist::Int, fittedparam,  onstates, propcv, cv)
+function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, nhist::Int, fittedparam, onstates, propcv, cv)
     ntransitions = length(transitions)
-    if length(r) != num_rates(transitions,R,S)
-        throw("r does not have",num_rates(transitions,R,S),"elements")
+    if length(r) != num_rates(transitions, R, S)
+        throw("r does not have", num_rates(transitions, R, S), "elements")
     end
     method = 1
     if typeof(cv) <: Real
@@ -144,16 +144,15 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, 
     else
         rcv = cv
     end
-     d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if S > 0
         components = make_components(transitions, G, R, S, r, nhist, set_indices(ntransitions, R, S))
-		return  GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
-	elseif R > 0
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
+    elseif R > 0
         components = make_components(transitions, G, R, r, nhist, set_indices(ntransitions, R))
         return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
-	else
+    else
         components = make_components(transitions, G, r, nhist, set_indices(ntransitions), onstates)
         return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)
-  
-	end
+    end
 end
