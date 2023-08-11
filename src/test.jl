@@ -123,7 +123,7 @@ function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtar
 end
 
 
-function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 2, 200, 2], rinit=[fill(.01,num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
+function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 15, 200, 70], rinit=[fill(.01,num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
     traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)

@@ -95,7 +95,8 @@ function read_tracefiles(path::String,cond::String,col=3)
             end
         end
     end
-    return traces
+    set = sum.(traces)
+    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
 end
 
 """

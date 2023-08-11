@@ -509,8 +509,8 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, mu::Float64, total::
 end
 function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
     nT = size(T, 1)
-    total = size(S, 1)
-    M = kron(S, sparse(I, nT, nT)) + kron(sparse(I, total, total), T - B) + kron(Uminus, B) + kron(Uplus, sparse(I, nT, nT))
+    total = size(U, 1)
+    M = kron(U, sparse(I, nT, nT)) + kron(sparse(I, total, total), T - B) + kron(Uminus, B) + kron(Uplus, sparse(I, nT, nT))
     M[end-size(B, 1)+1:end, end-size(B, 1)+1:end] .+= B  # boundary condition to ensure probability is conserved
     return M
 end
