@@ -16,7 +16,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
     r = get_rates(param, model)
-    reporters = num_reporters(G, model.onstates)
+    reporters = num_reporters(model.G, model.onstates)
     ll_Gaussian(r, model.G, reporters, model.components.elementsT, data.interval, data.trace)
 end
 

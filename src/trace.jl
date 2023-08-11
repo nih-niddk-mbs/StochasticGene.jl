@@ -63,7 +63,7 @@ end
 
 TBW
 """
-function trace_options(samplesteps::Int=100000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=100.0)
+function trace_options(samplesteps::Int=1000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=1.0)
 
     MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
 

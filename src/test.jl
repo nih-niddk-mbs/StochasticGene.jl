@@ -113,7 +113,7 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
 end
 
 
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[ones(num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(.01,num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = histogram_model(rinit, transitions, G, R, S, nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
@@ -123,7 +123,7 @@ function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtar
 end
 
 
-function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 20, 200, 65], rinit=[ones(num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
+function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 2, 200, 2], rinit=[fill(.01,num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
     traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)
