@@ -575,6 +575,11 @@ function logsumexp(v)
     end
 end
 
+
+function meansplicetime(r::Vector)
+    sum(1 ./ r)
+end
+
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"

@@ -210,6 +210,22 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
 end
 
+struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
+    G::Int
+    R::Int
+    S::Int
+    nalleles::Int
+    type::String
+    rates::RateType
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    Gtransitions::Tuple
+    components::ComponentType
+end
+
 function write_model(model::AbstractModel)
     for fname in fieldnames(model)
         println("$fname =",getfield(model,fname))
