@@ -63,7 +63,7 @@ end
 
 TBW
 """
-function trace_options(samplesteps::Int=1000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=1.0)
+function trace_options(;samplesteps::Int=1000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=1.0)
 
     MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
 
@@ -74,7 +74,7 @@ end
 
 TBW
 """
-function trace_prior(r,fittedparam,f=Normal,cv = 1.)
+function trace_prior(r,fittedparam,f=Normal,cv = 100.)
 	rcv = cv * ones(length(r))
 	distribution_array(log.(r[fittedparam]),sigmalognormal(rcv[fittedparam]),f)
 end
@@ -91,7 +91,11 @@ function read_tracefiles(path::String,cond::String,col=3)
             target = joinpath(root, file)
             if occursin(cond,target)
                 # println(target)
-                push!(traces, read_tracefile(target,col))
+                if occursin("csv",file)
+                    push!(traces, read_tracefile(target,col,','))
+                else
+                    push!(traces, read_tracefile(target,col))
+                end
             end
         end
     end
@@ -104,4 +108,7 @@ end
 
 TBW
 """
-read_tracefile(target::String,col=3) = readdlm(target)[:,col]
+read_tracefile(target::String,col) = readdlm(target)[:,col]
+
+
+read_tracefile(target::String,col,delimiter) = readdlm(target,delimiter)[:,col]
