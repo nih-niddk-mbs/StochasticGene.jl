@@ -167,7 +167,7 @@ function burstsize(r,R,ntransitions)
     L = nT*total
     S0 = zeros(L)
     S0[2] = 1.
-    s=StochasticGene.time_evolve_diff([1,10/minimum(r[ntransitions:ntransitions+R+1])],M,S0)
+    s=time_evolve_diff([1,10/minimum(r[ntransitions:ntransitions+R+1])],M,S0)
     mean_histogram(s[2,collect(1:nT:L)])
 end
 

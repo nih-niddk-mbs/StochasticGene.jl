@@ -26,7 +26,6 @@ include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
 include("trace.jl")
-include("io.jl")
 
 """
 test(r,transitions,G,nhist,nalleles,onstates,range)
@@ -66,11 +65,9 @@ R = 0;
 onstates = [2];
 interval = 5/3;
 par=[30, 14, 200, 75];
-trace=make_trace(r,par,transitions,G,R,onstates,interval,50,10);
 data = test_data(trace,interval);
 model = test_model(r,par,transitions,G,onstates);
 options = test_options(1000);
-@time fit,waic = metropolis_hastings(data,model,options);
 @time fit,stats,measures = run_mh(data,model,options);
 
 """

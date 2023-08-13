@@ -22,7 +22,7 @@ end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
     r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, 0)
+    reporters = num_reporters(model.G, model.R, 0, any)
     base = 2
     ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
 end
@@ -144,6 +144,14 @@ function prob_Gaussian(par, reporters, N)
     end
     d
 end
+
+# function prob_Gaussian_any(par, reporters, N)
+#     d = Array{Distribution{Univariate,Continuous}}(undef, N)
+#     for i in 1:N
+#         d[i] = Normal(par[1] + Int(reporters[i]>0) * par[3], sqrt(par[2]^2 + Int(reporters[i]>0) * par[4]^2))
+#     end
+#     d
+# end
 
 # function prob_Gaussian(par, onstates::Vector, N)
 #     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -431,13 +439,11 @@ viterbi(a, b, p0, N, T)
 returns maximum likelihood state path using Viterbi algorithm
 
 """
-function viterbi(a, b, p0, N, T)
-    loga = log.(a)
-    logb = log.(b)
+function viterbi(loga, logb, logp0, N, T)
     ϕ = similar(logb)
     ψ = similar(ϕ)
     q = Vector{Int}(undef, T)
-    ϕ[:, 1] = log.(p0) + logb[:, 1]
+    ϕ[:, 1] = logp0 + logb[:, 1]
     ψ[:, 1] .= 0
     for t in 2:T
         for j in 1:N
@@ -452,3 +458,49 @@ function viterbi(a, b, p0, N, T)
     return q
 end
 
+
+function viterbi_exp(a, b, p0, N, T)
+    loga = log.(a)
+    logb = log.(b)
+    logp0 = log.(p0)
+    viterbi(loga, logb, logp0, N, T)
+    # ϕ = similar(logb)
+    # ψ = similar(ϕ)
+    # q = Vector{Int}(undef, T)
+    # ϕ[:, 1] = log.(p0) + logb[:, 1]
+    # ψ[:, 1] .= 0
+    # for t in 2:T
+    #     for j in 1:N
+    #         m, ψ[j, t] = findmax(ϕ[:, t-1] + loga[:, j])
+    #         ϕ[j, t] = m + logb[j, t]
+    #     end
+    # end
+    # q[T] = argmax(ϕ[:, T])
+    # for t in T-1:-1:1
+    #     q[t] = ψ[q[t+1], t+1]
+    # end
+    # return q
+end
+
+"""
+    predicted_trace(r, data,model)
+
+TBW
+"""
+function predicted_trace(r, data, model)
+    reporters = num_reporters(model.G, model.R, 0,any)
+    base = 2
+    predicted_trace(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace[1])
+end
+
+
+"""
+    predicted_trace(r, nT, reporters, elementsT, interval, trace)
+
+TBW
+"""
+function predicted_trace(r, N, reporters, elementsT, interval, trace)
+    loga, logp0 = make_logap(r, interval, elementsT, N)
+    logb = set_logb_Gaussian(trace, N, r[end-3:end], reporters)
+    viterbi(loga, logb, logp0, N, length(trace))
+end

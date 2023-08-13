@@ -217,12 +217,15 @@ end
     num_reporters(G::Int,R::Int,S::Int=0)
 
 return number of reporters for all state indices
+
+if f = sum, returns total number of reporters
+if f = any, returns 1 for presence of any reporter
 """
-function num_reporters(G::Int, R::Int, S::Int=0)
+function num_reporters(G::Int, R::Int, S::Int=0,f=sum)
     base = S > 0 ? 3 : 2
     reporters = Int[]
     for i in 1:G, z in 1:base^R
-        push!(reporters, sum(digits(z - 1, base=base, pad=R) .== base - 1))
+        push!(reporters, f(digits(z - 1, base=base, pad=R) .== base - 1))
     end
     reporters
 end
@@ -277,11 +280,11 @@ end
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
 
 """
-# set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
-# set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
-# set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
-# set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_elements_RS!(elementsT, G, R, R, nu, eta, 3)
-# set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
+set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
+set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
+set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
+set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_elements_RS!(elementsT, G, R, R, nu, eta, 3)
+set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
 
 """
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
