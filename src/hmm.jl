@@ -22,7 +22,7 @@ end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
     r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, 0, any)
+    reporters = num_reporters(model.G, model.R, 0, sum)
     base = 2
     ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
 end
