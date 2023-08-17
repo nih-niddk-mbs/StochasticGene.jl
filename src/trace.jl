@@ -18,7 +18,7 @@ end
 
 TBW
 """
-simulate_trace(r,transitions,G,R,S,interval,totaltime;onstates=[G],reporterfunc=sum) = simulator(r, transitions, G, R, S, 1, 1, onstates=onstates, traceinterval=interval, reporterfunc=reporterfunc,totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
+simulate_trace(r,transitions,G,R,S,interval,totaltime;onstates=[G],reporterfnc=sum) = simulator(r, transitions, G, R, S, 1, 1, onstates=onstates, traceinterval=interval, reporterfnc=reporterfnc,totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)

@@ -27,25 +27,12 @@ function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
     ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
 end
 
-
 function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
     r = get_rates(param, model)
     reporters = num_reporters(model.G, model.R, model.S)
     base = 3
     ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
 end
-
-# function loglikelihood(r, nT, onstates, elementsT, interval, trace)
-#     logpredictions = Array{Float64}(undef, 0)
-#     for t in trace
-#         T = length(t)
-#         loga, logp0 = make_logap(r, interval, elementsT, nT)
-#         logb = set_logb(t, nT, r[end-3:end], onstates)
-#         l = forward_log(loga, logb, logp0, nT, T)
-#         push!(logpredictions, logsumexp(l[:, T]))
-#     end
-#     -sum(logpredictions), -logpredictions
-# end
 
 function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
@@ -464,22 +451,6 @@ function viterbi_exp(a, b, p0, N, T)
     logb = log.(b)
     logp0 = log.(p0)
     viterbi(loga, logb, logp0, N, T)
-    # ϕ = similar(logb)
-    # ψ = similar(ϕ)
-    # q = Vector{Int}(undef, T)
-    # ϕ[:, 1] = log.(p0) + logb[:, 1]
-    # ψ[:, 1] .= 0
-    # for t in 2:T
-    #     for j in 1:N
-    #         m, ψ[j, t] = findmax(ϕ[:, t-1] + loga[:, j])
-    #         ϕ[j, t] = m + logb[j, t]
-    #     end
-    # end
-    # q[T] = argmax(ϕ[:, T])
-    # for t in T-1:-1:1
-    #     q[t] = ψ[q[t+1], t+1]
-    # end
-    # return q
 end
 
 """
@@ -487,8 +458,8 @@ end
 
 TBW
 """
-function predicted_trace(r, data, model)
-    reporters = num_reporters(model.G, model.R, 0,any)
+function predicted_trace(r, data, model, reporterfnc=sum)
+    reporters = num_reporters(model.G, model.R, 0,reporterfnc)
     base = 2
     predicted_trace(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace[1])
 end

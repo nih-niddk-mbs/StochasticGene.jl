@@ -70,7 +70,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
     
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfunc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
@@ -150,7 +150,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if onoff
         return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
     elseif traceinterval > 0.0
-        make_trace(tracelog, G, R, S, onstates, traceinterval, par,reporterfunc)
+        make_trace(tracelog, G, R, S, onstates, traceinterval, par,reporterfnc)
     else
         return mhist[1:nhist]
     end
@@ -250,13 +250,13 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par,reporterfunc=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par,reporterfnc=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        reporters = num_reporters(G, R, S,reporterfunc)
+        reporters = num_reporters(G, R, S,reporterfnc)
     else
         reporters = num_reporters(G,onstates)
     end
