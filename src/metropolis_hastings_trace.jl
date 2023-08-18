@@ -277,16 +277,37 @@ returns  WAIC and SE of WAIC
 
 using lppd and pwaic computed in metropolis_hastings()
 """
+function compute_waic(lppd::Array{T},pwaic::Array{T},data) where {T}
+    se = sqrt(length(lppd)*var(lppd-pwaic))
+    return -2*sum(lppd-pwaic), 2*se
+end
+
+"""
+    compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
+
+TBW
+"""
 function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
     hist = datahistogram(data)
     se = sqrt(sum(hist)*var(lppd-pwaic,weights(hist),corrected=false))
     return -2*hist'*(lppd-pwaic), 2*se
 end
 
-function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceData) where {T}
-    se = sqrt(length(lppd))*std(lppd-pwaic)
-    return -2*sum(lppd-pwaic), 2*se
+"""
+    compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceHistogramData) where {T}
+
+histogram data precedes trace data in vectors
+"""
+function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceHistogramData) where {T}
+    hist = datahistogram(data)
+    N = length(hist)
+    elppd = lppd-pwaic
+    vh = sum(hist)*var(ellpd[1:N],weights(hist),corrected=false)
+    vt = length(elppd[N+1:end])*var(elppd[N+1:end])
+    se = sqrt(vh+vt)
+    return -2*hist'*(elppd[1:N]) - 2*sum(elppd[N+1:end]), 2*se
 end
+
 """
 aic(fit::Fit)
 aic(nparams::Int,llml)
@@ -557,20 +578,6 @@ function find_ml(fits::Array)
 end
 
 """
-loglikelihood(param,data,model)
-
-returns negative loglikelihood of all data and vector of the prediction histogram negative loglikelihood
-Calls likelihoodfn and datahistogram
-provided for each data and model type
-"""
-function loglikelihood(param,data::AbstractHistogramData,model)
-    predictions = likelihoodfn(param,data,model)
-    hist = datahistogram(data)
-    logpredictions = log.(max.(predictions,eps()))
-    return crossentropy(logpredictions,hist), -logpredictions
-end
-
-"""
 crossentropy(logpredictions::Array{T},data::Array{T}) where {T}
 
 compute crosscentropy between data histogram and likelilhood
@@ -602,7 +609,6 @@ returns Deviance
 
 use log of data histogram as loglikelihood of over fit model
 """
-
 deviance(logpredictions::Array,data::AbstractHistogramData) = deviance(logpredictions,datapdf(data))
 
 

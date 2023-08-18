@@ -5,17 +5,25 @@ Abstract Experimental Data types
 """
 abstract type AbstractExperimentalData end
 """
-Base for data in the form of samples
+abstract type for data in the form of samples
 """
 abstract type AbstractSampleData <: AbstractExperimentalData end
 """
-Base for data in the form of a distribution
+abstract type for data in the form of a distribution
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
 
 abstract type AbstractRNAData{hType} <: AbstractHistogramData end
-
+"""
+abstract type for time series data
+"""
 abstract type AbstractTraceData <: AbstractExperimentalData end
+
+"""
+abstract type for combined time series histogram data
+
+"""
+abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
 
 """
 Data structures
@@ -73,7 +81,7 @@ struct TraceData <: AbstractTraceData
     interval::Float64
     trace::Vector
 end
-struct TraceRNAData{hType} <: AbstractTraceData
+struct TraceRNAData{hType} <: AbstractTraceHistogramData
     name::String
     gene::String
     trace::Vector
@@ -269,6 +277,64 @@ function datapdf(data::AbstractRNAData{Array{Array,1}})
 end
 
 #### Model likelihoods   ####
+"""
+loglikelihood(param,data::AbstractHistogramData,model)
+
+returns negative loglikelihood of all data and vector of the prediction histogram negative loglikelihood
+Calls likelihoodfn and datahistogram
+provided for each data and model type
+"""
+function loglikelihood(param,data::AbstractHistogramData,model)
+    predictions = likelihoodfn(param,data,model)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictions,eps()))
+    return crossentropy(logpredictions,hist), -logpredictions
+end
+"""
+    loglikelihood(param,data::AbstractTraceData,model::GMmodel)
+
+return negative loglikelihood of combined time series traces and each trace
+
+assume Gaussian observation probability model with four parameters
+"""
+function loglikelihood(param, data::AbstractTraceHistogramData, model::GRSMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.R, model.S)
+    base = 3
+    llg,llgp = ll_Gaussian(r, model.G * base^model.R, reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
+    M = make_mat_M(model.components.mcomponents,r)
+    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictions,eps()))
+    return crossentropy(logpredictions,hist)+llg, vcat(-logpredictions,llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+end
+"""
+    loglikelihood(param,data::AbstractTraceData,model::GMmodel)
+
+return negative loglikelihood of combined time series traces and each trace
+
+assume Gaussian observation probability model with four parameters
+"""
+function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.onstates)
+    ll_Gaussian(r, model.G, reporters, model.components.elementsT, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.R, 0, sum)
+    base = 2
+    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
+    r = get_rates(param, model)
+    reporters = num_reporters(model.G, model.R, model.S)
+    base = 3
+    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
+end
+
 
 """
 likelihoodfn(param,data,model)

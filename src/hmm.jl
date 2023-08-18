@@ -7,33 +7,13 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
+
+
 """
-    loglikelihood(param,data::AbstractTraceData,model::GMmodel)
+    ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
 
-return negative loglikelihood of combined time series traces and each trace
-
-assume Gaussian observation probability model with four parameters
+return total loglikelihood for traces with summed Gaussian noise and loglikelihood of each trace
 """
-function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
-    r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.onstates)
-    ll_Gaussian(r, model.G, reporters, model.components.elementsT, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
-    r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, 0, sum)
-    base = 2
-    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
-    r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, model.S)
-    base = 3
-    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
-end
-
 function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace
