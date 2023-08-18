@@ -75,6 +75,16 @@ struct RNALiveCellData <: AbstractHistogramData
     OFF::Array
     ON::Array
 end
+
+struct RNASurvivalData <: AbstractHistogramData
+    name::String
+    gene::String
+    nRNA::Int
+    histRNA::Array
+    bins::Array
+    DwellTimes::Array
+    DTtypes::Array
+end
 struct TraceData <: AbstractTraceData
     name::String
     gene::String
@@ -202,6 +212,7 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -216,6 +227,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 
 struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
@@ -232,6 +244,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
+    onstates::Vector
 end
 
 function write_model(model::AbstractModel)
