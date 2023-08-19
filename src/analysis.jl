@@ -854,7 +854,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
 end
 
 function plot_histogram(data::RNALiveCellData,model::AbstractStochasticGRmodel,filename = "")
-    h=likelihoodtuple(model.rates,data,model)
+    h=likelihoodarray(model.rates,data,model)
     plt1 = plot(data.bins,h[1])
     plot!(plt1,data.bins,normalize_histogram(data.OFF))
     plt2 = plot(data.bins,h[2])

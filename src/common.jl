@@ -59,7 +59,7 @@ struct RNAMixedData{hType} <: AbstractRNAData{hType}
     fish::Array{Bool,1}
     histRNA::hType
 end
-struct RNAOnOfflData <: AbstractHistogramData
+struct OnOffData <: AbstractHistogramData
     name::String
     gene::String
     bins::Array
@@ -76,7 +76,7 @@ struct RNALiveCellData <: AbstractHistogramData
     ON::Array
 end
 
-struct RNASurvivalData <: AbstractHistogramData
+struct RNADwellTimelData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
@@ -366,15 +366,31 @@ function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {
     end
     return hconcat
 end
-function likelihoodfn(param::Vector,data::RNALiveCellData,model)
-    modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
-    return [modelOFF;modelON;histF]
+
+"""
+    likelihoodfn(param,data::AbstractHistogramData,model)
+
+TBW
+"""
+function likelihoodfn(param,data::AbstractHistogramData,model)
+    h = likelihoodarray(get_rates(param,model),data,model)
+    hconcat = Array{Float64,1}(undef,0)
+    for h in h
+        hconcat = vcat(hconcat,h)
+    end
+    return hconcat
 end
 
-# function likelihoodfn(param::Vector,data::RNALiveCellData,model::GMmodel)
+# function likelihoodfn(param::Vector,data::RNALiveCellData,model)
 #     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
 #     return [modelOFF;modelON;histF]
 # end
+
+# function likelihoodfn(param::Vector,data::RNASurvivalData,model)
+#     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
+#     return [modelOFF;modelON;histF]
+# end
+
 
 likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) =
     steady_state(get_rates(param,model),model.G,model.R,data.nRNA,model.nalleles)
@@ -444,7 +460,7 @@ function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     return h
 end
 
-function likelihoodtuple(rin,data::RNALiveCellData,model::AbstractGRMmodel)
+function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         r = copy(rin)
         if model.type == "offdecay"
             r[end-1] *= survival_fraction(nu,eta,model.R)
@@ -457,17 +473,33 @@ function likelihoodtuple(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
         # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-    return modelOFF, modelON, histF
+    return [modelOFF, modelON, histF]
 end
 
-function likelihoodtuple(r,data::RNALiveCellData,model::GMmodel)
+function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
         T = make_mat_T(model.components.tcomponents,r)
         TA = make_mat_TA(model.components.tcomponents,r)
         TI = make_mat_TI(model.components.tcomponents,r)
         modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.onstates)
         M = make_mat_M(model.components.mcomponents,r)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-    return modelOFF, modelON, histF
+    return [modelOFF, modelON, histF]
+end
+
+function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
+    r = copy(rin)
+    if model.type == "offdecay"
+        r[end-1] *= survival_fraction(nu,eta,model.R)
+    end
+    T = make_mat_T(model.components.tcomponents,r)
+    TA = make_mat_TA(model.components.tcomponents,r)
+    TI = make_mat_TI(model.components.tcomponents,r)
+    modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
+    M = make_mat_M(model.components.mcomponents,r)
+    # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
+    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+    # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
+return [modelOFF, modelON, histF]
 end
 
 
