@@ -506,8 +506,6 @@ function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     return [modelOFF, modelON, histF]
 end
-"""
-    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
 
 """
     likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
