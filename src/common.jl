@@ -514,7 +514,6 @@ TBW
 """
 function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
     r = copy(rin)
-    T = make_mat_T(model.components.tcomponents[1],r)
     tcomponents = model.components.tcomponents
     T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
