@@ -13,7 +13,7 @@ abstract type for data in the form of a distribution
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
 
-abstract type AbstractRNAData{hType} <: AbstractHistogramData end
+abstract type AbstractRNAData <: AbstractHistogramData end
 """
 abstract type for time series data
 """
@@ -39,20 +39,20 @@ bins: number of live cell recording time bins
 OFF:  OFF time probability density
 ON:: ON time probability density
 """
-struct RNAData{nType,hType} <: AbstractRNAData{hType}
+struct RNAData{nType,hType} <: AbstractRNAData
     name::String
     gene::String
     nRNA::nType
     histRNA::hType
 end
-struct TransientRNAData{nType,tType,hType} <: AbstractRNAData{hType}
+struct TransientRNAData{nType,tType,hType} <: AbstractRNAData
     name::String
     gene::String
     nRNA::nType
     time::tType
     histRNA::hType
 end
-struct RNAMixedData{hType} <: AbstractRNAData{hType}
+struct RNAMixedData{hType} <: AbstractRNAData
     name::String
     gene::String
     nRNA::Array
@@ -350,37 +350,33 @@ end
 
 
 """
-likelihoodfn(param,data,model)
-model likelihoodfn called by loglikelihood
+    likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Int, T2 <: Array}
+
+return likelihoodfn for single RNA histogram
 """
-function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
+function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Int, T2 <: Array}
     r = get_rates(param,model)
     M = make_mat_M(model.components,r)
     steady_state(M,model.G,model.nalleles,data.nRNA)
 end
-function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
-    h = likelihoodarray(get_rates(param,model),data,model)
-    hconcat = Array{Float64,1}(undef,0)
-    for h in h
-        hconcat = vcat(hconcat,h)
-    end
-    return hconcat
-end
-
 """
     likelihoodfn(param,data::AbstractHistogramData,model)
 
-TBW
+return loglikelihood
 """
 function likelihoodfn(param,data::AbstractHistogramData,model)
     h = likelihoodarray(get_rates(param,model),data,model)
-    hconcat = Array{Float64,1}(undef,0)
-    for h in h
-        hconcat = vcat(hconcat,h)
-    end
-    return hconcat
+    make_array{h}
 end
-
+# function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+#     h = likelihoodarray(get_rates(param,model),data,model)
+#     make_array{h}
+#     hconcat = Array{Float64,1}(undef,0)
+#     for h in h
+#         hconcat = vcat(hconcat,h)
+#     end
+#     return hconcat
+# end
 # function likelihoodfn(param::Vector,data::RNALiveCellData,model)
 #     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
 #     return [modelOFF;modelON;histF]
@@ -411,12 +407,17 @@ first set of parameters gives the initial histogram
 2nd set gives the new parameters at subsequent times
 data.histRNA holds array of histograms for time points given by data.time
 transient computes the time evolution of the histogram
-model.method=1 specifies finite difference solution otherwise use eigendecomposition solution,
+model.method=1 specifies finite difference solution using DifferentialEquations.jl otherwise use eigendecomposition solution,
 """
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
     h=likelihoodarray(r,data,model,maximum(data.nRNA))
     trim_hist(h,data.nRNA)
 end
+"""
+    likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+
+TBW
+"""
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
     # n = model.G-1
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -428,12 +429,22 @@ function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T
     end
     trim_hist(h,data.nRNA)
 end
+"""
+    likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
+
+TBW
+"""
 function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
     G = model.G
     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
     transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 end
+"""
+    likelihoodarray(r,data::RNAData,model::GMmultimodel)
+
+TBW
+"""
 function likelihoodarray(r,data::RNAData,model::GMmultimodel)
     G = model.G
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -443,6 +454,11 @@ function likelihoodarray(r,data::RNAData,model::GMmultimodel)
     end
     return h
 end
+"""
+    likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
+
+TBW
+"""
 function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     G = model.G
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -459,7 +475,24 @@ function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
     end
     return h
 end
+"""
+    likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 
+TBW
+"""
+function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
+    TA = make_mat_TA(model.components.tcomponents,r)
+    TI = make_mat_TI(model.components.tcomponents,r)
+    modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.onstates)
+    M = make_mat_M(model.components.mcomponents,r)
+    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+return [modelOFF, modelON, histF]
+end
+"""
+    likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
+
+TBW
+"""
 function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         r = copy(rin)
         if model.type == "offdecay"
@@ -470,40 +503,30 @@ function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
         TI = make_mat_TI(model.components.tcomponents,r)
         modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
         M = make_mat_M(model.components.mcomponents,r)
-        # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
-        histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-        # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-    return [modelOFF, modelON, histF]
-end
-
-function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
-        T = make_mat_T(model.components.tcomponents,r)
-        TA = make_mat_TA(model.components.tcomponents,r)
-        TI = make_mat_TI(model.components.tcomponents,r)
-        modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.onstates)
-        M = make_mat_M(model.components.mcomponents,r)
         histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     return [modelOFF, modelON, histF]
 end
+"""
+    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
 
+TBW
+"""
 function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
     r = copy(rin)
-    if model.type == "offdecay"
-        r[end-1] *= survival_fraction(nu,eta,model.R)
+    T = make_mat_T(model.components.tcomponents[1],r)
+    for d in model.DTtypes
+
     end
-    T = make_mat_T(model.components.tcomponents,r)
+
     TA = make_mat_TA(model.components.tcomponents,r)
     TI = make_mat_TI(model.components.tcomponents,r)
+
     modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
     M = make_mat_M(model.components.mcomponents,r)
-    # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-    # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
 return [modelOFF, modelON, histF]
 end
 
-
-SIinit(model::GMmodel) = SIinit(model.G,model.Gtransitions)
 
 """
 transform_rates(r,model::AbstractStochasticGRmodel)

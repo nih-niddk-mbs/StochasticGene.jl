@@ -55,6 +55,11 @@ struct TComponents
     elementsTI::Vector{Element}
 end
 
+# struct TComponents
+#     nT::Int
+#     elements::Vector
+# end
+
 """
  MTComponents
 

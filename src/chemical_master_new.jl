@@ -96,9 +96,6 @@ function ontimeCDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, m
     SA = time_evolve(t, TA, SAinit, method)
     return sum(SA[:, offstates], dims=2)[:, 1]
 end
-
-
-
 """
 offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
 

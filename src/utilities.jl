@@ -580,6 +580,19 @@ function meansplicetime(r::Vector)
     sum(1 ./ r)
 end
 
+"""
+    make_array(v::Array)
+
+convert array of arrays into a single array
+"""
+function make_array(v::Array)
+    vconcat = Float64[]
+    for v in v
+        vconcat = [vconcat;v]
+    end
+    return vconcat
+end
+
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"
