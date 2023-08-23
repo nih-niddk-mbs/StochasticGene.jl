@@ -54,6 +54,11 @@ struct TComponents
     elementsTA::Vector{Element}
     elementsTI::Vector{Element}
 end
+struct TDComponents
+    nT::Int
+    elementsT::Vector{Element}
+    elementsTD::Vector{Vector{Element}}
+end
 
 # struct TComponents
 #     nT::Int
@@ -68,6 +73,11 @@ end
 struct MTComponents
     mcomponents::MComponents
     tcomponents::TComponents
+end
+
+struct MTDComponents
+    mcomponents::MComponents
+    tcomponents::TDComponents
 end
 """
 Indices

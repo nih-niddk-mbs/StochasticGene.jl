@@ -76,7 +76,7 @@ struct RNALiveCellData <: AbstractHistogramData
     ON::Array
 end
 
-struct RNADwellTimelData <: AbstractHistogramData
+struct RNADwellTimeData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
@@ -509,6 +509,9 @@ end
 """
     likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
 
+"""
+    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
+
 TBW
 """
 function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
@@ -517,14 +520,19 @@ function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
     for d in model.DTtypes
 
     end
-
-    TA = make_mat_TA(model.components.tcomponents,r)
-    TI = make_mat_TI(model.components.tcomponents,r)
-
-    modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
+    tcomponents = model.components.tcomponents
+    T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
+    pss = normalized_nullspace(T)
+    hists = Vector{Vector}(undef,length(data.DTtypes))
+    for (i,Dtype) in enumerate(data.DTtypes)
+        TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+        S = Dtype == "ON" ? ontimeCDF(data.bins[i], model.G, model.R, TD, pss, 1) : offtimeCDF(data.bins[i], r, model.G, model.R, TD, pss, 1)
+        hists[i] = pdf_from_cdf(data.bins[i],S)
+    end
     M = make_mat_M(model.components.mcomponents,r)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-return [modelOFF, modelON, histF]
+    push!(hists,histF)
+    return hists
 end
 
 
