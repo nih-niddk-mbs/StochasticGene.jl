@@ -76,7 +76,7 @@ struct RNALiveCellData <: AbstractHistogramData
     ON::Array
 end
 
-struct RNADwellTimelData <: AbstractHistogramData
+struct RNADwellTimeData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
@@ -486,20 +486,29 @@ function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
     return [modelOFF, modelON, histF]
 end
 
+"""
+    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
+
+TBW
+"""
 function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
     r = copy(rin)
     if model.type == "offdecay"
         r[end-1] *= survival_fraction(nu,eta,model.R)
     end
-    T = make_mat_T(model.components.tcomponents,r)
-    TA = make_mat_TA(model.components.tcomponents,r)
-    TI = make_mat_TI(model.components.tcomponents,r)
-    modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
+    tcomponents = model.components.tcomponents
+    T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
+    pss = normalized_nullspace(T)
+    hists = Vector{Vector}(undef,length(data.DTtypes))
+    for (i,Dtype) in enumerate(data.DTtypes)
+        TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+        S = Dtype == "ON" ? ontimeCDF(data.bins[i], model.G, model.R, TD, pss, 1) : offtimeCDF(data.bins[i], r, model.G, model.R, TD, pss, 1)
+        hists[i] = pdf_from_cdf(data.bins[i],S)
+    end
     M = make_mat_M(model.components.mcomponents,r)
-    # histF = steady_state(r,model.G-1,model.R,data.nRNA,model.nalleles)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-    # histF = steady_state_offpath(r,model.G-1,model.R,data.nRNA,model.nalleles)
-return [modelOFF, modelON, histF]
+    push!(hists,histF)
+    return hists
 end
 
 
