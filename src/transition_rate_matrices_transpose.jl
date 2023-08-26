@@ -231,7 +231,7 @@ end
 """
     num_reporters(G::Int,R::Int,S::Int=0)
 
-return number of reporters for all state indices
+return number of a vector of the number reporters for each state index
 
 if f = sum, returns total number of reporters
 if f = any, returns 1 for presence of any reporter
