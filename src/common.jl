@@ -13,7 +13,7 @@ abstract type for data in the form of a distribution
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
 
-abstract type AbstractRNAData <: AbstractHistogramData end
+abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 """
 abstract type for time series data
 """
@@ -39,20 +39,20 @@ bins: number of live cell recording time bins
 OFF:  OFF time probability density
 ON:: ON time probability density
 """
-struct RNAData{nType,hType} <: AbstractRNAData
+struct RNAData{nType,hType} <: AbstractRNAData{hType}
     name::String
     gene::String
     nRNA::nType
     histRNA::hType
 end
-struct TransientRNAData{nType,tType,hType} <: AbstractRNAData
+struct TransientRNAData{nType,tType,hType} <: AbstractRNAData{hType}
     name::String
     gene::String
     nRNA::nType
     time::tType
     histRNA::hType
 end
-struct RNAMixedData{hType} <: AbstractRNAData
+struct RNAMixedData{hType} <: AbstractRNAData{hType}
     name::String
     gene::String
     nRNA::Array
