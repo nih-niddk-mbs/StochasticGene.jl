@@ -204,7 +204,6 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     G::Int
     R::Int
     nalleles::Int
-    type::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -219,7 +218,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     R::Int
     S::Int
     nalleles::Int
-    type::String
+    offeject:: Bool
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -235,7 +234,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     R::Int
     S::Int
     nalleles::Int
-    type::String
+    offeject::Bool
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType

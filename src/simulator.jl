@@ -60,6 +60,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
     - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 	- `par=[30, 14, 200, 75, 0.2]`: Vector of 5 parameters for noise model [background mean, background std, signal mean, signal std, weight of background <= 1]
     - `verbose::Bool=false`: flag for printing state information
+    - `offeject`::Bool : true if splice is off pathway
 
 
     Examples:
@@ -303,7 +304,7 @@ function state_index(state, G, R, S=0)
     end
 end
 
-function num_reporters(state, allele, G, R)
+function num_reporters(state::Matrix, allele, G, R)
     d = 0
     for i in G+1:G+max(R, 1)
         d = d + Int(state[i, allele] > 1)

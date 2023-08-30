@@ -305,10 +305,12 @@ set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(e
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
 
 set matrix elements in elementsT for GRS state transition matrix
+
+    "offeject" = pre-RNA is completely ejected when spliced
 """
-function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int}, type="")
+function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int}, offeject=false)
     if R > 0
-        if type == "offeject"
+        if offeject
             S = 0
             base = 2
         end
@@ -344,7 +346,7 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                 if S > 0 && abs(sC) == 1
                     push!(elementsT, Element(a, b, eta[R], sC))
                 end
-                if type == "offeject"
+                if offeject
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
                         push!(elementsT, Element(a, b, eta[R], s))
@@ -372,7 +374,7 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                             push!(elementsT, Element(a, b, eta[j], s))
                         end
                     end
-                    if type == "offeject"
+                    if offeject
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                         if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j], s))
