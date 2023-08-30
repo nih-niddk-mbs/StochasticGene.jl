@@ -112,20 +112,22 @@ abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 """
 Model structures
 
-arguments:
+fields:
 G: number of G steps
 R: number of R steps
+S: number of S sites (if S < R, splice only at the last S of the R steps)
 nalleles: number of alleles producing RNA
-type: type of model (e.g. splice, premature RNA death, etc.)
+offeject: true means splicing early is off pathway (RNA not viable)
 rates: transition rates
 rateprior: prior for rates
 proposal: MCMC proposal distribution
 fittedparam: indices of rates to be fitted
     randomeffects: indices of rates that are fixed to each other, in the form of a 2tuple of vectors
     with index 1 the tied index vector and 2 the corresponding fitted index vector
+fixedeffects: tuple of vectors of rates that are locked together
 method: numerical method for solving Master equation
 -`Gtransitions`:  tuple of vectors of G state transitions
--`onstates`: vector of onstates for GM models
+-`onstates`: vector of onstates
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
