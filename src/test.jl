@@ -97,12 +97,21 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
     if R == 0
-        modelOFF, modelON = offonPDF(TA, TI, range, r, G, transitions, onstates)
+        modelOFFold, modelONold = offonPDF(TA, TI, range, r, G, transitions, onstates)
     else
-        modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R)
+        modelOFFold, modelONold = offonPDF(T, TA, TI, range, r, G, R)
     end
+	pss = normalized_nullspace(T)
+    nonzeros = nonzero_rows(TI)
+	base = S > 0 ? 3 : 2
+	nT = G * base^R
+	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
+	init_SIt(r,onstates,tcomponents.elementsT,pss,nonzeros)
+	offstates = off_states(nT, onstates)
+	modelON = ontimeCDF(range, TA, offstates, SAinit)
+	# modelOFF = offtimeCDF(range, TI[nonzeros,nonzeros], onstates, SIinit)
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-    modelOFF, modelON, histF
+    modelOFFold, modelON, histF
 end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)

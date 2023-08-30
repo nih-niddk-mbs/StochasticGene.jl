@@ -228,6 +228,10 @@ function on_states(G::Int, R::Int, S::Int,onstates=[G])
 	end
 	onstates
 end
+
+off_states(nT,onstates) = setdiff(collect(1:nT), onstates)
+
+
 """
     num_reporters(G::Int,R::Int,S::Int=0)
 

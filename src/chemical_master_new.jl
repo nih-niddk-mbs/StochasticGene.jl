@@ -142,8 +142,8 @@ end
 returns OFF and ON dwell time histograms for G model
 """
 function offonPDF(TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onstates::Vector, method=1)
-    off = offstates(G, onstates)
-    SA = ontimeCDF(t, TA, off, init_SA(G, onstates, transitions), method)
+    offstates = off_states(G, onstates)
+    SA = ontimeCDF(t, TA, offstates, init_SA(G, onstates, transitions), method)
     if length(off) > 1
         SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions, r), method)
     else
@@ -189,12 +189,12 @@ function gt_histograms(r, transitions, G, R, nhist, nalleles, range, onstates, m
 end
 
 
-"""
-    offstates(G,onstates)
+# """
+#     offstates(G,onstates)
 
-    returns OFF G states (complement set of G ON states)
-"""
-offstates(G, onstates) = setdiff(collect(1:G), onstates)
+#     returns OFF G states (complement set of G ON states)
+# """
+# offstates(G, onstates) = setdiff(collect(1:G), onstates)
 
 """
 init_SA(pss,n,nr)
