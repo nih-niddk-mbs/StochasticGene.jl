@@ -171,14 +171,14 @@ make_components_TAI(elementsT, G::Int, onstates::Vector)
 
 return TComponent structure
 """
-function make_components_TAI(elementsT, G::Int, onstates::Vector)
+function make_components_TAI(elementsT, nT::Int, onstates::Vector)
     elementsTA = Vector{Element}(undef, 0)
     elementsTI = Vector{Element}(undef, 0)
     set_elements_TA!(elementsTA, elementsT, onstates)
     set_elements_TI!(elementsTI, elementsT, onstates)
-    TComponents(G, elementsT, elementsTA, elementsTI)
+    TComponents(nT, elementsT, elementsTA, elementsTI)
 end
-function make_components_TAI(elementsT, G::Int, R, base)
+function make_components_TAI(elementsT, G::Int, R::Int, base)
     elementsTA = Vector{Element}(undef, 0)
     elementsTI = Vector{Element}(undef, 0)
     set_elements_TA!(elementsTA, elementsT, G, R, base)
@@ -216,17 +216,17 @@ end
 
 return vector of on state indices for GR and GRS models
 """
-function on_states(G::Int, R::Int, S::Int=0)
-    base = S > 0 ? 3 : 2
-    onstates = Int[]
-    j = 1
-    for i in 1:G, z in 1:base^R
-        if any(digits(z - 1, base=base, pad=R) .== base - 1)
-            push!(onstates, j)
+function on_states(G::Int, R::Int, S::Int,onstates=[G])
+    if R > 0
+        base = S > 0 ? 3 : 2
+        onstates = Int[]
+        for i in 1:G, z in 1:base^R
+            if any(digits(z - 1, base=base, pad=R) .== base - 1)
+                push!(onstates, i + G * (z - 1))
+            end
         end
-        j += 1
-    end
-    onstates
+	end
+	onstates
 end
 """
     num_reporters(G::Int,R::Int,S::Int=0)

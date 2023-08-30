@@ -202,7 +202,7 @@ Initial condition for first passage time calculation of active (ON) state
 (Sum over all states with first R step occupied weighted by equilibrium state
 of all states with all R steps not occupied with reporters)
 """
-function init_SA(pss::Vector, n, nr)
+function init_SA(pss::Vector, n::Int, nr::Int)
     l = length(pss)
     base = findbase(l, n, nr)
     SAinit = zeros(l)
@@ -222,7 +222,7 @@ function init_SA(pss::Vector, n, nr)
     end
     SAinit / sum(SAinit)
 end
-function init_SA(G, onstates, transitions)
+function init_SA(G::Int, onstates::Vector, transitions::Tuple)
     start = Int[]
     for t in transitions
         if t[1] ∉ onstates && t[2] ∈ onstates
@@ -233,13 +233,23 @@ function init_SA(G, onstates, transitions)
     Sinit[minimum(start)] = 1
     return Sinit
 end
+function init_SA(onstates::Vector,elements::Vector,pss::Vector)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.a ∈ onstates && e.b ∉ onstates)
+            Sinit[e.a] += pss[e.b]
+        end
+    end
+    Sinit / sum(Sinit)
+end
+
 """
 init_SI(pss,r,n,nr,nonzeros)
 Initial condition for first passage time calculation of inactive (OFF) state
 (Sum over all states with no R step introns occupied weighted by equilibrium state
 of all states with a single R step intron)
 """
-function init_SI(pss::Vector, r, n, nr, nonzeros)
+function init_SI(pss::Vector, r, n::Int, nr, nonzeros)
     l = length(pss)
     base = findbase(l, n, nr)
     SIinit = zeros(l)
@@ -303,20 +313,19 @@ function init_SI(G::Int, onstates, transitions, r::Vector)
     for (i, s) in enumerate(start)
         Sinit[s] = r[tindex[i]]
     end
-    return Sinit / sum(Sinit)
+    Sinit / sum(Sinit)
 end
 
 
-function init_SIt(rates,onstates,elements,pss,nonzeros)
+function init_SI(rates::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
     Sinit = zeros(length(pss))
     for e in elements
-        if e.b ∈ onstates && e.a ∉ onstates
-            Sinit[e.a] = pss[e.a] * rates[e.index]
+        if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
+            Sinit[e.a] += pss[e.b] * rates[e.index]
         end
     end
-    # Sinit = Sinit[nonzeros]
-    return Sinit / sum(Sinit)
-
+    Sinit = Sinit[nonzeros]
+    Sinit / sum(Sinit)
 end
 
 """

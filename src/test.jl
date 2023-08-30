@@ -135,19 +135,34 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
-function test_init(r,G,R,S,transitions)
-    onstates=on_states(G,R,S)
+function test_init(r,G,R,S,transitions,onstates=[G])
+    onstates=on_states(G,R,S,onstates)
     indices = set_indices(length(transitions), R, S)
     base = S > 0 ? 3 : 2
-    tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+	nT = G * base^R
+	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+	if R > 0
+   		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+	else
+		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
+	end
     T = make_mat_T(tcomponents, r)
     TA = make_mat_TA(tcomponents, r)
     TI = make_mat_TI(tcomponents, r)
+	Told = make_mat_T(tcomponentsold, r)
+    TAold = make_mat_TA(tcomponentsold, r)
+    TIold = make_mat_TI(tcomponentsold, r)
+  
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
-    SAinit = init_SA(pss, G - 1, R)
-    SIinit = init_SI(pss, r, G - 1, R, nonzeros)
-    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI
+	if R > 0
+		SAinit = init_SA(pss, G - 1, R)
+		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
+	else
+		SAinit = init_SA(G,onstates,transitions)
+		SIinit = init_SI(G,onstates,transitions,r)
+	end
+    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
 end
 
 
