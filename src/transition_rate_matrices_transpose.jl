@@ -91,13 +91,13 @@ struct Indices
     decay::Int
 end
 """
-    make_components(transitions, G, R, S, r, total::Int, indices::Indices, type::String="")
+    make_components(transitions, G, R, S, r, total::Int, indices::Indices, rna_pathway::String="")
 
 return MTComponent structure
 """
-function make_components(transitions, G, R, S, r, total::Int, indices::Indices, onstates=[G], type::String="")
+function make_components(transitions, G, R, S, r, total::Int, indices::Indices, onstates=[G], rna_pathway::String="")
     if S > 0
-        return make_components(transitions, G, R, S, r, total, indices, type)
+        return make_components(transitions, G, R, S, r, total, indices, rna_pathway)
     elseif R > 0
         return make_components(transitions, G, R, r, total, indices)
     else
@@ -124,19 +124,19 @@ function make_components(transitions, G, R, r::Vector, total::Int, indices::Indi
     MTComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
 end
 """
-    make_components(transitions, G, R, r, total::Int, type::String, indices::Indices)
+    make_components(transitions, G, R, r, total::Int, rna_pathway::String, indices::Indices)
 
 
 """
-function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indices::Indices, type::String="")
-    # if type == "offeject"
+function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indices::Indices, rna_pathway::String="")
+    # if rna_pathway == "offeject"
     #     elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
-    #     set_elements_T(transitions, G, R, S, indices, R,S),type)
+    #     set_elements_T(transitions, G, R, S, indices, R,S),rna_pathway)
     # else
     #     elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
     # end
     U, Um, Up = make_mat_U(total, r[indices.decay])
-    MTComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, type), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, type), G, R, 3))
+    MTComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rna_pathway), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rna_pathway), G, R, 3))
 end
 """
 make_components_M(transitions, nT, total, decay)
@@ -292,7 +292,7 @@ function set_elements_G!(elements, transitions, j=0, gamma=collect(1:length(tran
     end
 end
 """
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,offeject=false)
+set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rna_pathway="")
 
 """
 set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
@@ -302,15 +302,15 @@ set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_eleme
 set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
 
 """
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,offeject=false)
+set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rna_pathway="")
 
 set matrix elements in elementsT for GRS state transition matrix
 
     "offeject" = pre-RNA is completely ejected when spliced
 """
-function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int}, offeject=false)
+function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int}, rna_pathway="")
     if R > 0
-        if offeject
+        if rna_pathway == "offeject"
             S = 0
             base = 2
         end
@@ -346,7 +346,7 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                 if S > 0 && abs(sC) == 1
                     push!(elementsT, Element(a, b, eta[R], sC))
                 end
-                if offeject
+                if rna_pathway == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
                         push!(elementsT, Element(a, b, eta[R], s))
@@ -374,7 +374,7 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                             push!(elementsT, Element(a, b, eta[j], s))
                         end
                     end
-                    if offeject
+                    if rna_pathway == "offeject"
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                         if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j], s))
@@ -447,11 +447,11 @@ function set_elements_T(transitions, G, R, base, f!, indices::Indices)
     elementsT
 end
 
-function set_elements_T(transitions, G, R, S, indices::Indices, type::String)
+function set_elements_T(transitions, G, R, S, indices::Indices, rna_pathway::String)
     elementsT = Vector{Element}(undef, 0)
     base = S > 0 ? 3 : 2
     set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-    set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, type)
+    set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rna_pathway)
     elementsT
 end
 """
