@@ -26,6 +26,11 @@ include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
 include("trace.jl")
+include("io.jl")
+include("biowulf.jl")
+include("fit.jl")
+include("genetrap.jl")
+include("analysis.jl")
 
 """
 test(r,transitions,G,nhist,nalleles,onstates,range)

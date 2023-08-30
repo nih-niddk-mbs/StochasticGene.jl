@@ -75,7 +75,6 @@ struct RNALiveCellData <: AbstractHistogramData
     OFF::Array
     ON::Array
 end
-
 struct RNADwellTimeData <: AbstractHistogramData
     name::String
     gene::String
@@ -107,7 +106,6 @@ abstract type AbstractStochasticGRmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractStochasticGRmodel end
 abstract type AbstractGRMmodel <: AbstractStochasticGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
-
 
 """
 Model structures
@@ -220,7 +218,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     R::Int
     S::Int
     nalleles::Int
-    offeject:: Bool
+    rna_pathway::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -236,7 +234,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     R::Int
     S::Int
     nalleles::Int
-    offeject::Bool
+    rna_pathway::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType

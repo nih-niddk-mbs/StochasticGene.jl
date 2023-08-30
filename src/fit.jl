@@ -4,7 +4,7 @@
 #
 
 """
-fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median",writesamples=false)
+fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -40,14 +40,14 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `burst`: if true then compute burst frequency
 - `nalleles`: number of alleles, value in alleles folder will be used if it exists
 - `optimize`: use optimizer to compute maximum likelihood value
-- `type`: switch used for GRS models, choices include "", "offeject"
+- `rnatype`: switch used for GRS models, choices include "", "offeject", "offdecay"
 - `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `writesamples`: write out MH samples if true, default is false
 - `data`: data structure
 
 """
 
-function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median",writesamples=false)
+function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
     println(now())
     gene = check_genename(gene,"[")
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
@@ -57,8 +57,8 @@ function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeff
 
     if datatype == "genetrap"
         # data = data_genetrap_FISH(root,label,gene)
-        # model = model_genetrap(data,gene,transitions,G,R,nalleles,type,fittedparam,fixedeffects,infolder,label,rtype,root)
-        data,model = genetrap(root,gene,transitions,G,R,nalleles,type,fittedparam,infolder,resultfolder,label,"median",1.)
+        # model = model_genetrap(data,gene,transitions,G,R,nalleles,rnatype,fittedparam,fixedeffects,infolder,label,rtype,root)
+        data,model = genetrap(root,gene,transitions,G,R,nalleles,rnatype,fittedparam,infolder,resultfolder,label,"median",1.)
     else
         datafolder = folder_path(datafolder,root,"data")
         if occursin("-",datafolder)
@@ -245,7 +245,7 @@ end
 
 
 """
-readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
 
 Read in initial rates from previous runs
 """
@@ -255,7 +255,7 @@ function read_ratefile
 
 end
 
-function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
     if rtype == "ml"
         row = 1
     elseif rtype == "mean"
@@ -267,10 +267,10 @@ function readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,
     else
         row = 3
     end
-    if type == "offeject" || type == "on"
-        type = ""
+    if rnatype == "offeject" || rnatype == "on"
+        rnatype = ""
     end
-    infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,type)
+    infile = getratefile_genetrap(infolder,rtype,gene,label,G,R,nalleles,rnatype)
     println(gene," ","$G$R"," ",label)
     readrates_genetrap(infile,row)
 end
@@ -284,7 +284,7 @@ function readrates_genetrap(infile::String,row::Int)
     end
 end
 
-function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,type::String)
+function getratefile_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
     model = R == 0 ? "$G" : "$G$R"
     file = "rates" * "_" * label * "_" * gene * "_" * model * "_"  * "$(nalleles)" * ".txt"
     joinpath(infolder,file)
