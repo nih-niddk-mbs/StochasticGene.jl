@@ -292,7 +292,7 @@ function set_elements_G!(elements, transitions, j=0, gamma=collect(1:length(tran
     end
 end
 """
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
+set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,offeject=false)
 
 """
 set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
@@ -302,7 +302,7 @@ set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_eleme
 set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
 
 """
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,type="")
+set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,offeject=false)
 
 set matrix elements in elementsT for GRS state transition matrix
 
