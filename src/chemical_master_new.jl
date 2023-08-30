@@ -495,7 +495,7 @@ Solve transient problem using DifferentialEquations.jl
 """
 function time_evolve_diff(t, Q::SparseMatrixCSC, P0)
     global Q_evolve = copy(Q)
-    tspan = (0.0, t[end])
+    tspan = (t[1], t[end])
     prob = ODEProblem(fevolve, P0, tspan)
     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
     sol = solve(prob, lsoda(), saveat=t)
