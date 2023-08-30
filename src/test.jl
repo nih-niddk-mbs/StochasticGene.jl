@@ -26,10 +26,10 @@ include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
 include("trace.jl")
-include("io.jl")
+# include("io.jl")
 include("biowulf.jl")
 include("fit.jl")
-include("genetrap.jl")
+# include("genetrap.jl")
 include("analysis.jl")
 
 """
@@ -91,7 +91,7 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     # else
     #     components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions), R, R))
     # end
-	components = make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, R), onstates, "")
+	components = make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, S), onstates, "")
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
@@ -135,6 +135,22 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
+function test_init(r,G,R,S,transitions)
+    onstates=on_states(G,R,S)
+    indices = set_indices(length(transitions), R, S)
+    base = S > 0 ? 3 : 2
+    tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+    T = make_mat_T(tcomponents, r)
+    TA = make_mat_TA(tcomponents, r)
+    TI = make_mat_TI(tcomponents, r)
+    pss = normalized_nullspace(T)
+    nonzeros = nonzero_rows(TI)
+    SAinit = init_SA(pss, G - 1, R)
+    SIinit = init_SI(pss, r, G - 1, R, nonzeros)
+    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI
+end
+
+
 
 function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, nhist::Int, fittedparam, onstates, propcv, cv)
     ntransitions = length(transitions)
@@ -150,10 +166,10 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, 
     d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if S > 0
         components = make_components(transitions, G, R, S, r, nhist, set_indices(ntransitions, R, S))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components,onstates)
     elseif R > 0
         components = make_components(transitions, G, R, r, nhist, set_indices(ntransitions, R))
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, "", r, d, propcv, fittedparam, method, transitions, components)
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, r, d, propcv, fittedparam, method, transitions, components,onstates)
     else
         components = make_components(transitions, G, r, nhist, set_indices(ntransitions), onstates)
         return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)

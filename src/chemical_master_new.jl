@@ -307,6 +307,18 @@ function init_SI(G::Int, onstates, transitions, r::Vector)
 end
 
 
+function init_SIt(rates,onstates,elements,pss,nonzeros)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b ∈ onstates && e.a ∉ onstates
+            Sinit[e.a] = pss[e.a] * rates[e.index]
+        end
+    end
+    # Sinit = Sinit[nonzeros]
+    return Sinit / sum(Sinit)
+
+end
+
 """
 accumulate(SA::Matrix,n,nr)
 Sum over all probability vectors accumulated into OFF states
