@@ -115,7 +115,7 @@ G: number of G steps
 R: number of R steps
 S: number of S sites (if S < R, splice only at the last S of the R steps)
 nalleles: number of alleles producing RNA
-offeject: true means splicing early is off pathway (RNA not viable)
+rnatype: choices are "", "offeject", "offdecay"
 rates: transition rates
 rateprior: prior for rates
 proposal: MCMC proposal distribution
@@ -218,7 +218,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     R::Int
     S::Int
     nalleles::Int
-    rna_pathway::String
+    rnatype::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -234,7 +234,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     R::Int
     S::Int
     nalleles::Int
-    rna_pathway::String
+    rnatype::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
