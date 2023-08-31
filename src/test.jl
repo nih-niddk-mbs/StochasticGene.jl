@@ -159,13 +159,16 @@ function test_init(r,G,R,S,transitions,onstates=[G])
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
 	if R > 0
-		SAinit = init_SA(pss, G - 1, R)
-		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
+		SAinitold = init_SA(pss, G - 1, R)
+		SIinitold = init_SI(pss, r, G - 1, R, nonzeros)
 	else
-		SAinit = init_SA(G,onstates,transitions)
-		SIinit = init_SI(G,onstates,transitions,r)
+		SAinitold = init_SA(G,onstates,transitions)
+		SIinitold = init_SI(G,onstates,transitions,r)
 	end
-    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
+	SAinit = init_S(r,onstates,tcomponents.elementsT,pss)
+	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+
+    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,SIinitold,SAinitold,Told,TAold,TIold
 end
 
 # function test_init(r,G,R,S,transitions,onstates=[G])

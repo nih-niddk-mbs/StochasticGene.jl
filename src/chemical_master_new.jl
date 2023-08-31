@@ -59,7 +59,110 @@ function steady_state(r, transitions, G, nhist, nalleles)
 end
 
 
-### Functions to compute ON and OFF time histograms
+### Functions to compute dwell time distributions
+
+
+
+"""
+    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+
+  return dwell time CDF (cumulative distribution function) to reach barrier states starting from Sinit in live states
+  live U barrier = all states
+
+  First passage time calculation from live states to barrier states
+
+- `tin`: vector of time bins for dwell time distribution
+- `Td`: dwell time rate matrix (within non barrier states)
+- `barrier`: set of barrier states
+- `Sinit`: initial state
+- `method`: 1 for directly solving ODE otherwise use eigendecomposition
+"""
+function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+    t = [0; tin]
+    S = time_evolve(t, Td, Sinit, method)
+    return sum(S[:, barrier], dims=2)[:, 1]
+end
+
+"""
+    dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+
+return dwell time PDF (probability density function)
+"""
+dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,Td,barrier,Sinit,method))
+
+"""
+pdf_from_cdf(S)
+
+return PDF (derivative (using finite difference) of CDF)
+
+- `S`: dwell time CDF
+"""
+function pdf_from_cdf(S)
+    P = diff(S)
+    P / sum(P)
+end
+
+
+"""
+    init_S(r::Vector,livestates::Vector,elements::Vector,pss)
+
+return initial distribution for dwell time distribution
+
+given by transition probability of entering live states in steady state
+(probability of barrier state multiplied by transition rate to live state)
+
+- `r`: transition rates
+- `livestates`: set of non barrier states (e.g. onstates for ON Time distribution)
+- `elements`: vector of Elements (transition rate matrix element structures)
+- `pss`: steady state distribution
+
+"""
+function init_S(r::Vector,livestates::Vector,elements::Vector,pss)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.a ∈ livestates && e.b ∉ livestates)
+            Sinit[e.a] += pss[e.b] * r[e.index]
+        end
+    end
+    Sinit / sum(Sinit)
+end
+"""
+init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector)
+
+return initial distribution for ON time distribution
+"""
+init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector) = init_S(r,onstates,elements,pss)
+
+
+
+"""
+    init_SI(r::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
+
+return nonzero states of initial distribution for OFF time distribution
+
+"""
+function init_SI(r::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
+            Sinit[e.a] += pss[e.b] * r[e.index]
+        end
+    end
+    Sinit = Sinit[nonzeros]
+    Sinit / sum(Sinit)
+end
+
+
+#     Sinit = zeros(length(pss))
+#     for e in elements
+#         if e.b != e.a && (e.a ∈ onstates && e.b ∉ onstates)
+#             Sinit[e.a] += pss[e.b] 
+#         end
+#     end
+#     Sinit / sum(Sinit)
+# end
+
+### Legacy code
 
 """
 ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
@@ -127,11 +230,6 @@ end
 offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,TI,onstates,SIinit))
 
 
-function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, sink_states, Sinit::Vector, method::Int=1)
-    t = [0; tin]
-    S = time_evolve(t, Td, Sinit, method)
-    return sum(S[:, sink_states], dims=2)[:, 1]
-end
 
 """
 offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1)
@@ -162,18 +260,6 @@ function offonPDF(TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onst
     end
     return pdf_from_cdf(SI), pdf_from_cdf(SA)
 end
-
-
-"""
-pdf_from_cdf(S)
-"""
-function pdf_from_cdf(S)
-    P = diff(S)
-    P / sum(P)
-end
-
-
-
 
 function gt_histograms(r, transitions, G, R, nhist, nalleles, bins, onstates, method=1, rnatype="")
     ntransitions = length(transitions)
@@ -244,15 +330,7 @@ function init_SA(G::Int, onstates::Vector, transitions::Tuple)
     Sinit[minimum(start)] = 1
     return Sinit
 end
-function init_SA(onstates::Vector,elements::Vector,pss::Vector)
-    Sinit = zeros(length(pss))
-    for e in elements
-        if e.b != e.a && (e.a ∈ onstates && e.b ∉ onstates)
-            Sinit[e.a] += pss[e.b]
-        end
-    end
-    Sinit / sum(Sinit)
-end
+
 
 """
 init_SI(pss,r,n,nr,nonzeros)
@@ -328,16 +406,6 @@ function init_SI(G::Int, onstates, transitions, r::Vector)
 end
 
 
-function init_SI(rates::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
-    Sinit = zeros(length(pss))
-    for e in elements
-        if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
-            Sinit[e.a] += pss[e.b] * rates[e.index]
-        end
-    end
-    Sinit = Sinit[nonzeros]
-    Sinit / sum(Sinit)
-end
 
 """
 accumulate(SA::Matrix,n,nr)
@@ -376,6 +444,11 @@ function accumulate(SI, n, nr, nonzeros, p)
     end
     return SIj
 end
+
+
+### end of legacy code
+
+
 """
 marginalize(p::Vector,n,nhist)
 marginalize(p::Vector,n)
