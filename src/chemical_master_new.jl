@@ -96,6 +96,8 @@ function ontimeCDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, m
     SA = time_evolve(t, TA, SAinit, method)
     return sum(SA[:, offstates], dims=2)[:, 1]
 end
+
+ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = pdf_from_cdf(tin,dwelltimeCDF(tin,TA,offstates,SAinit,method))
 """
 offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
 
@@ -120,6 +122,15 @@ function offtimeCDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, m
     t = [0; tin]
     SI = time_evolve(t, TI, SIinit, method)
     return sum(SI[:, onstates], dims=2)[:, 1]
+end
+
+offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(tin,dwelltimeCDF(tin,TI,onstates,SIinit))
+
+
+function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, sink_states, Sinit::Vector, method::Int=1)
+    t = [0; tin]
+    S = time_evolve(t, Td, Sinit, method)
+    return sum(S[:, sink_states], dims=2)[:, 1]
 end
 
 """

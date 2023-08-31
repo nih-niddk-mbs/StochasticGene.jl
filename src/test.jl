@@ -84,13 +84,7 @@ function test(r, transitions, G, R, S, nhist, nalleles, onstates, range)
 end
 
 function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
-    # if R == 0
-    #     components = make_components(transitions, G, r, nhist, set_indices(length(transitions)), onstates)
-    # elseif S == 0
-    #     components = make_components(transitions, G, R, r, nhist, set_indices(length(transitions), R))
-    # else
-    #     components = make_components(transitions, G, R, r, nhist, "", set_indices(length(transitions), R, R))
-    # end
+	onstates=on_states(G,R,S,onstates)
 	components = make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, S), onstates, "")
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
@@ -101,17 +95,18 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     else
         modelOFFold, modelONold = offonPDF(T, TA, TI, range, r, G, R)
     end
-	pss = normalized_nullspace(T)
-    nonzeros = nonzero_rows(TI)
-	base = S > 0 ? 3 : 2
-	nT = G * base^R
-	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
-	init_SIt(r,onstates,tcomponents.elementsT,pss,nonzeros)
-	offstates = off_states(nT, onstates)
-	modelON = ontimeCDF(range, TA, offstates, SAinit)
-	# modelOFF = offtimeCDF(range, TI[nonzeros,nonzeros], onstates, SIinit)
-    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-    modelOFFold, modelON, histF
+	histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
+	# pss = normalized_nullspace(T)
+    # nonzeros = nonzero_rows(TI)
+	# base = S > 0 ? 3 : 2
+	# nT = G * base^R
+	# SAinit = init_SA(onstates,tcomponents.elementsT,pss)
+	# SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+	# offstates = off_states(nT, onstates)
+	# modelON = ontimePDF(range, TA, offstates, SAinit)
+	# modelOFF = offtimePDF(range, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
+   
+    modelOFFold, modelONold, histF
 end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
@@ -144,35 +139,54 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
+# function test_init(r,G,R,S,transitions,onstates=[G])
+#     onstates=on_states(G,R,S,onstates)
+#     indices = set_indices(length(transitions), R, S)
+#     base = S > 0 ? 3 : 2
+# 	nT = G * base^R
+# 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+# 	if R > 0
+#    		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+# 	else
+# 		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
+# 	end
+#     T = make_mat_T(tcomponents, r)
+#     TA = make_mat_TA(tcomponents, r)
+#     TI = make_mat_TI(tcomponents, r)
+# 	Told = make_mat_T(tcomponentsold, r)
+#     TAold = make_mat_TA(tcomponentsold, r)
+#     TIold = make_mat_TI(tcomponentsold, r)
+  
+#     pss = normalized_nullspace(T)
+#     nonzeros = nonzero_rows(TI)
+# 	if R > 0
+# 		SAinit = init_SA(pss, G - 1, R)
+# 		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
+# 	else
+# 		SAinit = init_SA(G,onstates,transitions)
+# 		SIinit = init_SI(G,onstates,transitions,r)
+# 	end
+#     return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
+# end
+
 function test_init(r,G,R,S,transitions,onstates=[G])
     onstates=on_states(G,R,S,onstates)
     indices = set_indices(length(transitions), R, S)
     base = S > 0 ? 3 : 2
 	nT = G * base^R
 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
-	if R > 0
-   		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
-	else
-		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
-	end
     T = make_mat_T(tcomponents, r)
     TA = make_mat_TA(tcomponents, r)
     TI = make_mat_TI(tcomponents, r)
-	Told = make_mat_T(tcomponentsold, r)
-    TAold = make_mat_TA(tcomponentsold, r)
-    TIold = make_mat_TI(tcomponentsold, r)
-  
+
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
-	if R > 0
-		SAinit = init_SA(pss, G - 1, R)
-		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
-	else
-		SAinit = init_SA(G,onstates,transitions)
-		SIinit = init_SI(G,onstates,transitions,r)
-	end
-    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
+	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
+	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+
+    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
 end
+
 
 
 
