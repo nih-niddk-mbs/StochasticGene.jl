@@ -72,6 +72,9 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
     
 """
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
+    if S > R
+        throw("S>R")
+    end
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
