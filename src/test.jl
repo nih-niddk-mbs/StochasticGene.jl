@@ -121,7 +121,7 @@ end
 
 function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(.01,num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
-    data =message:%3C26D6DFC4-35FF-4F2A-A462-E39E8E78D234@physics.ucsd.edu%3E RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
+    data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = histogram_model(rinit, transitions, G, R, S, nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fit, stats, measures = run_mh(data, model, options)
