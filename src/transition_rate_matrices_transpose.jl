@@ -44,26 +44,48 @@ struct MComponents
 end
 
 """
-TComponents
+AbstractTComponents
 
-structure for elements of matrix T, onstate transition matrix TA, and off state transitinon matrix TI
+abstract type for components of transition matrices 
 """
-struct TComponents
+abstract type AbstractTComponents end
+
+"""
+struct TAIComponents
+
+fields:
+nT, elementsT, elementsTA, elementsTI
+
+"""
+struct TAIComponents
     nT::Int
     elementsT::Vector{Element}
     elementsTA::Vector{Element}
     elementsTI::Vector{Element}
 end
+"""
+struct TDComponents
+
+fields:
+nT, elementsT, elementsTD:: Vector{Vector{Element}}
+
+"""
 struct TDComponents
     nT::Int
     elementsT::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
+"""
+struct TComponents
 
-# struct TComponents
-#     nT::Int
-#     elements::Vector
-# end
+fields:
+nT, elementsT
+
+"""
+struct TComponents
+    nT::Int
+    elementsT::Vector
+end
 
 """
  MTComponents
@@ -73,6 +95,10 @@ end
 struct MTComponents
     mcomponents::MComponents
     tcomponents::TComponents
+end
+struct MTAIComponents
+    mcomponents::MComponents
+    tcomponents::TAIComponents
 end
 
 struct MTDComponents
@@ -113,7 +139,7 @@ end
 function make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
     elementsT = set_elements_T(transitions, indices.gamma)
     U, Um, Up = make_mat_U(total, r[indices.decay])
-    MTComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, U, Um, Up), make_components_TAI(elementsT, G, onstates))
+    MTAIComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, U, Um, Up), make_components_TAI(elementsT, G, onstates))
 end
 """
     make_components(transitions, G, R, r, total, indices::Indices)
@@ -121,7 +147,7 @@ end
 
 """
 function make_components(transitions, G, R, r::Vector, total::Int, indices::Indices)
-    MTComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
+    MTAIComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
 end
 """
     make_components(transitions, G, R, r, total::Int, rnatype::String, indices::Indices)
@@ -129,12 +155,12 @@ end
 
 """
 function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indices::Indices, rnatype::String="")
-    # if rnatype == "offeject"
-    #     elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
-    #     set_elements_T(transitions, G, R, S, indices, R,S),rnatype)
-    # else
-    #     elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
-    # end
+    if rnatype == "offeject"
+         elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
+         set_elements_T(transitions, G, R, S, indices, R,S),rnatype)
+    else
+         elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
+    end
     U, Um, Up = make_mat_U(total, r[indices.decay])
     MTComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
 end
@@ -176,14 +202,14 @@ function make_components_TAI(elementsT, nT::Int, onstates::Vector)
     elementsTI = Vector{Element}(undef, 0)
     set_elements_TA!(elementsTA, elementsT, onstates)
     set_elements_TI!(elementsTI, elementsT, onstates)
-    TComponents(nT, elementsT, elementsTA, elementsTI)
+    TAIComponents(nT, elementsT, elementsTA, elementsTI)
 end
 function make_components_TAI(elementsT, G::Int, R::Int, base)
     elementsTA = Vector{Element}(undef, 0)
     elementsTI = Vector{Element}(undef, 0)
     set_elements_TA!(elementsTA, elementsT, G, R, base)
     set_elements_TI!(elementsTI, elementsT, G, R, base)
-    TComponents(G * base^R, elementsT, elementsTA, elementsTI)
+    TAIComponents(G * base^R, elementsT, elementsTA, elementsTI)
 end
 """
     make_components_T(transitions, G, R)
@@ -205,11 +231,11 @@ end
 function make_components_T(transitions, G, R)
     # elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
     elements_T = set_elements_T(transitions, G, R, 0, set_indices(length(transitions), R), "")
-    TComponents(G * 2^R, elements_T, Element[], Element[])
+    TComponents(G * 2^R, elements_T)
 end
 function make_components_T(transitions, G)
     elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
-    TComponents(G, elements_T, Element[], Element[])
+    TComponents(G, elements_T)
 end
 """
     on_states(G,R,base=2)
@@ -444,13 +470,12 @@ function set_elements_T(transitions, gamma::Vector)
     set_elements_G!(elementsT, transitions, 0, gamma)
     elementsT
 end
-function set_elements_T(transitions, G, R, base, f!, indices::Indices)
-    elementsT = Vector{Element}(undef, 0)
-    set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-    f!(elementsT, G, R, indices)
-    elementsT
-end
-
+# function set_elements_T(transitions, G, R, base, f!, indices::Indices)
+#     elementsT = Vector{Element}(undef, 0)
+#     set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
+#     f!(elementsT, G, R, indices)
+#     elementsT
+# end
 function set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
     elementsT = Vector{Element}(undef, 0)
     base = S > 0 ? 3 : 2
@@ -550,8 +575,8 @@ make_T_mat
 
 
 """
-make_mat_T(components::TComponents, rates) = make_mat(components.elementsT, rates, components.nT)
+make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
 
-make_mat_TA(components::TComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
+make_mat_TA(components::TAIComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
 
-make_mat_TI(components::TComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
+make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
