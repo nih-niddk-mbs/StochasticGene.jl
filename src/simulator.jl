@@ -38,9 +38,9 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 """
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75], verbose::Bool=false)
+	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],bins::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75], verbose::Bool=false)
 
-	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
+	Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
     If trace is set to true, it returns a nascent mRNA trace
 
 	Arguments
@@ -54,7 +54,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 	Named arguments
     - `onstates::Vector`: a vector of ON G states
-	- `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
+	- `bins::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
 	- `totalsteps::Int=10000000`: maximum number of simulation steps
 	- `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram (not used when traces are made)
     - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
@@ -67,22 +67,22 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
     julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
 
- 	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],range=collect(1.:100.))
+ 	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
     
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], range::Vector{Float64}=Float64[], totalsteps::Int=10000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
     tIA = zeros(Float64, nalleles)
     tAI = zeros(Float64, nalleles)
-    if length(range) < 1
+    if length(bins) < 1
         onoff = false
     else
         onoff = true
-        ndt = length(range)
-        dt = range[2] - range[1]
+        ndt = length(bins)
+        dt = bins[2] - bins[1]
         histofftdd = zeros(Int, ndt)
         histontdd = zeros(Int, ndt)
     end

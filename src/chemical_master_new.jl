@@ -97,7 +97,7 @@ function ontimeCDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, m
     return sum(SA[:, offstates], dims=2)[:, 1]
 end
 
-ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = pdf_from_cdf(tin,dwelltimeCDF(tin,TA,offstates,SAinit,method))
+ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,TA,offstates,SAinit,method))
 """
 offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
 
@@ -124,7 +124,7 @@ function offtimeCDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, m
     return sum(SI[:, onstates], dims=2)[:, 1]
 end
 
-offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(tin,dwelltimeCDF(tin,TI,onstates,SIinit))
+offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,TI,onstates,SIinit))
 
 
 function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, sink_states, Sinit::Vector, method::Int=1)
@@ -144,7 +144,7 @@ function offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1
     pss = normalized_nullspace(T)
     SA = ontimeCDF(t, G, R, TA, pss, method)
     SI = offtimeCDF(t, r, G, R, TI, pss, method)
-    return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
+    return pdf_from_cdf(SI), pdf_from_cdf(SA)
 end
 
 """
@@ -160,14 +160,14 @@ function offonPDF(TA, TI, t::Vector, r::Vector, G::Int, transitions::Tuple, onst
     else
         SI = offtimeCDF(t, TI, onstates, init_SI(G, onstates, transitions), method)
     end
-    return pdf_from_cdf(t, SI), pdf_from_cdf(t, SA)
+    return pdf_from_cdf(SI), pdf_from_cdf(SA)
 end
 
 
 """
-pdf_from_cdf(t,S)
+pdf_from_cdf(S)
 """
-function pdf_from_cdf(t, S)
+function pdf_from_cdf(S)
     P = diff(S)
     P / sum(P)
 end
@@ -175,7 +175,7 @@ end
 
 
 
-function gt_histograms(r, transitions, G, R, nhist, nalleles, range, onstates, method=1, rnatype="")
+function gt_histograms(r, transitions, G, R, nhist, nalleles, bins, onstates, method=1, rnatype="")
     ntransitions = length(transitions)
     if R > 0
         components = make_components(transitions, G, R, r, nhist + 2, rnatype, Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+2*R+1), ntransitions + 2 * R + 2))
@@ -190,9 +190,9 @@ function gt_histograms(r, transitions, G, R, nhist, nalleles, range, onstates, m
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     if R > 0
-        modelOFF, modelON = offonPDF(T, TA, TI, range, r, G, R, method)
+        modelOFF, modelON = offonPDF(T, TA, TI, bins, r, G, R, method)
     else
-        modelOFF, modelON = offonPDF(TA, TI, range, G, transitions, onstates)
+        modelOFF, modelON = offonPDF(TA, TI, bins, G, transitions, onstates)
     end
     M = make_mat_M(components.mcomponents, r)
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)

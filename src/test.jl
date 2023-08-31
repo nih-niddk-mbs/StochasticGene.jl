@@ -33,7 +33,7 @@ include("fit.jl")
 include("analysis.jl")
 
 """
-test(r,transitions,G,nhist,nalleles,onstates,range)
+test(r,transitions,G,nhist,nalleles,onstates,bins)
 
 returns dwell time and mRNA histograms for simulations and chemical master equation solutions
 
@@ -77,13 +77,13 @@ options = test_options(1000);
 
 """
 
-function test(r, transitions, G, R, S, nhist, nalleles, onstates, range)
-    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
-    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
+function test(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
+    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins)
+    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
+function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
 	onstates=on_states(G,R,S,onstates)
 	components = make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, S), onstates, "")
     T = make_mat_T(components.tcomponents, r)
@@ -91,25 +91,24 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, range)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
     if R == 0
-        modelOFFold, modelONold = offonPDF(TA, TI, range, r, G, transitions, onstates)
+        modelOFFold, modelONold = offonPDF(TA, TI, bins, r, G, transitions, onstates)
     else
-        modelOFFold, modelONold = offonPDF(T, TA, TI, range, r, G, R)
+        modelOFFold, modelONold = offonPDF(T, TA, TI, bins, r, G, R)
     end
 	histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-	# pss = normalized_nullspace(T)
-    # nonzeros = nonzero_rows(TI)
-	# base = S > 0 ? 3 : 2
-	# nT = G * base^R
-	# SAinit = init_SA(onstates,tcomponents.elementsT,pss)
-	# SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
-	# offstates = off_states(nT, onstates)
-	# modelON = ontimePDF(range, TA, offstates, SAinit)
-	# modelOFF = offtimePDF(range, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
-   
-    modelOFFold, modelONold, histF
+	pss = normalized_nullspace(T)
+    nonzeros = nonzero_rows(TI)
+	base = S > 0 ? 3 : 2
+	nT = G * base^R
+	SAinit = init_SA(onstates,components.tcomponents.elementsT,pss)
+	SIinit = init_SI(r,onstates,components.tcomponents.elementsT,pss,nonzeros)
+	offstates = off_states(nT, onstates)
+	modelON = ontimePDF(bins, TA, offstates, SAinit)
+	modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
+    modelOFF, modelON, histF,modelOFFold,modelONold
 end
 
-test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, range) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, range=range)
+test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins)
 
 function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsets=1, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datafolder="data/HCT116_testdata", label="scRNA_test", root=".")
     data = data_rna(gene, datacond, datafolder, fish, label)
@@ -139,53 +138,53 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
-# function test_init(r,G,R,S,transitions,onstates=[G])
-#     onstates=on_states(G,R,S,onstates)
-#     indices = set_indices(length(transitions), R, S)
-#     base = S > 0 ? 3 : 2
-# 	nT = G * base^R
-# 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
-# 	if R > 0
-#    		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
-# 	else
-# 		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
-# 	end
-#     T = make_mat_T(tcomponents, r)
-#     TA = make_mat_TA(tcomponents, r)
-#     TI = make_mat_TI(tcomponents, r)
-# 	Told = make_mat_T(tcomponentsold, r)
-#     TAold = make_mat_TA(tcomponentsold, r)
-#     TIold = make_mat_TI(tcomponentsold, r)
-  
-#     pss = normalized_nullspace(T)
-#     nonzeros = nonzero_rows(TI)
-# 	if R > 0
-# 		SAinit = init_SA(pss, G - 1, R)
-# 		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
-# 	else
-# 		SAinit = init_SA(G,onstates,transitions)
-# 		SIinit = init_SI(G,onstates,transitions,r)
-# 	end
-#     return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
-# end
-
 function test_init(r,G,R,S,transitions,onstates=[G])
     onstates=on_states(G,R,S,onstates)
     indices = set_indices(length(transitions), R, S)
     base = S > 0 ? 3 : 2
 	nT = G * base^R
 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+	if R > 0
+   		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+	else
+		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
+	end
     T = make_mat_T(tcomponents, r)
     TA = make_mat_TA(tcomponents, r)
     TI = make_mat_TI(tcomponents, r)
-
+	Told = make_mat_T(tcomponentsold, r)
+    TAold = make_mat_TA(tcomponentsold, r)
+    TIold = make_mat_TI(tcomponentsold, r)
+  
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
-	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
-	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
-
-    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
+	if R > 0
+		SAinit = init_SA(pss, G - 1, R)
+		SIinit = init_SI(pss, r, G - 1, R, nonzeros)
+	else
+		SAinit = init_SA(G,onstates,transitions)
+		SIinit = init_SI(G,onstates,transitions,r)
+	end
+    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,Told,TAold,TIold
 end
+
+# function test_init(r,G,R,S,transitions,onstates=[G])
+#     onstates=on_states(G,R,S,onstates)
+#     indices = set_indices(length(transitions), R, S)
+#     base = S > 0 ? 3 : 2
+# 	nT = G * base^R
+# 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+#     T = make_mat_T(tcomponents, r)
+#     TA = make_mat_TA(tcomponents, r)
+#     TI = make_mat_TI(tcomponents, r)
+
+#     pss = normalized_nullspace(T)
+#     nonzeros = nonzero_rows(TI)
+# 	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
+# 	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+
+#     return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
+# end
 
 
 
