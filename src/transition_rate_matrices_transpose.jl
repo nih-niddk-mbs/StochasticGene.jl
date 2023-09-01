@@ -121,11 +121,11 @@ end
 
 return MTComponent structure
 """
-function make_components(transitions, G, R, S, r, total::Int, indices::Indices, onstates=[G], rnatype::String="")
+function make_components(transitions, G, R, S, startstep, r, total::Int, indices::Indices, onstates=[G], rnatype::String="")
     if S > 0
-        return make_components(transitions, G, R, S, r, total, indices, rnatype)
+        return make_components(transitions, G, R, S, startstep, r, total, indices, rnatype)
     elseif R > 0
-        return make_components(transitions, G, R, r, total, indices)
+        return make_components(transitions, G, R, startstep, r, total, indices)
     else
         return make_components(transitions, G, r, total, indices, onstates)
     end
@@ -237,26 +237,34 @@ function make_components_T(transitions, G)
     elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
     TComponents(G, elements_T)
 end
+
 """
-    on_states(G,R,base=2)
+    state_index(G::Int,i,z)
+
+return state index for state (i,z)
+"""
+state_index(G::Int,i,z) = i + G * (z - 1)
+"""
+    on_states(G,R,startstep,base=2)
 
 return vector of on state indices for GR and GRS models
 """
-function on_states(G::Int, R::Int, S::Int,onstates=[G])
-    if R > 0
-        base = S > 0 ? 3 : 2
-        onstates = Int[]
-        for i in 1:G, z in 1:base^R
-            if any(digits(z - 1, base=base, pad=R) .== base - 1)
-                push!(onstates, i + G * (z - 1))
-            end
-        end
+function on_states!(onstates::Vector,G::Int, R::Int,insertstep, base)
+	for i in 1:G, z in 1:base^R
+		if any(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+			push!(onstates, state_index(i,z))
+		end
 	end
+end
+
+function on_states(G,R,S,insertstep) 
+	base = S > 0 ? 3 : 2
+	onstates = Int[]
+	on_states!(onstates,G, R,insertstep, base)
 	onstates
 end
 
 off_states(nT,onstates) = setdiff(collect(1:nT), onstates)
-
 
 """
     num_reporters(G::Int,R::Int,S::Int=0)
@@ -266,11 +274,12 @@ return number of a vector of the number reporters for each state index
 if f = sum, returns total number of reporters
 if f = any, returns 1 for presence of any reporter
 """
-function num_reporters(G::Int, R::Int, S::Int=0,f=sum)
+function num_reporters(G::Int, R::Int, S::Int=0,insterstep=1,f=sum)
     base = S > 0 ? 3 : 2
-    reporters = Int[]
+    reporters = Vector{Int}(undef,G*base^R)
     for i in 1:G, z in 1:base^R
-        push!(reporters, f(digits(z - 1, base=base, pad=R) .== base - 1))
+		reporters[state_index(i,z)] = f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1)
+        # push!(reporters, f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1))
     end
     reporters
 end
@@ -325,11 +334,11 @@ end
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rnatype="")
 
 """
-set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
-set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
-set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
-set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_elements_RS!(elementsT, G, R, R, nu, eta, 3)
-set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
+# set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
+# set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
+# set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
+# set_elements_RS!(elementsT, G, R, nu::Vector{Int}, eta::Vector{Int}) = set_elements_RS!(elementsT, G, R, R, nu, eta, 3)
+# set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
 
 """
 set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rnatype="")
@@ -338,7 +347,7 @@ set matrix elements in elementsT for GRS state transition matrix
 
     "offeject" = pre-RNA is completely ejected when spliced
 """
-function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
+function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
     if R > 0
         if rnatype == "offeject"
             S = 0
@@ -350,8 +359,8 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
             base = 3
         end
         for w = 1:base^R, z = 1:base^R
-            zdigits = digits(z - 1, base=base, pad=R)
-            wdigits = digits(w - 1, base=base, pad=R)
+            zdigits = digit_vector(z,base,R)
+            wdigits = digit_vector(w,base,R)
             z1 = zdigits[1]
             w1 = wdigits[1]
             zr = zdigits[R]
@@ -368,8 +377,10 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                 sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
             end
             for i = 1:G
-                a = i + G * (z - 1)
-                b = i + G * (w - 1)
+                # a = i + G * (z - 1)
+                # b = i + G * (w - 1)
+				a = state_index(G,i,z)
+				b = state_index(G,i,w)
                 if abs(sB) == 1
                     push!(elementsT, Element(a, b, nu[R+1], sB))
                 end
@@ -400,13 +411,13 @@ function set_elements_RS!(elementsT, G, R, S, nu::Vector{Int}, eta::Vector{Int},
                     end
                     if S > 0
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-                        if abs(s) == 1
+                        if abs(s) == 1 && i >= insertstep
                             push!(elementsT, Element(a, b, eta[j], s))
                         end
                     end
                     if rnatype == "offeject"
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
-                        if abs(s) == 1
+                        if abs(s) == 1 && i >= insertstep
                             push!(elementsT, Element(a, b, eta[j], s))
                         end
                     end

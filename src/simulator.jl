@@ -291,7 +291,7 @@ function intensity(state,G, R, d)
 	max(rand(d[stateindex]),0)
 end
 
-function state_index(state, G, R, S=0)
+function state_index(state::Array, G, R, S=0)
     Gstate = argmax(state[1:G])
     if R == 0
         return Gstate

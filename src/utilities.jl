@@ -176,6 +176,14 @@ function decimal(x::Vector,base::Int=3)
     nr = length(x)
     x' * base .^ collect(0:nr-1)
 end
+
+"""
+    digit_vector(z,base,R)
+
+convert z to vector of length R in base=base
+"""
+digit_vector(z,base,R) = digits(z - 1, base=base, pad=R)
+
 """
 findbase(l,n,nr)
 
@@ -484,7 +492,7 @@ function burstoccupancy(n::Int,nr::Int,r::Vector)
 	asum = 0
 	for w=1:nr
 		for i = 1:n+1, z = 1:3^nr
-			zdigits = digits(z-1,base=3,pad=nr)
+			zdigits = digit_vector(z,3,nr)
 			a = i + (n+1)*(z-1)
 			if sum(zdigits .== 2) == w
 				Rssvisible[w] += pss[a]

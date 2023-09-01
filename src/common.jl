@@ -113,7 +113,8 @@ Model structures
 fields:
 G: number of G steps
 R: number of R steps
-S: number of S sites (if S < R, splice only at the last S of the R steps)
+S: indicator for splicing, 0 no splicing, > 1 splicing
+insertstep: R step where reporter is inserted (first step where reporter is visible)
 nalleles: number of alleles producing RNA
 rnatype: choices are "", "offeject", "offdecay"
 rates: transition rates
@@ -203,7 +204,7 @@ end
 struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
-    startstep::Int
+    insertstep::Int
     nalleles::Int
     rates::RateType
     rateprior::PriorType
@@ -218,7 +219,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     G::Int
     R::Int
     S::Int
-    startstep::Int
+    insertstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType
@@ -235,7 +236,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     G::Int
     R::Int
     S::Int
-    startstep::Int
+    insertstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType
@@ -249,7 +250,12 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     onstates::Vector
 end
 
-function write_model(model::AbstractModel)
+"""
+    print_model(model::AbstractModel)
+
+print all fields of model
+"""
+function print_model(model::AbstractModel)
     for fname in fieldnames(model)
         println("$fname =",getfield(model,fname))
     end
