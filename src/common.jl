@@ -203,6 +203,7 @@ end
 struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
     R::Int
+    startstep::Int
     nalleles::Int
     rates::RateType
     rateprior::PriorType
@@ -217,6 +218,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     G::Int
     R::Int
     S::Int
+    startstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType
@@ -233,6 +235,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     G::Int
     R::Int
     S::Int
+    startstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType

@@ -57,7 +57,7 @@ fields:
 nT, elementsT, elementsTA, elementsTI
 
 """
-struct TAIComponents
+struct TAIComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
     elementsTA::Vector{Element}
@@ -70,7 +70,7 @@ fields:
 nT, elementsT, elementsTD:: Vector{Vector{Element}}
 
 """
-struct TDComponents
+struct TDComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
     elementsTD::Vector{Vector{Element}}
@@ -82,7 +82,7 @@ fields:
 nT, elementsT
 
 """
-struct TComponents
+struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
@@ -155,14 +155,14 @@ end
 
 """
 function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indices::Indices, rnatype::String="")
-    if rnatype == "offeject"
-         elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
-         set_elements_T(transitions, G, R, S, indices, R,S),rnatype)
-    else
-         elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
-    end
+    # if rnatype == "offeject"
+    #      elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
+    #      set_elements_T(transitions, G, R, S, indices, R,S,rnatype)
+    # else
+    #      elementsT = set_elements_T(transitions, G, R, 2, set_elements_R!, indices)
+    # end
     U, Um, Up = make_mat_U(total, r[indices.decay])
-    MTComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
+    MTAIComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
 end
 """
 make_components_M(transitions, nT, total, decay)

@@ -25,6 +25,448 @@ function steady_state(M, nT, nalleles)
     allele_convolve(mhist, nalleles)
 end
 
+
+
+### Functions to compute dwell time distributions
+
+"""
+    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+
+  return dwell time CDF (cumulative distribution function) to reach barrier states starting from Sinit in live states
+  live U barrier = all states
+
+  First passage time calculation from live states to barrier states
+
+- `tin`: vector of time bins for dwell time distribution
+- `Td`: dwell time rate matrix (within non barrier states)
+- `barrier`: set of barrier states
+- `Sinit`: initial state
+- `method`: 1 for directly solving ODE otherwise use eigendecomposition
+"""
+function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+    t = [0; tin]
+    S = time_evolve(t, Td, Sinit, method)
+    return sum(S[:, barrier], dims=2)[:, 1]
+end
+
+"""
+    dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
+
+return dwell time PDF (probability density function)
+"""
+dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin, Td, barrier, Sinit, method))
+
+
+ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = dwelltimePDF(tin, TA, offstates, SAinit, method)
+
+offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = dwelltimePDF(tin, TI, onstates, SIinit, method)
+
+"""
+pdf_from_cdf(S)
+
+return PDF (derivative (using finite difference) of CDF)
+
+- `S`: dwell time CDF
+"""
+function pdf_from_cdf(S)
+    P = diff(S)
+    P / sum(P)
+end
+
+
+"""
+    init_S(r::Vector,livestates::Vector,elements::Vector,pss)
+
+return initial distribution for dwell time distribution
+
+given by transition probability of entering live states in steady state
+(probability of barrier state multiplied by transition rate to live state)
+
+- `r`: transition rates
+- `sojurn`: set of sojurn states (e.g. onstates for ON Time distribution)
+- `elements`: vector of Elements (transition rate matrix element structures)
+- `pss`: steady state distribution
+
+"""
+function init_S(r::Vector, sojurn::Vector, elements::Vector, pss)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.a ∈ sojurn && e.b ∉ sojurn)
+            Sinit[e.a] += pss[e.b] * r[e.index]
+        end
+    end
+    Sinit / sum(Sinit)
+end
+"""
+init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector)
+
+return initial distribution for ON time distribution
+"""
+init_SA(r::Vector, onstates::Vector, elements::Vector, pss::Vector) = init_S(r, onstates, elements, pss)
+
+"""
+    init_SI(r::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
+
+return nonzero states of initial distribution for OFF time distribution
+
+"""
+function init_SI(r::Vector, onstates::Vector, elements::Vector, pss, nonzeros)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
+            Sinit[e.a] += pss[e.b] * r[e.index]
+        end
+    end
+    Sinit = Sinit[nonzeros]
+    Sinit / sum(Sinit)
+end
+
+
+"""
+marginalize(p::Vector,nT,nhist)
+marginalize(p::Vector,nT)
+marginalize(P::Matrix)
+
+Marginalize over G states
+"""
+function marginalize(p::Vector, nT, nhist)
+    mhist = zeros(nhist)
+    for m in 1:nhist
+        i = (m - 1) * nT
+        mhist[m] = sum(p[i+1:i+nT])
+    end
+    return mhist
+end
+
+function marginalize(p::Vector, nT)
+    nhist = div(length(p), nT)
+    marginalize(p, nT, nhist)
+end
+
+marginalize(P::Matrix) = sum(P, dims=1)
+
+
+
+"""
+    unfold(P::Matrix)
+
+TBW
+"""
+unfold(P::Matrix) = reshape(P, length(P))
+
+
+
+"""
+time_evolve(t,M::Matrix,Sinit::Vector)
+Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
+"""
+function time_evolve(t, M::AbstractMatrix, S0::Vector, method)
+    if method == 1
+        return time_evolve_diff(t, M, S0)
+    else
+        return time_evolve_eig(t, M, S0)
+    end
+end
+"""
+time_evolve_diff(t,M::Matrix,P0)
+
+Solve master equation problem using DifferentialEquations.jl
+"""
+function time_evolve_diff(t, Q::SparseMatrixCSC, P0)
+    tspan = (t[1], t[end])
+    prob = ODEProblem(fevolve!, P0, tspan, Q)
+    sol = solve(prob, lsoda(), saveat=t)
+    return sol'
+end
+
+"""
+    fevolve!(du,u::Vector, p, t)
+
+in place update of du of ODE system for DifferentialEquations,jl
+"""
+function fevolve!(du, u::Vector, p, t)
+    du .= p * u
+end
+
+
+"""
+    time_evolve_eig(t, M::AbstractMatrix, Sinit::Vector)
+
+    Solve master equation problem using eigen decomposition
+"""
+function time_evolve_eig(t, M::AbstractMatrix, Sinit::Vector)
+    vals, vects = eig_decompose(M)
+    weights = solve_vector(vects, Sinit)
+    time_evolve(t, vals, vects, weights)
+end
+"""
+time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
+
+"""
+function time_evolve_eig(t::Float64, vals::Vector, vects::Matrix, weights::Vector)
+    n = length(vals)
+    S = zeros(n)
+    for j = 1:n
+        for i = 1:n
+            S[j] += real(weights[i] * vects[j, i] * exp.(vals[i] * t))
+        end
+    end
+    return S
+end
+"""
+    time_evolve_eig(t::Vector, vals::Vector, vects::Matrix, weights::Vector)
+
+TBW
+"""
+function time_evolve_eig(t::Vector, vals::Vector, vects::Matrix, weights::Vector)
+    ntime = length(t)
+    n = length(vals)
+    S = Array{Float64,2}(undef, ntime, n)
+    for j = 1:n
+        Sj = zeros(ntime)
+        for i = 1:n
+            Sj += real(weights[i] * vects[j, i] * exp.(vals[i] * t))
+        end
+        S[:, j] = Sj
+    end
+    return S
+end
+
+"""
+normalized_nullspace(M::SparseMatrixCSC)
+Compute the normalized null space of a nxn matrix
+of rank n-1 using QR decomposition with pivoting
+"""
+function normalized_nullspace(M::SparseMatrixCSC)
+    m = size(M, 1)
+    p = zeros(m)
+    F = qr(M)   #QR decomposition
+    R = F.R
+    # Back substitution to solve R*p = 0
+    p[end] = 1.0
+    for i in 1:m-1
+        p[m-i] = -R[m-i, m-i+1:end]' * p[m-i+1:end] / R[m-i, m-i]
+    end
+    # Permute elements according to sparse matrix result
+    pp = copy(p)
+    for i in eachindex(p)
+        pp[F.pcol[i]] = p[i]
+    end
+    pp / sum(pp)
+
+end
+"""
+    allele_convolve(mhist,nalleles)
+
+    Convolve to compute distribution for contributions from multiple alleles
+"""
+function allele_convolve(mhist, nalleles)
+    nhist = length(mhist)
+    mhists = Array{Array{Float64,1}}(undef, nalleles)
+    mhists[1] = float.(mhist)
+    for i = 2:nalleles
+        mhists[i] = zeros(nhist)
+        for m = 0:nhist-1
+            for m2 = 0:min(nhist - 1, m)
+                mhists[i][m+1] += mhists[i-1][m-m2+1] * mhist[m2+1]
+            end
+        end
+    end
+    return mhists[nalleles]
+end
+"""
+    allele_deconvolve(mhist,nalleles)
+
+    Deconvolve to compute distribution of one allele from contributions of multiple alleles
+"""
+allele_deconvolve(mhist, nalleles) = irfft((rfft(mhist)) .^ (1 / nalleles), length(mhist))
+
+
+
+
+"""
+nhist_loss(nhist,yieldfactor)
+
+Compute length of pre-loss histogram
+"""
+nhist_loss(nhist, yieldfactor) = round(Int, nhist / yieldfactor)
+
+"""
+technical_loss(mhist,yieldfactor)
+
+Reduce counts due to technical loss
+"""
+function technical_loss!(mhist::Vector, yieldfactor)
+    for i in eachindex(mhist)
+        mhist[i] = technical_loss(mhist[i], yieldfactor, length(mhist[i]))
+    end
+end
+"""
+technical_loss(mhist,yieldfactor,nhist)
+
+Reduce counts due to technical loss using Binomial sampling
+"""
+function technical_loss(mhist::Vector, yieldfactor, nhist)
+    p = zeros(nhist)
+    for m in eachindex(mhist)
+        d = Binomial(m - 1, clamp(yieldfactor, 0.0, 1.0))
+        for c in 1:nhist
+            p[c] += mhist[m] * pdf(d, c - 1)
+        end
+    end
+    normalize_histogram(p)
+end
+"""
+technical_loss_poisson(mhist,yieldfactor,nhist)
+
+Reduce counts due to technical loss using Poisson sampling
+"""
+function technical_loss_poisson(mhist, yieldfactor, nhist)
+    p = zeros(nhist)
+    for m in eachindex(mhist)
+        d = Poisson(yieldfactor * (m - 1))
+        for c in 1:nhist
+            p[c] += mhist[m] * pdf(d, c - 1)
+        end
+    end
+    normalize_histogram(p)
+end
+
+"""
+additive_noise(mhist,noise,nhist)
+
+Add Poisson noise to histogram
+"""
+function additive_noise(mhist, noise, nhist)
+    p = zeros(nhist)
+    d = Poisson(noise)
+    for m in 1:nhist
+        for n in 1:m
+            p[m] += mhist[n] * pdf(d, m - n)
+        end
+    end
+    normalize_histogram(p)
+end
+"""
+threshold_noise(mhist,noise,yieldfactor,nhist)
+
+Add Poisson noise to histogram then reduce counts due to technical loss
+
+"""
+function threshold_noise(mhist, noise, yieldfactor, nhist)
+    h = additive_noise(mhist, noise, nhist)
+    technical_loss(h, yieldfactor, nhist)
+end
+
+"""
+solve_vector(A::Matrix,b::vector)
+solve A x = b
+If matrix divide has error higher than tol
+use SVD and pseudoinverse with threshold
+"""
+function solve_vector(A::Matrix, b::Vector, th=1e-16, tol=1e-1)
+    x = A \ b
+    if norm(b - A * x, Inf) > tol
+        M = svd(A)
+        Sv = M.S
+        Sv[abs.(Sv).<th] .= 0.0
+        Sv[abs.(Sv).>=th] = 1 ./ Sv[abs.(Sv).>=th]
+        x = M.V * diagm(Sv) * M.U' * b
+    end
+    return x[:, 1] # return as vector
+end
+
+
+
+
+### Legacy code no longer compatible with new format
+
+"""
+    time_evolve_delay(t, r0, r1, delay, n, P0)
+
+TBW
+"""
+function time_evolve_delay(t, r0, r1, delay, n, P0)
+    tspan = (0.0, t[end])
+    nhist = Int(length(P0) / (n + 1)) - 2
+    p = [r0; r1; delay; n; nhist]
+    P0 = [P0; 1.0]
+    prob = ODEProblem(fdelay!, P0, tspan, p)
+    sol = solve(prob, lsoda(), saveat=t)
+    return sol'
+end
+
+"""
+    fdelay!(du, u, p, t)
+
+TBW
+"""
+function fdelay!(du, u, p, t)
+    n = Int(p[end-1])
+    nhist = Int(p[end])
+    delay = p[end-3]
+    r0 = p[1:2*(n+1)]
+    r1 = p[2*(n+1)+1:4*(n+1)]
+    r = r0 * u[end] + (1 - u[end]) * r1
+    M = mat_GM(r, n, nhist)
+    du[1:end-1] = M * u[1:end-1]
+    du[end] = -delay * u[end]
+end
+
+"""
+transient(ts::Vector,r,n,nhist,nalleles,P0)
+
+Compute mRNA pmf of GM model at times in vector ts starting
+with initial condition P0
+"""
+
+"""
+transient(t,r,yieldfactor,n,nhist,nalleles,P0::Vector,method)
+transient(t,n,nhist,nalleles,P0,Mvals,Mvects)
+
+Compute mRNA pmf of GM model at time t given initial condition P0
+and eigenvalues and eigenvectors of model transition rate matrix
+method = 1 uses JuliaDifferentialEquations.jl
+method != 1 uses eigenvalue decomposition
+"""
+function transient(t, r, yieldfactor, n, nalleles, P0::Vector, method)
+    mhist = transient(t, r, n, nalleles, P0, method)
+    technical_loss!(mhist, yieldfactor)
+    return mhist
+end
+function transient(t::Float64, r, n, nalleles, P0::Vector, method)
+    P = transient(t, r, n, P0, method)
+    mh = marginalize(P, n)
+    allele_convolve(mh, nalleles)
+end
+function transient(t::Vector, r, n, nalleles, P0::Vector, method)
+    P = transient(t, r, n, P0, method)
+    # P += abs.(rand(size(P)))
+    mhist = Array{Array,1}(undef, length(t))
+    for i in 1:size(P, 1)
+        mh = marginalize(P[i, :], n)
+        mhist[i] = allele_convolve(mh, nalleles)
+    end
+    return mhist
+end
+function transient(t, r, n, P0::Vector, method)
+    nhist = Int(length(P0) / (n + 1)) - 2
+    M = mat_GM(r, n, nhist)
+    time_evolve(t, M, P0, method)
+end
+
+function transient_delay(t::Vector, r0::Vector, r1::Vector, delay::Float64, n::Int, nalleles, P0::Vector)
+    P = time_evolve_delay(t, r0, r1, delay, n, P0)
+    mhist = Array{Array,1}(undef, length(t))
+    for i in 1:size(P, 1)
+        mh = marginalize(P[i, 1:end-1], n)
+        mhist[i] = allele_convolve(mh, nalleles)
+    end
+    return mhist
+end
+
+
+
 """
 steady_state(r,transitions,G,R,nhist,nalleles,rnatype="")
 
@@ -58,111 +500,6 @@ function steady_state(r, transitions, G, nhist, nalleles)
     steady_state(M, G, nalleles, nhist)
 end
 
-
-### Functions to compute dwell time distributions
-
-
-
-"""
-    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
-
-  return dwell time CDF (cumulative distribution function) to reach barrier states starting from Sinit in live states
-  live U barrier = all states
-
-  First passage time calculation from live states to barrier states
-
-- `tin`: vector of time bins for dwell time distribution
-- `Td`: dwell time rate matrix (within non barrier states)
-- `barrier`: set of barrier states
-- `Sinit`: initial state
-- `method`: 1 for directly solving ODE otherwise use eigendecomposition
-"""
-function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
-    t = [0; tin]
-    S = time_evolve(t, Td, Sinit, method)
-    return sum(S[:, barrier], dims=2)[:, 1]
-end
-
-"""
-    dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
-
-return dwell time PDF (probability density function)
-"""
-dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,Td,barrier,Sinit,method))
-
-"""
-pdf_from_cdf(S)
-
-return PDF (derivative (using finite difference) of CDF)
-
-- `S`: dwell time CDF
-"""
-function pdf_from_cdf(S)
-    P = diff(S)
-    P / sum(P)
-end
-
-
-"""
-    init_S(r::Vector,livestates::Vector,elements::Vector,pss)
-
-return initial distribution for dwell time distribution
-
-given by transition probability of entering live states in steady state
-(probability of barrier state multiplied by transition rate to live state)
-
-- `r`: transition rates
-- `livestates`: set of non barrier states (e.g. onstates for ON Time distribution)
-- `elements`: vector of Elements (transition rate matrix element structures)
-- `pss`: steady state distribution
-
-"""
-function init_S(r::Vector,livestates::Vector,elements::Vector,pss)
-    Sinit = zeros(length(pss))
-    for e in elements
-        if e.b != e.a && (e.a ∈ livestates && e.b ∉ livestates)
-            Sinit[e.a] += pss[e.b] * r[e.index]
-        end
-    end
-    Sinit / sum(Sinit)
-end
-"""
-init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector)
-
-return initial distribution for ON time distribution
-"""
-init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector) = init_S(r,onstates,elements,pss)
-
-
-
-"""
-    init_SI(r::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
-
-return nonzero states of initial distribution for OFF time distribution
-
-"""
-function init_SI(r::Vector,onstates::Vector,elements::Vector,pss,nonzeros)
-    Sinit = zeros(length(pss))
-    for e in elements
-        if e.b != e.a && (e.b ∈ onstates && e.a ∉ onstates)
-            Sinit[e.a] += pss[e.b] * r[e.index]
-        end
-    end
-    Sinit = Sinit[nonzeros]
-    Sinit / sum(Sinit)
-end
-
-
-#     Sinit = zeros(length(pss))
-#     for e in elements
-#         if e.b != e.a && (e.a ∈ onstates && e.b ∉ onstates)
-#             Sinit[e.a] += pss[e.b] 
-#         end
-#     end
-#     Sinit / sum(Sinit)
-# end
-
-### Legacy code
 
 """
 ontimeCDF(tin::Vector,G::Int,R::Int,TA::AbstractMatrix,pss::Vector,method)
@@ -200,7 +537,7 @@ function ontimeCDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, m
     return sum(SA[:, offstates], dims=2)[:, 1]
 end
 
-ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,TA,offstates,SAinit,method))
+ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin, TA, offstates, SAinit, method))
 """
 offtimeCDF(tin::Vector,r::Vector,G::Int,R::Int,TI::AbstractMatrix,pss::Vector,method)
 
@@ -227,7 +564,7 @@ function offtimeCDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, m
     return sum(SI[:, onstates], dims=2)[:, 1]
 end
 
-offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin,TI,onstates,SIinit))
+offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = pdf_from_cdf(dwelltimeCDF(tin, TI, onstates, SIinit))
 
 
 
@@ -445,262 +782,6 @@ function accumulate(SI, n, nr, nonzeros, p)
     return SIj
 end
 
-
-### end of legacy code
-
-
-"""
-marginalize(p::Vector,n,nhist)
-marginalize(p::Vector,n)
-marginalize(P::Matrix)
-
-Marginalize over G states
-"""
-function marginalize(p::Vector, nT, nhist)
-    mhist = zeros(nhist)
-    for m in 1:nhist
-        i = (m - 1) * nT
-        mhist[m] = sum(p[i+1:i+nT])
-    end
-    return mhist
-end
-
-function marginalize(p::Vector, nT)
-    nhist = div(length(p), nT)
-    marginalize(p, nT, nhist)
-end
-
-marginalize(P::Matrix) = sum(P, dims=1)
-
-unfold(P::Matrix) = reshape(P, length(P))
-
-
-"""
-transient(ts::Vector,r,n,nhist,nalleles,P0)
-
-Compute mRNA pmf of GM model at times in vector ts starting
-with initial condition P0
-"""
-
-"""
-transient(t,r,yieldfactor,n,nhist,nalleles,P0::Vector,method)
-transient(t,n,nhist,nalleles,P0,Mvals,Mvects)
-
-Compute mRNA pmf of GM model at time t given initial condition P0
-and eigenvalues and eigenvectors of model transition rate matrix
-method = 1 uses JuliaDifferentialEquations.jl
-method != 1 uses eigenvalue decomposition
-"""
-function transient(t, r, yieldfactor, n, nalleles, P0::Vector, method)
-    mhist = transient(t, r, n, nalleles, P0, method)
-    technical_loss!(mhist, yieldfactor)
-    return mhist
-end
-function transient(t::Float64, r, n, nalleles, P0::Vector, method)
-    P = transient(t, r, n, P0, method)
-    mh = marginalize(P, n)
-    allele_convolve(mh, nalleles)
-end
-function transient(t::Vector, r, n, nalleles, P0::Vector, method)
-    P = transient(t, r, n, P0, method)
-    # P += abs.(rand(size(P)))
-    mhist = Array{Array,1}(undef, length(t))
-    for i in 1:size(P, 1)
-        mh = marginalize(P[i, :], n)
-        mhist[i] = allele_convolve(mh, nalleles)
-    end
-    return mhist
-end
-function transient(t, r, n, P0::Vector, method)
-    nhist = Int(length(P0) / (n + 1)) - 2
-    M = mat_GM(r, n, nhist)
-    time_evolve(t, M, P0, method)
-end
-
-function transient_delay(t::Vector, r0::Vector, r1::Vector, delay::Float64, n::Int, nalleles, P0::Vector)
-    P = time_evolve_delay(t, r0, r1, delay, n, P0)
-    mhist = Array{Array,1}(undef, length(t))
-    for i in 1:size(P, 1)
-        mh = marginalize(P[i, 1:end-1], n)
-        mhist[i] = allele_convolve(mh, nalleles)
-    end
-    return mhist
-end
-
-
-"""
-time_evolve(t,M::Matrix,Sinit::Vector)
-Eigenvalue solution of Linear ODE with rate matrix T and initial vector Sinit
-"""
-function time_evolve(t, M::AbstractMatrix, S0::Vector, method)
-    if method == 1
-        return time_evolve_diff(t, M, S0)
-    else
-        return time_evolve(t, M, S0)
-    end
-end
-
-function time_evolve(t, M::AbstractMatrix, Sinit::Vector)
-    vals, vects = eig_decompose(M)
-    weights = solve_vector(vects, Sinit)
-    time_evolve(t, vals, vects, weights)
-end
-"""
-time_evolve(t,vals::Vector,vects::Matrix,weights::Vector)
-
-"""
-function time_evolve(t::Float64, vals::Vector, vects::Matrix, weights::Vector)
-    n = length(vals)
-    S = zeros(n)
-    for j = 1:n
-        for i = 1:n
-            S[j] += real(weights[i] * vects[j, i] * exp.(vals[i] * t))
-        end
-    end
-    return S
-end
-function time_evolve(t::Vector, vals::Vector, vects::Matrix, weights::Vector)
-    ntime = length(t)
-    n = length(vals)
-    S = Array{Float64,2}(undef, ntime, n)
-    for j = 1:n
-        Sj = zeros(ntime)
-        for i = 1:n
-            Sj += real(weights[i] * vects[j, i] * exp.(vals[i] * t))
-        end
-        S[:, j] = Sj
-    end
-    return S
-end
-"""
-time_evolve_diff(t,M::Matrix,P0)
-
-Solve transient problem using DifferentialEquations.jl
-"""
-function time_evolve_diff(t, Q::SparseMatrixCSC, P0)
-    global Q_evolve = copy(Q)
-    tspan = (t[1], t[end])
-    prob = ODEProblem(fevolve, P0, tspan)
-    # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
-    sol = solve(prob, lsoda(), saveat=t)
-    return sol'
-end
-
-fevolve(u::Vector, p, t) = Q_evolve::SparseMatrixCSC * u
-
-function time_evolve_delay(t, r0, r1, delay, n, P0)
-    tspan = (0.0, t[end])
-    nhist = Int(length(P0) / (n + 1)) - 2
-    p = [r0; r1; delay; n; nhist]
-    P0 = [P0; 1.0]
-    prob = ODEProblem(fdelay!, P0, tspan, p)
-    sol = solve(prob, lsoda(), saveat=t)
-    return sol'
-end
-
-function fdelay!(du, u, p, t)
-    n = Int(p[end-1])
-    nhist = Int(p[end])
-    delay = p[end-3]
-    r0 = p[1:2*(n+1)]
-    r1 = p[2*(n+1)+1:4*(n+1)]
-    r = r0 * u[end] + (1 - u[end]) * r1
-    M = mat_GM(r, n, nhist)
-    du[1:end-1] = M * u[1:end-1]
-    du[end] = -delay * u[end]
-end
-
-"""
-nhist_loss(nhist,yieldfactor)
-
-Compute length of pre-loss histogram
-"""
-nhist_loss(nhist, yieldfactor) = round(Int, nhist / yieldfactor)
-
-"""
-technical_loss(mhist,yieldfactor)
-
-Reduce counts due to technical loss
-"""
-function technical_loss!(mhist::Vector, yieldfactor)
-    for i in eachindex(mhist)
-        mhist[i] = technical_loss(mhist[i], yieldfactor, length(mhist[i]))
-    end
-end
-"""
-technical_loss(mhist,yieldfactor,nhist)
-
-Reduce counts due to technical loss using Binomial sampling
-"""
-function technical_loss(mhist::Vector, yieldfactor, nhist)
-    p = zeros(nhist)
-    for m in eachindex(mhist)
-        d = Binomial(m - 1, clamp(yieldfactor, 0.0, 1.0))
-        for c in 1:nhist
-            p[c] += mhist[m] * pdf(d, c - 1)
-        end
-    end
-    normalize_histogram(p)
-end
-"""
-technical_loss_poisson(mhist,yieldfactor,nhist)
-
-Reduce counts due to technical loss using Poisson sampling
-"""
-function technical_loss_poisson(mhist, yieldfactor, nhist)
-    p = zeros(nhist)
-    for m in eachindex(mhist)
-        d = Poisson(yieldfactor * (m - 1))
-        for c in 1:nhist
-            p[c] += mhist[m] * pdf(d, c - 1)
-        end
-    end
-    normalize_histogram(p)
-end
-
-"""
-additive_noise(mhist,noise,nhist)
-
-Add Poisson noise to histogram
-"""
-function additive_noise(mhist, noise, nhist)
-    p = zeros(nhist)
-    d = Poisson(noise)
-    for m in 1:nhist
-        for n in 1:m
-            p[m] += mhist[n] * pdf(d, m - n)
-        end
-    end
-    normalize_histogram(p)
-end
-"""
-threshold_noise(mhist,noise,yieldfactor,nhist)
-
-Add Poisson noise to histogram then reduce counts due to technical loss
-
-"""
-function threshold_noise(mhist, noise, yieldfactor, nhist)
-    h = additive_noise(mhist, noise, nhist)
-    technical_loss(h, yieldfactor, nhist)
-end
-
-"""
-solve_vector(A::Matrix,b::vector)
-solve A x = b
-If matrix divide has error higher than tol
-use SVD and pseudoinverse with threshold
-"""
-function solve_vector(A::Matrix, b::Vector, th=1e-16, tol=1e-1)
-    x = A \ b
-    if norm(b - A * x, Inf) > tol
-        M = svd(A)
-        Sv = M.S
-        Sv[abs.(Sv).<th] .= 0.0
-        Sv[abs.(Sv).>=th] = 1 ./ Sv[abs.(Sv).>=th]
-        x = M.V * diagm(Sv) * M.U' * b
-    end
-    return x[:, 1] # return as vector
-end
 """
 initial_pmf(T,ejectrate,n,nr,nhist)
 
@@ -728,54 +809,4 @@ function initial_pmf(t0, ejectrate, nhist)
     end
     P
 end
-
-"""
-normalized_nullspace(M::SparseMatrixCSC)
-Compute the normalized null space of a nxn matrix
-of rank n-1 using QR decomposition with pivoting
-"""
-function normalized_nullspace(M::SparseMatrixCSC)
-    m = size(M, 1)
-    p = zeros(m)
-    F = qr(M)   #QR decomposition
-    R = F.R
-    # Back substitution to solve R*p = 0
-    p[end] = 1.0
-    for i in 1:m-1
-        p[m-i] = -R[m-i, m-i+1:end]' * p[m-i+1:end] / R[m-i, m-i]
-    end
-    # Permute elements according to sparse matrix result
-    pp = copy(p)
-    for i in eachindex(p)
-        pp[F.pcol[i]] = p[i]
-    end
-    pp / sum(pp)
-
-end
-"""
-    allele_convolve(mhist,nalleles)
-
-    Convolve to compute distribution for contributions from multiple alleles
-"""
-function allele_convolve(mhist, nalleles)
-    nhist = length(mhist)
-    mhists = Array{Array{Float64,1}}(undef, nalleles)
-    mhists[1] = float.(mhist)
-    for i = 2:nalleles
-        mhists[i] = zeros(nhist)
-        for m = 0:nhist-1
-            for m2 = 0:min(nhist - 1, m)
-                mhists[i][m+1] += mhists[i-1][m-m2+1] * mhist[m2+1]
-            end
-        end
-    end
-    return mhists[nalleles]
-end
-"""
-    allele_deconvolve(mhist,nalleles)
-
-    Deconvolve to compute distribution of one allele from contributions of multiple alleles
-"""
-allele_deconvolve(mhist, nalleles) = irfft((rfft(mhist)) .^ (1 / nalleles), length(mhist))
-
-
+### end of legacy code

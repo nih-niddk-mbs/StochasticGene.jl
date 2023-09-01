@@ -90,22 +90,23 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-    if R == 0
-        modelOFFold, modelONold = offonPDF(TA, TI, bins, r, G, transitions, onstates)
-    else
-        modelOFFold, modelONold = offonPDF(T, TA, TI, bins, r, G, R)
-    end
+    # if R == 0
+    #     modelOFFold, modelONold = offonPDF(TA, TI, bins, r, G, transitions, onstates)
+    # else
+    #     modelOFFold, modelONold = offonPDF(T, TA, TI, bins, r, G, R)
+    # end
 	histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
 	pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
 	base = S > 0 ? 3 : 2
 	nT = G * base^R
-	SAinit = init_SA(onstates,components.tcomponents.elementsT,pss)
+	SAinit = init_SA(r,onstates,components.tcomponents.elementsT,pss)
 	SIinit = init_SI(r,onstates,components.tcomponents.elementsT,pss,nonzeros)
 	offstates = off_states(nT, onstates)
 	modelON = ontimePDF(bins, TA, offstates, SAinit)
-	modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
-    modelOFF, modelON, histF,modelOFFold,modelONold
+	# modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
+	modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], nonzero_states(onstates,nonzeros), SIinit)
+    modelOFF, modelON, histF
 end
 
 test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins)

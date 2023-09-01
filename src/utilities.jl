@@ -47,6 +47,13 @@ function nonzero_rows(T)
 end
 
 """
+    nonzero_states(states,nonzeros)
+
+return reindexed state vector with zeros removed
+"""
+nonzero_states(states,nonzeros) = [findfirst(o .== nonzeros) for o in intersect(states,nonzeros)]
+
+"""
 normalize_histogram(hist)
 
 Returns normalized histogram hist
