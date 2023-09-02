@@ -168,6 +168,13 @@ function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indic
     MTAIComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
 end
 
+
+function make_components_MTAI(transitions, G, R, S, insertstep, r, total::Int, indices::Indices, onstates=[], rnatype::String="")
+
+
+
+end
+
 """
     make_components(transitions, G, R, r, total, indices::Indices)
 
@@ -266,25 +273,25 @@ end
 
 return state index for state (i,z)
 """
-state_index(G::Int,i,z) = i + G * (z - 1)
+state_index(G::Int, i, z) = i + G * (z - 1)
 """
     on_states(G,R,startstep,base=2)
 
 return vector of on state indices for GR and GRS models
 """
-function on_states!(onstates::Vector,G::Int, R::Int,insertstep, base)
-	for i in 1:G, z in 1:base^R
-		if any(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
-			push!(onstates, state_index(i,z))
-		end
-	end
+function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
+    for i in 1:G, z in 1:base^R
+        if any(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+            push!(onstates, state_index(i, z))
+        end
+    end
 end
 
-function on_states(G,R,S,insertstep) 
-	base = S > 0 ? 3 : 2
-	onstates = Int[]
-	on_states!(onstates,G, R,insertstep, base)
-	onstates
+function on_states(G, R, S, insertstep)
+    base = S > 0 ? 3 : 2
+    onstates = Int[]
+    on_states!(onstates, G, R, insertstep, base)
+    onstates
 end
 
 """
@@ -292,7 +299,7 @@ end
 
 return barrier (off) states, complement of sojurn (on) states
 """
-off_states(nT,onstates) = setdiff(collect(1:nT), onstates)
+off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 
 """
     num_reporters(G::Int, R::Int, S::Int=0,insterstep=1,f=sum)
@@ -302,11 +309,11 @@ return number of a vector of the number reporters for each state index
 if f = sum, returns total number of reporters
 if f = any, returns 1 for presence of any reporter
 """
-function num_reporters(G::Int, R::Int, S::Int=0,insterstep=1,f=sum)
+function num_reporters(G::Int, R::Int, S::Int=0, insterstep=1, f=sum)
     base = S > 0 ? 3 : 2
-    reporters = Vector{Int}(undef,G*base^R)
+    reporters = Vector{Int}(undef, G * base^R)
     for i in 1:G, z in 1:base^R
-		reporters[state_index(i,z)] = f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1)
+        reporters[state_index(i, z)] = f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1)
         # push!(reporters, f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1))
     end
     reporters
@@ -328,7 +335,7 @@ end
 
 function set_indices(ntransitions, R, insertstep)
     if S > 0
-        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions+R+R-insertstep+3)
+        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions + R + R - insertstep + 3)
     elseif R > 0
         set_indices(ntransitions, R)
     else
@@ -389,8 +396,8 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
             base = 3
         end
         for w = 1:base^R, z = 1:base^R
-            zdigits = digit_vector(z,base,R)
-            wdigits = digit_vector(w,base,R)
+            zdigits = digit_vector(z, base, R)
+            wdigits = digit_vector(w, base, R)
             z1 = zdigits[1]
             w1 = wdigits[1]
             zr = zdigits[R]
@@ -409,8 +416,8 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
             for i = 1:G
                 # a = i + G * (z - 1)
                 # b = i + G * (w - 1)
-				a = state_index(G,i,z)
-				b = state_index(G,i,w)
+                a = state_index(G, i, z)
+                b = state_index(G, i, w)
                 if abs(sB) == 1
                     push!(elementsT, Element(a, b, nu[R+1], sB))
                 end
@@ -460,8 +467,17 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
         end
     end
 end
+
+
+elementsTI = Vector{Element}(undef, 0)
+
+function set_elements_TA(elementsT,onstates)
+    elementsTA = Vector{Element}(undef, 0)
+    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+    elementsTA
+end
 """
-	set_elements_TA!(elementsTA,elementsT)
+    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
 
 
 """
@@ -481,7 +497,8 @@ function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, base::Int=3)
     end
 end
 """
-	set_elements_TI!(elementsTI,elementsT)
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+
 
 
 """
@@ -508,15 +525,15 @@ end
 return T matrix elements (Element structure)
 """
 function set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
-	if R > 0
-    	elementsT = Vector{Element}(undef, 0)
-    	base = S > 0 ? 3 : 2
-    	set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-   		set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rnatype)
-    	return elementsT
-	else
-		return set_elements_T(transitions, gamma::Vector)
-	end
+    if R > 0
+        elementsT = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
+        set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rnatype)
+        return elementsT
+    else
+        return set_elements_T(transitions, gamma::Vector)
+    end
 end
 function set_elements_T(transitions, gamma::Vector)
     elementsT = Vector{Element}(undef, 0)
