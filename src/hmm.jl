@@ -159,19 +159,33 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
+# function kolmogorov_forward(Q, interval)
+#     global Q_kf = copy(Q)
+#     tspan = (0.0, interval)
+#     prob = ODEProblem(fkfg, Matrix(I, size(Q)), tspan)
+#     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
+#     sol = solve(prob, lsoda(), save_everystep=false)
+#     return sol
+# end
+# """
+# fkf(u::Matrix,p,t)
+
+# """
+# fkfg(u::Matrix, p, t) = u * Q_kf
+
 function kolmogorov_forward(Q, interval)
-    global Q_kf = copy(Q)
     tspan = (0.0, interval)
-    prob = ODEProblem(fkf, Matrix(I, size(Q)), tspan)
-    # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
-    sol = solve(prob, lsoda(), save_everystep=false)
-    return sol
+    prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
+    solve(prob, lsoda(), save_everystep=false)
 end
 """
-fkf(u::Matrix,p,t)
+    fkf!(du,u::Matrix, p, t)
 
+in place update of du of ODE system for DifferentialEquations,jl
 """
-fkf(u::Matrix, p, t) = u * Q_kf
+function fkf!(du,u::Matrix, p, t) 
+    du .= u * p
+end
 
 """
 expected_transitions(α, a, b, β, N, T)

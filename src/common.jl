@@ -1,32 +1,50 @@
 ###  common.jl
 
+
+# Data types
 """
-Abstract Experimental Data types
+    AbstractExperimentalData
+
+abstract type for experimental data
 """
 abstract type AbstractExperimentalData end
 """
+    AbstractSampleData
+
 abstract type for data in the form of samples
 """
 abstract type AbstractSampleData <: AbstractExperimentalData end
 """
-abstract type for data in the form of a distribution
+    AbstractHistogramData
+
+abstract type for data in the form of a histogram (probability distribution)
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
 
+"""
+    AbstractRNAData{hType}
+
+abstract type for steady state RNA histogram data
+"""
 abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 """
-abstract type for time series data
+    AbstractTraceData
+    
+abstract type for intensity time series data
 """
 abstract type AbstractTraceData <: AbstractExperimentalData end
 
 """
-abstract type for combined time series histogram data
-
+    AbstractTraceHistogramData
+    
+abstract type for combined time series and histogram data
 """
 abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
 
+# Data structures 
+
 """
-Data structures
+    Data structures
 
 Do not use underscore "_" in name
 
@@ -99,16 +117,16 @@ struct TraceRNAData{hType} <: AbstractTraceHistogramData
 end
 
 """
-Abstract model types
+    Abstract model types
 """
 abstract type AbstractModel end
-abstract type AbstractStochasticGRmodel <: AbstractModel end
-abstract type AbstractGMmodel <: AbstractStochasticGRmodel end
-abstract type AbstractGRMmodel <: AbstractStochasticGRmodel end
+abstract type AbstractGRmodel <: AbstractModel end
+abstract type AbstractGMmodel <: AbstractGRmodel end
+abstract type AbstractGRMmodel <: AbstractGRmodel end
 abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
 
 """
-Model structures
+    Model structures
 
 fields:
 G: number of G steps
@@ -126,7 +144,7 @@ fittedparam: indices of rates to be fitted
 fixedeffects: tuple of vectors of rates that are locked together
 method: numerical method for solving Master equation
 -`Gtransitions`:  tuple of vectors of G state transitions
--`onstates`: vector of onstates
+-`reporters`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -138,7 +156,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMfixedeffectsmodel
     G::Int
@@ -151,7 +169,7 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -163,7 +181,7 @@ struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,Compone
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -175,7 +193,7 @@ struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,Compone
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -187,7 +205,7 @@ struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Com
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -199,7 +217,7 @@ struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Comp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -213,7 +231,7 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
     G::Int
@@ -229,7 +247,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 
 struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
@@ -247,7 +265,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    onstates::Vector
+    reporters::Vector
 end
 
 """
@@ -305,7 +323,7 @@ returns negative loglikelihood of all data and vector of the prediction histogra
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
-function loglikelihood(param,data::AbstractHistogramData,model)
+function loglikelihood(param,data::AbstractHistogramData,model::abstractGRmodel)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions,eps()))
@@ -318,11 +336,10 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-function loglikelihood(param, data::AbstractTraceHistogramData, model::GRSMmodel)
+function loglikelihood(param, data::AbstractTraceHistogramData, model::abstractGRModel)
     r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, model.S)
-    base = 3
-    llg,llgp = ll_Gaussian(r, model.G * base^model.R, reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
+    # reporters = num_reporters(model.G, model.R, model.S)
+    llg,llgp = ll_Gaussian(r, Rmodel.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents,r)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     hist = datahistogram(data)
@@ -336,25 +353,25 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
+# function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
+#     r = get_rates(param, model)
+#     # reporters = num_reporters(model.G, model.reporters)
+#     ll_Gaussian(r, model.G, model.reporters, model.components.elementsT, data.interval, data.trace)
+# end
+
+function loglikelihood(param, data::AbstractTraceData, model::abstractGRmodel)
     r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.onstates)
-    ll_Gaussian(r, model.G, reporters, model.components.elementsT, data.interval, data.trace)
+    # reporters = num_reporters(model.G, model.R, 0, sum)
+    # base = 2
+    ll_Gaussian(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRMmodel)
-    r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, 0, sum)
-    base = 2
-    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
-    r = get_rates(param, model)
-    reporters = num_reporters(model.G, model.R, model.S)
-    base = 3
-    ll_Gaussian(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace)
-end
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
+#     r = get_rates(param, model)
+#     # reporters = num_reporters(model.G, model.R, model.S)
+#     # base = 3
+#     ll_Gaussian(r, model.component.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
+# end
 
 
 """
@@ -491,7 +508,7 @@ TBW
 function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
     TA = make_mat_TA(model.components.tcomponents,r)
     TI = make_mat_TI(model.components.tcomponents,r)
-    modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.onstates)
+    modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.reporters)
     M = make_mat_M(model.components.mcomponents,r)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
 return [modelOFF, modelON, histF]
@@ -539,25 +556,25 @@ end
 
 
 """
-transform_rates(r,model::AbstractStochasticGRmodel)
+transform_rates(r,model::AbstractGRmodel)
 
 transform rates to real domain
 """
-transform_rates(r,model::AbstractStochasticGRmodel) = log.(r)
+transform_rates(r,model::AbstractGRmodel) = log.(r)
 
 """
-inverse_transform_rates(x,model::AbstractStochasticGRmodel)
+inverse_transform_rates(x,model::AbstractGRmodel)
 
 transform MH parameters on real domain back to rate domain
 
 """
-inverse_transform_rates(p,model::AbstractStochasticGRmodel) = exp.(p)
+inverse_transform_rates(p,model::AbstractGRmodel) = exp.(p)
 
 """
 get_rates(param,model)
 replace fitted rates with new values and return
 """
-function get_rates(param,model::AbstractStochasticGRmodel;inverse=true)
+function get_rates(param,model::AbstractGRmodel;inverse=true)
     r = get_r(model)
     if inverse
         r[model.fittedparam] = inverse_transform_rates(param,model)
@@ -617,7 +634,7 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::AbstractStochasticGRmodel) = transform_rates(model.rates[model.fittedparam],model)
+get_param(model::AbstractGRmodel) = transform_rates(model.rates[model.fittedparam],model)
 
 function get_param(model::GMrescaledmodel)
     r = copy(model.rates)
@@ -642,7 +659,7 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::AbstractStochasticGRmodel)
+function logprior(param,model::AbstractGRmodel)
     d = model.rateprior
     p=0
     for i in eachindex(param)

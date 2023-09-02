@@ -66,12 +66,12 @@ returns fit, stats, measures
 Run Metropolis-Hastings MCMC algorithm and compute statistics of results
 
 -`data`: AbstractExperimentalData structure
--`model`: AbstractStochasticGRmodel structure with a logprior function
+-`model`: AbstractGRmodel structure with a logprior function
 -`options`: MHOptions structure
 
 model and data must have a likelihoodfn function
 """
-function run_mh(data::AbstractExperimentalData,model::AbstractStochasticGRmodel,options::MHOptions)
+function run_mh(data::AbstractExperimentalData,model::AbstractGRmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param,model)
@@ -87,7 +87,7 @@ end
 run_mh(data,model,options,nchains)
 
 """
-function run_mh(data::AbstractExperimentalData,model::AbstractStochasticGRmodel,options::MHOptions,nchains)
+function run_mh(data::AbstractExperimentalData,model::AbstractGRmodel,options::MHOptions,nchains)
     if nchains == 1
         return run_mh(data,model,options)
     else
@@ -372,11 +372,11 @@ function proposal_dist(param::Vector,cov::Matrix,model)
 end
 
 """
-proposal_scale(cv::Float64,model::AbstractStochasticGRmodel)
+proposal_scale(cv::Float64,model::AbstractGRmodel)
 
 return variance of normal distribution of log(parameter)
 """
-proposal_scale(cv::Float64,model::AbstractStochasticGRmodel) = sqrt(log(1+cv^2))
+proposal_scale(cv::Float64,model::AbstractGRmodel) = sqrt(log(1+cv^2))
 
 
 """
@@ -617,7 +617,7 @@ function deviance(fit::Fit,data::AbstractHistogramData,model)
     deviance(log.(max.(predictions,0)),data)
 end
 
-function deviance(data::AbstractHistogramData,model::AbstractStochasticGRmodel)
+function deviance(data::AbstractHistogramData,model::AbstractGRmodel)
     h = likelihoodfn(model.rates[model.fittedparam],data,model)
     deviance(h,data)
 end

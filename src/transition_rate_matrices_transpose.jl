@@ -195,33 +195,30 @@ function make_components(transitions, G, r, total::Int, indices::Indices, onstat
 end
 
 """
-make_components_M(transitions, nT, total, decay)
+    make_components_M(transitions, G, R, decay, indices, rnatype)
 
-return MComponent structure
-
+return M matrix components
 """
-function make_components_M(transitions, nT, total, decay)
-    ntransitions = length(transitions)
-    elementsT = set_elements_T(transitions, collect(1:ntransitions))
-    elementsB = set_elements_B(nT, ntransitions + 1)
+function make_components_M(transitions, G, R, decay, insertstep, rnatype)
+    indices = set_indices(length(transitions), R, insertstep)
+    elementsT = set_elements_T(transitions, G, R, 0, indices, rnatype)
+    elementsB = set_elements_B(G, R, indices.nu[R+1])
     U, Um, Up = make_mat_U(total, decay)
-    MComponents(elementsT, elementsB, nT, U, Um, Up)
+    return MComponents(elementsT, elementsB, G * 2^R, U, Um, Up)
 end
-"""
-    make_components_M(transitions, G, R, total, decay, base, indices)
-
 
 """
-function make_components_M(transitions, G, R, total, decay, base, indices)
-    if R == 0
-        return make_components_M(transitions, G, total, decay)
-    else
-        elementsT = set_elements_T(transitions, G, R, base, set_elements_R!, indices)
-        elementsB = set_elements_B(G, R, indices.nu[R+1])
-        U, Um, Up = make_mat_U(total, decay)
-        return MComponents(elementsT, elementsB, G * base^R, U, Um, Up)
-    end
+    make_components_T(transitions, G, R, S,rnatype)
+
+return T matrix components
+"""
+function make_components_T(transitions, G, R, S, insertstep, rnatype)
+    indices = set_indices(length(transitions), R, insertstep)
+    elementsT = set_elements_T(transitions, G, R, S, indices, rnatype)
+    base = S > 0 ? 3 : 2
+    TComponents(G * base^R, elementsT)
 end
+
 """
 make_components_TAI(elementsT, G::Int, onstates::Vector)
 
@@ -241,32 +238,38 @@ function make_components_TAI(elementsT, G::Int, R::Int, base)
     set_elements_TI!(elementsTI, elementsT, G, R, base)
     TAIComponents(G * base^R, elementsT, elementsTA, elementsTI)
 end
-"""
-    make_components_T(transitions, G, R)
+# """
+#     make_components_T(transitions, G, R)
 
-return TComponent structure
-"""
-function make_components_T(transitions, G, R, S)
-    if S > 0
-        # elements_T = set_elements_T(transitions, G, R, 3, set_elements_R!, set_indices(length(transitions), R,S))
-        elements_T = set_elements_T(transitions, G, R, S, set_indices(length(transitions), R, S), "")
-        return TComponents(G * 3^R, elements_T, Element[], Element[])
-    elseif R > 0
-        return make_components_T(transitions, G, R)
-    else
-        return make_components_T(transitions, G)
-    end
-end
+# return TComponent structure
+# """
+# function make_components_T(transitions, G, R, S)
+#     if S > 0
+#         # elements_T = set_elements_T(transitions, G, R, 3, set_elements_R!, set_indices(length(transitions), R,S))
+#         elements_T = set_elements_T(transitions, G, R, S, set_indices(length(transitions), R, S), "")
+#         return TComponents(G * 3^R, elements_T, Element[], Element[])
+#     elseif R > 0
+#         return make_components_T(transitions, G, R)
+#     else
+#         return make_components_T(transitions, G)
+#     end
+# end
 
-function make_components_T(transitions, G, R)
-    # elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
-    elements_T = set_elements_T(transitions, G, R, 0, set_indices(length(transitions), R), "")
-    TComponents(G * 2^R, elements_T)
-end
-function make_components_T(transitions, G)
-    elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
-    TComponents(G, elements_T)
-end
+# function make_components_T(transitions, G, R)
+#     # elements_T = set_elements_T(transitions, G, R, 2, set_elements_R!, set_indices(length(transitions), R))
+#     elements_T = set_elements_T(transitions, G, R, 0, set_indices(length(transitions), R), "")
+#     TComponents(G * 2^R, elements_T)
+# end
+
+# function make_components_T(transitions, G)
+#     elements_T = set_elements_T(transitions, set_indices(length(transitions)).gamma)
+#     TComponents(G, elements_T)
+# end
+
+
+
+
+
 
 """
     state_index(G::Int,i,z)
@@ -342,9 +345,8 @@ function set_indices(ntransitions, R, insertstep)
         set_indices(ntransitions)
     end
 end
-
-set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
+set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 
 
 """
@@ -355,11 +357,9 @@ set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransit
 -`elements`: Vector of Element structures
 -`transitions`: tupe of G state transitions
 """
-function set_elements_G!(elements, transitions, G, R, base, gamma)
-    nT = G * base^R
-    k = 1
+function set_elements_G!(elements, transitions, G, gamma, nT)
     for j = 0:G:nT-1
-        set_elements_G!(elements, transitions, j, gamma)
+        set_elements_G!(elements, transitions, gamma, j)
     end
 end
 function set_elements_G!(elements, transitions, j=0, gamma=collect(1:length(transitions)))
@@ -380,9 +380,9 @@ end
 """
     set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
 
-set inline matrix elements in elementsT for GRS state transition matrix, do nothing if R == 0
+inplace update matrix elements in elementsT for GRS state transition matrix, do nothing if R == 0
 
-    "offeject" = pre-RNA is completely ejected when spliced
+"offeject" = pre-RNA is completely ejected when spliced
 """
 function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
     if R > 0
@@ -469,8 +469,13 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
 end
 
 
-elementsTI = Vector{Element}(undef, 0)
 
+
+"""
+    set_elements_TA(elementsT,onstates)
+
+TBW
+"""
 function set_elements_TA(elementsT,onstates)
     elementsTA = Vector{Element}(undef, 0)
     set_elements_TA!(elementsTA, elementsT, onstates::Vector)
@@ -496,6 +501,18 @@ function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, base::Int=3)
         end
     end
 end
+
+"""
+    set_elements_TI(elementsT,onstates)
+
+TBW
+"""
+function set_elements_TI(elementsT,onstates)
+    elementsTI = Vector{Element}(undef, 0)
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+    elementsTI
+end
+
 """
     set_elements_TI!(elementsTI, elementsT, onstates::Vector)
 
@@ -522,23 +539,24 @@ end
 """
     set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
 
-return T matrix elements (Element structure)
+return T matrix elements (Element structure) and size of matrix
 """
-function set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
+function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, rnatype::String)
     if R > 0
         elementsT = Vector{Element}(undef, 0)
         base = S > 0 ? 3 : 2
-        set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-        set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rnatype)
-        return elementsT
+        nT = G*base^R
+        set_elements_G!(elementsT, transitions, G, indices.gamma, nT)
+        set_elements_RS!(elementsT, G, R, S, insertstep, indices.nu, indices.eta, rnatype)
+        return elementsT, nT
     else
-        return set_elements_T(transitions, gamma::Vector)
+        return set_elements_T(transitions, indices.gamma)
     end
 end
 function set_elements_T(transitions, gamma::Vector)
     elementsT = Vector{Element}(undef, 0)
-    set_elements_G!(elementsT, transitions, 0, gamma)
-    elementsT
+    set_elements_G!(elementsT, transitions, gamma)
+    elementsT, G
 end
 """
     set_elements_B(G, ejectindex)
