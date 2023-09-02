@@ -1,19 +1,21 @@
-### transition_rate_matrices_transpose.jl
-###
-### Functions to compute the transpose of the transition rate matrix for Stochastic transitions
-### Matrices are the transpose to the convention for Kolmogorov forward equations
-### i.e. reaction directions go from column to row,
-### Notation:  M = transpose of transition rate matrix of full (countably infinite) stochastic process including mRNA kinetics
-### Q = finite transition rate matrix for GRS continuous Markov process
-### T = Q'
-### transpose of Q is more convenient for solving chemical master equation
-###
+# This file is part of StochasticGene.jl
+#
+# transition_rate_matrices_transpose.jl
+#
+# Functions to compute the transpose of the transition rate matrix for Stochastic transitions
+# Matrices are the transpose to the convention for Kolmogorov forward equations
+# i.e. reaction directions go from column to row,
+# Notation:  M = transpose of transition rate matrix of full (countably infinite) stochastic process including mRNA kinetics
+# Q = finite transition rate matrix for GRS continuous Markov process
+# T = Q'
+# transpose of Q is more convenient for solving chemical master equation
+#
 
 
 """
-Element
+	struct Element
 
-transition matrix elements
+structure for transition matrix elements
 fields: 
 `a`: row, 
 `b`: column
@@ -30,7 +32,7 @@ end
 
 
 """
-MComponents
+	struct MComponents
 
 structure for matrix components for matrix M
 """
@@ -44,14 +46,26 @@ struct MComponents
 end
 
 """
-AbstractTComponents
+	AbstractTComponents
 
 abstract type for components of transition matrices 
 """
 abstract type AbstractTComponents end
 
 """
-struct TAIComponents
+	struct TComponents
+
+fields:
+nT, elementsT
+
+"""
+struct TComponents <: AbstractTComponents
+    nT::Int
+    elementsT::Vector
+end
+
+"""
+	struct TAIComponents
 
 fields:
 nT, elementsT, elementsTA, elementsTI
@@ -64,7 +78,7 @@ struct TAIComponents <: AbstractTComponents
     elementsTI::Vector{Element}
 end
 """
-struct TDComponents
+	struct TDComponents
 
 fields:
 nT, elementsT, elementsTD:: Vector{Vector{Element}}
@@ -75,38 +89,49 @@ struct TDComponents <: AbstractTComponents
     elementsT::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
-"""
-struct TComponents
 
-fields:
-nT, elementsT
 
 """
-struct TComponents <: AbstractTComponents
-    nT::Int
-    elementsT::Vector
-end
-
-"""
- MTComponents
+ 	MTComponents
 
  structure for M and T components
+
+fields:
+mcomponents::MComponents
+tcomponents::TComponents
 """
 struct MTComponents
     mcomponents::MComponents
     tcomponents::TComponents
 end
+"""
+ 	MTComponents
+
+ structure for M and TAI components
+
+fields:
+mcomponents::MComponents
+tcomponents::TAIComponents
+"""
 struct MTAIComponents
     mcomponents::MComponents
     tcomponents::TAIComponents
 end
+"""
+ 	MTDComponents
 
+ structure for M and TD components
+
+fields:
+mcomponents::MComponents
+tcomponents::TDComponents
+"""
 struct MTDComponents
     mcomponents::MComponents
     tcomponents::TDComponents
 end
 """
-Indices
+	struct Indices
 
 index ranges for rates
 """
@@ -119,7 +144,7 @@ end
 """
     make_components(transitions, G, R, S, r, total::Int, indices::Indices, rnatype::String="")
 
-return MTComponent structure
+return MTAI Component structure
 """
 function make_components(transitions, G, R, S, startstep, r, total::Int, indices::Indices, onstates=[], rnatype::String="")
     if S > 0
@@ -262,10 +287,15 @@ function on_states(G,R,S,insertstep)
 	onstates
 end
 
+"""
+    off_states(nT,onstates)
+
+return barrier (off) states, complement of sojurn (on) states
+"""
 off_states(nT,onstates) = setdiff(collect(1:nT), onstates)
 
 """
-    num_reporters(G::Int,R::Int,S::Int=0)
+    num_reporters(G::Int, R::Int, S::Int=0,insterstep=1,f=sum)
 
 return number of a vector of the number reporters for each state index
 
@@ -289,13 +319,12 @@ function num_reporters(G::Int, onstates::Vector)
     reporters
 end
 """
-set_indices(ntransitions, R, insertstep)
-set_indices(ntransitions,R)
-set_indices(ntransitions)
+	set_indices(ntransitions, R, insertstep)
+	set_indices(ntransitions,R)
+	set_indices(ntransitions)
 
+	return Indices structure
 """
-set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
-set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
 
 function set_indices(ntransitions, R, insertstep)
     if S > 0
@@ -307,10 +336,14 @@ function set_indices(ntransitions, R, insertstep)
     end
 end
 
-"""
-set_elements_G!(elements,transitions,G,R,base,gamma)
+set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
+set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
 
-set G state transition elements
+
+"""
+	set_elements_G!(elements,transitions,G,R,base,gamma)
+
+	return G transition matrix elements
 
 -`elements`: Vector of Element structures
 -`transitions`: tupe of G state transitions
@@ -330,10 +363,7 @@ function set_elements_G!(elements, transitions, j=0, gamma=collect(1:length(tran
         i += 1
     end
 end
-"""
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rnatype="")
 
-"""
 # set_elements_R!(elementsT, G, R, indices::Indices) = set_elements_R!(elementsT, G, R, indices.nu)
 # set_elements_R!(elementsT, G, R, nu::Vector{Int}) = set_elements_RS!(elementsT, G, R, 0, nu, Int[], 2)
 # set_elements_RS!(elementT, G, R, indices::Indices) = set_elements_RS!(elementT, G, R, indices.nu, indices.eta)
@@ -341,9 +371,9 @@ set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rn
 # set_elements_R_offeject!(elementsT, G, R, indices::Indices) = set_elements_RS!(elementsT, G, R, R, indices.nu, indices.eta, 2, "offeject")
 
 """
-set_elements_RS!(elementsT,G,R,S,nu::Vector{Int},eta::Vector{Int},base::Int=3,rnatype="")
+    set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
 
-set matrix elements in elementsT for GRS state transition matrix
+set inline matrix elements in elementsT for GRS state transition matrix, do nothing if R == 0
 
     "offeject" = pre-RNA is completely ejected when spliced
 """
@@ -431,7 +461,7 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
     end
 end
 """
-set_elements_TA!(elementsTA,elementsT)
+	set_elements_TA!(elementsTA,elementsT)
 
 
 """
@@ -451,7 +481,7 @@ function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, base::Int=3)
     end
 end
 """
-set_elements_TI!(elementsTI,elementsT)
+	set_elements_TI!(elementsTI,elementsT)
 
 
 """
@@ -471,33 +501,32 @@ function set_elements_TI!(elementsTI, elementsT, G::Int, R::Int, base::Int=3)
     end
 end
 
-"""
-set_elements_T(transitions,gamma)
-set_elements_T(transitions,G,R,base,f!,indices)
 
 """
+    set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
+
+return T matrix elements (Element structure)
+"""
+function set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
+	if R > 0
+    	elementsT = Vector{Element}(undef, 0)
+    	base = S > 0 ? 3 : 2
+    	set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
+   		set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rnatype)
+    	return elementsT
+	else
+		return set_elements_T(transitions, gamma::Vector)
+	end
+end
 function set_elements_T(transitions, gamma::Vector)
     elementsT = Vector{Element}(undef, 0)
     set_elements_G!(elementsT, transitions, 0, gamma)
     elementsT
 end
-# function set_elements_T(transitions, G, R, base, f!, indices::Indices)
-#     elementsT = Vector{Element}(undef, 0)
-#     set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-#     f!(elementsT, G, R, indices)
-#     elementsT
-# end
-function set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
-    elementsT = Vector{Element}(undef, 0)
-    base = S > 0 ? 3 : 2
-    set_elements_G!(elementsT, transitions, G, R, base, indices.gamma)
-    set_elements_RS!(elementsT, G, R, S, indices.nu, indices.eta, rnatype)
-    elementsT
-end
 """
-set_elements_B
+    set_elements_B(G, ejectindex)
 
-
+return B matrix elements
 """
 set_elements_B(G, ejectindex) = [Element(G, G, ejectindex, 1)]
 

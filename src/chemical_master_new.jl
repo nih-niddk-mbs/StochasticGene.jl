@@ -1,4 +1,6 @@
-### chemical_master.jl
+# This file is part of StochasticGene.jl
+#
+# chemical_master.jl
 #
 # Functions to solve the chemical master equation
 # operates on the transpose of the Markov process transition rate matrix

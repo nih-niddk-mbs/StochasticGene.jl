@@ -1,9 +1,8 @@
+# This file is part of StochasticGene.jl
+#
+#genetrap.jl
+#Fit GRSM models to live cell and smFISH data
 
-"""
-genetrap.jl
-
-Fit GRSM models to live cell and smFISH data
-"""
 
 """
 Gene information

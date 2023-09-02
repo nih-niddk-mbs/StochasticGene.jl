@@ -1,10 +1,11 @@
-### utilities.jl
+# This file is part of StochasticGene.jl    
 
+# utilities.jl
 
+"""
+ Strings
+"""
 
-#
-# Strings
-#
 const rchar = "rml"
 const rmchar = "rmean"
 const rqchar = "rquant"
@@ -21,7 +22,7 @@ const txtstr = ".txt"
 
 
 """
-eig_decompose(M)
+    eig_decompose(M)
 
 Take matrix M and return values and vectors
 """
@@ -31,7 +32,7 @@ function eig_decompose(M)
 end
 
 """
-nonzero_rows(T)
+    nonzero_rows(T)
 
 Returns an array of row indices that have at least one nonzero element for matrix T
 """
