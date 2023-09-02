@@ -121,39 +121,17 @@ end
 
 return MTComponent structure
 """
-function make_components(transitions, G, R, S, startstep, r, total::Int, indices::Indices, onstates=[G], rnatype::String="")
+function make_components(transitions, G, R, S, startstep, r, total::Int, indices::Indices, onstates=[], rnatype::String="")
     if S > 0
-        return make_components(transitions, G, R, S, startstep, r, total, indices, rnatype)
+        return make_components(transitions, G, R, S, startstep, r, total, indices, rnatype, onstates)
+        U, Um, Up = make_mat_U(total, r[indices.decay])
+        return MTAIComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
     elseif R > 0
-        return make_components(transitions, G, R, startstep, r, total, indices)
+        return make_components(transitions, G, R, startstep, r, total, indices, onstates)
     else
         return make_components(transitions, G, r, total, indices, onstates)
     end
 end
-
-"""
-    make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
-
-
-"""
-function make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
-    elementsT = set_elements_T(transitions, indices.gamma)
-    U, Um, Up = make_mat_U(total, r[indices.decay])
-    MTAIComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, U, Um, Up), make_components_TAI(elementsT, G, onstates))
-end
-"""
-    make_components(transitions, G, R, r, total, indices::Indices)
-
-
-"""
-function make_components(transitions, G, R, r::Vector, total::Int, indices::Indices)
-    MTAIComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
-end
-"""
-    make_components(transitions, G, R, r, total::Int, rnatype::String, indices::Indices)
-
-
-"""
 function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indices::Indices, rnatype::String="")
     # if rnatype == "offeject"
     #      elementsT = set_elements_T(transitions, G, R, 2, set_elements_R_offeject!, indices)
@@ -164,6 +142,26 @@ function make_components(transitions, G, R, S::Int, r::Vector, total::Int, indic
     U, Um, Up = make_mat_U(total, r[indices.decay])
     MTAIComponents(MComponents(set_elements_T(transitions, G, R, 0, indices, rnatype), set_elements_B(G, R, indices.nu[R+1]), G * 2^R, U, Um, Up), make_components_TAI(set_elements_T(transitions, G, R, S, indices, rnatype), G, R, 3))
 end
+
+"""
+    make_components(transitions, G, R, r, total, indices::Indices)
+
+
+"""
+function make_components(transitions, G, R, r::Vector, total::Int, indices::Indices)
+    MTAIComponents(make_components_M(transitions, G, R, total, r[indices.decay], 2, indices), make_components_TAI(set_elements_T(transitions, G, R, 2, set_elements_R!, indices), G, R, 2))
+end
+"""
+    make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
+
+
+"""
+function make_components(transitions, G, r, total::Int, indices::Indices, onstates::Vector)
+    elementsT = set_elements_T(transitions, indices.gamma)
+    U, Um, Up = make_mat_U(total, r[indices.decay])
+    MTAIComponents(MComponents(elementsT, set_elements_B(G, indices.nu[1]), G, U, Um, Up), make_components_TAI(elementsT, G, onstates))
+end
+
 """
 make_components_M(transitions, nT, total, decay)
 
