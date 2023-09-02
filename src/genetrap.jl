@@ -91,7 +91,7 @@ function model_genetrap(data,gene::String,transitions::Tuple,G::Int,R::Int,nalle
     model_genetrap(r,gene,G,R,nalleles,fittedparam,rnatype,method,transitions,data)
 end
 
-function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,rnatype::String,method,transitions,data)
+function model_genetrap(r,gene::String,G::Int,R::Int,insertstep::Int,nalleles::Int,fittedparam,rnatype::String,method,transitions,data)
     ntransitions = length(transitions)
     if R == 0
         decayrate = get_decay(halflife[gene])
@@ -116,8 +116,8 @@ function model_genetrap(r,gene::String,G::Int,R::Int,nalleles::Int,fittedparam,r
         # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
         d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
         # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
-        components = make_components(transitions,G,R,r,data.nRNA+2,rnatype,set_indices(ntransitions,R))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,R,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components)
+        components = make_components(transitions,G,R,r,data.nRNA+2,rnatype,set_indices(ntransitions,R,insertstep))
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,insertstep,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components)
 
     end
 end

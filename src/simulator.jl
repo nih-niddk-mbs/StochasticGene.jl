@@ -71,9 +71,9 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
     
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
-    if S > R
-        throw("S>R")
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
+    if insertstep > R
+        throw("insertstep>R")
     end
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S)
@@ -307,9 +307,9 @@ function state_index(state::Array, G, R, S=0)
     end
 end
 
-function num_reporters(state::Matrix, allele, G, R)
+function num_reporters(state::Matrix, allele, G, R, insertstep)
     d = 0
-    for i in G+1:G+max(R, 1)
+    for i in G+1+insertstep:G+max(R, 1)
         d = d + Int(state[i, allele] > 1)
     end
     d
@@ -325,7 +325,7 @@ end
 
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
 
-function set_reactionindices(Gtransitions, R, S)
+function set_reactionindices(Gtransitions, R, S, insertstep)
     g = 1:length(Gtransitions)
     r = length(Gtransitions)+1:length(Gtransitions)+1+R
     s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S
@@ -337,7 +337,7 @@ set_reactions(Gtransitions,G,R,S,indices,actions)
 
 create a vector of Reaction structures all the possible reactions
 """
-function set_reactions(Gtransitions, G, R, S)
+function set_reactions(Gtransitions, G, R, S, insertstep)
     actions = set_actions()
     indices = set_reactionindices(Gtransitions, R, S)
     reactions = Reaction[]

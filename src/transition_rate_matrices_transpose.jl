@@ -291,15 +291,17 @@ function num_reporters(G::Int, onstates::Vector)
     reporters
 end
 """
-set_indices(ntransitions,R,S)
+set_indices(ntransitions, R, insertstep)
 set_indices(ntransitions,R)
+set_indices(ntransitions)
 
 """
 set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
-function set_indices(ntransitions, R, S)
+
+function set_indices(ntransitions, R, insertstep)
     if S > 0
-        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+S+1), ntransitions + R + S + 2)
+        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions+R+R-insertstep+3)
     elseif R > 0
         set_indices(ntransitions, R)
     else
@@ -385,12 +387,12 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                     push!(elementsT, Element(a, b, nu[R+1], sB))
                 end
                 if S > 0 && abs(sC) == 1
-                    push!(elementsT, Element(a, b, eta[R], sC))
+                    push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
                 end
                 if rnatype == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
-                        push!(elementsT, Element(a, b, eta[R], s))
+                        push!(elementsT, Element(a, b, eta[R-insertstep+1], s))
                     end
                 end
                 for j = 1:R-1
@@ -412,13 +414,13 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                     if S > 0
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                         if abs(s) == 1 && i >= insertstep
-                            push!(elementsT, Element(a, b, eta[j], s))
+                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
                     if rnatype == "offeject"
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                         if abs(s) == 1 && i >= insertstep
-                            push!(elementsT, Element(a, b, eta[j], s))
+                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
                 end
