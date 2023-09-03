@@ -77,15 +77,17 @@ options = test_options(1000);
 
 """
 
-function test(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
-    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins)
-    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
+function test(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total = 100000000,tol=1e-6)
+    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates, bins=bins,totalsteps = total,tol=tol)
+    modelOFF, modelON, histF= test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
-	onstates=on_states(G,R,S,onstates)
-	components = make_components(transitions, G, R, S, r, nhist, set_indices(length(transitions), R, S), onstates, "")
+function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
+    if isempty(onstates)
+        onstates = on_states(G, R, S, insertstep)
+    end
+    components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, r[num_rates(transitions,R,S,insertstep)])
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
@@ -95,17 +97,16 @@ function test_chem(r, transitions, G, R, S, nhist, nalleles, onstates, bins)
     # else
     #     modelOFFold, modelONold = offonPDF(T, TA, TI, bins, r, G, R)
     # end
-	histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-	pss = normalized_nullspace(T)
+    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
+    pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
-	base = S > 0 ? 3 : 2
-	nT = G * base^R
-	SAinit = init_SA(r,onstates,components.tcomponents.elementsT,pss)
-	SIinit = init_SI(r,onstates,components.tcomponents.elementsT,pss,nonzeros)
-	offstates = off_states(nT, onstates)
-	modelON = ontimePDF(bins, TA, offstates, SAinit)
-	# modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], [findfirst(o .== nonzeros) for o in intersect(onstates,nonzeros)], SIinit)
-	modelOFF = offtimePDF(bins, TI[nonzeros,nonzeros], nonzero_states(onstates,nonzeros), SIinit)
+    base = S > 0 ? 3 : 2
+    nT = G * base^R
+    SAinit = init_SA(r, onstates, components.tcomponents.elementsT, pss)
+    SIinit = init_SI(r, onstates, components.tcomponents.elementsT, pss, nonzeros)
+    offstates = off_states(nT, onstates)
+    modelON = ontimePDF(bins, TA, offstates, SAinit)
+    modelOFF = offtimePDF(bins, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), SIinit)
     modelOFF, modelON, histF
 end
 
@@ -120,7 +121,7 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
 end
 
 
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(.01,num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, num_rates(transitions, R, S) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:num_rates(transitions, R, S)-1), propcv=0.05, cv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = histogram_model(rinit, transitions, G, R, S, nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
@@ -130,7 +131,7 @@ function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtar
 end
 
 
-function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1,0.01], par=[50, 15, 200, 70], rinit=[fill(.01,num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
+function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], par=[50, 15, 200, 70], rinit=[fill(0.01, num_rates(transitions, R, S)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S)-1); num_rates(transitions, R, S)+1:num_rates(transitions, R, S)+4], propcv=0.05, cv=10.0, interval=1.0)
     traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)
@@ -139,37 +140,37 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
-function test_init(r,G,R,S,transitions,onstates=[G])
-    onstates=on_states(G,R,S,onstates)
+function test_init(r, G, R, S, transitions, onstates=[G])
+    onstates = on_states(G, R, S, onstates)
     indices = set_indices(length(transitions), R, S)
     base = S > 0 ? 3 : 2
-	nT = G * base^R
-	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
-	if R > 0
-   		 tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
-	else
-		tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT,onstates)
-	end
+    nT = G * base^R
+    tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT, onstates)
+    if R > 0
+        tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+    else
+        tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT, onstates)
+    end
     T = make_mat_T(tcomponents, r)
     TA = make_mat_TA(tcomponents, r)
     TI = make_mat_TI(tcomponents, r)
-	Told = make_mat_T(tcomponentsold, r)
+    Told = make_mat_T(tcomponentsold, r)
     TAold = make_mat_TA(tcomponentsold, r)
     TIold = make_mat_TI(tcomponentsold, r)
-  
+
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
-	if R > 0
-		SAinitold = init_SA(pss, G - 1, R)
-		SIinitold = init_SI(pss, r, G - 1, R, nonzeros)
-	else
-		SAinitold = init_SA(G,onstates,transitions)
-		SIinitold = init_SI(G,onstates,transitions,r)
-	end
-	SAinit = init_S(r,onstates,tcomponents.elementsT,pss)
-	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+    if R > 0
+        SAinitold = init_SA(pss, G - 1, R)
+        SIinitold = init_SI(pss, r, G - 1, R, nonzeros)
+    else
+        SAinitold = init_SA(G, onstates, transitions)
+        SIinitold = init_SI(G, onstates, transitions, r)
+    end
+    SAinit = init_S(r, onstates, tcomponents.elementsT, pss)
+    SIinit = init_SI(r, onstates, tcomponents.elementsT, pss, nonzeros)
 
-    return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI,SIinitold,SAinitold,Told,TAold,TIold
+    return SIinit, SAinit, onstates, tcomponents, pss, nonzeros, T, TA, TI, SIinitold, SAinitold, Told, TAold, TIold
 end
 
 # function test_init(r,G,R,S,transitions,onstates=[G])
@@ -207,10 +208,10 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, nalleles::Int, 
     d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if S > 0
         components = make_components(transitions, G, R, S, r, nhist, set_indices(ntransitions, R, S))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components,onstates)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components, onstates)
     elseif R > 0
         components = make_components(transitions, G, R, r, nhist, set_indices(ntransitions, R))
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, r, d, propcv, fittedparam, method, transitions, components,onstates)
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, R, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
     else
         components = make_components(transitions, G, r, nhist, set_indices(ntransitions), onstates)
         return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)

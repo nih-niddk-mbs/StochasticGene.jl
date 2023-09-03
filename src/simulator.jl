@@ -5,7 +5,7 @@
 """
 	Reaction
 
-	structure for reaction type
+structure for reaction type
 """
 struct Reaction
     action::Int
@@ -15,12 +15,10 @@ struct Reaction
     initial::Int
     final::Int
 end
-
-
 """
 	ReactionIndices
 
-	structure for rate indices of reaction types
+structure for rate indices of reaction types
 """
 struct ReactionIndices
     grange::UnitRange{Int64}
@@ -28,22 +26,21 @@ struct ReactionIndices
     srange::UnitRange{Int64}
     decay::Int
 end
-
 """
 	set_actions()
 
-	create dictionary for all the possible transitions
+create dictionary for all the possible transitions
 """
 set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
 invert_dict(D) = Dict(D[k] => k for k in keys(D))
 
 """
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],bins::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6, par=[30, 14, 200, 75], verbose::Bool=false)
+    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfnc=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
 
-	Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
-    If trace is set to true, it returns a nascent mRNA trace
+Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
+If trace is set to true, it returns a nascent mRNA trace
 
-	Arguments
+#Arguments
 	- `r`: vector of rates
 	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 	- `G`: number of gene states
@@ -52,7 +49,7 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
 	- `nhist::Int`: Size of mRNA histogram
 	- `nalleles`: Number of alleles
 
-	Named arguments
+#Named arguments
     - `onstates::Vector`: a vector of ON G states
 	- `bins::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
 	- `totalsteps::Int=10000000`: maximum number of simulation steps
@@ -63,20 +60,22 @@ invert_dict(D) = Dict(D[k] => k for k in keys(D))
     - `offeject`::Bool : true if splice is off pathway
 
 
-    Examples:
+#Examples:
 
     julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
 
  	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
-    
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nhist::Int, nalleles::Int; onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64 =0.,tol::Float64=1e-6, reporterfnc=sum,traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false,offeject::Bool=false,)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfnc=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
     if insertstep > R
         throw("insertstep>R")
     end
+    if S > 0
+        S = R
+    end
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
-    reactions = set_reactions(transitions, G, R, S)
+    reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
     tIA = zeros(Float64, nalleles)
     tAI = zeros(Float64, nalleles)
@@ -94,11 +93,13 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     if verbose
         invactions = invert_dict(set_actions())
+        println(length(reactions))
+        println(tau)
     end
-	if totaltime > 0.
-		err = 0.
-		totalsteps = 0
-	end
+    if totaltime > 0.0
+        err = 0.0
+        totalsteps = 0
+    end
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
         t, rindex = findmin(tau)
@@ -114,9 +115,10 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         end
         if verbose
             println("---")
+            println(m)
             println(state)
             if R > 0
-                println(num_reporters(state, allele, G, R))
+                println(num_reporters(state, allele, G, R, insertstep))
             end
             println(tau)
             println(rindex)
@@ -149,19 +151,20 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             push!(tracelog, (t, state[:, 1]))
         end
     end  # while
+    println(steps)
     counts = max(sum(mhist), 1)
     mhist /= counts
     if onoff
         return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
     elseif traceinterval > 0.0
-        make_trace(tracelog, G, R, S, onstates, traceinterval, par,reporterfnc)
+        make_trace(tracelog, G, R, S, onstates, traceinterval, par, reporterfnc)
     else
         return mhist[1:nhist]
     end
 end
 
 """
-initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+    initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
 
 return initial proposed next reaction times and states
 
@@ -176,7 +179,7 @@ function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
     return tau, states
 end
 """
-initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
+    initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
 
 """
 initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0) = zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
@@ -188,7 +191,7 @@ TBW
 """
 update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
 """
-update_mhist!(mhist,m,dt,nhist)
+    update_mhist!(mhist,m,dt,nhist)
 
 """
 function update_mhist!(mhist, m, dt, nhist)
@@ -201,7 +204,7 @@ end
 
 
 """
-update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+    update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
 
 updates proposed next reaction time and state given the selected action and returns updated number of mRNA
 
@@ -228,7 +231,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
     else
         if action < 7
             if action == 5
-                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
             else
                 m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
             end
@@ -236,7 +239,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
             if action == 7
                 splice!(tau, state, index, t, m, r, allele, G, R, initial)
             else
-                m = decay!(tau, state, index, t, m, r)
+                m = decay!(tau, index, t, m, r)
             end
         end
     end
@@ -244,7 +247,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
 end
 
 """
-make_trace(tracelog, G, R, onstates, interval=100.0)
+    make_trace(tracelog, G, R, onstates, interval=100.0)
 
 Return array of frame times and intensities
 
@@ -254,15 +257,15 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par,reporterfnc=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par, reporterfnc=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        reporters = num_reporters(G, R, S,reporterfnc)
+        reporters = num_reporters(G, R, S, reporterfnc)
     else
-        reporters = num_reporters(G,onstates)
+        reporters = num_reporters(G, onstates)
     end
     i = 2
     d = prob_Gaussian(par, reporters, G * 2^R)
@@ -278,7 +281,7 @@ function make_trace(tracelog, G, R, S, onstates, interval, par,reporterfnc=sum)
 end
 
 """
-intensity(state,onstates,G,R)
+    intensity(state,onstates,G,R)
 
 Returns the trace intensity given the state of a system
 
@@ -286,11 +289,16 @@ For R = 0, the intensity is occupancy of any onstates
 For R > 0, intensity is the number of reporters in the nascent mRNA
 
 """
-function intensity(state,G, R, d)
-	stateindex = state_index(state,G,R)
-	max(rand(d[stateindex]),0)
+function intensity(state, G, R, d)
+    stateindex = state_index(state, G, R)
+    max(rand(d[stateindex]), 0)
 end
 
+"""
+    state_index(state::Array, G, R, S=0)
+
+TBW
+"""
 function state_index(state::Array, G, R, S=0)
     Gstate = argmax(state[1:G])
     if R == 0
@@ -307,14 +315,24 @@ function state_index(state::Array, G, R, S=0)
     end
 end
 
-function num_reporters(state::Matrix, allele, G, R, insertstep)
+"""
+    num_reporters(state::Matrix, allele, G, R, insertstep=1)
+
+TBW
+"""
+function num_reporters(state::Matrix, allele, G, R, insertstep=1)
     d = 0
-    for i in G+1+insertstep:G+max(R, 1)
+    for i in G+insertstep:G+max(R, 1)
         d = d + Int(state[i, allele] > 1)
     end
     d
 end
 
+"""
+    firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
+
+TBW
+"""
 function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     t1[allele] = t
     t12 = (t - t2[allele]) / dt
@@ -325,21 +343,26 @@ end
 
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
 
+"""
+    set_reactionindices(Gtransitions, R, S, insertstep)
+
+TBW
+"""
 function set_reactionindices(Gtransitions, R, S, insertstep)
     g = 1:length(Gtransitions)
     r = length(Gtransitions)+1:length(Gtransitions)+1+R
-    s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S
-    d = length(Gtransitions) + 1 + R + S + 1
+    s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S-insertstep+1
+    d = length(Gtransitions) + 1 + R + S + 1 - insertstep + 1
     ReactionIndices(g, r, s, d)
 end
 """
-set_reactions(Gtransitions,G,R,S,indices,actions)
+    set_reactions(Gtransitions, G, R, S, insertstep)
 
 create a vector of Reaction structures all the possible reactions
 """
 function set_reactions(Gtransitions, G, R, S, insertstep)
     actions = set_actions()
-    indices = set_reactionindices(Gtransitions, R, S)
+    indices = set_reactionindices(Gtransitions, R, S, insertstep)
     reactions = Reaction[]
     nG = length(Gtransitions)
     for g in eachindex(Gtransitions)
@@ -367,7 +390,7 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     end
     if R > 0
         # set downstream to splice reaction
-        push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
+        push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG+2+S-insertstep+1], G, G + 1))
     end
     i = G
     for r in indices.rrange
@@ -376,21 +399,21 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
             push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
         end
     end
-    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[nG+R+S+2], G + R, 0))
+    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[nG+R+S+2-insertstep+1], G + R, 0))
     j = G
     for s in indices.srange
         j += 1
-        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
+        if j > insertstep - 1
+            push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
+        end
     end
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
     return reactions
 end
-
-
 """
-	transitionG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
+    transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
 
-	update tau and state for G transition
+update tau and state for G transition
 
 """
 function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
@@ -417,7 +440,8 @@ function activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstre
     end
 end
 """
-	deactivateG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
+    deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+
 
 """
 function deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
@@ -426,9 +450,9 @@ function deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downst
         state[G+1, allele] = 0
     end
 end
-
 """
-	initiate!(tau,state,index,t,m,r,allele,G,R,S,downstream)
+    initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+
 
 """
 function initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
@@ -442,13 +466,14 @@ function initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
     end
 end
 """
-	transitionR!(tau,state,index,t,m,r,allele,G,R,S,upstream,downstream,initial,final)
+    transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
+
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
+function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final, insertstep)
     tau[index, allele] = Inf
     if S > 0 && isfinite(tau[index+S, allele])
-        tau[index+S+1, allele] = -log(rand()) / (r[index+S+1]) + t
+        tau[index+S+1, allele] = -log(rand()) / (r[index+S+1-insertstep+1]) + t
         tau[index+S, allele] = Inf
     end
     if state[initial-1, allele] > 0
@@ -465,7 +490,7 @@ function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial
     state[initial, allele] = 0
 end
 """
-eject!
+    eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
 
 """
 function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
@@ -486,7 +511,7 @@ function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstrea
     m
 end
 """
-splice!
+    splice!(tau, state, index, t, m, r, allele, G, R, initial)
 
 """
 function splice!(tau, state, index, t, m, r, allele, G, R, initial)
@@ -494,17 +519,22 @@ function splice!(tau, state, index, t, m, r, allele, G, R, initial)
     tau[index, allele] = Inf
 end
 """
-decay!
+    decay!(tau, index, t, m, r)
 
 """
-function decay!(tau, state, index, t, m, r)
+function decay!(tau, index, t, m, r)
     m -= 1
-    tau[index, 1] = -log(rand()) / (m * r[index]) + t
+    if m == 0
+        tau[index, 1] = Inf
+    else
+        tau[index, 1] = -log(rand()) / (m * r[index]) + t
+    end
     m
 end
 
 """
-set_decay!(tau,reaction,t,m)
+    set_decay!(tau, index, t, m, r)
+
 update tau matrix for decay rate
 
 """

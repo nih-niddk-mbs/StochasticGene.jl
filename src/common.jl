@@ -323,7 +323,7 @@ returns negative loglikelihood of all data and vector of the prediction histogra
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
-function loglikelihood(param,data::AbstractHistogramData,model::abstractGRmodel)
+function loglikelihood(param,data::AbstractHistogramData,model::AbstractGRmodel)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions,eps()))
@@ -336,7 +336,7 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-function loglikelihood(param, data::AbstractTraceHistogramData, model::abstractGRModel)
+function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRMmodel)
     r = get_rates(param, model)
     # reporters = num_reporters(model.G, model.R, model.S)
     llg,llgp = ll_Gaussian(r, Rmodel.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
@@ -359,7 +359,7 @@ assume Gaussian observation probability model with four parameters
 #     ll_Gaussian(r, model.G, model.reporters, model.components.elementsT, data.interval, data.trace)
 # end
 
-function loglikelihood(param, data::AbstractTraceData, model::abstractGRmodel)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRmodel)
     r = get_rates(param, model)
     # reporters = num_reporters(model.G, model.R, 0, sum)
     # base = 2
@@ -694,7 +694,13 @@ Intron ejection rates at each R step
 """
 get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
 
-num_rates(transitions,R,S) = length(transitions) + R + S + 2
+function num_rates(transitions,R,S,insertstep) 
+    if R > 0
+         return length(transitions) + R + S + 3 - insertstep
+    else
+        return length(transitions) + 2
+    end
+end
 
 # function get_eta(r,n,nr)
 #     eta = zeros(nr)
