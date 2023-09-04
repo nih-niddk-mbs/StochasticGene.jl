@@ -1,6 +1,6 @@
 # simulator.jl
 # Functions to simulate Markov gene transcription models
-# Uses simplified next reaction method
+# Uses hybrid first and next reaction method
 
 """
 	Reaction
@@ -136,7 +136,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     if verbose
                         println("off")
                     end
-                elseif action == 4 && num_reporters(state, allele, G, R, insertstep) == 0   # turn on
+                elseif num_reporters(state, allele, G, R, insertstep) == 0 && ((action == 4 && insertstep == 1) || (action == 5 && final == G + insertstep)) # turn on
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                     if verbose
                         println("on")

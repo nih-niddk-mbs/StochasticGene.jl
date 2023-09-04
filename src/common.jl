@@ -696,7 +696,7 @@ get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
 
 function num_rates(transitions,R,S,insertstep) 
     if R > 0
-         return length(transitions) + R + S + 3 - insertstep
+         return length(transitions) + 1 + R + S + 1 - insertstep + 1
     else
         return length(transitions) + 2
     end
