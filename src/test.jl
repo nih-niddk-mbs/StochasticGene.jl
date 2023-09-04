@@ -140,56 +140,59 @@ function test_fit_trace(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), rtarget=[
     fit, stats, measures, data, model, options
 end
 
-function test_init(r, G, R, S, transitions, onstates=[G])
-    onstates = on_states(G, R, S, onstates)
-    indices = set_indices(length(transitions), R, S)
-    base = S > 0 ? 3 : 2
-    nT = G * base^R
-    tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT, onstates)
-    if R > 0
-        tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
-    else
-        tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT, onstates)
-    end
-    T = make_mat_T(tcomponents, r)
-    TA = make_mat_TA(tcomponents, r)
-    TI = make_mat_TI(tcomponents, r)
-    Told = make_mat_T(tcomponentsold, r)
-    TAold = make_mat_TA(tcomponentsold, r)
-    TIold = make_mat_TI(tcomponentsold, r)
-
-    pss = normalized_nullspace(T)
-    nonzeros = nonzero_rows(TI)
-    if R > 0
-        SAinitold = init_SA(pss, G - 1, R)
-        SIinitold = init_SI(pss, r, G - 1, R, nonzeros)
-    else
-        SAinitold = init_SA(G, onstates, transitions)
-        SIinitold = init_SI(G, onstates, transitions, r)
-    end
-    SAinit = init_S(r, onstates, tcomponents.elementsT, pss)
-    SIinit = init_SI(r, onstates, tcomponents.elementsT, pss, nonzeros)
-
-    return SIinit, SAinit, onstates, tcomponents, pss, nonzeros, T, TA, TI, SIinitold, SAinitold, Told, TAold, TIold
-end
-
-# function test_init(r,G,R,S,transitions,onstates=[G])
-#     onstates=on_states(G,R,S,onstates)
-#     indices = set_indices(length(transitions), R, S)
+# function test_init(r, transitions, G, R, S, insertstep)
+#     onstates = on_states(G, R, S, insertstep)
+#     indices = set_indices(length(transitions), R, S,insertstep)
 #     base = S > 0 ? 3 : 2
-# 	nT = G * base^R
-# 	tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+#     nT = G * base^R
+#     tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT, onstates)
+#     components =make_components_MTAI(transitions, G, R, S, insertstep, [], 2, r[num_rates(transitions,R,S,insertstep)], "")
+#     if R > 0
+#         tcomponentsold = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), G, R, base)
+#     else
+#         tcomponentsold = make_components_TAI(set_elements_T(transitions, collect(1:length(transitions))), nT, onstates)
+#     end
 #     T = make_mat_T(tcomponents, r)
 #     TA = make_mat_TA(tcomponents, r)
 #     TI = make_mat_TI(tcomponents, r)
+#     Told = make_mat_T(tcomponentsold, r)
+#     TAold = make_mat_TA(tcomponentsold, r)
+#     TIold = make_mat_TI(tcomponentsold, r)
 
 #     pss = normalized_nullspace(T)
 #     nonzeros = nonzero_rows(TI)
-# 	SAinit = init_SA(onstates,tcomponents.elementsT,pss)
-# 	SIinit = init_SI(r,onstates,tcomponents.elementsT,pss,nonzeros)
+#     if R > 0
+#         SAinitold = init_SA(pss, G - 1, R)
+#         SIinitold = init_SI(pss, r, G - 1, R, nonzeros)
+#     else
+#         SAinitold = init_SA(G, onstates, transitions)
+#         SIinitold = init_SI(G, onstates, transitions, r)
+#     end
+#     SAinit = init_S(r, onstates, tcomponents.elementsT, pss)
+#     SIinit = init_SI(r, onstates, tcomponents.elementsT, pss, nonzeros)
 
-#     return SIinit,SAinit,onstates,tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
+#     return SIinit, SAinit, onstates, tcomponents, pss, nonzeros, T, TA, TI, SIinitold, SAinitold, Told, TAold, TIold
 # end
+
+function test_init(r,transitions,G,R,S,insertstep)
+    onstates=on_states(G,R,S,insertstep)
+    indices = set_indices(length(transitions), R, S,insertstep)
+    base = S > 0 ? 3 : 2
+	nT = G * base^R
+	# tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
+    components =make_components_MTAI(transitions, G, R, S, insertstep, onstates, 2, r[num_rates(transitions,R,S,insertstep)], "")
+    T = make_mat_T(components.tcomponents, r)
+    TA = make_mat_TA(components.tcomponents, r)
+    TI = make_mat_TI(components.tcomponents, r)
+
+    pss = normalized_nullspace(T)
+    nonzeros = nonzero_rows(TI)
+	SAinit = init_SA(r,onstates,components.tcomponents.elementsT,pss)
+	SIinit = init_SI(r,onstates,components.tcomponents.elementsT,pss,nonzeros)
+    
+
+    return SIinit,SAinit,onstates,components.tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
+end
 
 
 

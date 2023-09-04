@@ -68,7 +68,7 @@ If trace is set to true, it returns a nascent mRNA trace
 
 """
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfnc=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
-    if insertstep > R
+    if insertstep > R > 0
         throw("insertstep>R")
     end
     if S > 0
@@ -93,8 +93,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     if verbose
         invactions = invert_dict(set_actions())
-        println(length(reactions))
-        println(tau)
     end
     if totaltime > 0.0
         err = 0.0
@@ -133,12 +131,12 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                 end
             else
-                if num_reporters(state, allele, G, R) == 1 && ((action == 6 && state[G+R] == 2) || action == 7)  # turn off
+                if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R] == 2) || action == 7)  # turn off
                     firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
                     if verbose
                         println("off")
                     end
-                elseif action == 4 && num_reporters(state, allele, G, R) == 0   # turn on
+                elseif action == 4 && num_reporters(state, allele, G, R, insertstep) == 0   # turn on
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                     if verbose
                         println("on")
@@ -146,7 +144,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                 end
             end
         end
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action, insertstep)
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -213,7 +211,7 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action, insertstep)
     if action < 5
         if action < 3
             if action == 1
@@ -233,7 +231,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
             if action == 5
                 transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
             else
-                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
             end
         else
             if action == 7
@@ -390,7 +388,11 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     end
     if R > 0
         # set downstream to splice reaction
-        push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG+2+S-insertstep+1], G, G + 1))
+        if insertstep == 1
+            push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
+        else
+            push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], Int[], G, G + 1))
+        end
     end
     i = G
     for r in indices.rrange
@@ -399,13 +401,11 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
             push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
         end
     end
-    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[nG+R+S+2-insertstep+1], G + R, 0))
-    j = G
+    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[indices.decay], G + R, 0))
+    j = G + insertstep - 1
     for s in indices.srange
         j += 1
-        if j > insertstep - 1
-            push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
-        end
+        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
     end
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
     return reactions
@@ -461,7 +461,7 @@ function initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
     if R < 2 || state[G+2, allele] < 1
         tau[index+1, allele] = -log(rand()) / (r[index+1]) + t
     end
-    if S > 0
+    if S > 0 && ~isempty(downstream)
         tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
     end
 end
@@ -472,9 +472,9 @@ end
 """
 function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final, insertstep)
     tau[index, allele] = Inf
-    if S > 0 && isfinite(tau[index+S, allele])
-        tau[index+S+1, allele] = -log(rand()) / (r[index+S+1-insertstep+1]) + t
-        tau[index+S, allele] = Inf
+    if S > 0 &&  (index - insertstep + 1 - G > 0  ||  isfinite(tau[index+S-insertstep+1, allele]))
+        tau[index+S+1-insertstep+1, allele] = -log(rand()) / (r[index+S+1-insertstep+1]) + t
+        tau[index+S-insertstep+1, allele] = Inf
     end
     if state[initial-1, allele] > 0
         tau[u[1], allele] = -log(rand()) / r[u[1]] + t
@@ -493,11 +493,11 @@ end
     eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
 
 """
-function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
+function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
     m += 1
     set_decay!(tau, downstream[end], t, m, r)
-    if S > 0 && isfinite(tau[index+S, allele])
-        tau[index+S, allele] = Inf
+    if S > 0 && isfinite(tau[index+S-insertstep+1, allele])
+        tau[index+S-insertstep+1, allele] = Inf
     end
     if R > 0
         tau[index, allele] = Inf

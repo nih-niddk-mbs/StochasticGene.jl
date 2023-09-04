@@ -240,19 +240,19 @@ return barrier (off) states, complement of sojurn (on) states
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 
 """
-    num_reporters(G::Int, R::Int, S::Int=0,insterstep=1,f=sum)
+    num_reporters(G::Int, R::Int, S::Int=0,insertstep=1,f=sum)
 
 return number of a vector of the number reporters for each state index
 
 if f = sum, returns total number of reporters
 if f = any, returns 1 for presence of any reporter
 """
-function num_reporters(G::Int, R::Int, S::Int=0, insterstep=1, f=sum)
+function num_reporters(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     base = S > 0 ? 3 : 2
     reporters = Vector{Int}(undef, G * base^R)
     for i in 1:G, z in 1:base^R
-        reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1)
-        # push!(reporters, f(digits(z - 1, base=base, pad=R)[insterstep:end] .== base - 1))
+        reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+        # push!(reporters, f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1))
     end
     reporters
 end
@@ -272,7 +272,7 @@ end
 """
 
 function set_indices(ntransitions, R, S, insertstep)
-    if insertstep > R
+    if insertstep > R > 0
         throw("insertstep>R")
     end
     if S > 0
@@ -425,9 +425,9 @@ function set_elements_TA!(elementsTA, elementsT, onstates::Vector)
         end
     end
 end
-function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, base::Int=3)
+function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, interstep=1, base::Int=3)
     for e in elementsT
-        wdigits = digits(div(e.b - 1, G), base=base, pad=R)
+        wdigits = digits(div(e.b - 1, G), base=base, pad=R)[interstep:end]
         if any(wdigits .> base - 2)
             push!(elementsTA, e)
         end
