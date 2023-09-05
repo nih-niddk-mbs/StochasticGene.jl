@@ -21,6 +21,7 @@ struct Reaction
     downstream::Vector{Int64}
     initial::Int
     final::Int
+    downstreamstates::Vector{Int64}
 end
 """
 	ReactionIndices
@@ -458,14 +459,15 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
         ginitial = Gtransitions[g][1]
         gfinal = Gtransitions[g][2]
         for s in eachindex(Gtransitions)
-            if ginitial == Gtransitions[s][1] 
+            # if ginitial == Gtransitions[s][1] && gfinal != Gtransitions[s][2]
+            if ginitial == Gtransitions[s][1]
                 push!(u, s)
             end
             if gfinal == Gtransitions[s][1]
                 push!(d, s)
             end
         end
-        if gfinal == G
+        if gfinal == G 
             push!(d, nG + 1)
             push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
         elseif ginitial == G
@@ -485,15 +487,15 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     i = G
     for r in indices.rrange
         i += 1
-        push!(reactions, Reaction(actions["transitionR!"], r, [r], [r-1,r + 1], i, i + 1))
+        push!(reactions, Reaction(actions["transitionR!"], r, Int[], [r-1,r + 1], i, i + 1))
     end
     for e in indices.erange
-        push!(reactions, Reaction(actions["eject!"], e, Int[e], Int[indices.decay], G + R, 0))
+        push!(reactions, Reaction(actions["eject!"], e, Int[], Int[indices.decay], G + R, 0))
     end
     j = G + insertstep - 1
     for s in indices.srange
         j += 1
-        push!(reactions, Reaction(actions["splice!"], s, Int[s], Int[], j, 0))
+        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
     end
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[indices.decay], 0, 0))
     return reactions
@@ -521,10 +523,7 @@ end
 """
 function activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    
-    if R == 0
-        state[G+1, allele] = 2
-    elseif state[G+1, allele] > 0
+    if R > 0 && state[G+1, allele] > 0
         tau[downstream[end], allele] = Inf
     end
 end
@@ -535,18 +534,25 @@ end
 """
 function deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    if R == 0
-        state[G+1, allele] = 0
-    end
 end
 """
     initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
 
 
 """
-function initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+function initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
     tau[index, allele] = Inf
     state[G+1, allele] = 2
+    for d in downstream
+        if state[final+1] == 0
+            tau[d, allele] = -log(rand()) / (r[d]) + t
+        end
+    end
+
+
+
+
+
     if R < 2 || state[G+2, allele] < 1
         tau[index+1, allele] = -log(rand()) / (r[index+1]) + t
     end
@@ -559,8 +565,14 @@ end
 
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final, insertstep)
+function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
     tau[index, allele] = Inf
+    for d in downstream
+    end
+
+
+
+
     if S > 0 &&  (index - insertstep + 1 - G > 0  ||  isfinite(tau[index+S-insertstep+1, allele]))
         tau[index+S+1-insertstep+1, allele] = -log(rand()) / (r[index+S+1-insertstep+1]) + t
         tau[index+S-insertstep+1, allele] = Inf
