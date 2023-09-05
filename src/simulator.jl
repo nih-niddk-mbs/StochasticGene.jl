@@ -21,7 +21,6 @@ struct Reaction
     downstream::Vector{Int64}
     initial::Int
     final::Int
-    downstreamstates::Vector{Int64}
 end
 """
 	ReactionIndices
@@ -508,13 +507,13 @@ update tau and state for G transition
 
 """
 function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    for d in downstream
-        tau[d, allele] = -log(rand()) / r[d] + t
-    end
     for u in upstream
         tau[u, allele] = Inf
     end
-    state[final, allele] = 1
+    for d in downstream
+        tau[d, allele] = -log(rand()) / r[d] + t
+    end
+     state[final, allele] = 1
     state[initial, allele] = 0
 end
 """
@@ -543,23 +542,15 @@ end
 function initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
     tau[index, allele] = Inf
     state[G+1, allele] = 2
-    for d in downstream
-        if state[final+1] == 0
-            tau[d, allele] = -log(rand()) / (r[d]) + t
-        end
+    if final+1 > R || state[final+1] == 0
+        tau[downstream[1], allele] = -log(rand()) / (r[d]) + t
     end
-
-
-
-
-
-    if R < 2 || state[G+2, allele] < 1
-        tau[index+1, allele] = -log(rand()) / (r[index+1]) + t
-    end
+    if length(downstream)
     if S > 0 && ~isempty(downstream)
-        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
+        tau[downstream[2], allele] = -log(rand()) / (r[downstream[2]]) + t
     end
 end
+
 """
     transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
 
@@ -567,33 +558,38 @@ end
 """
 function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
     tau[index, allele] = Inf
-    for d in downstream
+    for u in upstream
+        tau[u,allele] = Inf
     end
-
-
-
-
-    if S > 0 &&  (index - insertstep + 1 - G > 0  ||  isfinite(tau[index+S-insertstep+1, allele]))
-        tau[index+S+1-insertstep+1, allele] = -log(rand()) / (r[index+S+1-insertstep+1]) + t
-        tau[index+S-insertstep+1, allele] = Inf
+    if state[initial-1] > 0
+        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
     end
-    if state[initial-1, allele] > 0
-        tau[u[1], allele] = -log(rand()) / r[u[1]] + t
-    else
-        tau[u[1], allele] = Inf
+    if final+1 > R || state[final+1] == 0
+        tau[downstream[2], allele] = -log(rand()) / (r[downstream[2]]) + t
     end
-    if final == G + R || state[final+1, allele] < 1
-        tau[d[1], allele] = -log(rand()) / r[d[1]] + t
-    else
-        tau[d[1], allele] = Inf
-    end
-    state[final, allele] = state[initial, allele]
-    state[initial, allele] = 0
 end
+
 """
     eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
 
 """
+function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
+    m += 1
+    set_decay!(tau, downstream[end], t, m, r)
+    if S > 0 && isfinite(tau[index+S-insertstep+1, allele])
+        tau[index+S-insertstep+1, allele] = Inf
+    end
+    if R > 0
+        tau[index, allele] = Inf
+        state[G+R, allele] = 0
+        if state[G+R-1, allele] > 0
+            tau[upstream[1], allele] = -log(rand()) / (r[upstream[1]]) + t
+        end
+    else
+        tau[index, allele] = -log(rand()) / (r[index]) + t
+    end
+    m
+end
 function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
     m += 1
     set_decay!(tau, downstream[end], t, m, r)
