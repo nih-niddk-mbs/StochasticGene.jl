@@ -6,6 +6,13 @@
 	Reaction
 
 structure for reaction type
+
+action: type of reaction
+index: rate index for reaction
+upstream: reactions that are not possible after reaction
+downstream: reactions that are enabled by reaction
+initial: initial GR state
+final: final GR state
 """
 struct Reaction
     action::Int
@@ -22,7 +29,9 @@ structure for rate indices of reaction types
 """
 struct ReactionIndices
     grange::UnitRange{Int64}
+    irange::UnitRange{Int64}
     rrange::UnitRange{Int64}
+    erange::UnitRange{Int64}
     srange::UnitRange{Int64}
     decay::Int
 end
@@ -341,26 +350,22 @@ end
 
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
 
-"""
-    set_reactionindices(Gtransitions, R, S, insertstep)
 
-TBW
-"""
-function set_reactionindices(Gtransitions, R, S, insertstep)
+function set_reactionindicesold(Gtransitions, R, S, insertstep)
     g = 1:length(Gtransitions)
     r = length(Gtransitions)+1:length(Gtransitions)+1+R
     s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S-insertstep+1
     d = length(Gtransitions) + 1 + R + S + 1 - insertstep + 1
-    ReactionIndices(g, r, s, d)
+    ReactionIndices(g,2:1, r, 2:1, s, d)
 end
 """
     set_reactions(Gtransitions, G, R, S, insertstep)
 
 create a vector of Reaction structures all the possible reactions
 """
-function set_reactions(Gtransitions, G, R, S, insertstep)
+function set_reactionsold(Gtransitions, G, R, S, insertstep)
     actions = set_actions()
-    indices = set_reactionindices(Gtransitions, R, S, insertstep)
+    indices = set_reactionindicesold(Gtransitions, R, S, insertstep)
     reactions = Reaction[]
     nG = length(Gtransitions)
     for g in eachindex(Gtransitions)
@@ -411,21 +416,104 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     return reactions
 end
 """
+    set_reactionindices(Gtransitions, R, S, insertstep)
+
+TBW
+"""
+function set_reactionindices(Gtransitions, R, S, insertstep)
+    if S > 0
+        S = R
+    else
+        insertstep = 1
+    end
+    nG = length(Gtransitions)
+    g = 1:nG
+    i = nG+1:nG+Int(R>0)
+    r = nG+2:nG+R
+    e = nG+R+1:nG+R+1
+    s = nG+1+R+1:nG+1+R+S-insertstep+1
+    d = nG + 1 + R + S + 1 - insertstep + 1
+    ReactionIndices(g, i, r, e, s, d)
+end
+"""
+	Reaction
+
+structure for reaction type
+
+action: type of reaction
+index: rate index for reaction
+upstream: reactions disabled by reaction
+downstream: reactions enabled by reaction
+initial: initial GR state
+final: final GR state
+"""
+function set_reactions(Gtransitions, G, R, S, insertstep)
+    actions = set_actions()
+    indices = set_reactionindices(Gtransitions, R, S, insertstep)
+    reactions = Reaction[]
+    nG = length(Gtransitions)
+    for g in eachindex(Gtransitions)
+        u = Int[]
+        d = Int[]
+        ginitial = Gtransitions[g][1]
+        gfinal = Gtransitions[g][2]
+        for s in eachindex(Gtransitions)
+            if ginitial == Gtransitions[s][1] 
+                push!(u, s)
+            end
+            if gfinal == Gtransitions[s][1]
+                push!(d, s)
+            end
+        end
+        if gfinal == G
+            push!(d, nG + 1)
+            push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
+        elseif ginitial == G
+            push!(u, nG + 1)
+            push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
+        else
+            push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
+        end
+    end
+    for i in indices.irange
+        if insertstep == 1 && S > 0
+            push!(reactions, Reaction(actions["initiate!"], i, [i], [nG + 2; nG + 2 + S], G, G + 1))
+        else
+            push!(reactions, Reaction(actions["initiate!"], i, [i], [nG + 2], G, G + 1))
+        end
+    end
+    i = G
+    for r in indices.rrange
+        i += 1
+        push!(reactions, Reaction(actions["transitionR!"], r, [r], [r-1,r + 1], i, i + 1))
+    end
+    for e in indices.erange
+        push!(reactions, Reaction(actions["eject!"], e, Int[e], Int[indices.decay], G + R, 0))
+    end
+    j = G + insertstep - 1
+    for s in indices.srange
+        j += 1
+        push!(reactions, Reaction(actions["splice!"], s, Int[s], Int[], j, 0))
+    end
+    push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[indices.decay], 0, 0))
+    return reactions
+end
+
+"""
     transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
 
 update tau and state for G transition
 
 """
 function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    tau[index, allele] = Inf
-    state[final, allele] = 1
-    state[initial, allele] = 0
     for d in downstream
         tau[d, allele] = -log(rand()) / r[d] + t
     end
     for u in upstream
         tau[u, allele] = Inf
     end
+    state[final, allele] = 1
+    state[initial, allele] = 0
 end
 """
 	activateG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
@@ -433,6 +521,7 @@ end
 """
 function activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+    
     if R == 0
         state[G+1, allele] = 2
     elseif state[G+1, allele] > 0
