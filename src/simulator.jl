@@ -232,15 +232,15 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstre
             if action == 3
                 transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
             else
-                initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
             end
         end
     else
         if action < 7
             if action == 5
-                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
             else
-                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial)
             end
         else
             if action == 7
@@ -452,6 +452,7 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     indices = set_reactionindices(Gtransitions, R, S, insertstep)
     reactions = Reaction[]
     nG = length(Gtransitions)
+    Sstride = R - insertstep + 1
     for g in eachindex(Gtransitions)
         u = Int[]
         d = Int[]
@@ -477,19 +478,27 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
         end
     end
     for i in indices.irange
-        if insertstep == 1 && S > 0
-            push!(reactions, Reaction(actions["initiate!"], i, [i], [nG + 2; nG + 2 + S], G, G + 1))
+        if S > 0 && insertstep == 1
+            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2; nG + 2 + S], G, G + 1))
         else
-            push!(reactions, Reaction(actions["initiate!"], i, [i], [nG + 2], G, G + 1))
+            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2], G, G + 1))
         end
     end
     i = G
     for r in indices.rrange
         i += 1
-        push!(reactions, Reaction(actions["transitionR!"], r, Int[], [r-1,r + 1], i, i + 1))
+        if r + Sstride 
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r;r + Sstride], [r - 1;r + 1;r + 1 + Sstride], i, i + 1))
+        else
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1;r + 1], i, i + 1))
+        end
     end
     for e in indices.erange
-        push!(reactions, Reaction(actions["eject!"], e, Int[], Int[indices.decay], G + R, 0))
+        if S > 0
+            push!(reactions, Reaction(actions["eject!"], e, Int[e,e+Sstride], Int[e-1,indices.decay], G + R, 0))
+        else
+            push!(reactions, Reaction(actions["eject!"], e, Int[e], Int[e-1,indices.decay], G + R, 0))
+        end
     end
     j = G + insertstep - 1
     for s in indices.srange
@@ -513,7 +522,7 @@ function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downst
     for d in downstream
         tau[d, allele] = -log(rand()) / r[d] + t
     end
-     state[final, allele] = 1
+    state[final, allele] = 1
     state[initial, allele] = 0
 end
 """
@@ -541,23 +550,20 @@ end
 """
 function initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
     tau[index, allele] = Inf
-    state[G+1, allele] = 2
-    if final+1 > R || state[final+1] == 0
-        tau[downstream[1], allele] = -log(rand()) / (r[d]) + t
+    if final+1 > G+R || state[final+1] == 0
+        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
     end
-    if length(downstream)
-    if S > 0 && ~isempty(downstream)
-        tau[downstream[2], allele] = -log(rand()) / (r[downstream[2]]) + t
+    if S > 0 
+        tau[downstream[end], allele] = -log(rand()) / (r[downstream[end]]) + t
     end
+    state[final, allele] = 2
 end
-
 """
     transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
 
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, insertstep)
-    tau[index, allele] = Inf
+function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
     for u in upstream
         tau[u,allele] = Inf
     end
@@ -567,45 +573,27 @@ function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, dow
     if final+1 > R || state[final+1] == 0
         tau[downstream[2], allele] = -log(rand()) / (r[downstream[2]]) + t
     end
+    if S > 0
+        tau[downstream[3], allele] = -log(rand()) / (r[downstream[3]]) + t
+    end
+    state[final,allele] = state[initial,allele]
+    state[initial,allele] = 0
 end
 
 """
     eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
 
 """
-function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
+function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial)
+    for u in upstream
+        tau[u,allele] = Inf
+    end
+    if state[initial-1] > 0
+        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
+    end
+    state[initial,allele] = 0
     m += 1
     set_decay!(tau, downstream[end], t, m, r)
-    if S > 0 && isfinite(tau[index+S-insertstep+1, allele])
-        tau[index+S-insertstep+1, allele] = Inf
-    end
-    if R > 0
-        tau[index, allele] = Inf
-        state[G+R, allele] = 0
-        if state[G+R-1, allele] > 0
-            tau[upstream[1], allele] = -log(rand()) / (r[upstream[1]]) + t
-        end
-    else
-        tau[index, allele] = -log(rand()) / (r[index]) + t
-    end
-    m
-end
-function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,insertstep)
-    m += 1
-    set_decay!(tau, downstream[end], t, m, r)
-    if S > 0 && isfinite(tau[index+S-insertstep+1, allele])
-        tau[index+S-insertstep+1, allele] = Inf
-    end
-    if R > 0
-        tau[index, allele] = Inf
-        state[G+R, allele] = 0
-        if state[G+R-1, allele] > 0
-            tau[upstream[1], allele] = -log(rand()) / (r[upstream[1]]) + t
-        end
-    else
-        tau[index, allele] = -log(rand()) / (r[index]) + t
-    end
-    m
 end
 """
     splice!(tau, state, index, t, m, r, allele, G, R, initial)
@@ -621,12 +609,7 @@ end
 """
 function decay!(tau, index, t, m, r)
     m -= 1
-    if m == 0
-        tau[index, 1] = Inf
-    else
-        tau[index, 1] = -log(rand()) / (m * r[index]) + t
-    end
-    m
+    set_decay!(tau,index,t,m,r)
 end
 
 """
@@ -636,9 +619,12 @@ update tau matrix for decay rate
 
 """
 function set_decay!(tau, index, t, m, r)
-    if m == 1
+    if m == 0
+        tau[index, 1] = Inf
+    elseif m == 1
         tau[index, 1] = -log(rand()) / r[index] + t
     else
         tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
     end
+    m
 end
