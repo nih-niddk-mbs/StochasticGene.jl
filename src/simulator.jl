@@ -9,16 +9,16 @@ structure for reaction type
 
 action: type of reaction
 index: rate index for reaction
-upstream: reactions that are not possible after reaction
-downstream: reactions that are enabled by reaction
+disabled: reactions that are not possible after reaction
+enabled: reactions that are enabled by reaction
 initial: initial GR state
 final: final GR state
 """
 struct Reaction
     action::Int
     index::Int
-    upstream::Vector{Int64}
-    downstream::Vector{Int64}
+    disabled::Vector{Int64}
+    enabled::Vector{Int64}
     initial::Int
     final::Int
 end
@@ -112,7 +112,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         t, rindex = findmin(tau)
         index = rindex[1]
         allele = rindex[2]
-        initial, final, upstream, downstream, action = set_arguments(reactions[index])
+        initial, final, disabled, enabled, action = set_arguments(reactions[index])
         dth = t - t0
         t0 = t
         update_mhist!(mhist, m, dth, nhist)
@@ -153,7 +153,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                 end
             end
         end
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action, insertstep)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -211,7 +211,7 @@ end
 
 
 """
-    update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action)
+    update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
 
 updates proposed next reaction time and state given the selected action and returns updated number of mRNA
 
@@ -220,27 +220,27 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final, action, insertstep)
+function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
     if action < 5
         if action < 3
             if action == 1
-                activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+                activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
             else
-                deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+                deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
             end
         else
             if action == 3
-                transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+                transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
             else
-                initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,initial,final)
             end
         end
     else
         if action < 7
             if action == 5
-                transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final)
             else
-                m = eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial)
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,initial)
             end
         else
             if action == 7
@@ -348,7 +348,7 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     end
 end
 
-set_arguments(reaction) = (reaction.initial, reaction.final, reaction.upstream, reaction.downstream, reaction.action)
+set_arguments(reaction) = (reaction.initial, reaction.final, reaction.disabled, reaction.enabled, reaction.action)
 
 
 function set_reactionindicesold(Gtransitions, R, S, insertstep)
@@ -392,7 +392,7 @@ function set_reactionsold(Gtransitions, G, R, S, insertstep)
         end
     end
     if R > 0
-        # set downstream to splice reaction
+        # set enabled to splice reaction
         if insertstep == 1
             push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
         else
@@ -442,8 +442,8 @@ structure for reaction type
 
 action: type of reaction
 index: rate index for reaction
-upstream: reactions disabled by reaction
-downstream: reactions enabled by reaction
+disabled: reactions disabled by reaction
+enabled: reactions enabled by reaction
 initial: initial GR state
 final: final GR state
 """
@@ -487,7 +487,7 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     i = G
     for r in indices.rrange
         i += 1
-        if r + Sstride 
+        if S > 0 
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r;r + Sstride], [r - 1;r + 1;r + 1 + Sstride], i, i + 1))
         else
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1;r + 1], i, i + 1))
@@ -510,52 +510,52 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
 end
 
 """
-    transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 update tau and state for G transition
 
 """
-function transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    for u in upstream
-        tau[u, allele] = Inf
+function transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    for e in enabled
+        tau[e, allele] = -log(rand()) / r[e] + t
     end
-    for d in downstream
-        tau[d, allele] = -log(rand()) / r[d] + t
+    for d in disabled
+        tau[d, allele] = Inf
     end
     state[final, allele] = 1
     state[initial, allele] = 0
 end
 """
-	activateG!(tau,state,index,t,m,r,allele,G,R,upstream,downstream,initial,final)
+	activateG!(tau,state,index,t,m,r,allele,G,R,disabled,enabled,initial,final)
 
 """
-function activateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+function activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     if R > 0 && state[G+1, allele] > 0
-        tau[downstream[end], allele] = Inf
+        tau[enabled[end], allele] = Inf
     end
 end
 """
-    deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+    deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 
 """
-function deactivateG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
-    transitionG!(tau, state, index, t, m, r, allele, G, R, upstream, downstream, initial, final)
+function deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
 end
 """
-    initiate!(tau, state, index, t, m, r, allele, G, R, S, downstream)
+    initiate!(tau, state, index, t, m, r, allele, G, R, S, enabled)
 
 
 """
-function initiate!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial,final)
-    tau[index, allele] = Inf
+function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,initial,final)
     if final+1 > G+R || state[final+1] == 0
-        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
+        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     if S > 0 
-        tau[downstream[end], allele] = -log(rand()) / (r[downstream[end]]) + t
+        tau[enabled[end], allele] = -log(rand()) / (r[enabled[end]]) + t
     end
+    tau[index, allele] = Inf
     state[final, allele] = 2
 end
 """
@@ -563,37 +563,39 @@ end
 
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream, initial, final)
-    for u in upstream
-        tau[u,allele] = Inf
-    end
-    if state[initial-1] > 0
-        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
+function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final)
+   if state[initial-1] > 0
+        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     if final+1 > R || state[final+1] == 0
-        tau[downstream[2], allele] = -log(rand()) / (r[downstream[2]]) + t
+        tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
     end
     if S > 0
-        tau[downstream[3], allele] = -log(rand()) / (r[downstream[3]]) + t
+        if state[initial] == 2
+            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, 1] - t) + t
+        end
+    end
+    for d in disabled
+        tau[d,allele] = Inf
     end
     state[final,allele] = state[initial,allele]
     state[initial,allele] = 0
 end
 
 """
-    eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream)
+    eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled)
 
 """
-function eject!(tau, state, index, t, m, r, allele, G, R, S, upstream, downstream,initial)
-    for u in upstream
-        tau[u,allele] = Inf
+function eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,initial)
+   if state[initial-1] > 0
+        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
-    if state[initial-1] > 0
-        tau[downstream[1], allele] = -log(rand()) / (r[downstream[1]]) + t
+    for d in disabled
+        tau[d,allele] = Inf
     end
     state[initial,allele] = 0
     m += 1
-    set_decay!(tau, downstream[end], t, m, r)
+    set_decay!(tau, enabled[end], t, m, r)
 end
 """
     splice!(tau, state, index, t, m, r, allele, G, R, initial)
@@ -609,7 +611,12 @@ end
 """
 function decay!(tau, index, t, m, r)
     m -= 1
-    set_decay!(tau,index,t,m,r)
+    if m == 0
+        tau[index, 1] = Inf
+    else
+        tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
+    end
+    m
 end
 
 """
@@ -619,9 +626,7 @@ update tau matrix for decay rate
 
 """
 function set_decay!(tau, index, t, m, r)
-    if m == 0
-        tau[index, 1] = Inf
-    elseif m == 1
+    if m == 1
         tau[index, 1] = -log(rand()) / r[index] + t
     else
         tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
