@@ -77,6 +77,9 @@ If trace is set to true, it returns a nascent mRNA trace
 
 """
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfnc=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
+    if length(r) < num_rates(transitions, R, S, insertstep)
+        throw("r has too few elements")
+    end
     if insertstep > R > 0
         throw("insertstep>R")
     end
@@ -130,7 +133,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println(tau)
             println("t:", t)
             println(rindex)
-            println(invactions[action])
+            println(invactions[action], " ", allele)
             println(initial, "->", final)
         end
         if onoff
@@ -141,15 +144,15 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                 end
             else
-                if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R] == 2) || action == 7)  # turn off
+                if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R, allele] == 2) || action == 7)  # turn off
                     firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
                     if verbose
-                        println("off")
+                        println("off:", allele)
                     end
                 elseif num_reporters(state, allele, G, R, insertstep) == 0 && ((action == 4 && insertstep == 1) || (action == 5 && final == G + insertstep)) # turn on
                     firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
                     if verbose
-                        println("on")
+                        println("on:", allele)
                     end
                 end
             end
@@ -308,16 +311,16 @@ end
 TBW
 """
 function state_index(state::Array, G, R, S=0)
-    Gstate = argmax(state[1:G])
+    Gstate = argmax(state[1:G, 1])
     if R == 0
         return Gstate
     else
         if S > 0
             base = 3
-            Rstates = state[G+1:end]
+            Rstates = state[G+1:end, 1]
         else
             base = 2
-            Rstates = Int.(state[G+1:end] .> 0)
+            Rstates = Int.(state[G+1:end, 1] .> 0)
         end
         return (Gstate - 1) * base^R + decimal(Rstates, base) + 1
     end
@@ -328,7 +331,7 @@ end
 
 TBW
 """
-function num_reporters(state::Matrix, allele, G, R, insertstep=1)
+function num_reporters(state::Matrix, allele, G, R, insertstep)
     d = 0
     for i in G+insertstep:G+max(R, 1)
         d = d + Int(state[i, allele] > 1)
@@ -352,70 +355,70 @@ end
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.disabled, reaction.enabled, reaction.action)
 
 
-function set_reactionindicesold(Gtransitions, R, S, insertstep)
-    g = 1:length(Gtransitions)
-    r = length(Gtransitions)+1:length(Gtransitions)+1+R
-    s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S-insertstep+1
-    d = length(Gtransitions) + 1 + R + S + 1 - insertstep + 1
-    ReactionIndices(g, 2:1, r, 2:1, s, d)
-end
-"""
-    set_reactions(Gtransitions, G, R, S, insertstep)
+# function set_reactionindicesold(Gtransitions, R, S, insertstep)
+#     g = 1:length(Gtransitions)
+#     r = length(Gtransitions)+1:length(Gtransitions)+1+R
+#     s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S-insertstep+1
+#     d = length(Gtransitions) + 1 + R + S + 1 - insertstep + 1
+#     ReactionIndices(g, 2:1, r, 2:1, s, d)
+# end
+# """
+#     set_reactions(Gtransitions, G, R, S, insertstep)
 
-create a vector of Reaction structures all the possible reactions
-"""
-function set_reactionsold(Gtransitions, G, R, S, insertstep)
-    actions = set_actions()
-    indices = set_reactionindicesold(Gtransitions, R, S, insertstep)
-    reactions = Reaction[]
-    nG = length(Gtransitions)
-    for g in eachindex(Gtransitions)
-        u = Int[]
-        d = Int[]
-        ginitial = Gtransitions[g][1]
-        gfinal = Gtransitions[g][2]
-        for s in eachindex(Gtransitions)
-            if ginitial == Gtransitions[s][1] && gfinal != Gtransitions[s][2]
-                push!(u, s)
-            end
-            if gfinal == Gtransitions[s][1]
-                push!(d, s)
-            end
-        end
-        if gfinal == G
-            push!(d, length(Gtransitions) + 1)
-            push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
-        elseif ginitial == G
-            push!(u, length(Gtransitions) + 1)
-            push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
-        else
-            push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
-        end
-    end
-    if R > 0
-        # set enabled to splice reaction
-        if insertstep == 1
-            push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
-        else
-            push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], Int[], G, G + 1))
-        end
-    end
-    i = G
-    for r in indices.rrange
-        if r < length(Gtransitions) + R
-            i += 1
-            push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
-        end
-    end
-    push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[indices.decay], G + R, 0))
-    j = G + insertstep - 1
-    for s in indices.srange
-        j += 1
-        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
-    end
-    push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
-    return reactions
-end
+# create a vector of Reaction structures all the possible reactions
+# """
+# function set_reactionsold(Gtransitions, G, R, S, insertstep)
+#     actions = set_actions()
+#     indices = set_reactionindicesold(Gtransitions, R, S, insertstep)
+#     reactions = Reaction[]
+#     nG = length(Gtransitions)
+#     for g in eachindex(Gtransitions)
+#         u = Int[]
+#         d = Int[]
+#         ginitial = Gtransitions[g][1]
+#         gfinal = Gtransitions[g][2]
+#         for s in eachindex(Gtransitions)
+#             if ginitial == Gtransitions[s][1] && gfinal != Gtransitions[s][2]
+#                 push!(u, s)
+#             end
+#             if gfinal == Gtransitions[s][1]
+#                 push!(d, s)
+#             end
+#         end
+#         if gfinal == G
+#             push!(d, length(Gtransitions) + 1)
+#             push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
+#         elseif ginitial == G
+#             push!(u, length(Gtransitions) + 1)
+#             push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
+#         else
+#             push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
+#         end
+#     end
+#     if R > 0
+#         # set enabled to splice reaction
+#         if insertstep == 1
+#             push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
+#         else
+#             push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], Int[], G, G + 1))
+#         end
+#     end
+#     i = G
+#     for r in indices.rrange
+#         if r < length(Gtransitions) + R
+#             i += 1
+#             push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
+#         end
+#     end
+#     push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[indices.decay], G + R, 0))
+#     j = G + insertstep - 1
+#     for s in indices.srange
+#         j += 1
+#         push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
+#     end
+#     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
+#     return reactions
+# end
 """
     set_reactionindices(Gtransitions, R, S, insertstep)
 
@@ -552,11 +555,11 @@ end
 
 """
 function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final)
-    if final + 1 > G + R || state[final+1] == 0
+    if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
-    end
-    if S > 0
-        tau[enabled[end], allele] = -log(rand()) / (r[enabled[end]]) + t
+        if S > 0 && length(enabled) > 1
+            tau[enabled[end], allele] = -log(rand()) / (r[enabled[end]]) + t
+        end
     end
     tau[index, allele] = Inf
     state[final, allele] = 2
@@ -567,15 +570,15 @@ end
 
 """
 function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final)
-    if state[initial-1] > 0
+    if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
-    if final + 1 > R || state[final+1] == 0
+    if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
     end
     if S > 0
-        if state[initial] == 2
-            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, 1] - t) + t
+        if state[initial, allele] == 2
+            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
         end
     end
     for d in disabled
@@ -590,13 +593,13 @@ end
 
 """
 function eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
-    if state[initial-1] > 0
+    if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     for d in disabled
         tau[d, allele] = Inf
     end
-    if R>0
+    if R > 0
         state[initial, allele] = 0
     end
     set_decay!(tau, enabled[end], t, m, r)
