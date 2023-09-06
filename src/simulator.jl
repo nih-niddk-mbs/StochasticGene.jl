@@ -136,28 +136,43 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println(invactions[action], " ", allele)
             println(initial, "->", final)
         end
+        # if onoff
+        #     if R == 0
+        #         if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
+        #             firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+        #         elseif initial ∉ onstates && final ∈ onstates && final > 0 # turn on
+        #             firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+        #         end
+        #     else
+        #         if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R, allele] == 2) || action == 7)  # turn off
+        #             firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+        #             if verbose
+        #                 println("off:", allele)
+        #             end
+        #         elseif num_reporters(state, allele, G, R, insertstep) == 0 && ((action == 4 && insertstep == 1) || (action == 5 && final == G + insertstep)) # turn on
+        #             firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+        #             if verbose
+        #                 println("on:", allele)
+        #             end
+        #         end
+        #     end
+        # end
+        before = num_reporters(state, allele, G, R, insertstep)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
+        after = num_reporters(state, allele, G, R, insertstep)
         if onoff
-            if R == 0
-                if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
-                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-                elseif initial ∉ onstates && final ∈ onstates && final > 0 # turn on
-                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+            if before == 1 && after == 0  # turn off
+                firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+                if verbose
+                    println("off:", allele)
                 end
-            else
-                if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R, allele] == 2) || action == 7)  # turn off
-                    firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-                    if verbose
-                        println("off:", allele)
-                    end
-                elseif num_reporters(state, allele, G, R, insertstep) == 0 && ((action == 4 && insertstep == 1) || (action == 5 && final == G + insertstep)) # turn on
-                    firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-                    if verbose
-                        println("on:", allele)
-                    end
+            elseif before == 0 && after == 1 # turn on
+                firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+                if verbose
+                    println("on:", allele)
                 end
             end
         end
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -236,13 +251,13 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,
             if action == 3
                 transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
             else
-                initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final,insertstep)
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
             end
         end
     else
         if action < 7
             if action == 5
-                transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final,insertstep)
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
             else
                 m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
             end
@@ -491,15 +506,30 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     i = G
     for r in indices.rrange
         i += 1
-        if S > 0
-            if i >= G + insertstep 
-                push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-            else
-                push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-            end
-        else
+        if S == 0
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
         end
+        if S > 0 && insertstep == 1
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        end
+        if S > 0 && insertstep > 1 && i > G + insertstep - 1
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        end
+        if S > 0 && insertstep > 1 && i == G + insertstep - 1
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        end
+        if S > 0 && insertstep > 1 && i < G + insertstep - 1
+            push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+        end
+        # if S > 0
+        #     if i >= G + insertstep 
+        #         push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        #     else
+        #         push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        #     end
+        # else
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+        # end
     end
     for e in indices.erange
         if S > 0
@@ -558,14 +588,14 @@ end
 
 
 """
-function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final,insertstep)
+function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     if insertstep == 1
         state[final, allele] = 2
         if S > 0
-            tau[enabled[end], allele] = -log(rand()) / (r[enabled[end]]) + t
+            tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
         end
     else
         state[final, allele] = 1
@@ -577,19 +607,20 @@ end
 
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final,insertstep)
+function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / r[enabled[1]] + t
     end
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[2], allele] = -log(rand()) / r[enabled[2]] + t
     end
-    if S > 0
-        if final == insertstep + G
-            tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
-        elseif state[initial, allele] > 1
-            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
-        end
+    if S > 0 && final >= G + insertstep
+        tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # if final == insertstep + G
+        #     tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # elseif state[initial, allele] > 1
+        #     tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
+        # end
     end
     for d in disabled
         tau[d, allele] = Inf

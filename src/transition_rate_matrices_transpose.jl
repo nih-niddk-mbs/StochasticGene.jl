@@ -380,13 +380,13 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                     end
                     if S > 0 && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-                        if abs(s) == 1 && i >= insertstep
+                        if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
                     if rnatype == "offeject" && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
-                        if abs(s) == 1 && i >= insertstep
+                        if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
