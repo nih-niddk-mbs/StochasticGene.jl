@@ -1,3 +1,4 @@
+# This file is part of StochasticGene.jl
 # simulator.jl
 # Functions to simulate Markov gene transcription models
 # Uses hybrid first and next reaction method
@@ -9,8 +10,8 @@ structure for reaction type
 
 action: type of reaction
 index: rate index for reaction
-disabled: reactions that are not possible after reaction
-enabled: reactions that are enabled by reaction
+disabled: reactions that are disabled by current reaction
+enabled: reactions that are enabled by current reaction
 initial: initial GR state
 final: final GR state
 """
@@ -112,7 +113,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
-        t, rindex = findmin(tau)
+        t, rindex = findmin(tau)   # reaction index and allele for least time transition
         index = rindex[1]
         allele = rindex[2]
         initial, final, disabled, enabled, action = set_arguments(reactions[index])
@@ -123,66 +124,30 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             err, mhist0 = update_error(mhist, mhist0)
             ts = t
         end
+
         if onoff 
+            # find before and after states for the same allele to define dwell time histograms 
             before = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(initial ∈ onstates)
         end
-
-        verbose && println(initial,":",state_index(state,G,allele) )
 
         if verbose
             println("---")
             println("m:", m)
             println(state)
             println(before)
-            # if R > 0
-            #     println(num_reporters(state, allele, G, R, insertstep))
-            # end
-            # println(tau)
+            println(tau)
             println("t:", t)
             println(rindex)
             println(invactions[action], " ", allele)
             println(initial, "->", final)
         end
-        # if onoff
-        #     if R == 0
-        #         if initial ∈ onstates && final ∉ onstates && final > 0  # turn off
-        #             firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-        #         elseif initial ∉ onstates && final ∈ onstates && final > 0 # turn on
-        #             firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-        #         end
-        #     end
-        # end
-            # else
-        #         if num_reporters(state, allele, G, R, insertstep) == 1 && ((action == 6 && state[G+R, allele] == 2) || action == 7)  # turn off
-        #             firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-        #             if verbose
-        #                 println("off:", allele)
-        #             end
-        #         elseif num_reporters(state, allele, G, R, insertstep) == 0 && ((action == 4 && insertstep == 1) || (action == 5 && final == G + insertstep)) # turn on
-        #             firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-        #             if verbose
-        #                 println("on:", allele)
-        #             end
-        #         end
-        #     end
-        # end
-
+     
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
         
         if onoff
             after = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(final ∈ onstates)
-            if before == 1 && after == 0  # turn off
-                firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-                if verbose 
-                    println("off:", allele)
-                end
-            elseif before == 0 && after == 1 # turn on
-                firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-                if verbose
-                    println("on:", allele)
-                end
-            end
-        end
+            firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
+         end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -199,6 +164,9 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
 end
 
+
+
+
 """
     initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
 
@@ -207,7 +175,7 @@ return initial proposed next reaction times and states
 """
 function initialize(r, G, R, nreactions, nalleles, initstate=1, initreaction=1)
     tau = fill(Inf, nreactions, nalleles)
-    states = zeros(Int, G + max(R, 1), nalleles)
+    states = zeros(Int, G + R, nalleles)
     for n in 1:nalleles
         tau[initreaction, n] = -log(rand()) / r[1]
         states[initstate, n] = 1
@@ -239,48 +207,6 @@ function update_mhist!(mhist, m, dt, nhist)
 end
 
 
-"""
-    update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
-
-updates proposed next reaction time and state given the selected action and returns updated number of mRNA
-
-(uses if-then statements because that executes faster than an element of an array of functions)
-
-Arguments are same as defined in simulator
-
-"""
-function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
-    if action < 5
-        if action < 3
-            if action == 1
-                activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
-            else
-                deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
-            end
-        else
-            if action == 3
-                transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
-            else
-                initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-            end
-        end
-    else
-        if action < 7
-            if action == 5
-                transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-            else
-                m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
-            end
-        else
-            if action == 7
-                splice!(tau, state, index, t, m, r, allele, G, R, initial)
-            else
-                m = decay!(tau, index, t, m, r)
-            end
-        end
-    end
-    return m
-end
 
 """
     make_trace(tracelog, G, R, onstates, interval=100.0)
@@ -335,16 +261,12 @@ end
 
 """
     state_index(state::Array,G,allele)
+    state_index(state::Array, G, R, S,allele=1)
 
-TBW
+returns state index given state vector
 """
 state_index(state::Array,G,allele) = argmax(state[1:G, allele])
 
-"""
-    state_index(state::Array, G, R, S=0)
-
-TBW
-"""
 function state_index(state::Array, G, R, S,allele=1)
     Gstate = argmax(state[1:G, allele])
     if R == 0
@@ -364,20 +286,37 @@ end
 """
     num_reporters(state::Matrix, allele, G, R, insertstep=1)
 
-TBW
+return number of states with R steps > 1
 """
 function num_reporters(state::Matrix, allele, G, R, insertstep)
-    d = 0
-    for i in G+insertstep:G+max(R, 1)
-        d = d + Int(state[i, allele] > 1)
+    r = 0
+    for i in G+insertstep:G+R
+        r = r + Int(state[i, allele] > 1)
     end
-    d
+    r
 end
+"""
+    firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
 
+decide if transition exits or enters sojurn states then in place update appropriate histogram
+"""
+function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after,verbose)
+    if before == 1 && after == 0  # turn off
+        firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+        if verbose
+            println("off:", allele)
+        end
+    elseif before == 0 && after == 1 # turn on
+        firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+        if verbose
+            println("on:", allele)
+        end
+    end
+end
 """
     firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
 
-TBW
+in place update of first passage time histograms
 """
 function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     t1[allele] = t
@@ -387,77 +326,18 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     end
 end
 
+"""
+    set_arguments(reaction)
+
+return values of fields of Reaction structure
+"""
 set_arguments(reaction) = (reaction.initial, reaction.final, reaction.disabled, reaction.enabled, reaction.action)
 
 
-# function set_reactionindicesold(Gtransitions, R, S, insertstep)
-#     g = 1:length(Gtransitions)
-#     r = length(Gtransitions)+1:length(Gtransitions)+1+R
-#     s = length(Gtransitions)+1+R+1:length(Gtransitions)+1+R+S-insertstep+1
-#     d = length(Gtransitions) + 1 + R + S + 1 - insertstep + 1
-#     ReactionIndices(g, 2:1, r, 2:1, s, d)
-# end
-# """
-#     set_reactions(Gtransitions, G, R, S, insertstep)
-
-# create a vector of Reaction structures all the possible reactions
-# """
-# function set_reactionsold(Gtransitions, G, R, S, insertstep)
-#     actions = set_actions()
-#     indices = set_reactionindicesold(Gtransitions, R, S, insertstep)
-#     reactions = Reaction[]
-#     nG = length(Gtransitions)
-#     for g in eachindex(Gtransitions)
-#         u = Int[]
-#         d = Int[]
-#         ginitial = Gtransitions[g][1]
-#         gfinal = Gtransitions[g][2]
-#         for s in eachindex(Gtransitions)
-#             if ginitial == Gtransitions[s][1] && gfinal != Gtransitions[s][2]
-#                 push!(u, s)
-#             end
-#             if gfinal == Gtransitions[s][1]
-#                 push!(d, s)
-#             end
-#         end
-#         if gfinal == G
-#             push!(d, length(Gtransitions) + 1)
-#             push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
-#         elseif ginitial == G
-#             push!(u, length(Gtransitions) + 1)
-#             push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
-#         else
-#             push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
-#         end
-#     end
-#     if R > 0
-#         # set enabled to splice reaction
-#         if insertstep == 1
-#             push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], [nG + 2 + S], G, G + 1))
-#         else
-#             push!(reactions, Reaction(actions["initiate!"], indices.rrange[1], Int[], Int[], G, G + 1))
-#         end
-#     end
-#     i = G
-#     for r in indices.rrange
-#         if r < length(Gtransitions) + R
-#             i += 1
-#             push!(reactions, Reaction(actions["transitionR!"], r + 1, [r], [r + 2], i, i + 1))
-#         end
-#     end
-#     push!(reactions, Reaction(actions["eject!"], indices.rrange[end], Int[nG+R], Int[indices.decay], G + R, 0))
-#     j = G + insertstep - 1
-#     for s in indices.srange
-#         j += 1
-#         push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
-#     end
-#     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[], 0, 0))
-#     return reactions
-# end
 """
     set_reactionindices(Gtransitions, R, S, insertstep)
 
-TBW
+return structure of ranges for each type of transition
 """
 function set_reactionindices(Gtransitions, R, S, insertstep)
     if S > 0
@@ -475,16 +355,11 @@ function set_reactionindices(Gtransitions, R, S, insertstep)
     ReactionIndices(g, i, r, e, s, d)
 end
 """
-	Reaction
+    set_reactions(Gtransitions, G, R, S, insertstep)
 
-structure for reaction type
+return vector of Reaction structures for each transition in GRS model
 
-action: type of reaction
-index: rate index for reaction
-disabled: reactions disabled by reaction
-enabled: reactions enabled by reaction
-initial: initial GR state
-final: final GR state
+reporter first appears at insertstep
 """
 function set_reactions(Gtransitions, G, R, S, insertstep)
     actions = set_actions()
@@ -541,15 +416,6 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
         if S > 0 && insertstep > 1 && i < G + insertstep - 1
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
         end
-        # if S > 0
-        #     if i >= G + insertstep 
-        #         push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        #     else
-        #         push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        #     end
-        # else
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
-        # end
     end
     for e in indices.erange
         if S > 0
@@ -568,6 +434,49 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[indices.decay], 0, 0))
     return reactions
 end
+"""
+    update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
+
+updates proposed next reaction time and state given the selected action and returns updated number of mRNA
+
+(uses if-then statements because that executes faster than an element of an array of functions)
+
+Arguments are same as defined in simulator
+
+"""
+function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
+    if action < 5
+        if action < 3
+            if action == 1
+                activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+            else
+                deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+            end
+        else
+            if action == 3
+                transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+            else
+                initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+            end
+        end
+    else
+        if action < 7
+            if action == 5
+                transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+            else
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
+            end
+        else
+            if action == 7
+                splice!(tau, state, index, t, m, r, allele, G, R, initial)
+            else
+                m = decay!(tau, index, t, m, r)
+            end
+        end
+    end
+    return m
+end
+
 
 """
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
