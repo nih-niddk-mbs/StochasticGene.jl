@@ -45,14 +45,14 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S; onstates=[G], propc
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; onstates=[G], propcv=0.05, f=Normal, cv=1.)
+function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; insertstep::Int=1,onstates::Vector=[G], propcv=0.05, f=Normal, cv=1.)
 	d = trace_prior(r, fittedparam,f,cv)
 	method = 1
-    components = make_components_T(transitions, G, R, S)
+    components = make_components_T(transitions, G, R, S,insertstep,"")
 	if S > 0
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,S,1,"",r,d,propcv,fittedparam,method,transitions,components,onstates)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(insertstep)}(G,R,S,1,"",r,d,propcv,fittedparam,method,transitions,components,insertstep)
     elseif R > 0
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,"",r,d,propcv,fittedparam,method,transitions,components,onstates)
+        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(insertstep)}(G,R,1,r,d,propcv,fittedparam,method,transitions,components,insertstep)
     else
 		return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 	end

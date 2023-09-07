@@ -219,7 +219,7 @@ struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Comp
     components::ComponentType
     reporters::Vector
 end
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
+struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
     G::Int
     R::Int
     nalleles::Int
@@ -230,9 +230,9 @@ struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTy
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::Vector
+    reporters::ReporterType
 end
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
     G::Int
     R::Int
     S::Int
@@ -245,10 +245,10 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::Vector
+    reporters::ReporterType
 end
 
-struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGRMmodel
+struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
     G::Int
     R::Int
     S::Int
@@ -262,7 +262,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::Vector
+    reporters::ReporterType
 end
 
 """
