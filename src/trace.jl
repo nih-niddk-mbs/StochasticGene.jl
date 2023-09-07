@@ -108,7 +108,7 @@ end
 
 TBW
 """
-read_tracefile(target::String,col) = readdlm(target)[:,col]
+read_tracefile(target::String,col=3) = readdlm(target)[:,col]
 
 
 read_tracefile(target::String,col,delimiter) = readdlm(target,delimiter)[:,col]
