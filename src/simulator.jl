@@ -158,7 +158,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if onoff
         return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
     elseif traceinterval > 0.0
-        make_trace(tracelog, G, R, S, onstates, traceinterval, par, reporterfnc)
+        make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, reporterfnc)
     else
         return mhist[1:nhist]
     end
@@ -209,7 +209,7 @@ end
 
 
 """
-    make_trace(tracelog, G, R, onstates, interval=100.0)
+    make_trace(tracelog, G, R, S, onstates, interval, par, insertstep,reporterfnc=sum)
 
 Return array of frame times and intensities
 
@@ -219,13 +219,13 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par, reporterfnc=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep,reporterfnc=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        reporters = num_reporters(G, R, S, reporterfnc)
+        reporters = num_reporters(G, R, S, insertstep,reporterfnc)
     else
         reporters = num_reporters(G, onstates)
     end

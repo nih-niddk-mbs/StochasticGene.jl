@@ -28,7 +28,7 @@ include("hmm.jl")
 include("trace.jl")
 # include("io.jl")
 include("biowulf.jl")
-include("fit.jl")
+# include("fit.jl")
 # include("genetrap.jl")
 include("analysis.jl")
 
