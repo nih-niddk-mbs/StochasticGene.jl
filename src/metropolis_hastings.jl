@@ -64,7 +64,7 @@ data is an AbstractExperimentalData structure
 model is a StochasticGR model with a logprior function
 model and data must have a likelihoodfn function
 """
-function run_mh(data::AbstractExperimentalData,model::AbstractGRmodel,options::MHOptions)
+function run_mh(data::AbstractExperimentalData,model::AbstractGmodel,options::MHOptions)
     fit,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
         stats = compute_stats(fit.param,model)
@@ -80,7 +80,7 @@ end
 run_mh(data,model,options,nchains)
 
 """
-function run_mh(data::AbstractExperimentalData,model::AbstractGRmodel,options::MHOptions,nchains)
+function run_mh(data::AbstractExperimentalData,model::AbstractGmodel,options::MHOptions,nchains)
     if nchains == 1
         return run_mh(data,model,options)
     else
@@ -279,7 +279,7 @@ return proposal distribution specified by location and scale
 
 """
 
-proposal_scale(cv::Float64,model::AbstractGRmodel) = sqrt(log(1+cv^2))
+proposal_scale(cv::Float64,model::AbstractGmodel) = sqrt(log(1+cv^2))
 
 proposal_dist(param::Float64,cv::Float64,model) = Normal(param,proposal_scale(cv,model))
 function proposal_dist(param::Vector,cv::Float64,model)
@@ -540,7 +540,7 @@ function deviance(fit::Fit,data::AbstractHistogramData,model)
     deviance(h,data)
 end
 
-function deviance(data::AbstractHistogramData,model::AbstractGRmodel)
+function deviance(data::AbstractHistogramData,model::AbstractGmodel)
     h = likelihoodfn(model.rates[model.fittedparam],data,model)
     deviance(h,data)
 end

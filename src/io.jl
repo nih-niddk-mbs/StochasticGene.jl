@@ -381,7 +381,7 @@ end
 
 
 
-filename(data,model::AbstractGRMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
+filename(data,model::AbstractGRSMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
 filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,model.nalleles)
 filename(label::String,gene::String,G::Int,R::Int,nalleles::Int) = filename(label,gene,"$G"*"$R","$(nalleles)")
 filename(label::String,gene,G::Int,nalleles::Int) = filename(label,gene,"$G","$(nalleles)")
@@ -389,9 +389,9 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 
 
 """
-writeall(path::String,fit,stats,measures,data,temp,model::AbstractGRmodel;optimized=0,burst=0)
+writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::AbstractGRmodel;optimized=0,burst=0,writesamples=false)
+function writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0,writesamples=false)
     if ~isdir(path)
         mkpath(path)
     end
@@ -673,7 +673,7 @@ function save_model(file::String,model::AbstractGMmodel)
 
 end
 
-function load_model(file::String,model::AbstractGRMmodel)
+function load_model(file::String,model::AbstractGRSMmodel)
 
 end
 

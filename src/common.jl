@@ -20,9 +20,14 @@ abstract type AbstractSampleData <: AbstractExperimentalData end
 abstract type for data in the form of a histogram (probability distribution)
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
-
 """
-    AbstractRNAData{hType}
+  AbstractRNAData{hType}
+
+abstract type for steady state RNA histogram data
+"""
+abstract type AbstractHistogramArrayData <: AbstractHistogramData end
+"""
+  AbstractRNAData{hType}
 
 abstract type for steady state RNA histogram data
 """
@@ -63,28 +68,7 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     nRNA::nType
     histRNA::hType
 end
-struct TransientRNAData{nType,tType,hType} <: AbstractRNAData{hType}
-    name::String
-    gene::String
-    nRNA::nType
-    time::tType
-    histRNA::hType
-end
-struct RNAMixedData{hType} <: AbstractRNAData{hType}
-    name::String
-    gene::String
-    nRNA::Array
-    fish::Array{Bool,1}
-    histRNA::hType
-end
-struct OnOffData <: AbstractHistogramData
-    name::String
-    gene::String
-    bins::Array
-    OFF::Array
-    ON::Array
-end
-struct RNALiveCellData <: AbstractHistogramData
+struct RNALiveCellData <: AbstractHistogramArrayData
     name::String
     gene::String
     nRNA::Int
@@ -120,10 +104,9 @@ end
     Abstract model types
 """
 abstract type AbstractModel end
-abstract type AbstractGRmodel <: AbstractModel end
-abstract type AbstractGMmodel <: AbstractGRmodel end
-abstract type AbstractGRMmodel <: AbstractGRmodel end
-abstract type AbstractGMfixedeffectsmodel <: AbstractGMmodel end
+abstract type AbstractGmodel <: AbstractModel end
+abstract type AbstractGMmodel <: AbstractGmodel end
+abstract type AbstractGRSMmodel <: AbstractGmodel end
 
 """
     Model structures
@@ -158,7 +141,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     components::ComponentType
     reporters::Vector
 end
-struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMfixedeffectsmodel
+struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -171,68 +154,21 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     components::ComponentType
     reporters::Vector
 end
-struct GMdelaymodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
-    G::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    Gtransitions::Tuple
-    components::ComponentType
-    reporters::Vector
-end
-struct GMmultimodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
-    G::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    Gtransitions::Tuple
-    components::ComponentType
-    reporters::Vector
-end
-struct GMtransientmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
-    G::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    Gtransitions::Tuple
-    components::ComponentType
-    reporters::Vector
-end
-struct GMrescaledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
-    G::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    Gtransitions::Tuple
-    components::ComponentType
-    reporters::Vector
-end
-struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
-    G::Int
-    R::Int
-    nalleles::Int
-    rates::RateType
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    Gtransitions::Tuple
-    components::ComponentType
-    reporters::ReporterType
-end
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
+
+# struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
+#     G::Int
+#     R::Int
+#     nalleles::Int
+#     rates::RateType
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     method::MethodType
+#     Gtransitions::Tuple
+#     components::ComponentType
+#     reporters::ReporterType
+# end
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
     G::Int
     R::Int
     S::Int
@@ -248,7 +184,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporters::ReporterType
 end
 
-struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRMmodel
+struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
     G::Int
     R::Int
     S::Int
@@ -320,7 +256,7 @@ returns negative loglikelihood of all data and vector of the prediction histogra
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
-function loglikelihood(param,data::AbstractHistogramData,model::AbstractGRmodel)
+function loglikelihood(param,data::AbstractHistogramData,model::AbstractGmodel)
     predictions = likelihoodfn(param,data,model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions,eps()))
@@ -333,10 +269,9 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRMmodel)
+function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    # reporters = num_reporters(model.G, model.R, model.S)
-    llg,llgp = ll_Gaussian(r, Rmodel.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
+    llg,llgp = ll_Gaussian(r, model.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents,r)
     histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
     hist = datahistogram(data)
@@ -350,49 +285,35 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-# function loglikelihood(param, data::AbstractTraceData, model::GMmodel)
-#     r = get_rates(param, model)
-#     # reporters = num_reporters(model.G, model.reporters)
-#     ll_Gaussian(r, model.G, model.reporters, model.components.elementsT, data.interval, data.trace)
-# end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRmodel)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     r = get_rates(param, model)
-    # reporters = num_reporters(model.G, model.R, 0, sum)
-    # base = 2
     ll_Gaussian(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
-#     r = get_rates(param, model)
-#     # reporters = num_reporters(model.G, model.R, model.S)
-#     # base = 3
-#     ll_Gaussian(r, model.component.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
-# end
-
 
 """
-    likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Int, T2 <: Array}
+    likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
 
 return likelihoodfn for single RNA histogram
 """
-function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Int, T2 <: Array}
+function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
     r = get_rates(param,model)
     M = make_mat_M(model.components,r)
     steady_state(M,model.G,model.nalleles,data.nRNA)
 end
 """
-    likelihoodfn(param,data::AbstractHistogramData,model)
+    likelihoodfn(param,data::AbstractHistogramArrayData,model::AbstractGmodel)
 
-return loglikelihood
+return loglikelihood for multiple histograms
 """
-function likelihoodfn(param,data::AbstractHistogramData,model)
+function likelihoodfn(param,data::AbstractHistogramArrayData,model::AbstractGmodel)
     h = likelihoodarray(get_rates(param,model),data,model)
-    make_array{h}
+    make_array(h)
 end
 # function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
 #     h = likelihoodarray(get_rates(param,model),data,model)
-#     make_array{h}
+#     make_array(h)
 #     hconcat = Array{Float64,1}(undef,0)
 #     for h in h
 #         hconcat = vcat(hconcat,h)
@@ -410,8 +331,8 @@ end
 # end
 
 
-likelihoodfn(param::Vector,data::RNAData,model::AbstractGRMmodel) =
-    steady_state(get_rates(param,model),model.G,model.R,data.nRNA,model.nalleles)
+# likelihoodfn(param::Vector,data::RNAData,model::AbstractGRSMmodel) = steady_state(M, nT, nalleles, nhist)
+#     steady_state(get_rates(param,model),model.G,model.R,data.nRNA,model.nalleles)
 
 
 """
@@ -431,23 +352,20 @@ data.histRNA holds array of histograms for time points given by data.time
 transient computes the time evolution of the histogram
 model.method=1 specifies finite difference solution using DifferentialEquations.jl otherwise use eigendecomposition solution,
 """
-function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
-    h=likelihoodarray(r,data,model,maximum(data.nRNA))
-    trim_hist(h,data.nRNA)
-end
+# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
+#     h=likelihoodarray(r,data,model,maximum(data.nRNA))
+#     trim_hist(h,data.nRNA)
+# end
 """
     likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
 
 TBW
 """
 function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
-    # n = model.G-1
     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
     for i in eachindex(data.nRNA)
         M = make_mat_M(model.components[i],r[(i-1)*2*model.G+1 : i*2*model.G])
         h[i] = steady_state(M,model.G,model.nalleles,data.nRNA[i])
-        #
-        # h[i] =steady_state(r[(i-1)*2*model.G+1 : i*2*model.G],n,data.nRNA[i],model.nalleles)
     end
     trim_hist(h,data.nRNA)
 end
@@ -456,48 +374,49 @@ end
 
 TBW
 """
-function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
-    G = model.G
-    h0 = steady_state_full(r[1:2*G],G-1,maxdata)
-    transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
-    # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
-end
+# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
+#     maxdata 
+#     G = model.G
+#     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
+#     transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
+#     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
+# end
 """
     likelihoodarray(r,data::RNAData,model::GMmultimodel)
 
 TBW
 """
-function likelihoodarray(r,data::RNAData,model::GMmultimodel)
-    G = model.G
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-    for i in eachindex(data.nRNA)
-        g = steady_state(r[1:2*G],G-1,data.nRNA[i],model.nalleles)
-        h[i] = threshold_noise(g,r[2*G+1],r[2*G+1+i],data.nRNA[i])
-    end
-    return h
-end
+# function likelihoodarray(r,data::RNAData,model::GMmultimodel)
+#     G = model.G
+#     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+#     for i in eachindex(data.nRNA)
+#         g = steady_state(r[1:2*G],G-1,data.nRNA[i],model.nalleles)
+#         h[i] = threshold_noise(g,r[2*G+1],r[2*G+1+i],data.nRNA[i])
+#     end
+#     return h
+# end
 """
     likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
 
 TBW
 """
-function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
-    G = model.G
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-    j = 1
-    for i in eachindex(data.fish)
-        g = steady_state(r[1:2*G],G-1,maximum(data.nRNA),model.nalleles)
-        if data.fish[i]
-            h[i] = threshold_noise(g,r[2*G+j],r[2*G+j+1],data.nRNA[i])
-            j += 2
-        else
-            h[i] = technical_loss(g,r[2*G+j],data.nRNA[i])
-            j += 1
-        end
-    end
-    return h
-end
-"""
+# function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
+#     G = model.G
+#     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+#     j = 1
+#     for i in eachindex(data.fish)
+#         g = steady_state(r[1:2*G],G-1,maximum(data.nRNA),model.nalleles)
+#         if data.fish[i]
+#             h[i] = threshold_noise(g,r[2*G+j],r[2*G+j+1],data.nRNA[i])
+#             j += 2
+#         else
+#             h[i] = technical_loss(g,r[2*G+j],data.nRNA[i])
+#             j += 1
+#         end
+#     end
+#     return h
+# end
+ """
     likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 
 TBW
@@ -511,13 +430,13 @@ function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 return [modelOFF, modelON, histF]
 end
 """
-    likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
+    likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRSMmodel)
 
 TBW
 """
-function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
+function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRSMmodel)
         r = copy(rin)
-        if model.type == "offdecay"
+        if model.rnatype == "offdecay"
             r[end-1] *= survival_fraction(nu,eta,model.R)
         end
         T = make_mat_T(model.components.tcomponents,r)
@@ -530,11 +449,11 @@ function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRMmodel)
 end
 
 """
-    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
+    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
 
 TBW
 """
-function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRMmodel)
+function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
     r = copy(rin)
     tcomponents = model.components.tcomponents
     T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
@@ -553,25 +472,25 @@ end
 
 
 """
-transform_rates(r,model::AbstractGRmodel)
+transform_rates(r,model::AbstractGmodel)
 
 transform rates to real domain
 """
-transform_rates(r,model::AbstractGRmodel) = log.(r)
+transform_rates(r,model::AbstractGmodel) = log.(r)
 
 """
-inverse_transform_rates(x,model::AbstractGRmodel)
+inverse_transform_rates(x,model::AbstractGmodel)
 
 transform MH parameters on real domain back to rate domain
 
 """
-inverse_transform_rates(p,model::AbstractGRmodel) = exp.(p)
+inverse_transform_rates(p,model::AbstractGmodel) = exp.(p)
 
 """
 get_rates(param,model)
 replace fitted rates with new values and return
 """
-function get_rates(param,model::AbstractGRmodel;inverse=true)
+function get_rates(param,model::AbstractGmodel;inverse=true)
     r = get_r(model)
     if inverse
         r[model.fittedparam] = inverse_transform_rates(param,model)
@@ -586,28 +505,28 @@ end
 #     # setr(r,model)
 #     return r
 # end
-get_rates(param,model::GMtransientmodel) = inverse_transform_rates(param[1:2*model.G],model)
+# get_rates(param,model::GMtransientmodel) = inverse_transform_rates(param[1:2*model.G],model)
 
 """
 get_rates(param,model::GMrescaledmodel)
 
 gammas are scaled by nu
 """
-function get_rates(param,model::GMrescaledmodel)
-    param = inverse_transform_rates(param,model)
-    r = get_r(model)
-    n = get_n(model)
-    nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
-    r[1:n-1] /= r[n]
-    r[model.fittedparam] = param
-    r[1:n-1] *= nu
-    if r[2*model.G + 3] > 1
-        r[2*model.G + 3] = 1
-    end
-    return r
-end
+# function get_rates(param,model::GMrescaledmodel)
+#     param = inverse_transform_rates(param,model)
+#     r = get_r(model)
+#     n = get_n(model)
+#     nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
+#     r[1:n-1] /= r[n]
+#     r[model.fittedparam] = param
+#     r[1:n-1] *= nu
+#     if r[2*model.G + 3] > 1
+#         r[2*model.G + 3] = 1
+#     end
+#     return r
+# end
 
-get_rates(param,model::AbstractGMfixedeffectsmodel) = fixed_rates(param,model)
+# get_rates(param,model::AbstractGMfixedeffectsmodel) = fixed_rates(param,model)
 
 # get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
 
@@ -631,14 +550,14 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::AbstractGRmodel) = transform_rates(model.rates[model.fittedparam],model)
+get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam],model)
 
-function get_param(model::GMrescaledmodel)
-    r = copy(model.rates)
-    n = 2*model.G - 1
-    r[1:n-1] /= r[n]
-    transform_rates(r[model.fittedparam],model)
-end
+# function get_param(model::GMrescaledmodel)
+#     r = copy(model.rates)
+#     n = 2*model.G - 1
+#     r[1:n-1] /= r[n]
+#     transform_rates(r[model.fittedparam],model)
+# end
 
 """
 setr(r,model)
@@ -656,7 +575,7 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::AbstractGRmodel)
+function logprior(param,model::AbstractGmodel)
     d = model.rateprior
     p=0
     for i in eachindex(param)

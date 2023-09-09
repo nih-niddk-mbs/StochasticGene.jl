@@ -152,7 +152,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             push!(tracelog, (t, state[:, 1]))
         end
     end  # while
-    println(steps)
+    verbose && println(steps)
     counts = max(sum(mhist), 1)
     mhist /= counts
     if onoff

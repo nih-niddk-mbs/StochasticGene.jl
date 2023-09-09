@@ -853,7 +853,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}},model)
     return h
 end
 
-function plot_histogram(data::RNALiveCellData,model::AbstractGRmodel,filename = "")
+function plot_histogram(data::RNALiveCellData,model::AbstractGmodel,filename = "")
     h=likelihoodarray(model.rates,data,model)
     plt1 = plot(data.bins,h[1])
     plot!(plt1,data.bins,normalize_histogram(data.OFF))
@@ -869,15 +869,15 @@ function plot_histogram(data::RNALiveCellData,model::AbstractGRmodel,filename = 
     return h
 end
 
-function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
-    h=likelihoodarray(model.rates,data,model)
-    for i in eachindex(h)
-        figure(data.gene *":T" * "$(data.time[i])")
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-    end
-    return h
-end
+# function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
+#     h=likelihoodarray(model.rates,data,model)
+#     for i in eachindex(h)
+#         figure(data.gene *":T" * "$(data.time[i])")
+#         plot(h[i])
+#         plot(normalize_histogram(data.histRNA[i]))
+#     end
+#     return h
+# end
 
 function plot_histogram(data::RNAData{T1,T2},model::AbstractGMmodel,save = false) where {T1 <: Array, T2 <: Array}
     m=likelihoodarray(model.rates,data,model)

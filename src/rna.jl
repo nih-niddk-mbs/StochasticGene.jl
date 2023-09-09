@@ -215,7 +215,8 @@ function model_rna(data,r::Vector,G::Int,nalleles::Int,nsets::Int,propcv,fittedp
     model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions,onstates)
 end
 function model_rna(data,r::Vector,d,G::Int,nalleles,propcv,fittedparam,fixedeffects,transitions,method=0,onstates=[G])
-    components = make_components_M(transitions,G,data.nRNA+2,r[end])
+    # components = make_components_M(transitions,G,data.nRNA+2,r[end])
+    components = make_components_M(transitions, G, 0, data.nRNA+2, r[end], "")
     if length(fixedeffects) > 0
         model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,propcv,fittedparam,fixedeffects,method,transitions,components,onstates)
     else

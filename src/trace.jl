@@ -5,10 +5,10 @@
 
 return vector of traces
 """
-function simulate_trace_vector(r,transitions,G,R,S,interval,totaltime,ntrials;insertstep=1,onstates=[],reporterfnc=sum)
+function simulate_trace_vector(r,transitions,G,R,S,interval,totaltime,ntrials;insertstep=1,onstates=Int[],reporterfnc=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, S, 1, 1, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=par)[1:end-1, 2]
+        trace[i] = simulator(r[1:end-4], transitions, G, R, S, 1, 1, insertstep=insertstep,onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, 2]
     end
     trace
 end
@@ -18,7 +18,7 @@ end
 
 TBW
 """
-simulate_trace(r,transitions,G,R,S,interval,totaltime;insertstep=1,onstates=Int[],reporterfnc=sum) = simulator(r, transitions, G, R, S, 2, 1, insertstep=insertstep,onstates=onstates, traceinterval=interval, reporterfnc=reporterfnc,totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
+simulate_trace(r,transitions,G,R,S,interval,totaltime;insertstep=1,onstates=Int[],reporterfnc=sum) = simulator(r[1:end-4], transitions, G, R, S, 2, 1, insertstep=insertstep,onstates=onstates, traceinterval=interval, reporterfnc=reporterfnc,totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)
@@ -50,11 +50,9 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; insert
 	method = 1
     components = make_components_T(transitions, G, R, S,insertstep,"")
     reporters = num_reporters(G,R,S,insertstep)
-    println(reporters)
-	if S > 0
+    # println(reporters)
+	if R > 0
         return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporters)}(G,R,S,1,"",r,d,propcv,fittedparam,method,transitions,components,reporters)
-    elseif R > 0
-        return GRMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporters)}(G,R,1,r,d,propcv,fittedparam,method,transitions,components,reporters)
     else
 		return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
 	end
