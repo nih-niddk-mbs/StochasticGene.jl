@@ -45,7 +45,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S; onstates=[G], propc
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; insertstep::Int=1,onstates::Vector=[G], propcv=0.05, f=Normal, cv=1.)
+function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; fixedeffects=[],insertstep::Int=1,onstates::Vector=[G], propcv=0.05, f=Normal, cv=1.)
 	d = trace_prior(r, fittedparam,f,cv)
 	method = 1
     components = make_components_T(transitions, G, R, S,insertstep,"")
