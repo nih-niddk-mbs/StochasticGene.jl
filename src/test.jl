@@ -16,6 +16,7 @@ using Downloads
 using CSV
 using MultivariateStats
 using Optim
+using Test
 
 include("common.jl")
 include("transition_rate_matrices_transpose.jl")
@@ -92,11 +93,6 @@ function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstate
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-    # if R == 0
-    #     modelOFFold, modelONold = offonPDF(TA, TI, bins, r, G, transitions, onstates)
-    # else
-    #     modelOFFold, modelONold = offonPDF(T, TA, TI, bins, r, G, R)
-    # end
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
@@ -131,8 +127,7 @@ function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), inse
 end
 
 
-function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01,50, 15, 200, 70], rinit=[fill(0.01, num_rates(transitions, R, S,insertstep)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S,insertstep)-1); num_rates(transitions, R, S,insertstep)+1:num_rates(transitions, R, S,insertstep)+4], propcv=0.05, cv=10.0, interval=1.0)
-    # traces = simulate_trace_vector(rtarget, par, transitions, G, R, S, interval, totaltime, onstates, ntrials)
+function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.0,50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S,insertstep)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S,insertstep)-1); num_rates(transitions, R, S,insertstep)+1:num_rates(transitions, R, S,insertstep)+4], propcv=0.01, cv=100.0, interval=1.0)
     traces = simulate_trace_vector(rtarget,transitions,G,R,S,interval,totaltime,ntrials)
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)
@@ -147,7 +142,6 @@ function test_init(r,transitions,G,R,S,insertstep)
     indices = set_indices(length(transitions), R, S,insertstep)
     base = S > 0 ? 3 : 2
 	nT = G * base^R
-	# tcomponents = make_components_TAI(set_elements_T(transitions, G, R, S, indices, ""), nT,onstates)
     components =make_components_MTAI(transitions, G, R, S, insertstep, onstates, 2, r[num_rates(transitions,R,S,insertstep)], "")
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
@@ -160,8 +154,6 @@ function test_init(r,transitions,G,R,S,insertstep)
     
     return SIinit,SAinit,onstates,components.tcomponents,pss,nonzeros,T,TA,TI[nonzeros,nonzeros]
 end
-
-
 
 
 function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int,nalleles::Int, nhist::Int, fittedparam, onstates, propcv, cv)
