@@ -104,6 +104,7 @@ end
     Abstract model types
 """
 abstract type AbstractModel end
+abstract type AbstractfixedeffectsModel <: AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel <: AbstractGmodel end
@@ -369,11 +370,7 @@ function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T
     end
     trim_hist(h,data.nRNA)
 end
-"""
-    likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
 
-TBW
-"""
 # function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
 #     maxdata 
 #     G = model.G
@@ -381,11 +378,6 @@ TBW
 #     transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
 #     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
 # end
-"""
-    likelihoodarray(r,data::RNAData,model::GMmultimodel)
-
-TBW
-"""
 # function likelihoodarray(r,data::RNAData,model::GMmultimodel)
 #     G = model.G
 #     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -395,11 +387,6 @@ TBW
 #     end
 #     return h
 # end
-"""
-    likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
-
-TBW
-"""
 # function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
 #     G = model.G
 #     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
@@ -474,24 +461,32 @@ end
 """
 transform_rates(r,model::AbstractGmodel)
 
-transform rates to real domain
+log transform rates to real domain
 """
 transform_rates(r,model::AbstractGmodel) = log.(r)
 
 """
 inverse_transform_rates(x,model::AbstractGmodel)
 
-transform MH parameters on real domain back to rate domain
+inverse transform MH parameters on real domain back to rate domain
 
 """
-inverse_transform_rates(p,model::AbstractGmodel) = exp.(p)
+function inverse_transform_rates(p,model::AbstractGmodel,inverse=true)
+    if inverse
+        return exp.(p)
+    else
+        return p
+    end
+end
 
 """
 get_rates(param,model)
 replace fitted rates with new values and return
 """
-function get_rates(param,model::AbstractGmodel;inverse=true)
-    r = get_r(model)
+function get_rates(param,model::AbstractGmodel,inverse=true)
+    r = copy_r(model)
+    r[model.fittedparam] = inverse_transform_rates(param,model)
+
     if inverse
         r[model.fittedparam] = inverse_transform_rates(param,model)
     else
@@ -499,6 +494,10 @@ function get_rates(param,model::AbstractGmodel;inverse=true)
     end
     return r
 end
+
+
+
+
 # function get_rates(param,model::GRSMmodel)
 #     r = get_r(model)
 #     r[model.fittedparam] = inverse_transform_rates(param,model)
@@ -506,12 +505,6 @@ end
 #     return r
 # end
 # get_rates(param,model::GMtransientmodel) = inverse_transform_rates(param[1:2*model.G],model)
-
-"""
-get_rates(param,model::GMrescaledmodel)
-
-gammas are scaled by nu
-"""
 # function get_rates(param,model::GMrescaledmodel)
 #     param = inverse_transform_rates(param,model)
 #     r = get_r(model)
@@ -526,24 +519,24 @@ gammas are scaled by nu
 #     return r
 # end
 
-# get_rates(param,model::AbstractGMfixedeffectsmodel) = fixed_rates(param,model)
 
-# get_rates(param,model::GMfixedeffectslossmodel) = fixed_rates(param,model)
+get_rates(param,model::GRSMfixedeffectsmodel;inverse=true) = fixed_rates(param,model,inverse)
 
-function fixed_rates(param,model)
-    r = get_r(model)
-    n = get_n(model)
-    r[model.fittedparam] = inverse_transform_rates(param,model)
+"""
+    fixed_rates(param,model,inverse)
+
+TBW
+"""
+function fixed_rates(param,model::GRSMfixedeffectsmodel,inverse)
+    r = copy_r(model)
+    r[model.fittedparam] = inverse_transform_rates(param,model,inverse)
     for effect in model.fixedeffects
-        for ind in 2: length(effect)
-            r[effect[ind]] = r[effect[1]]
-        end
+        r[effect[2:end]] .= r[effect[1]]
     end
     return r
 end
 
-get_r(model) = copy(model.rates)
-get_n(model::AbstractGMmodel) = 2*model.G - 1
+copy_r(model) = copy(model.rates)
 
 """
 get_param(model)
@@ -552,18 +545,12 @@ get fitted parameters from model
 """
 get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam],model)
 
-# function get_param(model::GMrescaledmodel)
-#     r = copy(model.rates)
-#     n = 2*model.G - 1
-#     r[1:n-1] /= r[n]
-#     transform_rates(r[model.fittedparam],model)
-# end
 
 """
 setr(r,model)
 
 """
-function setr(r,model::GRSMmodel)
+function setr(r,model::AbstractGRSMmodel)
     n = model.G-1
     nr = model.R
     eta = get_eta(r,n,nr)
