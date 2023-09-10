@@ -19,6 +19,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `insertstep`: R step where reporter is first observed
 - `datatype`: data type, e.g. genetrap, scRNA, smFISH
 - `maxtime`: float maximum time for entire run
 - `infolder`: folder pointing to results used as initial conditions
@@ -47,7 +48,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
+function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,insertstep::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
     println(now())
     gene = check_genename(gene,"[")
     printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
@@ -58,7 +59,7 @@ function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeff
     if datatype == "genetrap"
         # data = data_genetrap_FISH(root,label,gene)
         # model = model_genetrap(data,gene,transitions,G,R,nalleles,rnatype,fittedparam,fixedeffects,infolder,label,rtype,root)
-        data,model = genetrap(root,gene,transitions,G,R,nalleles,rnatype,fittedparam,infolder,resultfolder,label,"median",1.)
+        data,model = genetrap(root,gene,transitions,G,R,insertstep,nalleles,rnatype,fittedparam,infolder,resultfolder,label,"median",1.)
     else
         datafolder = folder_path(datafolder,root,"data")
         if occursin("-",datafolder)

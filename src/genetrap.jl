@@ -44,17 +44,17 @@ root is the folder containing data and results
 FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
-function genetrap(root,gene::String,transitions::Tuple,G::Int,R::Int,nalleles,rnatype::String,fittedparam::Vector,infolder::String,resultfolder::String,label::String,rtype::String,tempfish)
+function genetrap(root,gene::String,transitions::Tuple,G::Int,R::Int,insertstep::Int,nalleles,rnatype::String,fittedparam::Vector,infolder::String,resultfolder::String,label::String,rtype::String,tempfish)
     # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",rnatype)
     r = readrates_genetrap(infolder,rtype,gene,label,G,R,nalleles,rnatype)
     println(r)
-    genetrap(root,r,label,gene,G,R,transitions,nalleles,rnatype,fittedparam,tempfish)
+    genetrap(root,r,label,gene,G,R,transitions,insertstep,nalleles,rnatype,fittedparam,tempfish)
 end
 
-function genetrap(root,r,label::String,gene::String,G::Int,R::Int,transitions,nalleles::Int=2,rnatype::String="",fittedparam=collect(1:num_rates(transitions,R)-1),tempfish=1.,method=1)
+function genetrap(root,r,label::String,gene::String,G::Int,R::Int,transitions,insertstep::Int,nalleles::Int=2,rnatype::String="",fittedparam=collect(1:num_rates(transitions,R)-1),tempfish=1.,method=1)
     # data = iszero(R) || iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
     data = iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
-    model = model_genetrap(r,gene,G,R,nalleles,fittedparam,rnatype,method,transitions,data)
+    model = model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data)
     return data,model
 end
 
@@ -82,12 +82,12 @@ model_genetrap
 load model structure
 """
 
-function model_genetrap(data,gene::String,transitions::Tuple,G::Int,R::Int,nalleles,rnatype::String,fittedparam::Vector,fixedeffects,infolder::String,label::String,rtype::String,root::String)
+function model_genetrap(data,gene::String,transitions::Tuple,G::Int,R::Int,insertstep::Int,nalleles,rnatype::String,fittedparam::Vector,fixedeffects,infolder::String,label::String,rtype::String,root::String)
     # r = readrates_genetrap(root,infolder,rtype,gene,"$G$R",rnatype)
     r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,rnatype)
     println(r)
     # genetrap(root,r,label,gene,G,R,transitions,nalleles,rnatype,fittedparam,tempfish)
-    model_genetrap(r,gene,G,R,nalleles,fittedparam,rnatype,method,transitions,data)
+    model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data)
 end
 
 function model_genetrap(r,gene::String,G::Int,R::Int,insertstep::Int,nalleles::Int,fittedparam,rnatype::String,method,transitions,data)
@@ -116,8 +116,7 @@ function model_genetrap(r,gene::String,G::Int,R::Int,insertstep::Int,nalleles::I
         d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
         # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
         components = make_components(transitions,G,R,r,data.nRNA+2,rnatype,set_indices(ntransitions,R,insertstep))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,insertstep,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components)
-
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,insertstep,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components,reporters)
     end
 end
 
