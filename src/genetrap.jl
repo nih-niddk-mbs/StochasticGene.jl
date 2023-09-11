@@ -20,7 +20,7 @@ halflife_gt() = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.
 
 function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,insertstep::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",rnatype="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String=".",burst=false)
     println(now())
-    data,model = genetrap(root,gene,transitions,G,R,insertstep,2,rnatype,fittedparam,infolder,folder,label,"median",tempfish)
+    data,model = genetrap(root,gene,transitions,G,R,insertstep,2,rnatype,fittedparam,infolder,folder,label,"ml",tempfish)
     println("size of histogram: ",data.nRNA)
     options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
     print_ll(data,model)
@@ -33,7 +33,7 @@ function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,ins
     # finalize(data,model,fit,stats,measures,1.,folder,0,bs,root)
     finalize(data,model,fit,stats,measures,temp,folder,0,burst,false,root)
     println(now())
-    return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,insertstep,nalleles,fittedparam,rnatype,1,transitions,data)
+    return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,insertstep,nalleles,fittedparam,rnatype,1,transitions,data.nRNA+2)
 end
 
 """
