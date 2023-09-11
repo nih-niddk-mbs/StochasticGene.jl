@@ -33,8 +33,8 @@ struct BurstMeasures <: Results
 end
 
 
-const raterow_dict = Dict([("ml", 1),("mean",2),("median",3),("last",4)])
-const statrow_dict = Dict([("mean",1),("SD", 2),("median",3),("MAD",4)])
+raterow_dict() = Dict([("ml", 1),("mean",2),("median",3),("last",4)])
+statrow_dict() = Dict([("mean",1),("SD", 2),("median",3),("MAD",4)])
 
 """
   write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
@@ -645,16 +645,16 @@ end
 write_log(file,datafile,data,model)
 write all information necessary for rerunning
 """
-function save_data(file::String,data::TransientRNAData)
-    f = open(file,"w")
-    writedlm(f, [typeof(data)])
-    writedlm(f,[data.name])
-    writedlm(f,[data.gene])
-    writedlm(f,[data.nRNA])
-    writedlm(f,[data.time])
-    writedlm(f,[data.histRNA])
-    close(f)
-end
+# function save_data(file::String,data::TransientRNAData)
+#     f = open(file,"w")
+#     writedlm(f, [typeof(data)])
+#     writedlm(f,[data.name])
+#     writedlm(f,[data.gene])
+#     writedlm(f,[data.nRNA])
+#     writedlm(f,[data.time])
+#     writedlm(f,[data.histRNA])
+#     close(f)
+# end
 
 function load_data(file::String,model::AbstractGMmodel)
 

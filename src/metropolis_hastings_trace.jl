@@ -267,7 +267,7 @@ returns llpd and pwaic, which are the running sum and variance of -logprediction
 (- sign needed because logpredictions is negative loglikelihood)
 """
 function update_waic(lppd,pwaic,logpredictions)
-    lppd = logsumexp.(lppd,-logpredictions)
+    lppd = logsumexp(lppd,-logpredictions)
     lppd, var_update(pwaic,-logpredictions)
 end
 """
@@ -488,10 +488,10 @@ function merge_fit(fits::Array{Fit,1})
         accept += fits[i].accept
         total += fits[i].total
         prior += fits[i].prior
-        lppd = logsumexp(llpd,fits[i].lppd)
+        lppd = logsumexp(lppd,fits[i].lppd)
         pwaic += fits[i].pwaic
     end
-    Fit(param,ll,parml,llml,lppd-log(length(fits)),pwaic/length(fits),prior/length(fits),accept,total)
+    Fit(param,ll,parml,llml,lppd .- log(length(fits)),pwaic/length(fits),prior/length(fits),accept,total)
 end
 
 """

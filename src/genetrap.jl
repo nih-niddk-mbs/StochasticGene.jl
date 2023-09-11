@@ -7,10 +7,10 @@
 """
 Gene information
 """
-const genes = ["CANX";"DNAJC5";"ERRFI1";"KPNB1";"MYH9";"Rab7a";"RHOA";"RPAP3";"Sec16A";"SLC2A1"]
-const genelength = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);("RHOA", 52948);("KPNB1", 33730);("MYH9", 106741);("DNAJC5", 40930);("CANX", 32710);("Rab7a", 88663);("RPAP3", 44130)])
-const MS2end = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
-const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
+genes_gt() = ["CANX";"DNAJC5";"ERRFI1";"KPNB1";"MYH9";"Rab7a";"RHOA";"RPAP3";"Sec16A";"SLC2A1"]
+genelength_gt() = Dict([("Sec16A", 42960);("SLC2A1", 33802);("ERRFI1", 14615);("RHOA", 52948);("KPNB1", 33730);("MYH9", 106741);("DNAJC5", 40930);("CANX", 32710);("Rab7a", 88663);("RPAP3", 44130)])
+MS2end_gt() = Dict([("Sec16A", 5220);("SLC2A1", 26001);("ERRFI1", 5324);("RHOA", 51109);("KPNB1", 24000);("MYH9", 71998);("DNAJC5", 14857);("CANX", 4861);("Rab7a", 83257);("RPAP3", 38610)])
+halflife_gt() = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9.),("MYH9", 10.),("Rab7a", 50.),("RHOA", 50.),("RPAP3", 7.5),("Sec16A", 8.),("SLC2A1", 5.)])
 
 
 """
@@ -18,9 +18,9 @@ const halflife = Dict([("CANX", 50.),("DNAJC5", 5.),("ERRFI1", 1.35),("KPNB1", 9
 
 """
 
-function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",rnatype="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String="/Users/carsonc/Dropbox/Larson/GeneTrap_analysis/",burst=false)
+function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,insertstep::Int,infolder::String,folder::String,samplesteps::Int=1000;nalleles::Int=2,label="gt",rnatype="",fittedparam=collect(1:num_rates(transitions,R)-1),warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,tempfish=1.,root::String=".",burst=false)
     println(now())
-    data,model = genetrap(root,gene,transitions,G,R,2,rnatype,fittedparam,infolder,folder,label,"median",tempfish)
+    data,model = genetrap(root,gene,transitions,G,R,insertstep,2,rnatype,fittedparam,infolder,folder,label,"median",tempfish)
     println("size of histogram: ",data.nRNA)
     options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
     print_ll(data,model)
@@ -30,9 +30,10 @@ function fit_genetrap(nchains,maxtime,gene::String,transitions,G::Int,R::Int,inf
     else
         bs = 0
     end
-    finalize(data,model,fit,stats,measures,1.,folder,0,bs,root)
+    # finalize(data,model,fit,stats,measures,1.,folder,0,bs,root)
+    finalize(data,model,fit,stats,measures,temp,folder,0,burst,false,root)
     println(now())
-    return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,nalleles,fittedparam,rnatype,1,transitions,data)
+    return data, model_genetrap(get_rates(fit.parml,model),gene,G,R,insertstep,nalleles,fittedparam,rnatype,1,transitions,data)
 end
 
 """
@@ -51,10 +52,10 @@ function genetrap(root,gene::String,transitions::Tuple,G::Int,R::Int,insertstep:
     genetrap(root,r,label,gene,G,R,transitions,insertstep,nalleles,rnatype,fittedparam,tempfish)
 end
 
-function genetrap(root,r,label::String,gene::String,G::Int,R::Int,transitions,insertstep::Int,nalleles::Int=2,rnatype::String="",fittedparam=collect(1:num_rates(transitions,R)-1),tempfish=1.,method=1)
+function genetrap(root,r,label::String,gene::String,G::Int,R::Int,transitions::Tuple,insertstep::Int,nalleles::Int=2,rnatype::String="",fittedparam=collect(1:num_rates(transitions,R)-1),tempfish=1.,method=1)
     # data = iszero(R) || iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
     data = iszero(tempfish) ? data_genetrap_FISH(root,label,gene) : data_genetrap(root,label,gene,tempfish)
-    model = model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data)
+    model = model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data.nRNA+2)
     return data,model
 end
 
@@ -87,36 +88,38 @@ function model_genetrap(data,gene::String,transitions::Tuple,G::Int,R::Int,inser
     r = readrates_genetrap(joinpath(root,infolder),rtype,gene,label,G,R,nalleles,rnatype)
     println(r)
     # genetrap(root,r,label,gene,G,R,transitions,nalleles,rnatype,fittedparam,tempfish)
-    model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data)
+    model_genetrap(r,gene,G,R,insertstep,nalleles,fittedparam,rnatype,method,transitions,data.nRNA+2)
 end
 
-function model_genetrap(r,gene::String,G::Int,R::Int,insertstep::Int,nalleles::Int,fittedparam,rnatype::String,method,transitions,data)
+function model_genetrap(r,gene::String,G::Int,R::Int,insertstep::Int,nalleles::Int,fittedparam,rnatype::String,method,transitions,nhist)
     ntransitions = length(transitions)
+    S = R
     if R == 0
-        decayrate = get_decay(halflife[gene])
+        decayrate = get_decay(halflife_gt()[gene])
         if r == 0
             r = setrate(G,1,decayrate,.1)[1]
         end
         d = prior_rna(r,G,1,fittedparam,decayrate,1.)
-        # components = make_components(transitions,G,data.nRNA+2,decayrate)
-        components = make_components(transitions,G,r,data.nRNA+2,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2))
+        components = make_components(transitions,G,r,nhist,Indices(collect(1:ntransitions),[ntransitions+1],Int[],ntransitions + 2))
         return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G,nalleles,r,d,0.05,fittedparam,method,transitions,components,onstates)
     else
         propcv=[.02*ones(2*(G-1));.02;.02*ones(R);.02*ones(R)]
         Gprior=(.01,10)
         Sprior=(.1,10)
         Rcv=10.
-        rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
-
+        if gene ∈ genes_gt()
+            rm,rcv = prior_rates_genetrap(G,R,gene,Gprior,Sprior,Rcv)
+        else
+            rm =[fill(0.01, length(rtarget) - 1);r[end]]
+            rcv = fill(cv, length(r))
+        end
         if r == 0
             r = rm
             println(r)
         end
-        # d = priordistributionLogNormal_genetrap(rm,rcv,G,R)
         d = distribution_array(log.(rm[fittedparam]),sigmalognormal(rcv[fittedparam]),Normal)
-        # d = priordistributionLogGamma_genetrap(rm,rcv,G,R)
-        components = make_components(transitions,G,R,r,data.nRNA+2,rnatype,set_indices(ntransitions,R,insertstep))
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G,R,1,insertstep,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components,reporters)
+        components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions,R,S,insertstep)])
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),Int}(G,R,1,insertstep,nalleles,rnatype,r,d,propcv,fittedparam,method,transitions,components,0)
     end
 end
 
@@ -126,7 +129,7 @@ Set prior distribution for mean and cv of rates
 """
 function prior_rates_genetrap(G,R,gene,Gprior::Tuple,Sprior::Tuple,Rcv::Float64)
     n = G-1
-    rm = [fill(Gprior[1],2*n);2000/(genelength[gene]-MS2end[gene]);fill(2000/MS2end[gene]*R,R);fill(Sprior[1], R);log(2.)/(60 .* halflife[gene])]
+    rm = [fill(Gprior[1],2*n);2000/(genelength_gt()[gene]-MS2end_gt()[gene]);fill(2000/MS2end_gt()[gene]*R,R);fill(Sprior[1], R);log(2.)/(60 .* halflife_gt()[gene])]
     rcv = [fill(Gprior[2],2*n);Rcv;Rcv;fill(Sprior[2], 2*R);.01]
     return rm,rcv
 end

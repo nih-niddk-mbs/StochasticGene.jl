@@ -173,6 +173,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     G::Int
     R::Int
     S::Int
+    insertstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType
@@ -189,6 +190,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     G::Int
     R::Int
     S::Int
+    insertstep::Int
     nalleles::Int
     rnatype::String
     rates::RateType
@@ -286,12 +288,10 @@ return negative loglikelihood of combined time series traces and each trace
 
 assume Gaussian observation probability model with four parameters
 """
-
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     r = get_rates(param, model)
     ll_Gaussian(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
 end
-
 
 """
     likelihoodfn(param,data::RNAData,model::AbstractGMmodel)

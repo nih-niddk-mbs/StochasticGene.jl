@@ -222,7 +222,7 @@ function printinfo(gene,G,cond,datafolder,infolder,resultfolder,maxtime)
 end
 
 """
-finalize(data,model,fit,stats,waic,temp,resultfolder,optimized,burst,root)
+    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
 
 write out run results and print out final loglikelihood and deviance
 """

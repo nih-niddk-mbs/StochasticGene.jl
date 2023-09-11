@@ -567,7 +567,16 @@ logsumexp(u,v)
 returns log of the sum of exponentials of u and v
 
 """
-function logsumexp(u,v)
+function logsumexp(u::Array,v::Array)
+    w = max(u,v)
+    if w == -Inf
+        return -Inf
+    else
+        return w + log.(exp.(u-w)+exp.(v-w))
+    end
+end
+
+function logsumexp(u::Float64,v::Float64)
     w = max(u,v)
     if w == -Inf
         return -Inf

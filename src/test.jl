@@ -27,10 +27,10 @@ include("metropolis_hastings_trace.jl")
 include("rna.jl")
 include("hmm.jl")
 include("trace.jl")
-# include("io.jl")
+include("io.jl")
 include("biowulf.jl")
-# include("fit.jl")
-# include("genetrap.jl")
+include("fit.jl")
+include("genetrap.jl")
 include("analysis.jl")
 
 """
@@ -120,8 +120,8 @@ end
 function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1,rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, cv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
-    model = histogram_model(rinit, transitions, G, R, S, insertstep,nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
-    model = model_genetrap(rinit,"",G,R,insertstep,nalleles,fittedparam,"",1,transitions,data)
+    # model = histogram_model(rinit, transitions, G, R, S, insertstep,nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
+    model = model_genetrap(rinit,"",G,R,insertstep,nalleles,fittedparam,"",transitions,data)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fit, stats, measures = run_mh(data, model, options)
     fit, stats, measures, data, model, options
@@ -147,7 +147,6 @@ function test_init(r,transitions,G,R,S,insertstep)
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
-
     pss = normalized_nullspace(T)
     nonzeros = nonzero_rows(TI)
 	SAinit = init_SA(r,onstates,components.tcomponents.elementsT,pss)
@@ -170,10 +169,8 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int
     end
     d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if R > 0
-        # components = make_components(transitions, G, R, S, r, nhist, set_indices(ntransitions, R, S, insertstep))
-        # components = make_components_MTAI(transitions, G, R, S, insertstep, Int[], nhist, decay, rnatype="")
         components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions,R,S,insertstep)])
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components, onstates)
+        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),Int}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components,0)
     else
         components = make_components(transitions, G, r, nhist, set_indices(ntransitions), onstates)
         return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)
