@@ -211,7 +211,7 @@ print all fields of model
 """
 function print_model(model::AbstractModel)
     for fname in fieldnames(model)
-        println("$fname =",getfield(model,fname))
+        println("$fname =", getfield(model, fname))
     end
 end
 
@@ -229,24 +229,24 @@ Return the RNA histogram data as one vector
 """
 # datahistogram(data::RNAData) = data.histRNA
 function datahistogram(data::AbstractRNAData{Array{Array,1}})
-# function datahistogram(data::TransientRNAData)
+    # function datahistogram(data::TransientRNAData)
     v = data.histRNA[1]
     for i in 2:length(data.histRNA)
-        v = vcat(v,data.histRNA[i])
+        v = vcat(v, data.histRNA[i])
     end
     return v
 end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
-datahistogram(data::RNALiveCellData) = [data.OFF;data.ON;data.histRNA]
+datahistogram(data::RNALiveCellData) = [data.OFF; data.ON; data.histRNA]
 
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
-datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF);normalize_histogram(data.ON);normalize_histogram(data.histRNA)]
+datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 # datapdf(data::AbstractRNAData{Array{Array,1}}) = normalize_histogram(datahistogram(data))
 function datapdf(data::AbstractRNAData{Array{Array,1}})
-# function datahistogram(data::TransientRNAData)
+    # function datahistogram(data::TransientRNAData)
     v = normalize_histogram(data.histRNA[1])
     for i in 2:length(data.histRNA)
-        v = vcat(v,normalize_histogram(data.histRNA[i]))
+        v = vcat(v, normalize_histogram(data.histRNA[i]))
     end
     return v
 end
@@ -259,11 +259,11 @@ returns negative loglikelihood of all data and vector of the prediction histogra
 Calls likelihoodfn and datahistogram
 provided for each data and model type
 """
-function loglikelihood(param,data::AbstractHistogramData,model::AbstractGmodel)
-    predictions = likelihoodfn(param,data,model)
+function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
+    predictions = likelihoodfn(param, data, model)
     hist = datahistogram(data)
-    logpredictions = log.(max.(predictions,eps()))
-    return crossentropy(logpredictions,hist), -logpredictions
+    logpredictions = log.(max.(predictions, eps()))
+    return crossentropy(logpredictions, hist), -logpredictions
 end
 """
     loglikelihood(param,data::AbstractTraceData,model::GMmodel)
@@ -274,12 +274,12 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg,llgp = ll_Gaussian(r, model.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents,r)
-    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+    llg, llgp = ll_Gaussian(r, model.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
+    M = make_mat_M(model.components.mcomponents, r)
+    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     hist = datahistogram(data)
-    logpredictions = log.(max.(predictions,eps()))
-    return crossentropy(logpredictions,hist)+llg, vcat(-logpredictions,llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+    logpredictions = log.(max.(predictions, eps()))
+    return crossentropy(logpredictions, hist) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 """
     loglikelihood(param,data::AbstractTraceData,model::GMmodel)
@@ -298,18 +298,18 @@ end
 
 return likelihoodfn for single RNA histogram
 """
-function likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
-    r = get_rates(param,model)
-    M = make_mat_M(model.components,r)
-    steady_state(M,model.G,model.nalleles,data.nRNA)
+function likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
+    r = get_rates(param, model)
+    M = make_mat_M(model.components, r)
+    steady_state(M, model.G, model.nalleles, data.nRNA)
 end
 """
     likelihoodfn(param,data::AbstractHistogramArrayData,model::AbstractGmodel)
 
 return loglikelihood for multiple histograms
 """
-function likelihoodfn(param,data::AbstractHistogramArrayData,model::AbstractGmodel)
-    h = likelihoodarray(get_rates(param,model),data,model)
+function likelihoodfn(param, data::AbstractHistogramArrayData, model::AbstractGmodel)
+    h = likelihoodarray(get_rates(param, model), data, model)
     make_array(h)
 end
 # function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
@@ -362,13 +362,13 @@ model.method=1 specifies finite difference solution using DifferentialEquations.
 
 TBW
 """
-function likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
-    h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
+function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+    h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
     for i in eachindex(data.nRNA)
-        M = make_mat_M(model.components[i],r[(i-1)*2*model.G+1 : i*2*model.G])
-        h[i] = steady_state(M,model.G,model.nalleles,data.nRNA[i])
+        M = make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G])
+        h[i] = steady_state(M, model.G, model.nalleles, data.nRNA[i])
     end
-    trim_hist(h,data.nRNA)
+    trim_hist(h, data.nRNA)
 end
 
 # function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
@@ -403,35 +403,55 @@ end
 #     end
 #     return h
 # end
- """
+"""
     likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 
 TBW
 """
-function likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
-    TA = make_mat_TA(model.components.tcomponents,r)
-    TI = make_mat_TI(model.components.tcomponents,r)
-    modelOFF, modelON = offonPDF(TA,TI,data.bins,r,model.G,model.Gtransitions,model.reporters)
-    M = make_mat_M(model.components.mcomponents,r)
-    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-return [modelOFF, modelON, histF]
+function likelihoodarray(r, data::RNALiveCellData, model::GMmodel)
+    TA = make_mat_TA(model.components.tcomponents, r)
+    TI = make_mat_TI(model.components.tcomponents, r)
+    modelOFF, modelON = offonPDF(TA, TI, data.bins, r, model.G, model.Gtransitions, model.reporters)
+    M = make_mat_M(model.components.mcomponents, r)
+    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    return [modelOFF, modelON, histF]
 end
 """
     likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRSMmodel)
 
 TBW
 """
-function likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRSMmodel)
-        r = copy(rin)
-        if model.rnatype == "offdecay"
-            r[end-1] *= survival_fraction(nu,eta,model.R)
-        end
-        T = make_mat_T(model.components.tcomponents,r)
-        TA = make_mat_TA(model.components.tcomponents,r)
-        TI = make_mat_TI(model.components.tcomponents,r)
-        modelOFF, modelON = offonPDF(T,TA,TI,data.bins,r,model.G,model.R,model.method)
-        M = make_mat_M(model.components.mcomponents,r)
-        histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
+function likelihoodarray(rin, data::RNALiveCellData, model::AbstractGRSMmodel)
+    r = copy(rin)
+    if model.rnatype == "offdecay"
+        r[end-1] *= survival_fraction(nu, eta, model.R)
+    end
+    components = model.components
+    onstates = model.reporters
+    T = make_mat_T(components.tcomponents, r)
+    TA = make_mat_TA(components.tcomponents, r)
+    TI = make_mat_TI(components.tcomponents, r)
+    M = make_mat_M(components.mcomponents, r)
+    histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
+    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
+
+
+    # function offonPDF(T, TA, TI, t::Vector, r::Vector, nT::Int, elementsT::Vector, onstates, method::Int=1)
+    # pss = normalized_nullspace(T)
+    # nonzeros = nonzero_rows(TI)
+    # ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss)), offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros))=
+    # end
+    # modelOFF, modelON, histF
+    # offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1)
+
+    # T = make_mat_T(model.components.tcomponents, r)
+    # TA = make_mat_TA(model.components.tcomponents, r)
+    # TI = make_mat_TI(model.components.tcomponents, r)
+    # modelOFF =
+    # modelON = 
+    # modelOFF, modelON = offonPDF(T, TA, TI, data.bins, r, model.G, model.R, model.method)
+    # M = make_mat_M(model.components.mcomponents, r)
+    # histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     return [modelOFF, modelON, histF]
 end
 
@@ -440,20 +460,20 @@ end
 
 TBW
 """
-function likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
+function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     r = copy(rin)
     tcomponents = model.components.tcomponents
     T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
-    hists = Vector{Vector}(undef,length(data.DTtypes))
-    for (i,Dtype) in enumerate(data.DTtypes)
+    hists = Vector{Vector}(undef, length(data.DTtypes))
+    for (i, Dtype) in enumerate(data.DTtypes)
         TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
         S = Dtype == "ON" ? ontimeCDF(data.bins[i], model.G, model.R, TD, pss, 1) : offtimeCDF(data.bins[i], r, model.G, model.R, TD, pss, 1)
-        hists[i] = pdf_from_cdf(data.bins[i],S)
+        hists[i] = pdf_from_cdf(data.bins[i], S)
     end
-    M = make_mat_M(model.components.mcomponents,r)
-    histF = steady_state(M,model.components.mcomponents.nT,model.nalleles,data.nRNA)
-    push!(hists,histF)
+    M = make_mat_M(model.components.mcomponents, r)
+    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    push!(hists, histF)
     return hists
 end
 
@@ -463,7 +483,7 @@ transform_rates(r,model::AbstractGmodel)
 
 log transform rates to real domain
 """
-transform_rates(r,model::AbstractGmodel) = log.(r)
+transform_rates(r, model::AbstractGmodel) = log.(r)
 
 """
 inverse_transform_rates(x,model::AbstractGmodel)
@@ -471,7 +491,7 @@ inverse_transform_rates(x,model::AbstractGmodel)
 inverse transform MH parameters on real domain back to rate domain
 
 """
-function inverse_transform_rates(p,model::AbstractGmodel,inverse=true)
+function inverse_transform_rates(p, model::AbstractGmodel, inverse=true)
     if inverse
         return exp.(p)
     else
@@ -483,12 +503,12 @@ end
 get_rates(param,model)
 replace fitted rates with new values and return
 """
-function get_rates(param,model::AbstractGmodel,inverse=true)
+function get_rates(param, model::AbstractGmodel, inverse=true)
     r = copy_r(model)
-    r[model.fittedparam] = inverse_transform_rates(param,model)
+    r[model.fittedparam] = inverse_transform_rates(param, model)
 
     if inverse
-        r[model.fittedparam] = inverse_transform_rates(param,model)
+        r[model.fittedparam] = inverse_transform_rates(param, model)
     else
         r[model.fittedparam] = param
     end
@@ -520,16 +540,16 @@ end
 # end
 
 
-get_rates(param,model::GRSMfixedeffectsmodel;inverse=true) = fixed_rates(param,model,inverse)
+get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param, model, inverse)
 
 """
     fixed_rates(param,model,inverse)
 
 TBW
 """
-function fixed_rates(param,model::GRSMfixedeffectsmodel,inverse)
+function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
     r = copy_r(model)
-    r[model.fittedparam] = inverse_transform_rates(param,model,inverse)
+    r[model.fittedparam] = inverse_transform_rates(param, model, inverse)
     for effect in model.fixedeffects
         r[effect[2:end]] .= r[effect[1]]
     end
@@ -543,18 +563,18 @@ get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam],model)
+get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 
 """
 setr(r,model)
 
 """
-function setr(r,model::AbstractGRSMmodel)
-    n = model.G-1
+function setr(r, model::AbstractGRSMmodel)
+    n = model.G - 1
     nr = model.R
-    eta = get_eta(r,n,nr)
-    r[2*n + 1 + nr + 1:2*n + 1 + nr + nr] = eta
+    eta = get_eta(r, n, nr)
+    r[2*n+1+nr+1:2*n+1+nr+nr] = eta
     r
 end
 """
@@ -562,50 +582,26 @@ logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
-function logprior(param,model::AbstractGmodel)
+function logprior(param, model::AbstractGmodel)
     d = model.rateprior
-    p=0
+    p = 0
     for i in eachindex(param)
-        p -= logpdf(d[i],param[i])
+        p -= logpdf(d[i], param[i])
     end
     return p
 end
 
-"""
-get_gamma(r,n,nr)
-G state forward and backward transition rates
-for use in transition rate matrices of Master equation
-(different from gamma used in Gillespie algorithms)
-"""
-function get_gamma(r,n)
-    gammaf = zeros(n+2)
-    gammab = zeros(n+2)
-    for i = 1:n
-        gammaf[i+1] = r[2*(i-1)+1]
-        gammab[i+1] = r[2*i]
-    end
-    return gammaf, gammab
-end
-"""
-get_nu(r,n,nr)
-R step forward transition rates
-"""
-get_nu(r,n,nr) =r[2*n+1 : 2*n+nr+1]
-"""
-get_eta(r,n,nr)
-Intron ejection rates at each R step
-"""
-get_eta(r,n,nr) = r[2*n+1+nr+1:2*n+1+nr+nr]
-
-function num_rates(transitions,R,S,insertstep) 
+function num_rates(transitions, R, S, insertstep)
     if R > 0
         if insertstep > R
             throw("insertstep>R")
         end
         if S == 0
             insertstep = 1
+        else
+            S = R
         end
-         return length(transitions) + 1 + R + S + 1 - insertstep + 1
+        return length(transitions) + 1 + R + S + 1 - insertstep + 1
     else
         return length(transitions) + 2
     end

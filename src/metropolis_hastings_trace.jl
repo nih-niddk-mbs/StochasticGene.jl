@@ -61,7 +61,7 @@ end
 """
 run_mh(data,model,options)
 
-returns fit, stats, measures
+returns fits, stats, measures
 
 Run Metropolis-Hastings MCMC algorithm and compute statistics of results
 
@@ -72,16 +72,16 @@ Run Metropolis-Hastings MCMC algorithm and compute statistics of results
 model and data must have a likelihoodfn function
 """
 function run_mh(data::AbstractExperimentalData,model::AbstractGmodel,options::MHOptions)
-    fit,waic = metropolis_hastings(data,model,options)
+    fits,waic = metropolis_hastings(data,model,options)
     if options.samplesteps > 0
-        stats = compute_stats(fit.param,model)
-        rhat = compute_rhat([fit])
+        stats = compute_stats(fits.param,model)
+        rhat = compute_rhat([fits])
         measures = Measures(waic,vec(rhat))
     else
         stats = 0
         measures = 0
     end
-    return fit, stats, measures
+    return fits, stats, measures
 end
 """
 run_mh(data,model,options,nchains)
@@ -94,10 +94,10 @@ function run_mh(data::AbstractExperimentalData,model::AbstractGmodel,options::MH
         sd = run_chains(data,model,options,nchains)
         chain = extract_chain(sd)
         waic = pooled_waic(chain)
-        fit = merge_fit(chain)
-        stats = compute_stats(fit.param,model)
+        fits = merge_fit(chain)
+        stats = compute_stats(fits.param,model)
         rhat = compute_rhat(chain)
-        return fit, stats, Measures(waic,vec(rhat))
+        return fits, stats, Measures(waic,vec(rhat))
     end
 end
 """
@@ -142,9 +142,9 @@ function metropolis_hastings(data,model,options)
     if options.warmupsteps > 0
         param,parml,ll,llml,d,proposalcv,logpredictions = warmup(logpredictions,param,param,ll,ll,d,model.proposal,data,model,options.warmupsteps,options.temp,time(),maxtime*options.warmupsteps/totalsteps)
     end
-    fit=sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
-    waic = compute_waic(fit.lppd,fit.pwaic,data)
-    return fit, waic
+    fits=sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,options.samplesteps,options.temp,time(),maxtime*options.samplesteps/totalsteps)
+    waic = compute_waic(fits.lppd,fits.pwaic,data)
+    return fits, waic
 end
 
 """
@@ -263,11 +263,11 @@ end
 """
 update_waic(lppd,pwaic,logpredictions)
 
-returns llpd and pwaic, which are the running sum and variance of -logpredictions
+returns lppd and pwaic, which are the running sum and variance of -logpredictions
 (- sign needed because logpredictions is negative loglikelihood)
 """
 function update_waic(lppd,pwaic,logpredictions)
-    lppd = logsumexp(lppd,-logpredictions)
+    lppd = logsumexp.(lppd,-logpredictions)
     lppd, var_update(pwaic,-logpredictions)
 end
 """
@@ -302,21 +302,21 @@ function compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceHistogra
     hist = datahistogram(data)
     N = length(hist)
     elppd = lppd-pwaic
-    vh = sum(hist)*var(ellpd[1:N],weights(hist),corrected=false)
+    vh = sum(hist)*var(elppd[1:N],weights(hist),corrected=false)
     vt = length(elppd[N+1:end])*var(elppd[N+1:end])
     se = sqrt(vh+vt)
     return -2*hist'*(elppd[1:N]) - 2*sum(elppd[N+1:end]), 2*se
 end
 
 """
-aic(fit::Fit)
+aic(fits::Fit)
 aic(nparams::Int,llml)
 
 -`llml`: negative of maximum loglikelihood
 
 returns AIC
 """
-aic(fit::Fit) = 2*length(fit.parml) + 2*fit.llml
+aic(fits::Fit) = 2*length(fits.parml) + 2*fits.llml
 aic(nparams::Int,llml) = 2*nparams + 2*llml
 
 """
@@ -495,7 +495,7 @@ function merge_fit(fits::Array{Fit,1})
 end
 
 """
-compute_stats(fit::Fit)
+compute_stats(fits::Fit)
 
 returns Stats structure
 
@@ -603,7 +603,7 @@ function hist_entropy(hist::Array{Array,1})
 end
 """
 deviance(logpredictions::Array,data::AbstractHistogramData)
-deviance(fit,data,model)
+deviance(fits,data,model)
 
 returns Deviance
 
@@ -612,14 +612,14 @@ use log of data histogram as loglikelihood of over fit model
 deviance(logpredictions::Array,data::AbstractHistogramData) = deviance(logpredictions,datapdf(data))
 
 
-function deviance(fit::Fit,data::AbstractHistogramData,model)
-    predictions=likelihoodfn(fit.parml,data,model)
-    deviance(log.(max.(predictions,0)),data)
+function deviance(fits::Fit,data::AbstractHistogramData,model)
+    predictions=likelihoodfn(fits.parml,data,model)
+    deviance(log.(max.(predictions,eps())),datapdf(data))
 end
 
 function deviance(data::AbstractHistogramData,model::AbstractGmodel)
     h = likelihoodfn(model.rates[model.fittedparam],data,model)
-    deviance(h,data)
+    deviance(h,datapdf(data))
 end
 
-deviance(logpredictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,0))-logpredictions)
+deviance(logpredictions::Array,hist::Array) = 2*hist'*(log.(max.(hist,eps()))-logpredictions)

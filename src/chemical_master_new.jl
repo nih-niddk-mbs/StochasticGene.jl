@@ -63,6 +63,12 @@ ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method::In
 
 offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method::Int=1) = dwelltimePDF(tin, TI, onstates, SIinit, method)
 
+function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix,  nT::Int, elementsT::Vector, onstates::Vector)
+    pss = normalized_nullspace(T)
+    nonzeros = nonzero_rows(TI)
+    offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros)), ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss))
+end
+
 """
 pdf_from_cdf(S)
 

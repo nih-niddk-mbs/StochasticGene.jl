@@ -381,9 +381,9 @@ end
 
 
 
-filename(data,model::AbstractGRSMmodel) = filename(data.name,data.gene,model.G,model.R,model.nalleles)
+filename(data,model::AbstractGRSMmodel) = filename(data.name,data.gene,model.G,model.R,model.insertstep,model.nalleles)
 filename(data,model::AbstractGMmodel) = filename(data.name,data.gene,model.G,model.nalleles)
-filename(label::String,gene::String,G::Int,R::Int,nalleles::Int) = filename(label,gene,"$G"*"$R","$(nalleles)")
+filename(label::String,gene::String,G::Int,R::Int,insertstep::Int,nalleles::Int) = filename(label,gene,"$G"*"$R"*"$insertstep","$(nalleles)")
 filename(label::String,gene,G::Int,nalleles::Int) = filename(label,gene,"$G","$(nalleles)")
 filename(label::String,gene::String,model::String,nalleles::String) = "_" * label  * "_" * gene *  "_" * model * "_" * nalleles * txtstr
 
@@ -391,13 +391,13 @@ filename(label::String,gene::String,model::String,nalleles::String) = "_" * labe
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
 """
-function writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0,writesamples=false)
+function writeall(path::String,fits,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0,writesamples=false)
     if ~isdir(path)
         mkpath(path)
     end
     name = filename(data,model)
-    write_rates(joinpath(path,"rates" * name ),fit,stats,model)
-    write_measures(joinpath(path,"measures" * name),fit,measures,deviance(fit,data,model),temp)
+    write_rates(joinpath(path,"rates" * name ),fits,stats,model)
+    write_measures(joinpath(path,"measures" * name),fits,measures,deviance(fits,data,model),temp)
     write_param_stats(joinpath(path,"param-stats" * name),stats)
     if optimized != 0
         write_optimized(joinpath(path,"optimized" * name),optimized)
@@ -406,13 +406,13 @@ function writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmode
         write_burstsize(joinpath(path,"burst" * name),burst)
     end
     if writesamples
-        write_array(joinpath(path,"ll_sampled_rates"*name),fit.ll)
-        write_array(joinpath(path,"sampled_rates"*name),permutedims(inverse_transform_rates(fit.param,model)))
+        write_array(joinpath(path,"ll_sampled_rates"*name),fits.ll)
+        write_array(joinpath(path,"sampled_rates"*name),permutedims(inverse_transform_rates(fits.param,model)))
     end
 end
 
 """
-write_rates(file::String,fit)
+write_rates(file::String,fits)
 
 Write rate parameters, rows in order are
 maximum likelihood
@@ -420,10 +420,10 @@ mean
 median
 last accepted
 """
-function write_rates(file::String,fit::Fit,stats,model)
+function write_rates(file::String,fits::Fit,stats,model)
     f = open(file,"w")
-    writedlm(f,[get_rates(fit.parml,model)],',')
-    writedlm(f,[get_rates(fit.param[:,end],model)],',')
+    writedlm(f,[get_rates(fits.parml,model)],',')
+    writedlm(f,[get_rates(fits.param[:,end],model)],',')
     writedlm(f,[stats.meanparam],',')
     writedlm(f,[stats.stdparam],',')
     writedlm(f,[stats.medparam],',')
@@ -432,13 +432,13 @@ function write_rates(file::String,fit::Fit,stats,model)
     close(f)
 end
 """
-write_measures(file,fit,waic,dev)
+write_measures(file,fits,waic,dev)
 """
-function write_measures(file::String,fit::Fit,measures::Measures,dev,temp)
+function write_measures(file::String,fits::Fit,measures::Measures,dev,temp)
     f = open(file,"w")
-    writedlm(f,[fit.llml mean(fit.ll) std(fit.ll) quantile(fit.ll,[.025;.5;.975])' measures.waic[1] measures.waic[2] aic(fit)],',')
+    writedlm(f,[fits.llml mean(fits.ll) std(fits.ll) quantile(fits.ll,[.025;.5;.975])' measures.waic[1] measures.waic[2] aic(fits)],',')
     writedlm(f,dev,',')
-    writedlm(f,[fit.accept fit.total],',')
+    writedlm(f,[fits.accept fits.total],',')
     writedlm(f,temp,',')
     writedlm(f,measures.rhat',',')
     writedlm(f,maximum(measures.rhat),',')

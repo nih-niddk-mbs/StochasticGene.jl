@@ -68,14 +68,14 @@ function fit_rna(nchains::Int,data::AbstractRNAData,gene::String,cell::String,fi
     model = model_rna(data,gene,cell,G,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate,Normal,priorcv,true)
     options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
     print_ll(data,model)
-    fit,stats,measures = run_mh(data,model,options,nchains);
+    fits,stats,measures = run_mh(data,model,options,nchains);
     optimized = 0
     try
-        optimized = Optim.optimize(x -> lossfnc(x,data,model),fit.parml,LBFGS())
+        optimized = Optim.optimize(x -> lossfnc(x,data,model),fits.parml,LBFGS())
     catch
         @warn "Optimizer failed"
     end
-    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burstsize(fit,model),root)
+    finalize(data,model,fits,stats,measures,temp,resultfolder,optimized,burstsize(fits,model),root)
     println(now())
     get_rates(transform_rates(stats.medparam,model),model)
 end
