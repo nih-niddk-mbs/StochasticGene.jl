@@ -48,18 +48,14 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, cv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=true, nalleles=2, optimize=true, rnatype="", rtype="median", writesamples=false)
+function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, cv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="ml", writesamples=false, onstates=Int[], tempfish=1.0)
     println(now())
-    gene = check_genename(gene, "[")
-    printinfo(gene, G, datacond, datafolder, infolder, resultfolder, maxtime)
-
-    resultfolder = folder_path(resultfolder, root, "results", make=true)
-    infolder = folder_path(infolder, root, "results")
 
     if datatype == "genetrap"
         # data = data_genetrap_FISH(root,label,gene)
         # model = model_genetrap(data,gene,transitions,G,R,nalleles,rnatype,fittedparam,fixedeffects,infolder,label,rtype,root)
-        data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "median", 1.0)
+        # data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", 1.0)
+        data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, cv, onstates)
     else
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)
@@ -82,8 +78,11 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
         end
         model = model_rna(data, gene, cell, G, cv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate, Normal, priorcv, true)
     end
+    gene = check_genename(gene, "[")
+    printinfo(gene, G, R, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+    resultfolder = folder_path(resultfolder, root, "results", make=true)
+    infolder = folder_path(infolder, root, "results")
     println("size of histogram: ", data.nRNA)
-
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
 end
@@ -158,12 +157,12 @@ function burstsize(fit::Fit, model::GRSMmodel)
     end
 end
 
-burstsize(r, model::GRSMmodel) = burstsize(r, model.R, length(model.Gtransitions))
+burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtransitions))
 
 function burstsize(r, R, ntransitions)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    indices = Indices(collect(ntransitions:ntransitions), collect(ntransitions+1:ntransitions+R+1), [], 1)
-    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, 0.0, 2, indices), r)
+    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end],""), r)
+    # M = make_components_M(transitions, G, R, nhist, decay, rnatype)
     nT = 2 * 2^R
     L = nT * total
     S0 = zeros(L)
@@ -221,6 +220,16 @@ function printinfo(gene, G, cond, datafolder, infolder, resultfolder, maxtime)
     println("maxtime: ", maxtime)
 end
 
+function printinfo(gene, G, R, insertstep, cond, datafolder, infolder, resultfolder, maxtime)
+    if R == 0
+        printinfo(gene, G, cond, datafolder, infolder, resultfolder, maxtime)
+    else
+        println("Gene: ", gene, " G R insertstep: ", G, R, insertstep)
+        println("in: ", infolder, " out: ", resultfolder)
+        println("maxtime: ", maxtime)
+    end
+end
+
 """
     finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
 
@@ -245,41 +254,6 @@ function finalize(data, model, fit, stats, measures, temp, resultfolder, optimiz
 end
 
 
-"""
-readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
-
-Read in initial rates from previous runs
-"""
-
-
-function readrates_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
-    if rtype == "ml"
-        row = 1
-    elseif rtype == "mean"
-        row = 2
-    elseif rtype == "median"
-        row = 3
-    elseif rtype == "last"
-        row = 4
-    else
-        row = 3
-    end
-    if rnatype == "offeject" || rnatype == "on"
-        rnatype = ""
-    end
-    infile = getratefile_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
-    println(gene, " ", "$G$R", " ", label)
-    readrates_genetrap(infile, row)
-end
-
-function readrates_genetrap(infile::String, row::Int)
-    if isfile(infile) && ~isempty(read(infile))
-        return readrates(infile, row)
-    else
-        println("using default rates")
-        return 0
-    end
-end
 
 function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
     model = R == 0 ? "$G" : "$G$R$insertstep"

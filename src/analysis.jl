@@ -787,6 +787,15 @@ plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
 functions to plot data and model predicted histograms
 
 """
+function make_ONOFFhistograms(r,transitions,G,R,S,insertstep,bins)
+    onstates =  on_states(G, R, S, insertstep)
+    components = make_components_TAI(transitions, G, R, S, insertstep, onstates, "")
+    T = make_mat_T(components, r)
+    TA = make_mat_TA(components, r)
+    TI = make_mat_TI(components, r)
+    offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
+end
+
 
 function plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
     r = readrow(ratefile,row)
@@ -904,16 +913,16 @@ function plot_histogram(data::RNAData,model::AbstractGMmodel)
     return h
 end
 
-function plot_model(r,n,nhist,nalleles,yield)
-    h= steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
-    plt = plot(h)
-    display(plt)
-    return h
-end
+# function plot_model(r,n,nhist,nalleles,yield)
+#     h= steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
+#     plt = plot(h)
+#     display(plt)
+#     return h
+# end
 
-function plot_model(r,n,nhist,nalleles)
-    h= steady_state(r[1:2*n+2],n,nhist,nalleles)
-    plt = plot(h)
-    display(plt)
-    return h
-end
+# function plot_model(r,n,nhist,nalleles)
+#     h= steady_state(r[1:2*n+2],n,nhist,nalleles)
+#     plt = plot(h)
+#     display(plt)
+#     return h
+# end

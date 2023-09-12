@@ -18,9 +18,9 @@ halflife_gt() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1
 
 """
 
-function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
+function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
     println(now())
-    data, model = genetrap(root, gene, transitions, G, R, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv,onstates)
+    data, model = genetrap(root, gene, transitions, G, R, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     println(model.rates)
@@ -34,7 +34,7 @@ function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::In
     # finalize(data,model,fits,stats,measures,1.,folder,0,bs,root)
     finalize(data, model, fits, stats, measures, temp, folder, 0, burst, false, root)
     println(now())
-    return data, model_genetrap(get_rates(fits.parml, model), gene, transitions, G, R, insertstep, nalleles, fittedparam, rnatype, data.nRNA + 2,priorcv,propcv,onstates), fits, stats, measures
+    return data, model_genetrap(get_rates(fits.parml, model), gene, transitions, G, R, insertstep, nalleles, fittedparam, rnatype, data.nRNA + 2, priorcv, propcv, onstates), fits, stats, measures
 end
 
 """
@@ -47,13 +47,13 @@ FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
 function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, resultfolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates)
-    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep,nalleles, rnatype)
-    genetrap(root, r, label, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv,onstates)
+    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
+    genetrap(root, r, label, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=.01,onstates=[])
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
     data = iszero(tempfish) ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish)
-    model = model_genetrap(r, gene, transitions, G, R, insertstep, nalleles, fittedparam, rnatype, data.nRNA + 2, priorcv, propcv,onstates)
+    model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
     return data, model
 end
 
@@ -81,8 +81,10 @@ model_genetrap
 load model structure
 """
 
-function model_genetrap(r, gene::String, transitions, G::Int, R::Int, insertstep::Int, nalleles::Int, fittedparam, rnatype::String, nhist, priorcv, propcv,onstates,method=1)
-    S = R
+function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep::Int, fittedparam::Vector, nalleles::Int, nhist::Int, priorcv=10.0, propcv=0.01, onstates=Int[], rnatype="", method=1)
+    if S > 0
+        S = R
+    end
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     end
@@ -111,6 +113,41 @@ end
 # end
 
 
+"""
+readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
+
+Read in initial rates from previous runs
+"""
+
+
+function readrates_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
+    if rtype == "ml"
+        row = 1
+    elseif rtype == "mean"
+        row = 2
+    elseif rtype == "median"
+        row = 3
+    elseif rtype == "last"
+        row = 4
+    else
+        row = 3
+    end
+    if rnatype == "offeject" || rnatype == "on"
+        rnatype = ""
+    end
+    infile = getratefile_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
+    println(gene, " ", "$G$R", " ", label)
+    readrates_genetrap(infile, row)
+end
+
+function readrates_genetrap(infile::String, row::Int)
+    if isfile(infile) && ~isempty(read(infile))
+        return readrates(infile, row)
+    else
+        println("using default rates")
+        return 0
+    end
+end
 """
 readLCPDF_genetrap(root,gene)
 

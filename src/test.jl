@@ -117,11 +117,10 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
 end
 
 
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1,rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=[G], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, cv=10.0)
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1,rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0)
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
-    # model = histogram_model(rinit, transitions, G, R, S, insertstep,nalleles, data.nRNA, fittedparam, onstates, propcv, cv)
-    model = model_genetrap(rinit,"",G,R,insertstep,nalleles,fittedparam,"",transitions,data)
+    model = model_genetrap("", rinit, transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, rnatype)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     fits, stats, measures, data, model, options

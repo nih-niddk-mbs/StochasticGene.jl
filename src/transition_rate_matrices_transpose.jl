@@ -202,9 +202,16 @@ function make_components_TAI(elementsT, nT::Int, onstates::Vector)
 end
 
 
-function make_components_TAI(elementsT, G::Int, R::Int, base)
+function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
     TAIComponents(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
 end
+
+function make_components_TAI(transitions, G, R, S, insertstep, onstates, rnatype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, rnatype)
+    make_components_TAI(elementsT, nT, onstates)
+end
+
 
 """
     state_index(G::Int,i,z)
