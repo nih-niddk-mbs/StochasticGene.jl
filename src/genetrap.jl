@@ -119,20 +119,8 @@ readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nallele
 Read in initial rates from previous runs
 """
 
-
 function readrates_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
-    # if rtype == "ml"
-    #     row = 1
-    # elseif rtype == "mean"
-    #     row = 2
-    # elseif rtype == "median"
-    #     row = 3
-    # elseif rtype == "last"
-    #     row = 4
-    # else
-    #     row = 1
-    # end
-    row = get_row(rtype)
+    row = get_row()[rtype]
     if rnatype == "offeject" || rnatype == "on"
         rnatype = ""
     end
@@ -141,7 +129,7 @@ end
 
 function readrates_genetrap(infile::String, row::Int)
     if isfile(infile) && ~isempty(read(infile))
-        println(infile,", row: ",row)
+        println(infile,", row: ",get_rtype()[row])
         return readrates(infile, row)
     else
         println("using default rates")

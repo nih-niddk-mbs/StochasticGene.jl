@@ -497,7 +497,7 @@ write_array(file::String, d::Array) = writedlm(file, d, header=false)
 
 get_row() = Dict([("ml", 1); ("mean", 2); ("median", 3); ("last", 4)])
 
-invert_dict(D) = Dict(D[k] => k for k in keys(D))
+get_rtype() = invert_dict(get_row())
 
 """
 readrates(file::String,row::Int)
