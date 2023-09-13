@@ -565,6 +565,8 @@ get fitted parameters from model
 """
 get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
 
+get_param(r,model::AbstractGmodel) = transform_rates(r[model.fittedparam],model)
+
 
 """
 setr(r,model)

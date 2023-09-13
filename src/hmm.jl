@@ -452,13 +452,17 @@ end
 
 TBW
 """
-function predicted_trace(r, data, model, reporterfnc=sum)
-    reporters = num_reporters(model.G, model.R, 0,reporterfnc)
-    base = 2
-    predicted_trace(r, model.G * base^model.R, reporters, model.components.elementsT, data.interval, data.trace[1])
+function predicted_trace(r, data::AbstractTraceData, model)
+    tsim = Vector{Int}[]
+    for t in data.trace
+        push!(tsim,predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, t))
+    end
+    tsim
 end
 
-
+function predicted_trace(r, trace::Vector, model)
+    predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, trace)
+end
 """
     predicted_trace(r, nT, reporters, elementsT, interval, trace)
 
