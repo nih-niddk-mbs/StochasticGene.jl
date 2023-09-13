@@ -787,13 +787,18 @@ plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
 functions to plot data and model predicted histograms
 
 """
-function make_ONOFFhistograms(r,transitions,G,R,S,insertstep,bins)
+function make_ONOFFhistograms(r,transitions,G,R,S,insertstep,bins; outfile::String="")
     onstates =  on_states(G, R, S, insertstep)
     components = make_components_TAI(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
     TA = make_mat_TA(components, r)
     TI = make_mat_TI(components, r)
-    offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
+    OFF,ON = offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
+    df = DataFrame(time= bins, OFF= OFF, ON = ON)
+    if ~isempty(outfile)
+        CSV.write(outfile,df)
+    end
+    df
 end
 
 
