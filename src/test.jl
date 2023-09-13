@@ -32,6 +32,7 @@ include("biowulf.jl")
 include("fit.jl")
 include("genetrap.jl")
 include("analysis.jl")
+include("biowulf.jl")
 
 """
 test(r,transitions,G,nhist,nalleles,onstates,bins)

@@ -57,19 +57,24 @@
 
 """
 
-function makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),insertstep::Int=1,onstates=Int[],cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
+function makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),insertstep::Int=1,onstates=Int[],cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=Inf,conds::String="NULL",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=tuple(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
     if occursin.("-",conds)
         cond = string.(split(conds,"-"))
     else
         cond = conds
     end
-    genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
+    if datatype == "scRNA"
+        genes = checkgenes(root,cond,datafolder,cell,thresholdlow,thresholdhigh)
+    elseif datatype == "genetrap"
+        genes = genes_gt()
+    end
     makeswarm(genes,G=G,R=R,S=S,transitions=transitions,insertstep=insertstep,onstates=onstates,cell=cell,infolder=infolder,swarmfile=swarmfile,label=label,inlabel=inlabel,timestamp=timestamp,nsets=nsets,datafolder=datafolder,datatype=datatype,conds=conds,resultfolder=resultfolder,batchsize=batchsize,maxtime=maxtime,nchains=nchains,nthreads=nthreads,transient=transient,fittedparam=fittedparam,fixedeffects=fixedeffects,juliafile=juliafile,root=root,samplesteps=samplesteps,warmupsteps=warmupsteps,annealsteps=annealsteps,temp=temp,tempanneal=tempanneal,cv=cv,priorcv=priorcv,decayrate=decayrate,burst=burst,nalleles=nalleles,optimize=optimize,rnatype=rnatype,rtype=rtype,writesamples=writesamples)
 end
 
 function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),insertstep::Int=1,onstates=Int[],cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
-    if datatype == "genetype"
-        label == "gt"
+    if datatype == "genetrap"
+        label = "gt" * "_" * conds
+        modelstring = "$G$R$insertstep"
     else
         if label == "label"
             if datatype == "fish"
@@ -86,18 +91,19 @@ function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[
                 inlabel = label
             end
         end
+        modelstring = "$G"
     end
     ngenes = length(genes)
     println("number of genes: ",ngenes)
-    juliafile = juliafile * "_" * label * "_" * "$G" * ".jl"
+    juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
     if ngenes > batchsize
         batches = getbatches(genes,ngenes,batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * label * "_" * "$G" * "_" * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * label * "_" * "$modelstring" * "_" * "$batch" * ".swarm"
             write_swarmfile(sfile,nchains,nthreads,juliafile,batches[batch])
         end
     else
-        sfile = swarmfile * "_" * label * "_" * "$G" * ".swarm"
+        sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
         write_swarmfile(sfile,nchains,nthreads,juliafile,genes)
     end
     write_fitfile(juliafile,nchains,cell,conds,G,R,S,transitions,insertstep,onstates,float(maxtime),fittedparam,fixedeffects,infolder,resultfolder,datafolder,datatype,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,cv,priorcv,decayrate,burst,nalleles,optimize,rnatype,rtype,writesamples)
@@ -172,7 +178,8 @@ make the file the swarm file calls to execute julia code
 function write_fitfile(fitfile,nchains,cell,datacond,G,R,S,transitions,insertstep,onstates,maxtime,fittedparam,fixedeffects,infolder,resultfolder,datafolder,datatype,inlabel,label,nsets,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,cv,priorcv,decayrate,burst,nalleles,optimize,rnatype,rtype,writesamples)
         f = open(fitfile,"w")
         s =   '"'
-        write(f,"@everywhere using StochasticGene\n")
+        # write(f,"@everywhere using StochasticGene\n")
+        write(f,"@everywhere include($s/Users/carsonc/github/StochasticGene.jl/src/test.jl$s)\n")
         write(f,"@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$rnatype$s,$s$rtype$s,$writesamples)\n")
         close(f)
 end
