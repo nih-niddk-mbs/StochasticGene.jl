@@ -505,8 +505,6 @@ replace fitted rates with new values and return
 """
 function get_rates(param, model::AbstractGmodel, inverse=true)
     r = copy_r(model)
-    r[model.fittedparam] = inverse_transform_rates(param, model)
-
     if inverse
         r[model.fittedparam] = inverse_transform_rates(param, model)
     else

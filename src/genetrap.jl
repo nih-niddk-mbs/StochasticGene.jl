@@ -47,7 +47,7 @@ FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
 function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, resultfolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates)
-    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
+    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype, fittedparam)
     genetrap(root, r, label, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
@@ -121,27 +121,27 @@ Read in initial rates from previous runs
 
 
 function readrates_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
-    if rtype == "ml"
-        row = 1
-    elseif rtype == "mean"
-        row = 2
-    elseif rtype == "median"
-        row = 3
-    elseif rtype == "last"
-        row = 4
-    else
-        row = 3
-    end
+    # if rtype == "ml"
+    #     row = 1
+    # elseif rtype == "mean"
+    #     row = 2
+    # elseif rtype == "median"
+    #     row = 3
+    # elseif rtype == "last"
+    #     row = 4
+    # else
+    #     row = 1
+    # end
+    row = get_row(rtype)
     if rnatype == "offeject" || rnatype == "on"
         rnatype = ""
     end
-    infile = getratefile_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
-    println(gene, " ", "$G$R", " ", label)
-    readrates_genetrap(infile, row)
+    readrates_genetrap(getratefile_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype), row)
 end
 
 function readrates_genetrap(infile::String, row::Int)
     if isfile(infile) && ~isempty(read(infile))
+        println(infile,", row: ",row)
         return readrates(infile, row)
     else
         println("using default rates")

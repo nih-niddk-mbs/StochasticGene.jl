@@ -181,7 +181,7 @@ function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, i
     f = open(fitfile, "w")
     s = '"'
     # write(f,"@everywhere using StochasticGene\n")
-    write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene.jl/src/test.jl$s)\n")
+    write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene/src/test.jl$s)\n")
     write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$rnatype$s,$s$rtype$s,$writesamples)\n")
     close(f)
 end

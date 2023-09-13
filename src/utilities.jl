@@ -22,6 +22,14 @@ const txtstr = ".txt"
 
 
 """
+    invert_dict(D)
+
+invert a dictionary
+"""
+invert_dict(D) = Dict(D[k] => k for k in keys(D))
+
+
+"""
     eig_decompose(M)
 
 Take matrix M and return values and vectors
