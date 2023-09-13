@@ -52,11 +52,8 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     println(now())
 
     if datatype == "genetrap"
-        # data = data_genetrap_FISH(root,label,gene)
-        # model = model_genetrap(data,gene,transitions,G,R,nalleles,rnatype,fittedparam,fixedeffects,infolder,label,rtype,root)
-        # data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", 1.0)
         data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, cv, onstates)
-    else
+    elseif datatype == "scRNA" || datatype == "fish"
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)
             datafolder = string.(split(datafolder, "-"))
@@ -253,14 +250,11 @@ function finalize(data, model, fit, stats, measures, temp, resultfolder, optimiz
     end
 end
 
-
-
 function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
     model = R == 0 ? "$G" : "$G$R$insertstep"
     file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$rnatype" * ".txt"
     joinpath(infolder, file)
 end
-
 
 """
 getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
@@ -273,7 +267,7 @@ function getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets:
             for n in nsets
                 r[2*G*n-1] *= clamp(r[2*G*nsets+1], eps(Float64), 1 - eps(Float64))
             end
-            r = r[1:2*G*nsets]
+            return r[1:2*G*nsets]
         end
         if length(r) == 2 * G * nsets
             if verbose
@@ -292,7 +286,7 @@ function getr(gene, G, nalleles, inlabel, infolder, root, verbose)
         println("rate file: ", ratefile)
     end
     if isfile(ratefile)
-        r = readrates(ratefile, 2)
+        return readrates(ratefile, 3)
     else
         return nothing
     end
