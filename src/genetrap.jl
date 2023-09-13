@@ -47,7 +47,7 @@ FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts
 """
 function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, resultfolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates)
-    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype, fittedparam)
+    r = readrates_genetrap(infolder, rtype, gene, label, G, R, insertstep, nalleles, rnatype)
     genetrap(root, r, label, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
@@ -130,7 +130,7 @@ end
 function readrates_genetrap(infile::String, row::Int)
     if isfile(infile) && ~isempty(read(infile))
         println(infile,", row: ",get_rtype()[row])
-        return readrates(infile, row)
+        return readrates(infile, row, true)
     else
         println("using default rates")
         return 0

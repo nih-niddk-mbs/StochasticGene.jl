@@ -626,6 +626,20 @@ function make_array(v::Array)
     return vconcat
 end
 
+"""
+    makestring(v::Vector)
+
+convert a vector of strings into a single string
+"""
+function makestring(v)
+    s = ""
+    for i in v
+        s *= i
+    end
+    return s
+end
+
+
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"

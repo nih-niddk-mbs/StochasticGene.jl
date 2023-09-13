@@ -607,6 +607,15 @@ function num_rates(transitions, R, S, insertstep)
     end
 end
 
+function num_rates(model::String)
+    m = digits(parse(Int, model))
+    if length(m) == 1
+        return 2*m[1] 
+    else
+        return 2*(m[4]-1) + m[3] + m[2] - m[1] + 2
+    end
+end
+
 # function get_eta(r,n,nr)
 #     eta = zeros(nr)
 #     if length(r) > 2*n + 2*nr

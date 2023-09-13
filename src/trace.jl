@@ -38,6 +38,9 @@ TBW
 function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; fixedeffects=tuple(),insertstep::Int=1,onstates::Vector=[G], propcv=0.05, f=Normal, priormean=[fill(.1,num_rates(transitions,R,S,insertstep));50;50;100;50], priorcv=[fill(100,num_rates(transitions,R,S,insertstep));3;3;3;3])
 	d = trace_prior(priormean, priorcv, fittedparam,f)
 	method = 1
+    if S > 0
+        S = R
+    end
     components = make_components_T(transitions, G, R, S,insertstep,"")
     # println(reporters)
 	if R > 0

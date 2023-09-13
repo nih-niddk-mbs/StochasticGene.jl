@@ -4,7 +4,7 @@
     make_dataframes(resultfolder::String,datafolder::String)
 
 """
-function make_dataframes(resultfolder::String,datafolder::String,assemble=true,fittedparams="")
+function make_dataframes(resultfolder::String,datafolder::String,assemble=true,fittedparams=Int[])
     if assemble
         assemble_all(resultfolder,fittedparams=fittedparams)
     end

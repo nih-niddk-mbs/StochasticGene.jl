@@ -33,8 +33,8 @@ struct BurstMeasures <: Results
 end
 
 
-raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
-statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
+# raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
+# statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
 
 """
   write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
@@ -50,12 +50,12 @@ Arguments
 
 
 
-function write_dataframes(resultfolder::String, datafolder::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams="")
+function write_dataframes(resultfolder::String, datafolder::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
     write_dataframes_only(resultfolder, datafolder, assemble=assemble, fittedparams=fittedparams)
     write_winners(resultfolder, measure)
 end
 
-function write_dataframes_only(resultfolder::String, datafolder::String; assemble::Bool=true, fittedparams="")
+function write_dataframes_only(resultfolder::String, datafolder::String; assemble::Bool=true, fittedparams=Int[])
     dfs = make_dataframes(resultfolder, datafolder, assemble, fittedparams)
     for df in dfs
         for dff in dfs
@@ -252,32 +252,35 @@ end
     assemble_all(folder;fittedparams)
 
 """
-function assemble_all(folder::String; fittedparams="")
+function assemble_all(folder::String; fittedparams=Int[])
     files = get_resultfiles(folder)
     parts = fields.(files)
     labels = get_labels(parts)
     conds = get_conds(parts)
     models = get_models(parts)
+    names = get_names(parts)
     if isempty(fittedparams)
-        fittedparams = collect(1:(2*parse(Int, models[1])-1))
+        fittedparams = collect(1:num_rates(models[1])-1)
     end
-    assemble_all(folder, files, labels, conds, models, fittedparams)
+    assemble_all(folder, files, labels, conds, models, names, fittedparams)
 end
 
-function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, fittedparams)
+function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names, fittedparams)
     for l in labels, c in conds, g in models
-        assemble_all(folder, files, l, c, g, isfish(l), fittedparams)
+        assemble_all(folder, files, l, c, g, isfish(l), names, fittedparams)
     end
 end
 
-function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, fish::Bool, fittedparams)
-    assemble_rates(folder, files, label, cond, model, fish)
+function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, fish::Bool, names, fittedparams)
+    labels = assemble_rates(folder, files, label, cond, model)
     assemble_measures(folder, files, label, cond, model)
-    assemble_stats(folder, files, label, cond, model, fittedparams)
-    if model != "1"
+    assemble_stats(folder, files, label, cond, model, labels, fittedparams)
+    if model != "1" && "burst" ∈ names
         assemble_burst_sizes(folder, files, label, cond, model, fittedparams)
     end
-    assemble_optimized(folder, files, label, cond, model, fittedparams)
+    if "optimized" ∈ names
+        assemble_optimized(folder, files, label, cond, model, labels, fittedparams)
+    end
 end
 
 function assemble_files(folder::String, files::Vector, outfile::String, header, readfunction)
@@ -293,9 +296,13 @@ function assemble_files(folder::String, files::Vector, outfile::String, header, 
     end
 end
 
-function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, fish)
+function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "rates", label, cond, model), outfile, ratelabels(model, split(cond, "-")), readml)
+    ratefiles = get_files(files, "rates", label, cond, model)
+    labels = readdlm(joinpath(folder,ratefiles[1]),',',header=true)[2]
+    # header = ratelabels(model, split(cond, "-"))
+    assemble_files(folder, ratefiles, outfile,ratelabels(labels, split(cond, "-")), readmedian)
+    return labels
 end
 
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
@@ -314,14 +321,14 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
     close(f)
 end
 
-function assemble_optimized(folder::String, files, label::String, cond::String, model::String, fittedparams)
+function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels, fittedparams)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, optlabels(model, split(cond, "-"), fittedparams), read_optimized)
+    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, optlabels(labels, split(cond, "-"), fittedparams), read_optimized)
 end
 
-function assemble_stats(folder::String, files, label::String, cond::String, model::String, fittedparams)
+function assemble_stats(folder::String, files, label::String, cond::String, model::String, labels,fittedparams)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "param-stats", label, cond, model), outfile, statlabels(model, split(cond, "-"), fittedparams), readstats)
+    assemble_files(folder, get_files(files, "param-stats", label, cond, model), outfile, statlabels(labels, split(cond, "-"), fittedparams), readstats)
 end
 
 function assemble_burst_sizes(folder, files, label, cond, model, fittedparams)
@@ -329,36 +336,91 @@ function assemble_burst_sizes(folder, files, label, cond, model, fittedparams)
     assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
 end
 
-function rlabels(model)
-    G = parse(Int, model)
-    n = G - 1
-    Grates = Array{String,2}(undef, 1, 2 * n)
-    for i = 0:n-1
-        Grates[1, 2*i+1] = "Rate$i$(i+1)"
-        Grates[1, 2*i+2] = "Rate$(i+1)$i"
+"""
+    rlabels(model::AbstractGRSMmodel)
+
+TBW
+"""
+function rlabels(model::AbstractGRSMmodel)
+    labels = String[]
+    for t in model.Gtransitions
+        push!(labels, "Rate$(t[1])$(t[2])")
     end
-    return [Grates "Eject" "Decay"]
+    push!(labels, "Initiate")
+    for i in 1:model.R-1
+        push!(labels, "Rshift$i")
+    end
+    push!(labels, "Eject")
+    for i in 1:model.S-model.insertstep+1
+        push!(labels, "Splice$i")
+    end
+    push!(labels, "Decay")
+    reshape(labels,1,length(labels))
 end
 
-function rlabels(model, conds::Vector)
+
+"""
+    rlabels(model::AbstractGMmodel)
+
+TBW
+"""
+function rlabels(model::AbstractGMmodel)
+    labels = String[]
+    for t in model.Gtransitions
+        push!(labels, "Rate$(t[1])$(t[2])")
+    end
+    push!(labels, "Eject")
+    push!(labels, "Decay")
+    reshape(labels,1,length(labels))
+end
+
+# function rlabels(model::String)
+#     G = parse(Int, model)
+#     n = G - 1
+#     Grates = Array{String,2}(undef, 1, 2 * n)
+#     for i = 0:n-1
+#         Grates[1, 2*i+1] = "Rate$i$(i+1)"
+#         Grates[1, 2*i+2] = "Rate$(i+1)$i"
+#     end
+#     return [Grates "Eject" "Decay"]
+# end
+
+# function rlabels(model::String, conds::Vector)
+#     nsets = length(conds)
+#     r = rlabels(model)
+#     if nsets == 1
+#         return r
+#     else
+#         rates = r .* conds[1]
+#         for i = 2:nsets
+#             rates = [rates r .* conds[i]]
+#         end
+#         return rates
+#     end
+# end
+
+function rlabels(labels::Matrix, conds::Vector)
     nsets = length(conds)
-    r = rlabels(model)
+    r = labels
     if nsets == 1
         return r
     else
         rates = r .* conds[1]
         for i = 2:nsets
-            rates = [rates r .* conds[i]]
+            rates = [rates r .* reshape(conds[i],1,length(conds))]
         end
         return rates
     end
 end
 
-rlabels(model, conds, fittedparams) = rlabels(model, conds)[1:1, fittedparams]
+rlabels(model::String, conds, fittedparams) = rlabels(model, conds)[1:1, fittedparams]
 
-ratelabels(model, conds) = ["Gene" rlabels(model, conds)]
 
-function statlabels(model, conds, fittedparams)
+rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fittedparams]
+
+ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
+
+function statlabels(model::String, conds, fittedparams)
     label = ["Mean", "SD", "Median", "MAD"]
     Grates = rlabels(model, conds, fittedparams)
     rates = Matrix{String}(undef, 1, 0)
@@ -368,8 +430,19 @@ function statlabels(model, conds, fittedparams)
     return ["Gene" rates]
 end
 
-optlabels(model, conds, fittedparams) = ["Gene" rlabels(model, conds, fittedparams) "LL" "Convergence"]
+function statlabels(labels::Matrix, conds, fittedparams)
+    label = ["Mean", "SD", "Median", "MAD"]
+    Grates = rlabels(labels, conds, fittedparams)
+    rates = Matrix{String}(undef, 1, 0)
+    for i in 1:4
+        rates = [rates Grates .* (label[i])]
+    end
+    return ["Gene" rates]
+end
 
+optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fittedparams) "LL" "Convergence"]
+
+optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds, fittedparams) "LL" "Convergence"]
 
 function get_all_rates(file::String, header::Bool)
     r = readdlm(file, ',', header=header)
@@ -379,14 +452,16 @@ function get_all_rates(file::String, header::Bool)
     return r
 end
 
+"""
+    filename(data, model::AbstractGRSMmodel)
 
-
-filename(data, model::AbstractGRSMmodel) = filename(data.name, data.gene, model.G, model.R, model.insertstep, model.nalleles)
+TBW
+"""
+filename(data, model::AbstractGRSMmodel) = filename(data.name, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.name, data.gene, model.G, model.nalleles)
-filename(label::String, gene::String, G::Int, R::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$insertstep", "$(nalleles)")
+filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * txtstr
-
 
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
@@ -422,18 +497,17 @@ last accepted
 """
 function write_rates(file::String, fits::Fit, stats, model)
     f = open(file, "w")
+    writedlm(f, rlabels(model), ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
-    writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
+    writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
     close(f)
 
     # writedlm(f,[stats.meanparam],',')
     # writedlm(f,[stats.stdparam],',')
     # writedlm(f,[stats.medparam],',')
     # writedlm(f,[stats.madparam],',')
-
-    close(f)
 end
 """
 write_measures(file,fits,waic,dev)
@@ -454,6 +528,7 @@ write_param_stats(stats,waic,data,model)
 """
 function write_param_stats(file, stats::Stats)
     f = open(file, "w")
+    writedlm(f,rlabels(model),',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
@@ -509,7 +584,7 @@ row
 4       last value of previous run
 """
 readrates(file::String) = readrates(file, 3)
-readrates(file::String, row::Int) = readrow(file, row)
+readrates(file::String, row::Int,header::Bool=true) = readrow(file, row,header)
 
 # function get_row(rtype)
 #     if rtype == "ml"
@@ -528,9 +603,13 @@ readrates(file::String, row::Int) = readrow(file, row)
 
 
 
-function readrow(file::String, row)
+function readrow(file::String, row,header=false)
     if isfile(file) && ~isempty(read(file))
-        contents = readdlm(file, ',')
+        if header
+            contents = readdlm(file, ',',header=true)[1]
+        else
+            contents = readdlm(file, ',',header=false)
+        end
         if row <= size(contents, 1)
             m = contents[row, :]
             return m[.~isempty.(m)]
@@ -570,12 +649,12 @@ readtemp(file::String) = readrow(file, 4)
 readrhat(file::String) = readrow(file, 6)
 
 function readml(ratefile::String)
-    m = readrow(ratefile, 1)
+    m = readrow(ratefile, 1,true)
     reshape(m, 1, length(m))
 end
 
 function readmean(ratefile::String)
-    m = readrow(ratefile, 2)
+    m = readrow(ratefile, 2,true)
     reshape(m, 1, length(m))
 end
 
@@ -593,7 +672,7 @@ function readstats(statfile::String)
 end
 
 function readmedian(statfile::String)
-    m = readrow(statfile, 3)
+    m = readrow(statfile, 3,true)
     reshape(m, 1, length(m))
 end
 
@@ -665,10 +744,10 @@ end
 
 # Functions for saving and loading data and models
 
-"""
-write_log(file,datafile,data,model)
-write all information necessary for rerunning
-"""
+# """
+# write_log(file,datafile,data,model)
+# write all information necessary for rerunning
+# """
 # function save_data(file::String,data::TransientRNAData)
 #     f = open(file,"w")
 #     writedlm(f, [typeof(data)])
@@ -680,10 +759,10 @@ write all information necessary for rerunning
 #     close(f)
 # end
 
-function load_data(file::String, model::AbstractGMmodel)
+# function load_data(file::String, model::AbstractGMmodel)
 
 
-end
+# end
 
 function save_model(file::String, model::AbstractGMmodel)
     f = open(file, "w")
@@ -694,22 +773,9 @@ function save_model(file::String, model::AbstractGMmodel)
     writedlm(f, model.fittedparam)
     writedlm(f, model.method)
     close(f)
-
 end
 
-function load_model(file::String, model::AbstractGRSMmodel)
+# function load_model(file::String, model::AbstractGRSMmodel)
 
-end
+# end
 
-"""
-    makestring(v::Vector)
-
-    turn a vector of strings into a single string
-"""
-function makestring(v)
-    s = ""
-    for i in v
-        s *= i
-    end
-    return s
-end
