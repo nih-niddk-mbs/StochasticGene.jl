@@ -119,7 +119,7 @@ TBW
 function prob_GaussianMixture(par,reporters,N)
     d = Array{Distribution{Univariate, Continuous}}(undef,N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(par[1],par[2])],[.9,.1] )
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(par[1],par[2])],[.7,.3] )
     end
     d
 end
@@ -143,20 +143,6 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-# function kolmogorov_forward(Q, interval)
-#     global Q_kf = copy(Q)
-#     tspan = (0.0, interval)
-#     prob = ODEProblem(fkfg, Matrix(I, size(Q)), tspan)
-#     # sol = solve(prob,saveat=t, lsoda(),abstol = 1e-4, reltol = 1e-4)
-#     sol = solve(prob, lsoda(), save_everystep=false)
-#     return sol
-# end
-# """
-# fkf(u::Matrix,p,t)
-
-# """
-# fkfg(u::Matrix, p, t) = u * Q_kf
-
 function kolmogorov_forward(Q, interval)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
@@ -194,6 +180,11 @@ function expected_transitions(α, a, b, β, N, T)
     return ξ, γ
 end
 
+"""
+    expected_transitions_log(logα, a, b, logβ, N, T)
+
+TBW
+"""
 function expected_transitions_log(logα, a, b, logβ, N, T)
     ξ = Array{Float64}(undef, N, N, T - 1)
     γ = Array{Float64}(undef, N, T - 1)
@@ -454,6 +445,6 @@ TBW
 """
 function predicted_trace(r, N, reporters, elementsT, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb_Gaussian(trace, N, r[end-3:end], reporters)
+    logb = set_logb_Gaussian(trace, N, r[end-3:end], reporters,prob_GaussianMixture)
     viterbi(loga, logb, logp0, N, length(trace))
 end
