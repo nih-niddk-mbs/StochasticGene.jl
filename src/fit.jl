@@ -51,7 +51,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, cv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="ml", writesamples=false, onstates=Int[], tempfish=1.0)
     println(now())
     if datatype == "genetrap"
-        data, model = genetrap(root, gene, transitions, G, R, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, cv, onstates)
+        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, cv, onstates)
     elseif datatype == "scRNA" || datatype == "fish"
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)
@@ -75,7 +75,7 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
         model = model_rna(data, gene, cell, G, cv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate, Normal, priorcv, true)
     end
     gene = check_genename(gene, "[")
-    printinfo(gene, G, R, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+    printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     println("size of histogram: ", data.nRNA)
@@ -167,7 +167,6 @@ function burstsize(r, R, ntransitions)
     mean_histogram(s[2, collect(1:nT:L)])
 end
 
-
 """
 check_genename(gene,p1)
 
@@ -188,7 +187,6 @@ function check_genename(gene, p1)
     end
     return gene
 end
-
 
 """
 print_ll(param,data,model,message="initial ll:")
@@ -216,11 +214,11 @@ function printinfo(gene, G, cond, datafolder, infolder, resultfolder, maxtime)
     println("maxtime: ", maxtime)
 end
 
-function printinfo(gene, G, R, insertstep, cond, datafolder, infolder, resultfolder, maxtime)
+function printinfo(gene, G, R, S, insertstep, cond, datafolder, infolder, resultfolder, maxtime)
     if R == 0
         printinfo(gene, G, cond, datafolder, infolder, resultfolder, maxtime)
     else
-        println("Gene: ", gene, " G R insertstep: ", G, R, insertstep)
+        println("Gene: ", gene, " G R S insertstep: ", G, R, S, insertstep)
         println("in: ", infolder, " out: ", resultfolder)
         println("maxtime: ", maxtime)
     end
@@ -249,8 +247,8 @@ function finalize(data, model, fit, stats, measures, temp, resultfolder, optimiz
     end
 end
 
-function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, insertstep, nalleles, rnatype::String)
-    model = R == 0 ? "$G" : "$G$R$insertstep"
+function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+    model = R == 0 ? "$G" : "$G$R$S$insertstep"
     file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$rnatype" * ".txt"
     joinpath(infolder, file)
 end

@@ -272,14 +272,14 @@ function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vect
 end
 
 function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, fish::Bool, names, fittedparams)
-    labels = assemble_rates(folder, files, label, cond, model)
+    assemble_rates(folder, files, label, cond, model)
     assemble_measures(folder, files, label, cond, model)
-    assemble_stats(folder, files, label, cond, model, labels, fittedparams)
+    labels = assemble_stats(folder, files, label, cond, model)
     if model != "1" && "burst" ∈ names
-        assemble_burst_sizes(folder, files, label, cond, model, fittedparams)
+        assemble_burst_sizes(folder, files, label, cond, model)
     end
     if "optimized" ∈ names
-        assemble_optimized(folder, files, label, cond, model, labels, fittedparams)
+        assemble_optimized(folder, files, label, cond, model, labels)
     end
 end
 
@@ -321,17 +321,19 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
     close(f)
 end
 
-function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels, fittedparams)
+function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, optlabels(labels, split(cond, "-"), fittedparams), read_optimized)
+    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, optlabels(labels, split(cond, "-")), read_optimized)
 end
 
-function assemble_stats(folder::String, files, label::String, cond::String, model::String, labels,fittedparams)
+function assemble_stats(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "param-stats", label, cond, model), outfile, statlabels(labels, split(cond, "-"), fittedparams), readstats)
+    statfiles = get_files(files, "param-stats", label, cond, model)
+    labels = readdlm(joinpath(folder,ratefiles[1]),',',header=true)[2]
+    assemble_files(folder, statfiles, outfile, statlabels(labels, split(cond, "-")), readstats)
 end
 
-function assemble_burst_sizes(folder, files, label, cond, model, fittedparams)
+function assemble_burst_sizes(folder, files, label, cond, model)
     outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
 end
@@ -431,18 +433,17 @@ function statlabels(model::String, conds, fittedparams)
 end
 
 function statlabels(labels::Matrix, conds, fittedparams)
-    label = ["Mean", "SD", "Median", "MAD"]
-    Grates = rlabels(labels, conds, fittedparams)
+    l = ["Mean", "SD", "Median", "MAD"]
     rates = Matrix{String}(undef, 1, 0)
     for i in 1:4
-        rates = [rates Grates .* (label[i])]
+        rates = [rates labels .* (l[i])]
     end
     return ["Gene" rates]
 end
 
 optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fittedparams) "LL" "Convergence"]
 
-optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds, fittedparams) "LL" "Convergence"]
+optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds) "LL" "Convergence"]
 
 function get_all_rates(file::String, header::Bool)
     r = readdlm(file, ',', header=header)
@@ -473,7 +474,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     name = filename(data, model)
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-    write_param_stats(joinpath(path, "param-stats" * name), stats)
+    write_param_stats(joinpath(path, "param-stats" * name), stats, model)
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -526,9 +527,9 @@ end
 write_param_stats(stats,waic,data,model)
 
 """
-function write_param_stats(file, stats::Stats)
+function write_param_stats(file, stats::Stats, model)
     f = open(file, "w")
-    writedlm(f,rlabels(model),',')
+    writedlm(f,rlabels(model)[1:1,model.fittedparam],',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
