@@ -19,7 +19,7 @@ function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, interval, elementsT, nT)
-        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters)
+        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters,prob_GaussianMixture)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -68,8 +68,8 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
 """
 
-function set_logb_Gaussian(trace, N, params, reporters)
-    d = prob_Gaussian(params, reporters, N)
+function set_logb_Gaussian(trace, N, params, reporters,probfn=prob_Gaussian)
+    d = probfn(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
@@ -111,7 +111,18 @@ function prob_Gaussian(par, reporters, N)
     end
     d
 end
+"""
+    prob_GaussianMixture(par,reporters,N)
 
+TBW
+"""
+function prob_GaussianMixture(par,reporters,N)
+    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+    for i in 1:N
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(par[1],par[2])],[.9,.1] )
+    end
+    d
+end
 # function prob_Gaussian_any(par, reporters, N)
 #     d = Array{Distribution{Univariate,Continuous}}(undef, N)
 #     for i in 1:N
@@ -120,33 +131,6 @@ end
 #     d
 # end
 
-# function prob_Gaussian(par, onstates::Vector, N)
-#     d = Array{Distribution{Univariate,Continuous}}(undef, N)
-#     for i in 1:N
-#         if i ∈ onstates
-#             d[i] = Normal(par[3], par[4])
-#         else
-#             d[i] = Normal(par[1], par[2])
-#         end
-#     end
-#     d
-# end
-# function prob_GaussianMixture(par,onstates,N)
-#     d = Array{Distribution{Univariate, Continuous}}(undef,N)
-#     for i in 1:N
-#         if i ∈ onstates
-#             d[i] = MixtureModel(Normal, [(par[1], par[2]), (par[3], par[4])], [par[5], 1-par[5]])
-#         else
-#             d[i] = Normal(par[1],par[2])
-#         end
-#     end
-#     d
-# end
-
-# function prob_Poisson(obs, state, lambda)
-#     d = Poisson(lambda[state])
-#     pdf(d, obs)
-# end
 
 
 
