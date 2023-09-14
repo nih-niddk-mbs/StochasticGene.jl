@@ -50,6 +50,10 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, cv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="ml", writesamples=false, onstates=Int[], tempfish=1.0)
     println(now())
+    gene = check_genename(gene, "[")
+    printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+    resultfolder = folder_path(resultfolder, root, "results", make=true)
+    infolder = folder_path(infolder, root, "results")
     if datatype == "genetrap"
         data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, cv, onstates)
     elseif datatype == "scRNA" || datatype == "fish"
@@ -74,10 +78,6 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
         end
         model = model_rna(data, gene, cell, G, cv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate, Normal, priorcv, true)
     end
-    gene = check_genename(gene, "[")
-    printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
-    resultfolder = folder_path(resultfolder, root, "results", make=true)
-    infolder = folder_path(infolder, root, "results")
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)

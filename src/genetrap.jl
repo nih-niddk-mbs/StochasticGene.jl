@@ -20,7 +20,9 @@ halflife_gt() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1
 
 function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
     println(now())
-    data, model = genetrap(root, gene, transitions, G, R, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
+    folder = folder_path(folder, root, "results", make=true)
+    infolder = folder_path(infolder, root, "results")
+    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     println(model.rates)
@@ -34,7 +36,7 @@ function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::In
     # finalize(data,model,fits,stats,measures,1.,folder,0,bs,root)
     finalize(data, model, fits, stats, measures, temp, folder, 0, burst, false, root)
     println(now())
-    return data, model_genetrap(get_rates(fits.parml, model), gene, transitions, G, R, S, insertstep, nalleles, fittedparam, rnatype, data.nRNA + 2, priorcv, propcv, onstates), fits, stats, measures
+    return data, model_genetrap(gene, get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype), fits, stats, measures
 end
 
 """
@@ -51,12 +53,8 @@ function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int
     genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int,S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
     data = iszero(tempfish) ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish)
-    S = S>0 ? R : 0
-    if r != num_rates(transitions,R,S,insertstep)
-        throw("r has wrong length")
-    end
     model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
     return data, model
 end
@@ -97,12 +95,13 @@ function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, in
     if gene ∈ genes_gt()
         rm[end] = log(2.0) / (60 .* halflife_gt()[gene])
     end
-    if r == 0.
+    if r == 0.0
         r = rm
     end
+    println(r)
     d = distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
-    return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, 1, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, onstates)
+    return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, onstates)
 end
 
 # """
@@ -133,7 +132,7 @@ end
 
 function readrates_genetrap(infile::String, row::Int)
     if isfile(infile) && ~isempty(read(infile))
-        println(infile,", row: ",get_rtype()[row])
+        println(infile, ", row: ", get_rtype()[row])
         return readrates(infile, row, true)
     else
         println("using default rates")
