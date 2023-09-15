@@ -609,7 +609,7 @@ function logsumexp(v)
 end
 
 
-function meansplicetime(r::Vector)
+function meantime(r::Vector)
     sum(1 ./ r)
 end
 

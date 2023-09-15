@@ -113,7 +113,7 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
     data = data_rna(gene, datacond, datafolder, fish, label)
     model = model_rna(data, r, G, nalleles, nsets, propcv, fittedparam, fixedeffects, transitions, decayrate, ejectprior)
     options = MHOptions(100000, 0, 0, 1000.0, 1.0, 1.0)
-    fits, stats, measures = run_mh(data, model, options, 1)
+    fits, stats, measures = run_mh(data, model, options, nworkers())
     return stats.medparam, fits.llml, model
 end
 
@@ -123,7 +123,7 @@ function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), inse
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = model_genetrap("", rinit, transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, rnatype)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
-    fits, stats, measures = run_mh(data, model, options)
+    fits, stats, measures = run_mh(data, model, options,nworkers())
     fits, stats, measures, data, model, options
 end
 
@@ -133,7 +133,7 @@ function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 
     data = trace_data(traces, interval)
     model = trace_model(rinit, transitions, G, R, S, fittedparam)
     options = trace_options(samplesteps=nsamples)
-    fits, stats, measures = run_mh(data, model, options)
+    fits, stats, measures = run_mh(data, model, options,nworkers())
     fits, stats, measures, data, model, options
 end
 

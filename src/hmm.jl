@@ -19,7 +19,7 @@ function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, interval, elementsT, nT)
-        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters,prob_GaussianMixture)
+        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters,prob_Gaussian)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
