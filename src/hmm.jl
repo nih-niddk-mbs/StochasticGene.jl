@@ -119,7 +119,7 @@ TBW
 function prob_GaussianMixture(par,reporters,N)
     d = Array{Distribution{Univariate, Continuous}}(undef,N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(par[1],par[2])],[.7,.3] )
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(2*par[1],par[2])],[.7,.3] )
     end
     d
 end
