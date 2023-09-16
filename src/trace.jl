@@ -1,5 +1,13 @@
 ### trace.jl
 
+
+struct ReporterComponents
+    noisefnc::Function
+    nparams::Int
+    numreporters::Vector
+end
+
+
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
 
