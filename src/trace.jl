@@ -83,7 +83,7 @@ end
 
 TBW
 """
-function read_tracefiles(path::String,cond::String,col=3)
+function read_tracefiles(path::String,cond::String="",col=3)
     traces = Vector[]
     for (root,dirs,files) in walkdir(path)
         for file in files

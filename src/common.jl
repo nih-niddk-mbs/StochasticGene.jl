@@ -95,6 +95,7 @@ end
 struct TraceRNAData{hType} <: AbstractTraceHistogramData
     name::String
     gene::String
+    interval::Float64
     trace::Vector
     nRNA::Int
     histRNA::hType
