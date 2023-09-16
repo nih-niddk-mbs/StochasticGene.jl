@@ -275,7 +275,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg, llgp = ll_Gaussian(r, model.components.tcomponents.nT, model.reporters, model.components.tcomponents.elementsT, data.interval, data.trace)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporters.n, model.reporters.per_state, model.reporters.probfn, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     hist = datahistogram(data)
@@ -291,7 +291,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     r = get_rates(param, model)
-    ll_Gaussian(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, data.trace)
+    ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporters.n, model.reporters.per_state, model.reporters.probfn, data.interval, data.trace)
 end
 
 """
@@ -564,7 +564,7 @@ get fitted parameters from model
 """
 get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_param(r,model::AbstractGmodel) = transform_rates(r[model.fittedparam],model)
+get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
 
 
 """
@@ -611,9 +611,9 @@ end
 function num_rates(model::String)
     m = digits(parse(Int, model))
     if length(m) == 1
-        return 2*m[1] 
+        return 2 * m[1]
     else
-        return 2*(m[4]-1) + m[3] + m[2] - m[1] + 2
+        return 2 * (m[4] - 1) + m[3] + m[2] - m[1] + 2
     end
 end
 

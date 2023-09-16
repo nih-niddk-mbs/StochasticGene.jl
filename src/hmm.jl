@@ -7,19 +7,17 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
-
-
 """
-    ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
+    ll_hmm(r, nT, reporters, elementsT, interval, trace)
 
-return total loglikelihood for traces with summed Gaussian noise and loglikelihood of each trace
+return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
+function ll_hmm(r, nT, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, interval, elementsT, nT)
-        logb = set_logb(t, nT, r[end-3:end], reporters,prob_GaussianMixture)
+        logb = set_logb(t, nT, r[end-noiseparams:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -56,7 +54,6 @@ function make_logap(r, interval, elementsT, N)
     log.(max.(a, 0)), log.(p0)
 end
 
-
 """
 set_logb(trace, N, params, reporters)
 
@@ -67,8 +64,7 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 -`T`: number of observations
 
 """
-
-function set_logb(trace, N, params, reporters,probfn=prob_Gaussian)
+function set_logb(trace, N, params, reporters, probfn=prob_Gaussian)
     d = probfn(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
@@ -116,10 +112,10 @@ end
 
 TBW
 """
-function prob_GaussianMixture(par,reporters,N)
-    d = Array{Distribution{Univariate, Continuous}}(undef,N)
+function prob_GaussianMixture(par, reporters, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(2*par[1],2*par[2])],[.8,.2] )
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (2 * par[1], 2 * par[2])], [0.8, 0.2])
     end
     d
 end
@@ -147,7 +143,7 @@ end
 
 in place update of du of ODE system for DifferentialEquations,jl
 """
-function fkf!(du,u::Matrix, p, t) 
+function fkf!(du, u::Matrix, p, t)
     du .= u * p
 end
 
@@ -424,7 +420,7 @@ TBW
 function predicted_trace(r, data::AbstractTraceData, model)
     tsim = Vector{Int}[]
     for t in data.trace
-        push!(tsim,predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, t))
+        push!(tsim, predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, t))
     end
     tsim
 end
@@ -439,6 +435,6 @@ TBW
 """
 function predicted_trace(r, N, reporters, elementsT, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb(trace, N, r[end-3:end], reporters,prob_GaussianMixture)
+    logb = set_logb(trace, N, r[end-3:end], reporters, prob_GaussianMixture)
     viterbi(loga, logb, logp0, N, length(trace))
 end

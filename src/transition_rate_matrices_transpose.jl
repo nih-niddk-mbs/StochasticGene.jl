@@ -11,7 +11,6 @@
 # transpose of Q is more convenient for solving chemical master equation
 #
 
-
 """
 	struct Element
 
@@ -363,7 +362,7 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                 if S > 0 && abs(sC) == 1
                     push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
                 end
-                if rnatype == "offeject" 
+                if rnatype == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
                         push!(elementsT, Element(a, b, eta[R-insertstep+1], s))

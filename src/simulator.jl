@@ -125,7 +125,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             ts = t
         end
 
-        if onoff 
+        if onoff
             # find before and after states for the same allele to define dwell time histograms 
             before = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(initial ∈ onstates)
         end
@@ -141,13 +141,13 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println(invactions[action], " ", allele)
             println(initial, "->", final)
         end
-     
+
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
-        
+
         if onoff
             after = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(final ∈ onstates)
             firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
-         end
+        end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
@@ -219,13 +219,13 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep,reporterfnc=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, reporterfnc=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        reporters = num_reporters(G, R, S, insertstep,reporterfnc)
+        reporters = num_reporters(G, R, S, insertstep, reporterfnc)
     else
         reporters = num_reporters(G, onstates)
     end
@@ -265,9 +265,9 @@ end
 
 returns state index given state vector
 """
-state_index(state::Array,G,allele) = argmax(state[1:G, allele])
+state_index(state::Array, G, allele) = argmax(state[1:G, allele])
 
-function state_index(state::Array, G, R, S,allele=1)
+function state_index(state::Array, G, R, S, allele=1)
     Gstate = argmax(state[1:G, allele])
     if R == 0
         return Gstate
@@ -300,7 +300,7 @@ end
 
 decide if transition exits or enters sojurn states then in place update appropriate histogram
 """
-function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after,verbose)
+function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
     if before == 1 && after == 0  # turn off
         firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
         if verbose

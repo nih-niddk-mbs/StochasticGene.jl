@@ -299,9 +299,9 @@ end
 function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
     ratefiles = get_files(files, "rates", label, cond, model)
-    labels = readdlm(joinpath(folder,ratefiles[1]),',',header=true)[2]
+    labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
     # header = ratelabels(model, split(cond, "-"))
-    assemble_files(folder, ratefiles, outfile,ratelabels(labels, split(cond, "-")), readmedian)
+    assemble_files(folder, ratefiles, outfile, ratelabels(labels, split(cond, "-")), readmedian)
     return labels
 end
 
@@ -329,7 +329,7 @@ end
 function assemble_stats(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
     statfiles = get_files(files, "param-stats", label, cond, model)
-    labels = readdlm(joinpath(folder,ratefiles[1]),',',header=true)[2]
+    labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
     assemble_files(folder, statfiles, outfile, statlabels(labels, split(cond, "-")), readstats)
 end
 
@@ -357,7 +357,7 @@ function rlabels(model::AbstractGRSMmodel)
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
-    reshape(labels,1,length(labels))
+    reshape(labels, 1, length(labels))
 end
 
 
@@ -373,7 +373,7 @@ function rlabels(model::AbstractGMmodel)
     end
     push!(labels, "Eject")
     push!(labels, "Decay")
-    reshape(labels,1,length(labels))
+    reshape(labels, 1, length(labels))
 end
 
 # function rlabels(model::String)
@@ -409,7 +409,7 @@ function rlabels(labels::Matrix, conds::Vector)
     else
         rates = r .* conds[1]
         for i = 2:nsets
-            rates = [rates r .* reshape(conds[i],1,length(conds))]
+            rates = [rates r .* reshape(conds[i], 1, length(conds))]
         end
         return rates
     end
@@ -529,7 +529,7 @@ write_param_stats(stats,waic,data,model)
 """
 function write_param_stats(file, stats::Stats, model)
     f = open(file, "w")
-    writedlm(f,rlabels(model)[1:1,model.fittedparam],',')
+    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
@@ -585,7 +585,7 @@ row
 4       last value of previous run
 """
 readrates(file::String) = readrates(file, 3)
-readrates(file::String, row::Int,header::Bool=true) = readrow(file, row,header)
+readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
 
 # function get_row(rtype)
 #     if rtype == "ml"
@@ -604,12 +604,12 @@ readrates(file::String, row::Int,header::Bool=true) = readrow(file, row,header)
 
 
 
-function readrow(file::String, row,header=false)
+function readrow(file::String, row, header=false)
     if isfile(file) && ~isempty(read(file))
         if header
-            contents = readdlm(file, ',',header=true)[1]
+            contents = readdlm(file, ',', header=true)[1]
         else
-            contents = readdlm(file, ',',header=false)
+            contents = readdlm(file, ',', header=false)
         end
         if row <= size(contents, 1)
             m = contents[row, :]
@@ -650,12 +650,12 @@ readtemp(file::String) = readrow(file, 4)
 readrhat(file::String) = readrow(file, 6)
 
 function readml(ratefile::String)
-    m = readrow(ratefile, 1,true)
+    m = readrow(ratefile, 1, true)
     reshape(m, 1, length(m))
 end
 
 function readmean(ratefile::String)
-    m = readrow(ratefile, 2,true)
+    m = readrow(ratefile, 2, true)
     reshape(m, 1, length(m))
 end
 
@@ -673,7 +673,7 @@ function readstats(statfile::String)
 end
 
 function readmedian(statfile::String)
-    m = readrow(statfile, 3,true)
+    m = readrow(statfile, 3, true)
     reshape(m, 1, length(m))
 end
 

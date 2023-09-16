@@ -55,7 +55,7 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     if datatype == "genetrap"
-        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, propcv, onstates,tracedata)
+        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
     elseif datatype == "scRNA" || datatype == "fish"
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)
@@ -80,7 +80,7 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     end
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-    fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)    
+    fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
 end
 
 """
@@ -157,7 +157,7 @@ burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtra
 
 function burstsize(r, R, ntransitions)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end],""), r)
+    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end], ""), r)
     # M = make_components_M(transitions, G, R, nhist, decay, rnatype)
     nT = 2 * 2^R
     L = nT * total
