@@ -83,18 +83,18 @@ end
 
 TBW
 """
-function read_tracefiles(path::String,cond::String="",col=3)
+function read_tracefiles(path::String,cond::String,delim::AbstractChar,col=3)
+    readfnc = delim == ',' ? read_tracefile_csv : read_tracefile
+    read_tracefiles(path,cond,readfnc,col)
+end
+
+function read_tracefiles(path::String,cond::String="",readfnc::Function=read_tracefile,col=3)
     traces = Vector[]
     for (root,dirs,files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
             if occursin(cond,target)
-                # println(target)
-                if occursin("csv",file)
-                    push!(traces, read_tracefile(target,col,','))
-                else
-                    push!(traces, read_tracefile(target,col))
-                end
+                push!(traces, readfnc(target,col))
             end
         end
     end
@@ -110,4 +110,4 @@ TBW
 read_tracefile(target::String,col=3) = readdlm(target)[:,col]
 
 
-read_tracefile(target::String,col,delimiter) = readdlm(target,delimiter)[:,col]
+read_tracefile_csv(target::String,col=3) = readdlm(target,',')[:,col]

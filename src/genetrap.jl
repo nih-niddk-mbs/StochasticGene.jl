@@ -18,11 +18,11 @@ halflife_gt() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1
 
 """
 
-function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false, tracedata=true)
+function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
     println(now())
     folder = folder_path(folder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates,tracedata)
+    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     println(model.rates)
@@ -44,25 +44,23 @@ genetrap()
 
 Load data, model and option structures for metropolis-hastings fit
 root is the folder containing data and results
-tracedata = true
 
 FISH counts is divided by tempfish to adjust relative weights of data
-set tempfish = 0 to equalize FISH and live cell counts
-tempfish < 0, just fit FISH data
+set tempfish = 0 to equalize FISH and live cell counts, tempfish < 0 for FISH alone
 """
-function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, resultfolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates,tracedata)
+function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, resultfolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates)
     r = readrates_genetrap(infolder, rtype, gene, label, G, R, S, insertstep, nalleles, rnatype)
-    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates,tracedata)
+    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[],tracedata)
-    data = tempfish < 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish,tracedata)
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
+    data = tempfish < 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish)
     model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
     return data, model
 end
 
-function data_genetrap(root, label, gene, tempfish=1.0,fish,tracedata)
-    
+function data_genetrap(root, label, gene, tempfish=1.0)
+    LC = readLCPDF_genetrap(root, gene)
     if tempfish == 0
         counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
         println(counts)
@@ -71,30 +69,12 @@ function data_genetrap(root, label, gene, tempfish=1.0,fish,tracedata)
     else
         histFISH = readFISH_genetrap(root, gene, tempfish)
     end
-    if tracedata
-
-        LC = readLCPDF_genetrap(root, gene)
     RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
-end
-
-function data_genetrap(root, label, gene, interval, tempfish,fish::Bool)
-    traces = readTrace_genetrap(root, gene)
-    if fish
-        histFISH = readFISH_genetrap(root, gene, tempfish)
-        return TraceRNAData{typeof(histFISH)}(label, gene, interval, trace, length(histFISH), histFISH)
-    else
-       return TraceData(label, gene, interval, trace)
-    end
 end
 
 function data_genetrap_FISH(root, label, gene)
     histFISH = readFISH_genetrap(root, gene, 1.0)
     RNAData(label, gene, length(histFISH), histFISH)
-end
-
-function readTrace_genetrap(root, gene::String, Tracefolder::String="both_clone_polyclonal_filtered_traces_raw")
-    path = joinpath(root, Tracefolder, gene)
-    read_tracefiles(path)
 end
 
 """
@@ -164,8 +144,8 @@ readLCPDF_genetrap(root,gene)
 
 Read in dwell time PDF
 """
-function readLCPDF_genetrap(root::String, gene::String, DwellTimefolder::String="DwellTimePDF")
-    infile = joinpath(root, DwellTimefolder, "$(gene)_PDF.csv")
+function readLCPDF_genetrap(root, gene)
+    infile = joinpath(root, "DwellTimePDF/$(gene)_PDF.csv")
     if isfile(infile)
         LC = readdlm(infile, ',')
         x = truncate_histogram(LC[:, 2], 0.999, 1000)
@@ -185,8 +165,8 @@ function readFISH_genetrap(root::String, gene::String, temp::Float64=1.0, clone=
     readFISH_genetrap(root, gene, Int(div(counts, temp)), clone)
 end
 
-function readFISH_genetrap(root::String, gene::String, counts::Int, FISHfolder::String="Fish_4_Genes", clone::Bool=true)
-    fishfile = joinpath(root, FISHfolder, "$(gene)_steady_state_mRNA.csv")
+function readFISH_genetrap(root::String, gene::String, counts::Int, clone=true)
+    fishfile = joinpath(root, "Fish_4_Genes/$(gene)_steady_state_mRNA.csv")
     col = clone ? 3 : 2
     # Get smFISH RNA histograms
     if isfile(fishfile)

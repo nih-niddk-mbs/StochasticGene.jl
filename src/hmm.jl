@@ -19,7 +19,7 @@ function ll_Gaussian(r, nT, reporters, elementsT, interval, trace)
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, interval, elementsT, nT)
-        logb = set_logb_Gaussian(t, nT, r[end-3:end], reporters,prob_Gaussian)
+        logb = set_logb(t, nT, r[end-3:end], reporters,prob_GaussianMixture)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -58,7 +58,7 @@ end
 
 
 """
-set_logb_Gaussian(trace, N, params, reporters)
+set_logb(trace, N, params, reporters)
 
 returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
@@ -68,7 +68,7 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
 """
 
-function set_logb_Gaussian(trace, N, params, reporters,probfn=prob_Gaussian)
+function set_logb(trace, N, params, reporters,probfn=prob_Gaussian)
     d = probfn(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
@@ -119,17 +119,11 @@ TBW
 function prob_GaussianMixture(par,reporters,N)
     d = Array{Distribution{Univariate, Continuous}}(undef,N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(2*par[1],par[2])],[.7,.3] )
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)),(2*par[1],2*par[2])],[.8,.2] )
     end
     d
 end
-# function prob_Gaussian_any(par, reporters, N)
-#     d = Array{Distribution{Univariate,Continuous}}(undef, N)
-#     for i in 1:N
-#         d[i] = Normal(par[1] + Int(reporters[i]>0) * par[3], sqrt(par[2]^2 + Int(reporters[i]>0) * par[4]^2))
-#     end
-#     d
-# end
+
 
 
 
@@ -445,6 +439,6 @@ TBW
 """
 function predicted_trace(r, N, reporters, elementsT, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb_Gaussian(trace, N, r[end-3:end], reporters,prob_GaussianMixture)
+    logb = set_logb(trace, N, r[end-3:end], reporters,prob_GaussianMixture)
     viterbi(loga, logb, logp0, N, length(trace))
 end
