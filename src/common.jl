@@ -1,6 +1,5 @@
 ###  common.jl
 
-
 # Data types
 """
     AbstractExperimentalData

@@ -1,7 +1,5 @@
 ### trace.jl
 
-
-
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
 
