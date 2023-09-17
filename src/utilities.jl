@@ -570,6 +570,21 @@ function make_histogram(r)
 end
 
 """
+    logit(x::Float64)
+
+logit transform
+"""
+logit(x::Float64) = log(x) - log(1-x)
+logit(x::Array) = log.(x) - log.(1-x)
+
+"""
+    invlogit(x::Float64)
+
+inverse logit transform
+"""
+invlogit(x::Float64) = 1/(1+exp(-x))
+invlogit(x::Array) = 1 ./ (1 + exp.(x))
+"""
 logsumexp(u,v)
 
 returns log of the sum of exponentials of u and v

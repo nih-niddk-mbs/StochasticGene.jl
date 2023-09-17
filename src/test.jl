@@ -18,6 +18,7 @@ using MultivariateStats
 using Optim
 using Test
 
+
 include("common.jl")
 include("transition_rate_matrices_transpose.jl")
 include("chemical_master_new.jl")
@@ -25,8 +26,8 @@ include("simulator.jl")
 include("utilities.jl")
 include("metropolis_hastings_trace.jl")
 include("rna.jl")
-include("hmm.jl")
 include("trace.jl")
+include("hmm.jl")
 include("io.jl")
 include("biowulf.jl")
 include("fit.jl")

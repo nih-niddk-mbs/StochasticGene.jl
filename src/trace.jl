@@ -1,12 +1,6 @@
 ### trace.jl
 
 
-struct ReporterComponents
-    n::Int
-    per_state::Vector
-    probfnc::Function
-end
-
 
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
@@ -42,8 +36,8 @@ end
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; fixedeffects=tuple(), insertstep::Int=1, onstates::Vector=[G], propcv=0.05, f=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); 3; 3; 3; 3])
-    d = trace_prior(priormean, priorcv, fittedparam, f)
+function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam;  propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); 3; 3; 3; 3],fixedeffects=tuple(), onstates::Vector=[G])
+    d = trace_prior(priormean, priorcv, fittedparam, priorprob)
     method = 1
     if S > 0
         S = R
@@ -51,7 +45,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, fittedparam; fixede
     components = make_components_T(transitions, G, R, S, insertstep, "")
     # println(reporters)
     if R > 0
-        reporters = num_reporters(G, R, S, insertstep)
+        reporters = ReporterComponents(noiseparams,num_reporters_per_state(G, R, S, insertstep),probfnc)
         if isempty(fixedeffects)
             return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporters)
         else

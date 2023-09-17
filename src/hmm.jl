@@ -120,10 +120,6 @@ function prob_GaussianMixture(par, reporters, N)
     d
 end
 
-
-
-
-
 """
 kolmogorov_forward(Q::Matrix,interval)
 
@@ -420,13 +416,13 @@ TBW
 function predicted_trace(r, data::AbstractTraceData, model)
     tsim = Vector{Int}[]
     for t in data.trace
-        push!(tsim, predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, t))
+        push!(tsim, predicted_trace(r, model.components.nT, model.reporter, model.components.elementsT, data.interval, t))
     end
     tsim
 end
 
 function predicted_trace(r, trace::Vector, model)
-    predicted_trace(r, model.components.nT, model.reporters, model.components.elementsT, data.interval, trace)
+    predicted_trace(r, model.components.nT, model.reporter, model.components.elementsT, data.interval, trace)
 end
 """
     predicted_trace(r, nT, reporters, elementsT, interval, trace)

@@ -246,14 +246,14 @@ return barrier (off) states, complement of sojurn (on) states
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 
 """
-    num_reporters(G::Int, R::Int, S::Int=0,insertstep=1,f=sum)
+    num_reporters_per_state(G::Int, R::Int, S::Int=0,insertstep=1,f=sum)
 
 return number of a vector of the number reporters for each state index
 
 if f = sum, returns total number of reporters
 if f = any, returns 1 for presence of any reporter
 """
-function num_reporters(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
+function num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     base = S > 0 ? 3 : 2
     reporters = Vector{Int}(undef, G * base^R)
     for i in 1:G, z in 1:base^R
@@ -262,7 +262,7 @@ function num_reporters(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     end
     reporters
 end
-function num_reporters(G::Int, onstates::Vector)
+function num_reporters_per_state(G::Int, onstates::Vector)
     reporters = Int[]
     for i in 1:G
         push!(reporters, i ∈ onstates ? 1 : 0)

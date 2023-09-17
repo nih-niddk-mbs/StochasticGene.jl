@@ -108,7 +108,7 @@ abstract type AbstractModel end
 abstract type AbstractfixedeffectsModel <: AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
-abstract type AbstractGRSMmodel <: AbstractGmodel end
+abstract type AbstractGRSMmodel{ReporterType} <: AbstractGmodel end
 
 """
     Model structures
@@ -141,7 +141,7 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::Vector
+    reporter::Vector
 end
 struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
     G::Int
@@ -154,23 +154,10 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::Vector
+    reporter::Vector
 end
 
-# struct GRMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
-#     G::Int
-#     R::Int
-#     nalleles::Int
-#     rates::RateType
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     method::MethodType
-#     Gtransitions::Tuple
-#     components::ComponentType
-#     reporters::ReporterType
-# end
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
     G::Int
     R::Int
     S::Int
@@ -184,10 +171,10 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::ReporterType
+    reporter::ReporterType
 end
 
-struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel
+struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
     G::Int
     R::Int
     S::Int
@@ -202,8 +189,21 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporters::ReporterType
+    reporter::ReporterType
 end
+
+"""
+ReporterComponents
+
+structure for reporters
+"""
+struct ReporterComponents
+    n::Int
+    per_state::Vector{Int}
+    probfnc::Function
+    weightind::Vector{Int}
+end
+
 
 """
     print_model(model::AbstractModel)
@@ -275,7 +275,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporters.n, model.reporters.per_state, model.reporters.probfn, data.interval, data.trace)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     hist = datahistogram(data)
@@ -291,7 +291,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     r = get_rates(param, model)
-    ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporters.n, model.reporters.per_state, model.reporters.probfn, data.interval, data.trace)
+    ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 """
@@ -313,29 +313,6 @@ function likelihoodfn(param, data::AbstractHistogramArrayData, model::AbstractGm
     h = likelihoodarray(get_rates(param, model), data, model)
     make_array(h)
 end
-# function likelihoodfn(param,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
-#     h = likelihoodarray(get_rates(param,model),data,model)
-#     make_array(h)
-#     hconcat = Array{Float64,1}(undef,0)
-#     for h in h
-#         hconcat = vcat(hconcat,h)
-#     end
-#     return hconcat
-# end
-# function likelihoodfn(param::Vector,data::RNALiveCellData,model)
-#     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
-#     return [modelOFF;modelON;histF]
-# end
-
-# function likelihoodfn(param::Vector,data::RNASurvivalData,model)
-#     modelOFF, modelON, histF = likelihoodtuple(get_rates(param,model),data,model)
-#     return [modelOFF;modelON;histF]
-# end
-
-
-# likelihoodfn(param::Vector,data::RNAData,model::AbstractGRSMmodel) = steady_state(M, nT, nalleles, nhist)
-#     steady_state(get_rates(param,model),model.G,model.R,data.nRNA,model.nalleles)
-
 
 """
 likelihoodarray(r,data,model)
@@ -345,7 +322,6 @@ Compute likelihoods for multiple distributions
 r = full rate vector including yield if it exists
 data = data structure
 model = model structure
-
 
 For time dependent model likelihoods
 first set of parameters gives the initial histogram
@@ -372,38 +348,6 @@ function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where 
     trim_hist(h, data.nRNA)
 end
 
-# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel,maxdata)
-#     maxdata 
-#     G = model.G
-#     h0 = steady_state_full(r[1:2*G],G-1,maxdata)
-#     transient(data.time,r[2*G+1:4*G],G-1,model.nalleles,h0,model.method)
-#     # transient(t,r,yieldfactor,n,nalleles,P0::Vector,method)
-# end
-# function likelihoodarray(r,data::RNAData,model::GMmultimodel)
-#     G = model.G
-#     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-#     for i in eachindex(data.nRNA)
-#         g = steady_state(r[1:2*G],G-1,data.nRNA[i],model.nalleles)
-#         h[i] = threshold_noise(g,r[2*G+1],r[2*G+1+i],data.nRNA[i])
-#     end
-#     return h
-# end
-# function likelihoodarray(r,data::RNAMixedData,model::AbstractGMmodel)
-#     G = model.G
-#     h = Array{Array{Float64,1},1}(undef,length(data.nRNA))
-#     j = 1
-#     for i in eachindex(data.fish)
-#         g = steady_state(r[1:2*G],G-1,maximum(data.nRNA),model.nalleles)
-#         if data.fish[i]
-#             h[i] = threshold_noise(g,r[2*G+j],r[2*G+j+1],data.nRNA[i])
-#             j += 2
-#         else
-#             h[i] = technical_loss(g,r[2*G+j],data.nRNA[i])
-#             j += 1
-#         end
-#     end
-#     return h
-# end
 """
     likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 
@@ -412,7 +356,7 @@ TBW
 function likelihoodarray(r, data::RNALiveCellData, model::GMmodel)
     TA = make_mat_TA(model.components.tcomponents, r)
     TI = make_mat_TI(model.components.tcomponents, r)
-    modelOFF, modelON = offonPDF(TA, TI, data.bins, r, model.G, model.Gtransitions, model.reporters)
+    modelOFF, modelON = offonPDF(TA, TI, data.bins, r, model.G, model.Gtransitions, model.reporter)
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     return [modelOFF, modelON, histF]
@@ -428,31 +372,13 @@ function likelihoodarray(rin, data::RNALiveCellData, model::AbstractGRSMmodel)
         r[end-1] *= survival_fraction(nu, eta, model.R)
     end
     components = model.components
-    onstates = model.reporters
+    onstates = model.reporter
     T = make_mat_T(components.tcomponents, r)
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
     histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
     modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
-
-
-    # function offonPDF(T, TA, TI, t::Vector, r::Vector, nT::Int, elementsT::Vector, onstates, method::Int=1)
-    # pss = normalized_nullspace(T)
-    # nonzeros = nonzero_rows(TI)
-    # ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss)), offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros))=
-    # end
-    # modelOFF, modelON, histF
-    # offonPDF(T, TA, TI, t::Vector, r::Vector, G::Int, R::Int, method::Int=1)
-
-    # T = make_mat_T(model.components.tcomponents, r)
-    # TA = make_mat_TA(model.components.tcomponents, r)
-    # TI = make_mat_TI(model.components.tcomponents, r)
-    # modelOFF =
-    # modelON = 
-    # modelOFF, modelON = offonPDF(T, TA, TI, data.bins, r, model.G, model.R, model.method)
-    # M = make_mat_M(model.components.mcomponents, r)
-    # histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     return [modelOFF, modelON, histF]
 end
 
@@ -478,13 +404,27 @@ function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     return hists
 end
 
-
 """
 transform_rates(r,model::AbstractGmodel)
 
 log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
+
+transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = [log.(r[1:model.reporter.weightindex-1]); logit(r[model.reporter.weight:end])]
+
+"""
+get_param(model)
+
+get fitted parameters from model
+"""
+get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
+
+get_param(model::AbstractGRSMmodel) = transform_rates(model.rates, model)[model.fittedparam]
+
+get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
+
+get_param(r, model::AbstractGRSMmodel) = transform_rates(r, model)[model.fittedparam]
 
 """
 inverse_transform_rates(x,model::AbstractGmodel)
@@ -499,6 +439,16 @@ function inverse_transform_rates(p, model::AbstractGmodel, inverse=true)
         return p
     end
 end
+
+function inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
+    if inverse
+        return [exp.(p[1:model.reporter.weightindex-1]); inlogit(p)]
+    else
+        return p
+    end
+end
+
+
 
 """
 get_rates(param,model)
@@ -556,16 +506,6 @@ function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
 end
 
 copy_r(model) = copy(model.rates)
-
-"""
-get_param(model)
-
-get fitted parameters from model
-"""
-get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
-
 
 """
 setr(r,model)
