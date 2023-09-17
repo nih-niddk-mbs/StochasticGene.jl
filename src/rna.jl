@@ -71,7 +71,7 @@ function fit_rna(nchains::Int, data::AbstractRNAData, gene::String, cell::String
     fits, stats, measures = run_mh(data, model, options, nchains)
     optimized = 0
     try
-        optimized = Optim.optimize(x -> lossfnc(x, data, model), fits.parml, LBFGS())
+        optimized = Optim.optimize(x -> lossfn(x, data, model), fits.parml, LBFGS())
     catch
         @warn "Optimizer failed"
     end

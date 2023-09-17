@@ -199,7 +199,7 @@ structure for reporters
 struct ReporterComponents
     n::Int
     per_state::Vector{Int}
-    probfnc::Function
+    probfn::Function
     weightind::Int
 end
 
@@ -290,7 +290,7 @@ assume Gaussian observation probability model with four parameters
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     r = get_rates(param, model)
-    ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    ll_hmm(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 """
@@ -391,7 +391,13 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = [log.(r[1:model.reporter.weightindex-1]); logit(r[model.reporter.weightindex:end])]
+function transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) 
+    n = num_rates(model)
+    [log.(r[1:n + model.reporter.weightind-1]); logit(r[n + model.reporter.weightind:end])]
+end
+
+
+
 """
 inverse_transform_rates(x,model::AbstractGmodel)
 
@@ -402,7 +408,7 @@ inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
 function inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents})
     n = num_rates(model)
-    [exp.(p[1:n + model.reporter.weightindex-1]); invlogit(p[n + model.reporter.weightindex:end])]
+    [exp.(p[1:n + model.reporter.weightind-1]); invlogit(p[n + model.reporter.weightind:end])]
 end
 
 """

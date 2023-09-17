@@ -5,7 +5,7 @@
 
 return vector of traces
 """
-function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfnc=sum)
+function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
         trace[i] = simulator(r[1:end-4], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, 2]
@@ -18,7 +18,7 @@ end
 
 TBW
 """
-simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfnc=sum) = simulator(r[1:end-4], transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfnc=reporterfnc, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
+simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r[1:end-4], transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)
@@ -34,7 +34,7 @@ end
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfnc=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); fill(2, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
+function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50;.9], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); fill(2, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
     d = trace_prior(priormean, priorcv, fittedparam, priorprob)
     method = 1
     if S > 0
@@ -43,11 +43,11 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
     components = make_components_T(transitions, G, R, S, insertstep, "")
     # println(reporters)
     if R > 0
-        reporters = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfnc, weightind)
+        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
         if isempty(fixedeffects)
-            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporters)
+            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporter)
         else
-            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporters)}(G, R, S, 1, "", r, d, propcv, fittedparam, fixedeffects, method, transitions, components, reporters)
+            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, 1, "", r, d, propcv, fittedparam, fixedeffects, method, transitions, components, reporter)
         end
     else
         return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
@@ -83,17 +83,17 @@ end
 TBW
 """
 function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
-    readfnc = delim == ',' ? read_tracefile_csv : read_tracefile
-    read_tracefiles(path, cond, readfnc, col)
+    readfn = delim == ',' ? read_tracefile_csv : read_tracefile
+    read_tracefiles(path, cond, readfn, col)
 end
 
-function read_tracefiles(path::String, cond::String="", readfnc::Function=read_tracefile, col=3)
+function read_tracefiles(path::String, cond::String="", readfn::Function=read_tracefile, col=3)
     traces = Vector[]
     for (root, dirs, files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
             if occursin(cond, target)
-                push!(traces, readfnc(target, col))
+                push!(traces, readfn(target, col))
             end
         end
     end

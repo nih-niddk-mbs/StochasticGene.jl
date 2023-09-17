@@ -94,7 +94,7 @@ function fit(nchains, data, model, options, temp, resultfolder, burst, optimize,
     optimized = 0
     if optimize
         try
-            optimized = Optim.optimize(x -> lossfnc(x, data, model), fit.parml, LBFGS())
+            optimized = Optim.optimize(x -> lossfn(x, data, model), fit.parml, LBFGS())
         catch
             @warn "Optimizer failed"
         end
@@ -110,12 +110,12 @@ function fit(nchains, data, model, options, temp, resultfolder, burst, optimize,
 end
 
 """
-lossfnc(x,data,model)
+lossfn(x,data,model)
 
 Compute loss function
 
 """
-lossfnc(x, data, model) = loglikelihood(x, data, model)[1]
+lossfn(x, data, model) = loglikelihood(x, data, model)[1]
 
 """
 burstsize(fit,model::AbstractGMmodel)
