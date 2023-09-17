@@ -34,7 +34,7 @@ end
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam;  propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); 3; 3; 3; 3],fixedeffects=tuple(), onstates::Vector=[G])
+function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfnc=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); fill(2, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
     d = trace_prior(priormean, priorcv, fittedparam, priorprob)
     method = 1
     if S > 0
@@ -43,7 +43,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
     components = make_components_T(transitions, G, R, S, insertstep, "")
     # println(reporters)
     if R > 0
-        reporters = ReporterComponents(noiseparams,num_reporters_per_state(G, R, S, insertstep),probfnc)
+        reporters = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfnc, weightind)
         if isempty(fixedeffects)
             return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporters)
         else

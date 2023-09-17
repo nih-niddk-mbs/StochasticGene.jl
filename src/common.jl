@@ -200,7 +200,7 @@ struct ReporterComponents
     n::Int
     per_state::Vector{Int}
     probfnc::Function
-    weightind::Vector{Int}
+    weightind::Int
 end
 
 
@@ -313,26 +313,7 @@ function likelihoodfn(param, data::AbstractHistogramArrayData, model::AbstractGm
     make_array(h)
 end
 
-"""
-likelihoodarray(r,data,model)
 
-Compute likelihoods for multiple distributions
-
-r = full rate vector including yield if it exists
-data = data structure
-model = model structure
-
-For time dependent model likelihoods
-first set of parameters gives the initial histogram
-2nd set gives the new parameters at subsequent times
-data.histRNA holds array of histograms for time points given by data.time
-transient computes the time evolution of the histogram
-model.method=1 specifies finite difference solution using DifferentialEquations.jl otherwise use eigendecomposition solution,
-"""
-# function likelihoodarray(r,data::TransientRNAData,model::AbstractGMmodel)
-#     h=likelihoodarray(r,data,model,maximum(data.nRNA))
-#     trim_hist(h,data.nRNA)
-# end
 """
     likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
 
@@ -410,7 +391,19 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = [log.(r[1:model.reporter.weightindex-1]); logit(r[model.reporter.weight:end])]
+transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = [log.(r[1:model.reporter.weightindex-1]); logit(r[model.reporter.weightindex:end])]
+"""
+inverse_transform_rates(x,model::AbstractGmodel)
+
+inverse transform MH parameters on real domain back to rate domain
+
+"""
+inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
+
+function inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents})
+    n = num_rates(model)
+    [exp.(p[1:n + model.reporter.weightindex-1]); invlogit(p[n + model.reporter.weightindex:end])]
+end
 
 """
 get_param(model)
@@ -424,29 +417,6 @@ get_param(model::AbstractGRSMmodel) = transform_rates(model.rates, model)[model.
 get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
 
 get_param(r, model::AbstractGRSMmodel) = transform_rates(r, model)[model.fittedparam]
-
-"""
-inverse_transform_rates(x,model::AbstractGmodel)
-
-inverse transform MH parameters on real domain back to rate domain
-
-"""
-function inverse_transform_rates(p, model::AbstractGmodel, inverse=true)
-    if inverse
-        return exp.(p)
-    else
-        return p
-    end
-end
-
-function inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
-    if inverse
-        return [exp.(p[1:model.reporter.weightindex-1]); inlogit(p)]
-    else
-        return p
-    end
-end
-
 
 
 """
@@ -464,29 +434,17 @@ function get_rates(param, model::AbstractGmodel, inverse=true)
 end
 
 
-
-
-# function get_rates(param,model::GRSMmodel)
-#     r = get_r(model)
-#     r[model.fittedparam] = inverse_transform_rates(param,model)
-#     # setr(r,model)
-#     return r
-# end
-# get_rates(param,model::GMtransientmodel) = inverse_transform_rates(param[1:2*model.G],model)
-# function get_rates(param,model::GMrescaledmodel)
-#     param = inverse_transform_rates(param,model)
-#     r = get_r(model)
-#     n = get_n(model)
-#     nu = n in model.fittedparam ? param[findfirst(model.fittedparam .== n)] : r[n]
-#     r[1:n-1] /= r[n]
-#     r[model.fittedparam] = param
-#     r[1:n-1] *= nu
-#     if r[2*model.G + 3] > 1
-#         r[2*model.G + 3] = 1
-#     end
-#     return r
-# end
-
+function get_rates(param, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
+    if inverse
+        p = transform_rates(model.rates,model)
+        p[model.fittedparam] = param
+        r = inverse_transform_rates(p,model)
+    else
+        r = copy_r(model)
+        r[model.fittedparam] = param
+    end
+    return r
+end
 
 get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param, model, inverse)
 
@@ -496,14 +454,19 @@ get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param
 TBW
 """
 function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
-    r = copy_r(model)
-    r[model.fittedparam] = inverse_transform_rates(param, model, inverse)
+    r = get_rates(param,model,inverse)
     for effect in model.fixedeffects
         r[effect[2:end]] .= r[effect[1]]
     end
     return r
 end
 
+
+"""
+    copy_r(model)
+
+copy rates from model structure
+"""
 copy_r(model) = copy(model.rates)
 
 """
@@ -547,6 +510,8 @@ function num_rates(transitions, R, S, insertstep)
     end
 end
 
+num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions,model.R,model.S,model.insertstep)
+
 function num_rates(model::String)
     m = digits(parse(Int, model))
     if length(m) == 1
@@ -555,50 +520,3 @@ function num_rates(model::String)
         return 2 * (m[4] - 1) + m[3] + m[2] - m[1] + 2
     end
 end
-
-# function get_eta(r,n,nr)
-#     eta = zeros(nr)
-#     if length(r) > 2*n + 2*nr
-#         eta[1] = r[2*n + 1 + nr + 1]
-#         for i = 2:nr
-#             eta[i] = eta[i-1] + r[2*n + 1 + nr + i]
-#         end
-#     end
-#     return eta
-# end
-
-
-# """
-# logprior(param,model::GRSModel)
-# Compute log prior using distributions in Model.rateprior
-# called by mhstep() in metropolis_hastings.jl
-# """
-# function logprior(param,model::GRSMmodel)
-#     r = get_rates(param,model)
-#     d = model.rateprior
-#     G = model.G
-#     R = model.R
-#     p=0
-#     j = 1
-#     #  G rates
-#     for i in Grange(G)
-#         p -= logpdf(d[j],r[i])
-#         j += 1
-#     end
-#     # initiation rate
-#     i = initiation(G)
-#     p -= logpdf(d[j],r[i])
-#     j += 1
-#     # sum of R Step rates are bounded by length of insertion site to end of gene, i.e sum of reciprocal rates is bounded
-#     t = sum(1 ./ r[Rrange(G,R)])
-#     p -= logpdf(d[j],1/t)
-#     j += 1
-#     # priors for splice rates
-#     rs = 0
-#     for i in Srange(G,R)
-#         rs = r[i]
-#         p -= logpdf(d[j],rs)
-#         j += 1
-#     end
-#     return p
-# end
