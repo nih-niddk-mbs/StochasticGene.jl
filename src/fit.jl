@@ -106,7 +106,7 @@ function fit(nchains, data, model, options, temp, resultfolder, burst, optimize,
     end
     finalize(data, model, fit, stats, measures, temp, resultfolder, optimized, bs, writesamples, root)
     println(now())
-    get_rates(transform_rates(stats.medparam, model), model)
+    get_rates(stats.medparam, model, false)
 end
 
 """

@@ -267,7 +267,7 @@ returns lppd and pwaic, which are the running sum and variance of -logprediction
 (- sign needed because logpredictions is negative loglikelihood)
 """
 function update_waic(lppd, pwaic, logpredictions)
-    lppd = logsumexp.(lppd, -logpredictions)
+    lppd = logsumexp(lppd, -logpredictions)
     lppd, var_update(pwaic, -logpredictions)
 end
 """

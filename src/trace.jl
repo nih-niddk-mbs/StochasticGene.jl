@@ -34,8 +34,8 @@ end
 
 TBW
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(0.1, num_rates(transitions, R, S, insertstep)); 50; 50; 100; 50;.9], priorcv=[fill(100, num_rates(transitions, R, S, insertstep)); fill(2, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
-    d = trace_prior(priormean, priorcv, fittedparam, priorprob)
+function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=7, probfn=prob_GaussianMixture, weightind=7, propcv=0.05, priorprob=Normal, priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); 100; 100; 100; 100;100;100;.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
+    d = trace_prior(priormean, priorcv, fittedparam, num_rates(transitions, R, S, insertstep)+weightind, priorprob)
     method = 1
     if S > 0
         S = R
@@ -43,7 +43,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
     components = make_components_T(transitions, G, R, S, insertstep, "")
     # println(reporters)
     if R > 0
-        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions,R,S,insertstep) + weightind)
         if isempty(fixedeffects)
             return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporter)
         else
@@ -70,11 +70,13 @@ end
 
 TBW
 """
-function trace_prior(r, rcv, fittedparam, f=Normal)
+function trace_prior(r, rcv, fittedparam, ind, f=Normal)
     if typeof(rcv) <: Real
         rcv = rcv * ones(length(r))
     end
-    distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), f)
+    distribution_array([logv(r[1:ind-1]);logit(r[ind:end])][fittedparam]  , sigmalognormal(rcv[fittedparam]), f)
+    # distribution_array(transform_array(r,ind,fittedparam,logv,logit) , sigmalognormal(rcv[fittedparam]), f)
+    # distribution_array(mulognormal(r[fittedparam],rcv[fittedparam]), sigmalognormal(rcv[fittedparam]), f)
 end
 
 """

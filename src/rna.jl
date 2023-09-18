@@ -77,7 +77,7 @@ function fit_rna(nchains::Int, data::AbstractRNAData, gene::String, cell::String
     end
     finalize(data, model, fits, stats, measures, temp, resultfolder, optimized, burstsize(fits, model), root)
     println(now())
-    get_rates(transform_rates(stats.medparam, model), model)
+    get_rates(stats.medparam, model, false)
 end
 
 

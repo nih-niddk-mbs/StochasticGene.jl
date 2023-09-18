@@ -17,7 +17,7 @@ function ll_hmm(r, nT, elementsT, noiseparams, reporters_per_state, probfn, inte
     for t in trace
         T = length(t)
         loga, logp0 = make_logap(r, interval, elementsT, nT)
-        logb = set_logb(t, nT, r[end-noiseparams:end], reporters_per_state, probfn)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -77,7 +77,7 @@ function set_logb(trace, N, params, reporters, probfn=prob_Gaussian)
     return logb
 end
 
-function set_logb_nonoise(trace, N, onstates)
+function set_logb_discrete(trace, N, onstates)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
@@ -115,7 +115,7 @@ TBW
 function prob_GaussianMixture(par, reporters, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (2 * par[1], 2 * par[2])], [par[5], 1-par[5]])
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (par[5], par[6])], [par[7], 1-par[7]])
     end
     d
 end
@@ -416,21 +416,21 @@ TBW
 function predicted_trace(r, data::AbstractTraceData, model)
     tsim = Vector{Int}[]
     for t in data.trace
-        push!(tsim, predicted_trace(r, model.components.nT, model.reporter, model.components.elementsT, data.interval, t))
+        push!(tsim, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
     end
     tsim
 end
 
 function predicted_trace(r, trace::Vector, model)
-    predicted_trace(r, model.components.nT, model.reporter, model.components.elementsT, data.interval, trace)
+    predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, trace)
 end
 """
     predicted_trace(r, nT, reporters, elementsT, interval, trace)
 
 TBW
 """
-function predicted_trace(r, N, reporters, elementsT, interval, trace)
+function predicted_trace(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb(trace, N, r[end-3:end], reporters, prob_GaussianMixture)
+    logb = set_logb(trace, N, r[end-noiseparams+1:end], reporters_per_state, probfn)
     viterbi(loga, logb, logp0, N, length(trace))
 end

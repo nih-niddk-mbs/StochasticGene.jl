@@ -314,8 +314,9 @@ end
 sigmalognormal(cv)
 mulognormal(mean,cv)
 
-compute LogNormal mu and sigma parameters
-given desired mean and coefficient of variation
+compute LogNormal mu and sigma parameters, 
+i.e. mean and sigma of exp(N(mu,sigma))
+given desired mean and coefficient of variation (cv)
 """
 sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
@@ -569,12 +570,23 @@ function make_histogram(r)
     h
 end
 
+
+"""
+    expv(v::Array)
+
+exponential of array
+"""
+expv(v::Array) = exp.(v)
+
+
+logv(v::Array) = log.(v)
+
 """
     logit(x::Float64)
 
 logit transform
 """
-logit(x::Float64) = log(x) - log(1-x)
+logit(x::Float64) = log(x) - log(1 - x)
 logit(x::Array) = log.(x) .- log.(1 .- x)
 
 """
@@ -582,7 +594,7 @@ logit(x::Array) = log.(x) .- log.(1 .- x)
 
 inverse logit transform
 """
-invlogit(x::Float64) = 1/(1+exp(-x))
+invlogit(x::Float64) = 1 / (1 + exp(-x))
 invlogit(x::Array) = 1 ./ (1 .+ exp.(-x))
 """
 logsumexp(u,v)
@@ -595,7 +607,7 @@ function logsumexp(u::Array, v::Array)
     if w == -Inf
         return -Inf
     else
-        return w + log.(exp.(u - w) + exp.(v - w))
+        return w .+ log.(exp.(u - w) + exp.(v - w))
     end
 end
 
@@ -614,12 +626,12 @@ logsumexp(v)
 returns log of the sum of exponentials of elements of v
 
 """
-function logsumexp(v)
+function logsumexp(v::Array)
     w = maximum(v)
     if w == -Inf
         return -Inf
     else
-        return w + log(sum(exp.(v .- w)))
+        return w .+ log(sum(exp.(v .- w)))
     end
 end
 

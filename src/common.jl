@@ -385,17 +385,47 @@ function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
 end
 
 """
+    transform_array(v::Array, index::Int, f1::Function, f2::Function)
+
+transform an array using function f1 for indices up to index (after applying a mask) and f2 after index
+"""
+function transform_array(v::Array, index::Int, f1::Function, f2::Function)
+    vcat(f1(v[1:index-1, :]), f2(v[index:end, :]))
+end
+
+"""
+    transform_array(v::Array, index, mask, f1, f2)
+
+transform an array using function f1 for indices up to index accounting for a mask and f2 after
+"""
+function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::Function)
+    if index ∈ mask
+        n = findfirst(index .== mask)
+        if typeof(v)<: Vector
+            return vcat(f1(v[1:n-1]), f2(v[n:end]))
+        else
+            return vcat(f1(v[1:n-1, :]), f2(v[n:end, :]))
+        end
+    else
+        return f1(v)
+    end
+end
+
+
+
+"""
 transform_rates(r,model::AbstractGmodel)
 
 log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-function transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) 
-    n = num_rates(model)
-    [log.(r[1:n + model.reporter.weightind-1]); logit(r[n + model.reporter.weightind:end])]
-end
+# function transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) 
+#     n = num_rates(model)
+#     [log.(r[1:n + model.reporter.weightind-1]); logit(r[n + model.reporter.weightind:end])]
+# end
 
+transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
 """
@@ -406,23 +436,45 @@ inverse transform MH parameters on real domain back to rate domain
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-function inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents})
-    n = num_rates(model)
-    [exp.(p[1:n + model.reporter.weightind-1]); invlogit(p[n + model.reporter.weightind:end])]
-end
+inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+
+
+# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{ReporterComponents})
+#     n = num_rates(model)
+#     vcat(exp.(p[1:n + model.reporter.weightind-1]), invlogit(p[n + model.reporter.weightind:end]))
+# end
+# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{ReporterComponents})
+#     wind = num_rates(model) + model.reporter.weightind
+#     if wind ∈ model.fittedparam
+#         n = findfirst(wind .== model.fittedparam)
+#         return vcat(exp.(p[1:n-1]), invlogit(p[n:end]))
+#     else
+#        return exp.(p)
+#     end
+# end
+
+# function inverse_transform_rates(p::Matrix, model::AbstractGRSMmodel{ReporterComponents})
+#     wind = num_rates(model) + model.reporter.weightind
+#     if wind ∈ model.fittedparam
+#         n = findfirst(wind .== model.fittedparam)
+#         return vcat(exp.(p[1:n-1,:]), invlogit(p[n:end,:]))
+#     else
+#        return exp.(p)
+#     end
+# end
 
 """
 get_param(model)
 
 get fitted parameters from model
 """
-get_param(model::AbstractGmodel) = transform_rates(model.rates[model.fittedparam], model)
+get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
-get_param(model::AbstractGRSMmodel) = transform_rates(model.rates, model)[model.fittedparam]
+get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
+# get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
 
-get_param(r, model::AbstractGRSMmodel) = transform_rates(r, model)[model.fittedparam]
+# get_param(r, model::AbstractGRSMmodel) = transform_rates(r, model)[model.fittedparam]
 
 
 """
@@ -440,17 +492,17 @@ function get_rates(param, model::AbstractGmodel, inverse=true)
 end
 
 
-function get_rates(param, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
-    if inverse
-        p = transform_rates(model.rates,model)
-        p[model.fittedparam] = param
-        r = inverse_transform_rates(p,model)
-    else
-        r = copy_r(model)
-        r[model.fittedparam] = param
-    end
-    return r
-end
+# function get_rates(param, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
+#     if inverse
+#         p = transform_rates(model.rates,model)
+#         p[model.fittedparam] = param
+#         r = inverse_transform_rates(p,model)
+#     else
+#         r = copy_r(model)
+#         r[model.fittedparam] = param
+#     end
+#     return r
+# end
 
 get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param, model, inverse)
 
@@ -460,7 +512,7 @@ get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param
 TBW
 """
 function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
-    r = get_rates(param,model,inverse)
+    r = get_rates(param, model, inverse)
     for effect in model.fixedeffects
         r[effect[2:end]] .= r[effect[1]]
     end
@@ -516,7 +568,7 @@ function num_rates(transitions, R, S, insertstep)
     end
 end
 
-num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions,model.R,model.S,model.insertstep)
+num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
 function num_rates(model::String)
     m = digits(parse(Int, model))
