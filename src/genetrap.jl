@@ -12,6 +12,12 @@ genelength_gt() = Dict([("Sec16A", 42960); ("SLC2A1", 33802); ("ERRFI1", 14615);
 MS2end_gt() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("RHOA", 51109); ("KPNB1", 24000); ("MYH9", 71998); ("DNAJC5", 14857); ("CANX", 4861); ("Rab7a", 83257); ("RPAP3", 38610)])
 halflife_gt() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0)])
 
+function insert_site_gt(R)
+    for g in genes_gt()
+        println(g, ": ", ceil(MS2end_gt()[g] / genelength_gt()[g] * R))
+    end
+end
+
 
 """
     fit_genetrap()
@@ -53,7 +59,7 @@ function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int
     genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R,S,insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
     data = tempfish < 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish)
     model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
     return data, model

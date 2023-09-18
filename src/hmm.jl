@@ -12,11 +12,23 @@
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_hmm(r, nT, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    loga, logp0 = make_logap(r, interval, elementsT, nT)
+    ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, loga, logp0)
+    # logpredictions = Array{Float64}(undef, 0)
+    # for t in trace
+    #     T = length(t)
+    #     logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+    #     l = forward_log(loga, logb, logp0, nT, T)
+    #     push!(logpredictions, logsumexp(l[:, T]))
+    # end
+    # -sum(logpredictions), -logpredictions
+end
+
+function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace
         T = length(t)
-        loga, logp0 = make_logap(r, interval, elementsT, nT)
         logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
@@ -112,10 +124,18 @@ end
 
 TBW
 """
+function prob_GaussianMixture_6(par, reporters, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+    end
+    d
+end
+
 function prob_GaussianMixture(par, reporters, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (par[5], par[6])], [par[7], 1-par[7]])
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (2 * par[1], 2 * par[2])], [par[5], 1 - par[5]])
     end
     d
 end
@@ -401,6 +421,11 @@ function viterbi(loga, logb, logp0, N, T)
 end
 
 
+"""
+    viterbi_exp(a, b, p0, N, T)
+
+TBW
+"""
 function viterbi_exp(a, b, p0, N, T)
     loga = log.(a)
     logb = log.(b)
