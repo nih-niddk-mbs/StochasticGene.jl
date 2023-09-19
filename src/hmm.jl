@@ -15,14 +15,6 @@ return total loglikelihood of traces with reporter noise and loglikelihood of ea
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, nT)
     ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, loga, logp0)
-    # logpredictions = Array{Float64}(undef, 0)
-    # for t in trace
-    #     T = length(t)
-    #     logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
-    #     l = forward_log(loga, logb, logp0, nT, T)
-    #     push!(logpredictions, logsumexp(l[:, T]))
-    # end
-    # -sum(logpredictions), -logpredictions
 end
 
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
@@ -34,6 +26,15 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
         push!(logpredictions, logsumexp(l[:, T]))
     end
     -sum(logpredictions), -logpredictions
+end
+
+function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
+    a, p0 = make_ap(r, interval, elementsT, N)
+    ll, lpred = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a,0)), log.(p0))
+    lln = -length(trace)*length(trace[1]) * sum(p0[reporters_per_state .> 0]) * log(nascent)
+    push!(logpredictions, lln)
+    ll += lln
+    ll, logpredictions
 end
 
 """
@@ -434,28 +435,43 @@ function viterbi_exp(a, b, p0, N, T)
 end
 
 """
-    predicted_trace(r, data,model)
+    predicted_states(r, data::AbstractTraceData, model)
 
 TBW
 """
-function predicted_trace(r, data::AbstractTraceData, model)
-    tsim = Vector{Int}[]
+function predicted_states(r, data::AbstractTraceData, model)
+    ts = Vector{Int}[]
     for t in data.trace
-        push!(tsim, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
+        # push!(tp, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
+        push!(ts,predicted_states(r,t,model))
     end
-    tsim
+    ts
 end
 
-function predicted_trace(r, trace::Vector, model)
-    predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, trace)
-end
 """
-    predicted_trace(r, nT, reporters, elementsT, interval, trace)
+    predicted_states(r, trace::Vector, model)
 
 TBW
 """
-function predicted_trace(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+function predicted_states(r, trace::Vector, model)
+    predicted_states(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, trace)
+end
+"""
+    predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
+function predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
     logb = set_logb(trace, N, r[end-noiseparams+1:end], reporters_per_state, probfn)
     viterbi(loga, logb, logp0, N, length(trace))
+end
+
+function predicted_trace(ts,model)
+    tp = Vector{Float64}[]
+    for t in ts
+        prob_GaussianMixture(par, reporters, N)
+        push!(tp,[ probfn(τ) for τ in t])
+    end
+    tp
 end

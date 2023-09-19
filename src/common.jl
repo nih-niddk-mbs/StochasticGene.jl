@@ -100,6 +100,14 @@ struct TraceRNAData{hType} <: AbstractTraceHistogramData
     histRNA::hType
 end
 
+struct TraceNascentData{hType} <: AbstractTraceData
+    name::String
+    gene::String
+    interval::Float64
+    trace::Vector
+    RNA::hType
+end
+
 """
     Abstract model types
 """
