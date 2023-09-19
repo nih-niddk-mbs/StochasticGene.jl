@@ -439,11 +439,11 @@ end
 
 TBW
 """
-function predicted_states(r, data::AbstractTraceData, model)
+function predicted_states(data::AbstractTraceData, model::AbstractGmodel)
     ts = Vector{Int}[]
     for t in data.trace
         # push!(tp, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
-        push!(ts,predicted_states(r,t,model))
+        push!(ts,predicted_states(model.rates,t,data.interval, model))
     end
     ts
 end
@@ -453,25 +453,39 @@ end
 
 TBW
 """
-function predicted_states(r, trace::Vector, model)
-    predicted_states(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, trace)
+function predicted_states(trace::Vector, interval::Float64, model::AbstractGmodel)
+    predicted_states(model.rates, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, interval, trace)
 end
 """
     predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
 
 TBW
 """
-function predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+function predicted_states(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, N)
     logb = set_logb(trace, N, r[end-noiseparams+1:end], reporters_per_state, probfn)
     viterbi(loga, logb, logp0, N, length(trace))
 end
 
-function predicted_trace(ts,model)
+"""
+    predicted_trace(ts,model)
+
+TBW
+"""
+function predicted_trace(ts::Vector,model)
     tp = Vector{Float64}[]
+    d=model.reporter.probfn(model.rates[end-model.reporter.n+1:end],model.reporter.per_state,model.components.nT)
     for t in ts
-        prob_GaussianMixture(par, reporters, N)
-        push!(tp,[ probfn(τ) for τ in t])
+        push!(tp,[ mean(d[state]) for state in t])
     end
-    tp
+    tp, ts
+end
+
+"""
+    predicted_trace(r,data,model)
+
+TBW
+"""
+function predicted_trace(data::AbstractTraceData,model)
+    predicted_trace( predicted_states(r,data,model),model)
 end

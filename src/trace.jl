@@ -35,6 +35,9 @@ end
 TBW
 """
 function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); fill(100,noiseparams-1);.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
+    if length(r) != num_rates(transitions,R,S,insertstep) + noiseparams
+        throw("rate wrong length")
+    end
     d = trace_prior(priormean, priorcv, fittedparam, num_rates(transitions, R, S, insertstep)+weightind, priorprob)
     method = 1
     if S > 0
