@@ -55,7 +55,7 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     if datatype == "genetrap"
-        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, resultfolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
+        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
     elseif datatype == "scRNA" || datatype == "fish"
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)

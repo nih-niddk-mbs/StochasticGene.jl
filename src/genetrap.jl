@@ -52,30 +52,36 @@ Load data, model and option structures for metropolis-hastings fit
 root is the folder containing data and results
 
 FISH counts is divided by tempfish to adjust relative weights of data
-set tempfish = 0 to equalize FISH and live cell counts, tempfish < 0 for FISH alone
+set tempfish = 0 to equalize FISH and live cell counts, 
 """
-function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates,tracedata)
+function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates, tracedata)
     r = readrates_genetrap(infolder, rtype, gene, label, G, R, S, insertstep, nalleles, rnatype)
-    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates,tracedata)
+    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates, tracedata)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[])
-    data = tempfish < 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish)
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[], tracedata="")
+    data = R == 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish, tracedata)
     model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
     return data, model
 end
 
-function data_genetrap(root, label, gene, tempfish=1.0)
-    LC = readLCPDF_genetrap(root, gene)
-    if tempfish == 0
-        counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
-        println(counts)
-        # set FISH counts to mean of live cell counts
-        histFISH = readFISH_genetrap(root, gene, counts)
-    else
+function data_genetrap(root, label, gene, tempfish, tracefolder)
+    if ~isempty(tracefolder)
+        traces = read_tracefiles(tracefolder,label,',')
         histFISH = readFISH_genetrap(root, gene, tempfish)
+        return TraceRNAData("traceRNA", "test", interval, traces, length(histFISH),histFISH)  
+    else
+        LC = readLCPDF_genetrap(root, gene)
+        if tempfish == 0
+            counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
+            println(counts)
+            # set FISH counts to mean of live cell counts
+            histFISH = readFISH_genetrap(root, gene, counts)
+        else
+            histFISH = readFISH_genetrap(root, gene, tempfish)
+        end
+        return RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
     end
-    RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
 end
 
 function data_genetrap_FISH(root, label, gene)
