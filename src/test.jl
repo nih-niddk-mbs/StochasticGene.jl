@@ -118,26 +118,25 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
     return stats.medparam, fits.llml, model
 end
 
-
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0)
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0,rnatype="")
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     data = RNALiveCellData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = model_genetrap("", rinit, transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, rnatype)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nworkers())
+    model = model_genetrap("", get_rates(fits.parml,model), transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, rnatype)
     fits, stats, measures, data, model, options
 end
-
 
 function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.0, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4], propcv=0.01, cv=100.0, interval=1.0)
     traces = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     data = trace_data(traces, interval)
-    model = trace_model(rinit, transitions, G, R, S, fittedparam)
+    model = trace_model(rinit, transitions, G, R, S, insertstep, fittedparam)
     options = trace_options(samplesteps=nsamples)
     fits, stats, measures = run_mh(data, model, options, nworkers())
+    model = trace_model(get_rates(fits.parml,model), transitions, G, R, S, insertstep, fittedparam)
     fits, stats, measures, data, model, options
 end
-
 
 function test_init(r, transitions, G, R, S, insertstep)
     onstates = on_states(G, R, S, insertstep)
@@ -155,7 +154,6 @@ function test_init(r, transitions, G, R, S, insertstep)
 
     return SIinit, SAinit, onstates, components.tcomponents, pss, nonzeros, T, TA, TI[nonzeros, nonzeros]
 end
-
 
 function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, nhist::Int, fittedparam, onstates, propcv, cv)
     ntransitions = length(transitions)

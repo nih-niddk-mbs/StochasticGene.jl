@@ -25,8 +25,12 @@ simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onsta
 
 TBW
 """
-function trace_data(trace, interval)
-    TraceData("trace", "test", interval, trace)
+function trace_data(trace, interval,nascent = 0.)
+    if nascent > 0
+        return TraceNascentData("trace", "test", interval, trace, nascent)
+    else
+        return TraceData("trace", "test", interval, trace)     
+    end
 end
 
 """

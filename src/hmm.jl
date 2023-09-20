@@ -29,12 +29,17 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
 end
 
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
-    a, p0 = make_ap(r, interval, elementsT, N)
-    ll, lpred = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a,0)), log.(p0))
-    lln = -length(trace)*length(trace[1]) * sum(p0[reporters_per_state .> 0]) * log(nascent)
+    a, p0 = make_ap(r, interval, elementsT, nT)
+    lln = ll_nascent(length(trace)*length(trace[1]), p0, reporters_per_state,nascent)
+    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a,0)), log.(p0))
     push!(logpredictions, lln)
     ll += lln
     ll, logpredictions
+end
+
+function ll_nascent(β,p0,reporters_per_state,nascent)
+    pn = sum(p0[reporters_per_state .> 0])
+    -β *(nascent  * log(pn) + (1. - nascent) * log(1 - pn))
 end
 
 """
@@ -123,7 +128,22 @@ end
 """
     prob_GaussianMixture(par,reporters,N)
 
-TBW
+return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight parameter
+
+"""
+function prob_GaussianMixture(par, reporters, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (2 * par[1], 2 * par[2])], [par[5], 1 - par[5]])
+    end
+    d
+end
+
+
+"""
+    prob_GaussianMixture_6(par, reporters, N)
+
+Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
 """
 function prob_GaussianMixture_6(par, reporters, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -133,13 +153,6 @@ function prob_GaussianMixture_6(par, reporters, N)
     d
 end
 
-function prob_GaussianMixture(par, reporters, N)
-    d = Array{Distribution{Univariate,Continuous}}(undef, N)
-    for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (2 * par[1], 2 * par[2])], [par[5], 1 - par[5]])
-    end
-    d
-end
 
 """
 kolmogorov_forward(Q::Matrix,interval)
@@ -443,7 +456,7 @@ function predicted_states(data::AbstractTraceData, model::AbstractGmodel)
     ts = Vector{Int}[]
     for t in data.trace
         # push!(tp, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
-        push!(ts,predicted_states(model.rates,t,data.interval, model))
+        push!(ts,predicted_states(t,data.interval, model))
     end
     ts
 end
@@ -487,5 +500,5 @@ end
 TBW
 """
 function predicted_trace(data::AbstractTraceData,model)
-    predicted_trace( predicted_states(r,data,model),model)
+    predicted_trace( predicted_states(data,model),model)
 end
