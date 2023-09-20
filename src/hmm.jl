@@ -62,6 +62,8 @@ function make_ap(r, interval, elementsT, N)
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
 end
+
+make_p0(r,elementsT,N) = normalized_nullspace(make_mat(elementsT, r, N))
 """
     make_logap(r, transitions, interval, G)
 

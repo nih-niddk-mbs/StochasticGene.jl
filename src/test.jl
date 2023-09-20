@@ -82,11 +82,11 @@ options = test_options(1000);
 
 function test(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total=100000000, tol=1e-6)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
-    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
+    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, insertstep, nalleles, nhist, bins, onstates)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
+function test_chem(r, transitions, G, R, S, insertstep, nalleles, nhist, bins, onstates)
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     end
@@ -96,15 +96,20 @@ function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstate
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
     histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-    pss = normalized_nullspace(T)
-    nonzeros = nonzero_rows(TI)
-    base = S > 0 ? 3 : 2
-    nT = G * base^R
-    SAinit = init_SA(r, onstates, components.tcomponents.elementsT, pss)
-    SIinit = init_SI(r, onstates, components.tcomponents.elementsT, pss, nonzeros)
-    offstates = off_states(nT, onstates)
-    modelON = ontimePDF(bins, TA, offstates, SAinit)
-    modelOFF = offtimePDF(bins, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), SIinit)
+    # pss = normalized_nullspace(T)
+    # nonzeros = nonzero_rows(TI)
+    # base = S > 0 ? 3 : 2
+    # nT = G * base^R
+    # SAinit = init_SA(r, onstates, components.tcomponents.elementsT, pss)
+    # SIinit = init_SI(r, onstates, components.tcomponents.elementsT, pss, nonzeros)
+    # offstates = off_states(nT, onstates)
+    # modelON = ontimePDF(bins, TA, offstates, SAinit)
+    # modelOFF = offtimePDF(bins, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), SIinit)
+
+
+    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
+    modelOFF, modelON = offonPDF(bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
+ 
     modelOFF, modelON, histF
 end
 
