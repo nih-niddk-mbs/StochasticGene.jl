@@ -16,14 +16,14 @@ end
 """
     simulate_trace(r,transitions,G,R,interval,totaltime,onstates=[G])
 
-TBW
+simulate a trace
 """
 simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r[1:end-4], transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)
 
-TBW
+set trace data
 """
 function trace_data(trace, interval,nascent = 0.)
     if nascent > 0
@@ -36,7 +36,7 @@ end
 """
     trace_model(r::Vector, transitions::Tuple, G, R, fittedparam; onstates=[G], propcv=0.05, f=Normal, cv=1.)
 
-TBW
+set models
 """
 function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); fill(100,noiseparams-1);.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G])
     if length(r) != num_rates(transitions,R,S,insertstep) + noiseparams
@@ -64,7 +64,7 @@ end
 """
     trace_options(samplesteps::Int=100000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=100.0)
 
-TBW
+set options
 """
 function trace_options(; samplesteps::Int=1000, warmupsteps=0, annealsteps=0, maxtime=1000.0, temp=1.0, tempanneal=1.0)
 
@@ -75,7 +75,7 @@ end
 """
     trace_prior(r,fittedparam,f=Normal)
 
-TBW
+return prior distribution
 """
 function trace_prior(r, rcv, fittedparam, ind, f=Normal)
     if typeof(rcv) <: Real
@@ -89,7 +89,7 @@ end
 """
     read_tracefiles(path::String,cond::String,col=3)
 
-TBW
+read tracefiles
 """
 function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
     readfn = delim == ',' ? read_tracefile_csv : read_tracefile
@@ -113,7 +113,7 @@ end
 """
     read_tracefile(target::String,col=3)
 
-TBW
+read single trace file
 """
 read_tracefile(target::String, col=3) = readdlm(target)[:, col]
 

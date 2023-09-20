@@ -247,11 +247,7 @@ function finalize(data, model, fit, stats, measures, temp, resultfolder, optimiz
     end
 end
 
-function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
-    model = R == 0 ? "$G" : "$G$R$S$insertstep"
-    file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$rnatype" * ".txt"
-    joinpath(infolder, file)
-end
+
 
 """
 getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)

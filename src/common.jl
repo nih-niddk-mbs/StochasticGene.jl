@@ -19,13 +19,6 @@ abstract type AbstractSampleData <: AbstractExperimentalData end
 abstract type for data in the form of a histogram (probability distribution)
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
-
-"""
-  AbstractRNAData{hType}
-
-abstract type for steady state RNA histogram data
-"""
-abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 """
     AbstractTraceData
     
@@ -33,15 +26,27 @@ abstract type for intensity time series data
 """
 abstract type AbstractTraceData <: AbstractExperimentalData end
 
+"""
+  AbstractRNAData{hType}
 
+abstract type for steady state RNA histogram data
+"""
+abstract type AbstractRNAData{hType} <: AbstractHistogramData end
+
+
+"""
+    AbstractTraceHistogramData
+    
+abstract type for intensity time series data with RNA histogram data
+"""
 abstract type AbstractTraceHistogramData <: AbstractHistogramData end
 
 # Data structures 
+#
+# Do not use underscore "_" in name
 
 """
     Data structures
-
-Do not use underscore "_" in name
 
 arguments:
 name: label for the data set
@@ -97,6 +102,8 @@ struct TraceRNAData{hType} <: AbstractTraceHistogramData
     nRNA::Int
     histRNA::hType
 end
+
+# Model structures
 
 """
     Abstract model types
@@ -267,7 +274,6 @@ end
     loglikelihood(param,data::AbstractTraceData,model::GMmodel)
 
 negative loglikelihood of combined time series traces and each trace
-
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -275,7 +281,7 @@ end
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
 
-neg loglikelihood of trace data with nascent RNA FISH active fraction (stored in data.histRNA field)
+negative loglikelihood of trace data with nascent RNA FISH active fraction (stored in data.histRNA field)
 """
 function loglikelihood(param, data::TraceNascentData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace, data.nascent)
@@ -285,7 +291,6 @@ end
 loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmodel)
 
 negative loglikelihood of time series traces and mRNA FISH steady state histogram
-
 """
 function loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmodel)
     r = get_rates(param, model)
@@ -301,7 +306,7 @@ end
 """
     likelihoodfn(param,data::RNAData,model::AbstractGMmodel)
 
-likelihoodfn for single RNA histogram
+likelihood for single RNA histogram
 """
 function likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
     r = get_rates(param, model)
@@ -322,7 +327,7 @@ end
 """
     likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
 
-
+likelihood for multiple histograms, returns an array of pdfs
 """
 function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
     h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
@@ -375,7 +380,7 @@ Under construction
 """
     likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
 
-TBW
+likelihood of an array of dwell time histograms
 """
 function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     r = copy(rin)
@@ -397,7 +402,7 @@ end
 """
     transform_array(v::Array, index::Int, f1::Function, f2::Function)
 
-transform an array using function f1 for indices up to index (after applying a mask) and f2 after index
+apply function f1 to actionrray v at indices up to index and f2 after index
 """
 function transform_array(v::Array, index::Int, f1::Function, f2::Function)
     vcat(f1(v[1:index-1, :]), f2(v[index:end, :]))
@@ -406,7 +411,7 @@ end
 """
     transform_array(v::Array, index, mask, f1, f2)
 
-transform an array using function f1 for indices up to index accounting for a mask and f2 after
+apply function f1 to array v at indices up to index and f2 after index accounting for application of mask (which changes indexing)
 """
 function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::Function)
     if index ∈ mask
@@ -424,7 +429,7 @@ end
 
 
 """
-transform_rates(r,model::AbstractGmodel)
+    transform_rates(r,model::AbstractGmodel)
 
 log transform rates to real domain
 """
@@ -439,7 +444,7 @@ transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = transform_arr
 
 
 """
-inverse_transform_rates(x,model::AbstractGmodel)
+    inverse_transform_rates(x,model::AbstractGmodel)
 
 inverse transform MH parameters on real domain back to rate domain
 
@@ -474,7 +479,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}) = trans
 # end
 
 """
-get_param(model)
+    get_param(model)
 
 get fitted parameters from model
 """
@@ -488,7 +493,8 @@ get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedpa
 
 
 """
-get_rates(param,model)
+    get_rates(param,model)
+
 replace fitted rates with new values and return
 """
 function get_rates(param, model::AbstractGmodel, inverse=true)
@@ -519,7 +525,7 @@ get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param
 """
     fixed_rates(param,model,inverse)
 
-TBW
+apply fixed effects on rates
 """
 function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
     r = get_rates(param, model, inverse)
@@ -549,7 +555,7 @@ function setr(r, model::AbstractGRSMmodel)
     r
 end
 """
-logprior(param,model::AbstractGMmodel)
+    logprior(param,model::AbstractGMmodel)
 
 compute log of the prior
 """
@@ -562,6 +568,11 @@ function logprior(param, model::AbstractGmodel)
     return p
 end
 
+"""
+    num_rates(transitions, R, S, insertstep)
+
+compute number of transition rates 
+"""
 function num_rates(transitions, R, S, insertstep)
     if R > 0
         if insertstep > R
@@ -580,6 +591,11 @@ end
 
 num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
+"""
+    num_rates(model::String)
+
+compute number of transition rates given model string
+"""
 function num_rates(model::String)
     m = digits(parse(Int, model))
     if length(m) == 1
