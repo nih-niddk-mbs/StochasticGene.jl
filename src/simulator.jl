@@ -77,7 +77,7 @@ If trace is set to true, it returns a nascent mRNA trace
  	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, probfn=prob_GaussianMixture, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
     if length(r) < num_rates(transitions, R, S, insertstep)
         throw("r has too few elements")
     end
@@ -158,7 +158,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if onoff
         return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
     elseif traceinterval > 0.0
-        make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, reporterfn)
+        return make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn,reporterfn)
     else
         return mhist[1:nhist]
     end
@@ -219,19 +219,19 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, reporterfn=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, probfn,reporterfn=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
     if R > 0
-        reporters = num_reporters(G, R, S, insertstep, reporterfn)
+        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
     else
-        reporters = num_reporters(G, onstates)
+        reporters = num_reporters_per_state(G, onstates)
     end
     i = 2
     base = S > 0 ? 3 : 2
-    d = prob_Gaussian(par, reporters, G * base^R)
+    d = probfn(par, reporters, G * base^R)
     while i < n
         while tracelog[i][1] <= frame && i < n
             state = tracelog[i][2]

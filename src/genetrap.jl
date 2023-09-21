@@ -67,7 +67,7 @@ end
 
 function data_genetrap(root, label, gene, tempfish, tracefolder)
     if ~isempty(tracefolder)
-        traces = read_tracefiles(tracefolder,label,',')
+        traces = read_tracefiles(tracefolder,"",',')
         histFISH = readFISH_genetrap(root, gene, tempfish)
         return TraceRNAData("traceRNA", "test", interval, traces, length(histFISH),histFISH)  
     else

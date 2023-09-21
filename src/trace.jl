@@ -18,7 +18,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r[1:end-4], transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-3:end])[1:end-1, :]
+simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r, transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-4:end])[1:end-1, :]
 
 """
     trace_data(trace, interval)
