@@ -81,24 +81,24 @@ struct RNADwellTimeData <: AbstractHistogramData
     DwellTimes::Array
     DTtypes::Array
 end
-struct TraceData <: AbstractTraceData
+struct TraceData{traceType} <: AbstractTraceData
     name::String
     gene::String
     interval::Float64
-    trace::Vector
+    trace::traceType
 end
-struct TraceNascentData <: AbstractTraceData
+struct TraceNascentData{traceType} <: AbstractTraceData
     name::String
     gene::String
     interval::Float64
-    trace::Vector
-    nascent::Base.Float64
+    trace::traceType
+    nascent::Float64
 end
-struct TraceRNAData{hType} <: AbstractTraceHistogramData
+struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     name::String
     gene::String
     interval::Float64
-    trace::Vector
+    trace::traceType
     nRNA::Int
     histRNA::hType
 end

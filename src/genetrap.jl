@@ -202,6 +202,18 @@ function readFISH_genetrap(root::String, gene::String, counts::Int, clone=true)
     nothing
 end
 
+function make_FISH_histograms(root::String, temp::Float64=1.0, clone=true)
+    path = joinpath(root,"data/FISH")
+    if ~ispath(path)
+        mkpath(path)
+    end
+    for gene in genes_gt()
+        h = readFISH_genetrap(root, gene, temp, clone)
+        file = joinpath(path,"$(gene)_gt.txt")
+        writedlm(file,h)
+    end
+end
+
 """
 countsFISH_genetrap(root,gene,x,counts,clone=true)
 
