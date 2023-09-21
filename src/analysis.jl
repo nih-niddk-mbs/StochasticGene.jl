@@ -883,6 +883,18 @@ function plot_histogram(data::RNALiveCellData, model::AbstractGmodel, filename="
     return h
 end
 
+function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
+    M = make_mat_M(model.components.mcomponents, model.rates)
+    h = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    plt = plot(h)
+    plot!(plt, normalize_histogram(data.histRNA))
+    display(plt)
+    if ~isempty(filename)
+        savefig(filename)
+    end
+    return h
+end
+
 # function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
 #     h=likelihoodarray(model.rates,data,model)
 #     for i in eachindex(h)

@@ -38,7 +38,7 @@ end
 
 set models
 """
-function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); fill(100,noiseparams-1);.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G],genetrap=false,nhist=20)
+function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); fill(100,noiseparams-1);.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G],genetrap=false,nhist=20,nalleles=2)
     if length(r) != num_rates(transitions,R,S,insertstep) + noiseparams
         throw("rate wrong length")
     end
@@ -57,12 +57,12 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
     if R > 0
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions,R,S,insertstep) + weightind)
         if isempty(fixedeffects)
-            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, 1, "", r, d, propcv, fittedparam, method, transitions, components, reporter)
+            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, "", r, d, propcv, fittedparam, method, transitions, components, reporter)
         else
-            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, 1, "", r, d, propcv, fittedparam, fixedeffects, method, transitions, components, reporter)
+            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, nalleles, "", r, d, propcv, fittedparam, fixedeffects, method, transitions, components, reporter)
         end
     else
-        return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, 1, r, d, propcv, fittedparam, method, transitions, components, onstates)
+        return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
     end
 end
 

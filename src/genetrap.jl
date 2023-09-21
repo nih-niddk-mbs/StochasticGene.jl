@@ -102,10 +102,11 @@ function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, in
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     end
-    rm = fill(0.1, num_rates(transitions, R, S, insertstep))
+    nrates = num_rates(transitions, R, S, insertstep)
+    rm = fill(0.1, nrates)
     rcv = [fill(priorcv, length(rm) - 1); 0.1]
     if gene ∈ genes_gt()
-        rm[end] = log(2.0) / (60 .* halflife_gt()[gene])
+        rm[nrates] = log(2.0) / (60 .* halflife_gt()[gene])
     end
     if r == 0.0
         r = rm

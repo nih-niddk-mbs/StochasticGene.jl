@@ -30,16 +30,16 @@ end
 
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
     a, p0 = make_ap(r, interval, elementsT, nT)
-    lln = ll_nascent(length(trace)*length(trace[1]), p0, reporters_per_state,nascent)
-    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a,0)), log.(p0))
+    lln = ll_nascent(length(trace) * length(trace[1]), p0, reporters_per_state, nascent)
+    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(p0))
     push!(logpredictions, lln)
     ll += lln
     ll, logpredictions
 end
 
-function ll_nascent(β,p0,reporters_per_state,nascent)
-    pn = sum(p0[reporters_per_state .> 0])
-    -β *(nascent  * log(pn) + (1. - nascent) * log(1 - pn))
+function ll_nascent(β, p0, reporters_per_state, nascent)
+    pn = sum(p0[reporters_per_state.>0])
+    -β * (nascent * log(pn) + (1.0 - nascent) * log(1 - pn))
 end
 
 """
@@ -63,7 +63,7 @@ function make_ap(r, interval, elementsT, N)
     kolmogorov_forward(sparse(Qtr'), interval)[2], normalized_nullspace(Qtr)
 end
 
-make_p0(r,elementsT,N) = normalized_nullspace(make_mat(elementsT, r, N))
+make_p0(r, elementsT, N) = normalized_nullspace(make_mat(elementsT, r, N))
 """
     make_logap(r, transitions, interval, G)
 
@@ -454,11 +454,10 @@ end
 
 TBW
 """
-function predicted_states(data::AbstractTraceData, model::AbstractGmodel)
+function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
     ts = Vector{Int}[]
     for t in data.trace
-        # push!(tp, predicted_trace(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, t))
-        push!(ts,predicted_states(t,data.interval, model))
+        push!(ts, predicted_states(t, data.interval, model))
     end
     ts
 end
@@ -469,7 +468,8 @@ end
 TBW
 """
 function predicted_states(trace::Vector, interval::Float64, model::AbstractGmodel)
-    predicted_states(model.rates, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, interval, trace)
+    tcomponents = tcomponent(model)
+    predicted_states(model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, interval, trace)
 end
 """
     predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
@@ -487,11 +487,11 @@ end
 
 TBW
 """
-function predicted_trace(ts::Vector,model)
+function predicted_trace(ts::Vector, model)
     tp = Vector{Float64}[]
-    d=model.reporter.probfn(model.rates[end-model.reporter.n+1:end],model.reporter.per_state,model.components.nT)
+    d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
     for t in ts
-        push!(tp,[ mean(d[state]) for state in t])
+        push!(tp, [mean(d[state]) for state in t])
     end
     tp, ts
 end
@@ -501,6 +501,8 @@ end
 
 TBW
 """
-function predicted_trace(data::AbstractTraceData,model)
-    predicted_trace( predicted_states(data,model),model)
+function predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
+    predicted_trace(predicted_states(data, model), model)
 end
+
+tcomponent(model) = typeof(model.components) == TComponents ?  model.components : model.components.tcomponents
