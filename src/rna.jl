@@ -125,18 +125,12 @@ function data_rna(gene::String, cond::String, datafolder::String, fish::Bool, la
     end
     data_rna(datafile, label, times, gene, false)
 end
-function data_rna(path, name, time, gene::String, fish::Bool)
-    len, h = histograms_rna(path, gene, fish)
-    TransientRNAData(name, gene, len, time, h)
-end
+
 function data_rna(path, name, gene::String, fish::Bool)
     len, h = histograms_rna(path, gene, fish)
     RNAData(name, gene, len, h)
 end
-function data_rna(path, name, gene::String, fish::Array{Bool,1})
-    len, h = histograms_rna(path, gene, fish)
-    RNAMixedData(name, gene, len, fish, h)
-end
+
 """
 histograms_rna(path,gene)
 

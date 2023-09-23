@@ -83,6 +83,35 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
 end
 
+
+
+
+function data = load_data(name,gene,cell,datatype,path)
+
+    if datatype == "scrna"
+
+        datafile = fish ? FISHpath(gene, cond, datafolder) : scRNApath(gene, cond, datafolder)
+        len, h = histograms_rna(datafile, gene, fish)
+        RNAData(name, gene, len, h)
+    elseif datatype == "fish"
+
+    elseif datatype =="rnadwelltime"
+
+
+    elseif datatype == "trace"
+
+    elseif datatype == "tracenascent"
+
+
+    elseif datatype == "tracerna"
+
+    end
+
+
+
+end
+
+
 """
 fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)
 
