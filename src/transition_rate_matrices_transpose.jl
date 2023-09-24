@@ -292,7 +292,6 @@ end
 set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
 set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 
-
 """
 	set_elements_G!(elements,transitions,G,R,base,gamma)
 

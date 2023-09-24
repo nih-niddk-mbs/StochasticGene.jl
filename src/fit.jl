@@ -84,10 +84,17 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
 end
 
 
+function datapath(root,gene,cond)
 
 
-function data = load_data(name,gene,cell,datatype,path)
+end
 
+"""
+    load_data(datatype,datafolder,name,gene,cond,interval,tempfish,nascent)
+
+TBW
+"""
+function load_data(datatype,datafolder,name,gene,cond,interval,tempfish,nascent)
     if datatype == "scrna"
         len, h = histograms_rna(scRNApath(gene, cond, datafolder), gene, fish)
         return RNAData(name, gene, len, h)
@@ -96,28 +103,56 @@ function data = load_data(name,gene,cell,datatype,path)
         return RNAData(name, gene, len, h)
     elseif datatype =="rnaoffon"
         LC = readLCPDF_genetrap(root, gene)
-        if tempfish == 0
-            counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
-            println(counts)
-            # set FISH counts to mean of live cell counts
-            histFISH = readFISH_genetrap(root, gene, counts)
-        else
-            histFISH = readFISH_genetrap(root, gene, tempfish)
-        end
+        histFISH = readFISH_genetrap(root, gene, tempfish)
         return RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
-
-
     elseif datatype == "trace"
+        trace = read_tracefiles(datafolder,cond);
         return TraceData("trace", gene, interval, trace) 
-
     elseif datatype == "tracenascent"
+        trace = read_tracefiles(datafolder,cond);
         return TraceNascentData(name, gene, interval, trace, nascent)
-
-
     elseif datatype == "tracerna"
-        return TraceRNAData(@NamedTuple, gene, interval, traces, length(histFISH),histFISH)
-
+        trace = read_tracefiles(datafolder,cond);
+        len, h = histograms_rna(FISHpath(gene, cond, datafolder), gene, fish)
+        return TraceRNAData(name, gene, interval, traces, len,h)
     end
+end
+
+"""
+    load_model()
+
+TBW
+"""
+function load_model(fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int,onstates)
+    components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
+    if genetrap
+        components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
+    else
+        components = make_components_T(transitions, G, R, S, insertstep, "")
+    end
+    components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
+
+
+    if R == 0
+        components
+        if isempty(fixedeffects)
+            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
+        else
+            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
+       end
+    else
+        if isempty(onstates) && genetrap
+            reporter = on_states(G, R, S, insertstep)
+        if tracetype
+            reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions,R,S,insertstep) + weightind)
+        end
+        if isempty(fixedeffects)
+            GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+        else
+            GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+        end
+    end
+
 end
 
 

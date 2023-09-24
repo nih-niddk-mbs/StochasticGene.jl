@@ -200,17 +200,17 @@ function model_rna(data, gene::String, cell::String, G::Int, cv, fittedparam, fi
         ejectrate = yieldprior
     end
     r = getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets, root, verbose)
-    model = model_rna(data, r, G, nalleles, nsets, cv, fittedparam, fixedeffects, transitions, decayrate, ejectrate, fprior, priorcv, onstates)
+    model = model_rna(data.nRNA, r, G, nalleles, nsets, cv, fittedparam, fixedeffects, transitions, decayrate, ejectrate, fprior, priorcv, onstates)
     return model
 end
 
-function model_rna(data, r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam, fixedeffects, transitions, decayprior, ejectprior, f=Normal, cv=10.0, onstates=[G])
+function model_rna(nRNA::Int, r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam, fixedeffects, transitions, decayprior, ejectprior, f=Normal, cv=10.0, onstates=[G])
     d = prior_rna(r, G, nsets, fittedparam, decayprior, ejectprior, f, cv)
-    model_rna(data, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, onstates)
+    model_rna(nRNA, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, onstates)
 end
-function model_rna(data, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, method=0, onstates=[G])
+function model_rna(nRNA::Int, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, method=0, onstates=[G])
     # components = make_components_M(transitions,G,data.nRNA+2,r[end])
-    components = make_components_M(transitions, G, 0, data.nRNA + 2, r[end], "")
+    components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
     if length(fixedeffects) > 0
         model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
     else
