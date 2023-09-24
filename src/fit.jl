@@ -89,26 +89,35 @@ end
 function data = load_data(name,gene,cell,datatype,path)
 
     if datatype == "scrna"
-
-        datafile = fish ? FISHpath(gene, cond, datafolder) : scRNApath(gene, cond, datafolder)
-        len, h = histograms_rna(datafile, gene, fish)
-        RNAData(name, gene, len, h)
+        len, h = histograms_rna(scRNApath(gene, cond, datafolder), gene, fish)
+        return RNAData(name, gene, len, h)
     elseif datatype == "fish"
-
-    elseif datatype =="rnadwelltime"
+        len, h = histograms_rna(FISHpath(gene, cond, datafolder), gene, fish)
+        return RNAData(name, gene, len, h)
+    elseif datatype =="rnaoffon"
+        LC = readLCPDF_genetrap(root, gene)
+        if tempfish == 0
+            counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
+            println(counts)
+            # set FISH counts to mean of live cell counts
+            histFISH = readFISH_genetrap(root, gene, counts)
+        else
+            histFISH = readFISH_genetrap(root, gene, tempfish)
+        end
+        return RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
 
 
     elseif datatype == "trace"
+        return TraceData("trace", gene, interval, trace) 
 
     elseif datatype == "tracenascent"
+        return TraceNascentData(name, gene, interval, trace, nascent)
 
 
     elseif datatype == "tracerna"
+        return TraceRNAData(@NamedTuple, gene, interval, traces, length(histFISH),histFISH)
 
     end
-
-
-
 end
 
 
