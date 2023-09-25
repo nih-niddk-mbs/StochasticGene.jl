@@ -48,7 +48,8 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
         S = R
     end
     if genetrap
-        components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
+        #components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
+        components = make_components_MT(transitions, G, R, S, insertstep, nhist, rr[num_rates(transitions, R, S, insertstep)])
     else
         components = make_components_T(transitions, G, R, S, insertstep, "")
     end
