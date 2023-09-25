@@ -54,8 +54,8 @@ root is the folder containing data and results
 FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts, 
 """
-function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, label::String, rtype::String, tempfish, priorcv, propcv, onstates, tracedata)
-    r = readrates_genetrap(infolder, rtype, gene, label, G, R, S, insertstep, nalleles, rnatype)
+function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, label::String, ratetype::String, tempfish, priorcv, propcv, onstates, tracedata)
+    r = readrates_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, rnatype)
     genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates, tracedata)
 end
 
@@ -130,19 +130,19 @@ end
 
 
 """
-readrates_genetrap(infolder::String,rtype::String,gene::String,label,G,R,nalleles,rnatype::String)
+readrates_genetrap(infolder::String,ratetype::String,gene::String,label,G,R,nalleles,rnatype::String)
 
 Read in initial rates from previous runs
 """
 
-function readrates_genetrap(infolder::String, rtype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
-    row = get_row()[rtype]
-    readrates_genetrap(getratefile_genetrap(infolder, rtype, gene, label, G, R, S, insertstep, nalleles, rnatype), row)
+function readrates_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+    row = get_row()[ratetype]
+    readrates_genetrap(getratefile_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, rnatype), row)
 end
 
 function readrates_genetrap(infile::String, row::Int)
     if isfile(infile) && ~isempty(read(infile))
-        println(infile, ", row: ", get_rtype()[row])
+        println(infile, ", row: ", get_ratetype()[row])
         return readrates(infile, row, true)
     else
         println("using default rates")
@@ -150,11 +150,11 @@ function readrates_genetrap(infile::String, row::Int)
     end
 end
 """
-    getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+    getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
 
 TBW
 """
-function getratefile_genetrap(infolder::String, rtype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+function getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
     model = R == 0 ? "$G" : "$G$R$S$insertstep"
     file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$rnatype" * ".txt"
     joinpath(infolder, file)

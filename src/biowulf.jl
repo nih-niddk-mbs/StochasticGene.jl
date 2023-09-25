@@ -2,9 +2,9 @@
 # functions for use on the NIH Biowulf super computer
 
 """
-    makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median")
+    makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",ratetype="median")
 
-    makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median")
+    makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",ratetype="median")
 
     Arguments
     - `G`: number of gene states
@@ -48,7 +48,7 @@
     - `nalleles`: number of alleles, value in alleles folder will be used if it exists
     - `optimize`: use optimizer to compute maximum likelihood value
     - `rnatype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-    - `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+    - `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
     - `writesamples`: write out MH samples if true, default is false
     - `onstates`: vector of sojurn states (currently not implemented)
 
@@ -57,7 +57,7 @@
 
 """
 
-function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="median", writesamples=false)
+function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", ratetype="median", writesamples=false)
     if occursin.("-", conds)
         cond = string.(split(conds, "-"))
     else
@@ -68,10 +68,10 @@ function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]),
     elseif datatype == "genetrap"
         genes = genes_gt()
     end
-    makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, rnatype=rnatype, rtype=rtype, writesamples=writesamples)
+    makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, rnatype=rnatype, ratetype=ratetype, writesamples=writesamples)
 end
 
-function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", conds::String="MOCK", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="median", writesamples=false)
+function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", conds::String="MOCK", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", ratetype="median", writesamples=false)
 
     if R > 0
         if S > 0
@@ -115,7 +115,7 @@ function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1,
         sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
         write_swarmfile(joinpath(root,sfile), nchains, nthreads, juliafile, genes)
     end
-    write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, rnatype, rtype, writesamples)
+    write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, rnatype, ratetype, writesamples)
 end
 
 """
@@ -184,12 +184,12 @@ make_fitfile(fitfile,fittedparam,fixedeffects)
 make the file the swarm file calls to execute julia code
 
 """
-function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, rnatype, rtype, writesamples)
+function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, rnatype, ratetype, writesamples)
     f = open(fitfile, "w")
     s = '"'
     # write(f,"@everywhere using StochasticGene\n")
     write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene/src/test.jl$s)\n")
-    write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$rnatype$s,$s$rtype$s,$writesamples)\n")
+    write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$rnatype$s,$s$ratetype$s,$writesamples)\n")
     close(f)
 end
 
@@ -240,12 +240,12 @@ function checkgenes(root, cond::String, datafolder, cell::String, thresholdlow::
     end
 end
 
-function folder_path(folder::String, root::String, foldertype::String; make=false)
+function folder_path(folder::String, root::String, folderatetype::String; make=false)
     f = folder
     if ~ispath(folder)
         f = joinpath(root, folder)
         if ~ispath(f)
-            f = joinpath(root, foldertype, folder)
+            f = joinpath(root, folderatetype, folder)
             if ~ispath(f) && ~make
                 throw("$folder not found")
             else

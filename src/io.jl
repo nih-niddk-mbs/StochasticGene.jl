@@ -573,7 +573,7 @@ write_array(file::String, d::Array) = writedlm(file, d, header=false)
 
 get_row() = Dict([("ml", 1); ("mean", 2); ("median", 3); ("last", 4)])
 
-get_rtype() = invert_dict(get_row())
+get_ratetype() = invert_dict(get_row())
 
 """
 readrates(file::String,row::Int)
@@ -587,14 +587,14 @@ row
 readrates(file::String) = readrates(file, 3)
 readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
 
-# function get_row(rtype)
-#     if rtype == "ml"
+# function get_row(ratetype)
+#     if ratetype == "ml"
 #         row = 1
-#     elseif rtype == "mean"
+#     elseif ratetype == "mean"
 #         row = 2
-#     elseif rtype == "median"
+#     elseif ratetype == "median"
 #         row = 3
-#     elseif rtype == "last"
+#     elseif ratetype == "last"
 #         row = 4
 #     else
 #         row = 1

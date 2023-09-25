@@ -4,7 +4,7 @@
 #
 
 """
-fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
+fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",ratetype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -42,13 +42,13 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `nalleles`: number of alleles, value in alleles folder will be used if it exists
 - `optimize`: use optimizer to compute maximum likelihood value
 - `rnatype`: switch used for GRS models, choices include "", "offeject", "offdecay"
-- `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `writesamples`: write out MH samples if true, default is false
 - `data`: data structure
 
 """
 
-function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, propcv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", rtype="ml", writesamples=false, onstates=Int[], tempfish=1.0, tracedata=true)
+function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, propcv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", ratetype="ml", writesamples=false, onstates=Int[], tempfish=1.0, tracedata=true)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
@@ -83,7 +83,13 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
 end
 
-function datatype_dict() = []
+function fit(nchains::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, root=".", datatype::String, inlabel::String, label::String, nalleles=2, propcv=0.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, rnatype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+
+
+end
+
+
+datatype_dict() = Dict("rna" => 1, "fish" => 2, "rnaoffon" => 3)
 
 function datapath(root, gene, cond)
 
@@ -124,7 +130,7 @@ end
 
 TBW
 """
-function load_model(datatype,fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
+function load_model(datatype, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
 
     if datatype == "rna"
         components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
