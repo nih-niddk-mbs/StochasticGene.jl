@@ -117,23 +117,27 @@ function finalize(vartuple)
 end
 
 """
-truncatehistogram(x::Array{Int,1},yield::Float64,nhistmax::Int)
+    truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
 
-only keep columns of histogram x that accounts for yield fraction of total sum
+return histogram x that accounts for fraction yield of total sum
 """
 function truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
-    counts = sum(x)
-    if counts > 0
-        nhist = 1
-        ratio = 0.0
-        # Only keep yield of all data to limit support of histogram
-        while ratio < yield && nhist <= nhistmax
-            ratio = sum(x[1:nhist]) / counts
-            nhist += 1
+    if yield < 1.0
+        counts = sum(x)
+        if counts > 0
+            nhist = 1
+            ratio = 0.0
+            # Only keep yield of all data to limit support of histogram
+            while ratio <= yield && nhist <= nhistmax
+                ratio = sum(x[1:nhist]) / counts
+                nhist += 1
+            end
+            return x[1:min(nhist, length(x))]
+        else
+            return 0
         end
-        return x[1:min(nhist, length(x))]
     else
-        return 0
+        return x[1:min(nhistmax, length(x))]
     end
 end
 

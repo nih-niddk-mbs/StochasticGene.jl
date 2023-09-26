@@ -94,8 +94,6 @@ function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::
     model = load_model()
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
-
-
 end
 
 
@@ -114,19 +112,18 @@ TBW
 function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
     
     if datatype == "rna"
-        len, h = histograms_rna(scRNApath(gene, cond, datafolder), gene, fish)
+        len, h = read_rna(gene,cond,datafolder)
         readdlm()
         return RNAData(name, gene, len, h)
     elseif datatype == "rnaoffon"
         LC = readLCPDF_genetrap(root, gene)
         readdlm(datafolder[1])
         readdlm(datafolder[2])
-        histFISH = readFISH_genetrap(root, gene, tempfish)
-        return RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
+        len, h  = read_rna(gene, cond, tempfish, datafolder)
+        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])å
     elseif datatype == "rnadwelltimes"
 
 
-    end
     elseif datatype == "trace"
         readdlm(datafolder)
         trace = read_tracefiles(datafolder, cond)
@@ -136,7 +133,7 @@ function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, n
         return TraceNascentData(name, gene, interval, trace, nascent)
     elseif datatype == "tracerna"
         trace = read_tracefiles(datafolder, cond)
-        len, h = histograms_rna(FISHpath(gene, cond, datafolder), gene, fish)
+        len, h = histograms_rna(datafolder, gene, fish)
         return TraceRNAData(name, gene, interval, traces, len, h)
     end
 end
