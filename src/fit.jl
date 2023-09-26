@@ -4,7 +4,7 @@
 #
 
 """
-fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",ratetype="median",writesamples=false)
+fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -41,21 +41,21 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `burst`: if true then compute burst frequency
 - `nalleles`: number of alleles, value in alleles folder will be used if it exists
 - `optimize`: use optimizer to compute maximum likelihood value
-- `rnatype`: switch used for GRS models, choices include "", "offeject", "offdecay"
+- `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
 - `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `writesamples`: write out MH samples if true, default is false
 - `data`: data structure
 
 """
 
-function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, propcv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, rnatype="", ratetype="ml", writesamples=false, onstates=Int[], tempfish=1.0, tracedata=true)
+function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, propcv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="ml", writesamples=false, onstates=Int[], tempfish=1.0, tracedata=true)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     if datatype == "genetrap"
-        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, infolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
+        data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, splicetype, fittedparam, infolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
     elseif datatype == "scRNA" || datatype == "fish"
         datafolder = folder_path(datafolder, root, "data")
         if occursin("-", datafolder)
@@ -83,13 +83,13 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
 end
 
-function fit(nchains::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, root=".", datatype::String, inlabel::String, label::String, nalleles=2, propcv=0.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, rnatype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
 
 
 end
 
 
-datatype_dict() = Dict("rna" => 1, "fish" => 2, "rnaoffon" => 3)
+datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatrace" => 4, "dwelltimes" => 5, "trace" => 5, "tracenascent" => 6)
 
 function datapath(root, gene, cond)
 
@@ -102,6 +102,7 @@ end
 TBW
 """
 function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
+    
     if datatype == "scrna"
         len, h = histograms_rna(scRNApath(gene, cond, datafolder), gene, fish)
         return RNAData(name, gene, len, h)
@@ -157,12 +158,21 @@ function load_model(datatype, fittedparam::Vector, fixedeffects::Tuple, transiti
                 reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
             end
             if isempty(fixedeffects)
-                GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+                GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
             else
-                GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+                GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
             end
         end
     end
+
+end
+
+function load_model()
+    make_reporter()
+    make_component()
+    make_prior()
+
+
 
 end
 
@@ -242,7 +252,7 @@ burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtra
 function burstsize(r, R, ntransitions)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
     M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end], ""), r)
-    # M = make_components_M(transitions, G, R, nhist, decay, rnatype)
+    # M = make_components_M(transitions, G, R, nhist, decay, splicetype)
     nT = 2 * 2^R
     L = nT * total
     S0 = zeros(L)

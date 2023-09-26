@@ -122,7 +122,7 @@ R: number of R steps
 S: indicator for splicing, 0 no splicing, > 1 splicing
 insertstep: R step where reporter is inserted (first step where reporter is visible)
 nalleles: number of alleles producing RNA
-rnatype: choices are "", "offeject", "offdecay"
+splicetype: choices are "", "offeject", "offdecay"
 rates: transition rates
 rateprior: prior for rates
 proposal: MCMC proposal distribution
@@ -134,7 +134,7 @@ method: numerical method for solving Master equation
 -`Gtransitions`:  tuple of vectors of G state transitions
 -`reporters`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 """
-struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
+struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -144,9 +144,9 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporter::Vector
+    reporter::ReporterType
 end
-struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType} <: AbstractGMmodel
+struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     G::Int
     nalleles::Int
     rates::RateType
@@ -157,7 +157,7 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     method::MethodType
     Gtransitions::Tuple
     components::ComponentType
-    reporter::Vector
+    reporter::ReporterType
 end
 
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
@@ -166,7 +166,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     S::Int
     insertstep::Int
     nalleles::Int
-    rnatype::String
+    splicetype::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -183,7 +183,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     S::Int
     insertstep::Int
     nalleles::Int
-    rnatype::String
+    splicetype::String
     rates::RateType
     rateprior::PriorType
     proposal::ProposalType
@@ -363,7 +363,7 @@ Under construction
 #
 # function likelihoodarray(rin, data::RNALiveCellData, model::AbstractGRSMmodel)
 #     r = copy(rin)
-#     if model.rnatype == "offdecay"
+#     if model.splicetype == "offdecay"
 #         # r[end-1] *= survival_fraction(nu, eta, model.R)
 #     end
 #     components = model.components

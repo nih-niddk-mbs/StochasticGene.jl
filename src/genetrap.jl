@@ -24,11 +24,11 @@ end
 
 """
 
-function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", rnatype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
+function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", splicetype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
     println(now())
     folder = folder_path(folder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, rnatype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
+    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, splicetype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     println(model.rates)
@@ -42,7 +42,7 @@ function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::In
     # finalize(data,model,fits,stats,measures,1.,folder,0,bs,root)
     finalize(data, model, fits, stats, measures, temp, folder, 0, burst, false, root)
     println(now())
-    return data, model_genetrap(gene, get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype), fits, stats, measures
+    return data, model_genetrap(gene, get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, splicetype), fits, stats, measures
 end
 
 """
@@ -54,14 +54,14 @@ root is the folder containing data and results
 FISH counts is divided by tempfish to adjust relative weights of data
 set tempfish = 0 to equalize FISH and live cell counts, 
 """
-function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, rnatype::String, fittedparam::Vector, infolder::String, label::String, ratetype::String, tempfish, priorcv, propcv, onstates, tracedata)
-    r = readrates_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, rnatype)
-    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, rnatype, fittedparam, tempfish, priorcv, propcv, onstates, tracedata)
+function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, splicetype::String, fittedparam::Vector, infolder::String, label::String, ratetype::String, tempfish, priorcv, propcv, onstates, tracedata)
+    r = readrates_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, splicetype)
+    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, splicetype, fittedparam, tempfish, priorcv, propcv, onstates, tracedata)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, rnatype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[], tracedata="")
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, splicetype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[], tracedata="")
     data = R == 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish, tracedata)
-    model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, rnatype)
+    model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, splicetype)
     return data, model
 end
 
@@ -95,7 +95,7 @@ model_genetrap
 load model structure
 """
 
-function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep::Int, fittedparam::Vector, nalleles::Int, nhist::Int, priorcv=10.0, propcv=0.01, onstates=Int[], rnatype="", method=1)
+function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep::Int, fittedparam::Vector, nalleles::Int, nhist::Int, priorcv=10.0, propcv=0.01, onstates=Int[], splicetype="", method=1)
     if S > 0
         S = R
     end
@@ -114,7 +114,7 @@ function model_genetrap(gene::String, r, transitions, G::Int, R::Int, S::Int, in
     println(r)
     d = distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
-    return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, rnatype, r, d, propcv, fittedparam, method, transitions, components, onstates)
+    return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, onstates)
 end
 
 # """
@@ -130,14 +130,14 @@ end
 
 
 """
-readrates_genetrap(infolder::String,ratetype::String,gene::String,label,G,R,nalleles,rnatype::String)
+readrates_genetrap(infolder::String,ratetype::String,gene::String,label,G,R,nalleles,splicetype::String)
 
 Read in initial rates from previous runs
 """
 
-function readrates_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+function readrates_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, splicetype::String)
     row = get_row()[ratetype]
-    readrates_genetrap(getratefile_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, rnatype), row)
+    readrates_genetrap(getratefile_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, splicetype), row)
 end
 
 function readrates_genetrap(infile::String, row::Int)
@@ -150,13 +150,13 @@ function readrates_genetrap(infile::String, row::Int)
     end
 end
 """
-    getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+    getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, splicetype::String)
 
 TBW
 """
-function getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, rnatype::String)
+function getratefile_genetrap(infolder::String, ratetype::String, gene::String, label, G, R, S, insertstep, nalleles, splicetype::String)
     model = R == 0 ? "$G" : "$G$R$S$insertstep"
-    file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$rnatype" * ".txt"
+    file = "rates" * "_" * label * "_" * gene * "_" * model * "_" * "$(nalleles)" * "$splicetype" * ".txt"
     joinpath(infolder, file)
 end
 """

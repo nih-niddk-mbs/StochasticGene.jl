@@ -477,7 +477,7 @@ end
 
 
 # """
-# steady_state(r,transitions,G,R,nhist,nalleles,rnatype="")
+# steady_state(r,transitions,G,R,nhist,nalleles,splicetype="")
 
 # return steady state mRNA histogram for G,R model
 #     calls steady_state(M,nT,nalleles)
@@ -488,11 +488,11 @@ end
 # -`R`: number of R states
 # -`nhists`: number of mRNA histogram bins
 # -`nalleles`: number of alleles (alleles are assumed to be uncoupled)
-# -`rnatype`: parameter to specify type of kinetics if necessary
+# -`splicetype`: parameter to specify type of kinetics if necessary
 
 # """
-# function steady_state(r, transitions, G, R, nhist, nalleles, rnatype="")
-#     components = make_components(transitions, G, R, r, nhist + 2, rnatype, set_indices(length(transitions), R))
+# function steady_state(r, transitions, G, R, nhist, nalleles, splicetype="")
+#     components = make_components(transitions, G, R, r, nhist + 2, splicetype, set_indices(length(transitions), R))
 #     M = make_mat_M(mcomponents.mcomponents, r)
 #     steady_state(M, components.mcomponents.nT, nalleles, nhist)
 # end
@@ -607,15 +607,15 @@ end
 #     return pdf_from_cdf(SI), pdf_from_cdf(SA)
 # end
 
-# function gt_histograms(r, transitions, G, R, nhist, nalleles, bins, onstates, method=1, rnatype="")
+# function gt_histograms(r, transitions, G, R, nhist, nalleles, bins, onstates, method=1, splicetype="")
 #     ntransitions = length(transitions)
 #     if R > 0
-#         components = make_components(transitions, G, R, r, nhist + 2, rnatype, Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+2*R+1), ntransitions + 2 * R + 2))
+#         components = make_components(transitions, G, R, r, nhist + 2, splicetype, Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+2*R+1), ntransitions + 2 * R + 2))
 #     else
 #         components = make_components(transitions, G, r, nhist + 2, Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+2*R+1), ntransitions + 2 * R + 2), onstates)
 #     end
 
-#     # if rnatype == "offdecay"
+#     # if splicetype == "offdecay"
 #     #     r[end-1] *= survival_fraction(nu,eta,model.R)
 #     # end
 #     T = make_mat_T(components.tcomponents, r)

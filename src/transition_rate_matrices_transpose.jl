@@ -143,51 +143,51 @@ end
 
 
 """
-    make_components_MTAI(transitions,G,R,S,insertstep,onstates,rnatype="")
+    make_components_MTAI(transitions,G,R,S,insertstep,onstates,splicetype="")
 
 make MTAI structure for GRS models (fitting mRNA, on time, and off time histograms)
 """
-function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, rnatype="")
+function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, rnatype)
-    MTAIComponents(make_components_M(transitions, G, R, nhist, decay, rnatype), make_components_TAI(elementsT, nT, onstates))
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    MTAIComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TAI(elementsT, nT, onstates))
 end
 
 
 """
-    make_components_MT(transitions,G,R,S,insertstep,decay,rnatype="")
+    make_components_MT(transitions,G,R,S,insertstep,decay,splicetype="")
 
 return MTcomponents structure for GRS models 
 
 for fitting traces and mRNA histograms
 """
-make_components_MT(transitions, G, R, S, insertstep, nhist, decay, rnatype="") = MTcomponents(make_components_M(transitions, G, R, insertstep, nhist, decay, rnatype), make_components_T(transitions, G, R, S, insertstep, rnatype))
+make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTcomponents(make_components_M(transitions, G, R, insertstep, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
 
 """
-    make_components_M(transitions, G, R, insertstep, decay, rnatype)
+    make_components_M(transitions, G, R, insertstep, decay, splicetype)
 
 return Mcomponents structure  
 
 matrix components for fitting mRNA histograms
 """
-function make_components_M(transitions, G, R, nhist, decay, rnatype)
+function make_components_M(transitions, G, R, nhist, decay, splicetype)
     indices = set_indices(length(transitions), R)
-    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, rnatype)
+    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, splicetype)
     elementsB = set_elements_B(G, R, indices.nu[R+1])
     U, Um, Up = make_mat_U(nhist, decay)
     return MComponents(elementsT, elementsB, nT, U, Um, Up)
 end
 
 """
-    make_components_T(transitions, G, R, S, insertstep, rnatype)
+    make_components_T(transitions, G, R, S, insertstep, splicetype)
 
 return Tcomponent structure 
 
 for fitting traces and also for creating TA and TI matrix components
 """
-function make_components_T(transitions, G, R, S, insertstep, rnatype)
+function make_components_T(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, rnatype)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     TComponents(nT, elementsT)
 end
 
@@ -205,9 +205,9 @@ function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
     TAIComponents(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
 end
 
-function make_components_TAI(transitions, G, R, S, insertstep, onstates, rnatype::String="")
+function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, rnatype)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     make_components_TAI(elementsT, nT, onstates)
 end
 
@@ -315,15 +315,15 @@ function set_elements_G!(elements, transitions, gamma=collect(1:length(transitio
 end
 
 """
-    set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
+    set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
 inplace update matrix elements in elementsT for GRS state transition matrix, do nothing if R == 0
 
 "offeject" = pre-RNA is completely ejected when spliced
 """
-function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, rnatype="")
+function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
-        if rnatype == "offeject"
+        if splicetype == "offeject"
             S = 0
             base = 2
         end
@@ -361,7 +361,7 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                 if S > 0 && abs(sC) == 1
                     push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
                 end
-                if rnatype == "offeject"
+                if splicetype == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
                         push!(elementsT, Element(a, b, eta[R-insertstep+1], s))
@@ -389,7 +389,7 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
-                    if rnatype == "offeject" && j > insertstep - 1
+                    if splicetype == "offeject" && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                         if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
@@ -474,17 +474,17 @@ end
 
 
 """
-    set_elements_T(transitions, G, R, S, indices::Indices, rnatype::String)
+    set_elements_T(transitions, G, R, S, indices::Indices, splicetype::String)
 
 return T matrix elements (Element structure) and size of matrix
 """
-function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, rnatype::String)
+function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
         elementsT = Vector{Element}(undef, 0)
         base = S > 0 ? 3 : 2
         nT = G * base^R
         set_elements_G!(elementsT, transitions, G, indices.gamma, nT)
-        set_elements_RS!(elementsT, G, R, S, insertstep, indices.nu, indices.eta, rnatype)
+        set_elements_RS!(elementsT, G, R, S, insertstep, indices.nu, indices.eta, splicetype)
         return elementsT, nT
     else
         return set_elements_T(transitions, indices.gamma), G
