@@ -80,10 +80,20 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     end
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-    fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
+    fit(nchains, data, model, options, joinpath(root,resultfolder), burst, optimize, writesamples)
 end
 
-function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+    println(now())
+    gene = check_genename(gene, "[")
+    printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+    resultfolder = folder_path(resultfolder, root, "results", make=true)
+    infolder = folder_path(infolder, root, "results")
+    datafolder = folder_path(datafolder,root,"data")
+    data = load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
+    model = load_model()
+    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 
 
 end
@@ -177,12 +187,13 @@ function load_model()
 end
 
 
-"""
-fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)
 
 """
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 
-function fit(nchains, data, model, options, temp, resultfolder, burst, optimize, writesamples, root)
+TBW
+"""
+function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
     fit, stats, measures = run_mh(data, model, options, nchains)
     optimized = 0
@@ -198,7 +209,7 @@ function fit(nchains, data, model, options, temp, resultfolder, burst, optimize,
     else
         bs = 0
     end
-    finalize(data, model, fit, stats, measures, temp, resultfolder, optimized, bs, writesamples, root)
+    finalize(data, model, fit, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
     println(now())
     get_rates(stats.medparam, model, false)
 end
@@ -323,8 +334,7 @@ end
 
 write out run results and print out final loglikelihood and deviance
 """
-function finalize(data, model, fit, stats, measures, temp, resultfolder, optimized, burst, writesamples, root)
-    writefolder = joinpath(root, resultfolder)
+function finalize(data, model, fit, stats, measures, temp, writefolder, optimized, burst, writesamples)
     writeall(writefolder, fit, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
     println("final max ll: ", fit.llml)
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")

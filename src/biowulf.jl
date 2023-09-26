@@ -240,7 +240,7 @@ function checkgenes(root, cond::String, datafolder, cell::String, thresholdlow::
     end
 end
 
-function folder_path(folder::String, root::String, folderatetype::String; make=false)
+function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
     f = folder
     if ~ispath(folder)
         f = joinpath(root, folder)
@@ -254,6 +254,14 @@ function folder_path(folder::String, root::String, folderatetype::String; make=f
         end
     end
     f
+end
+
+function folder_path(folder::Vector,root,foldertype)
+    fv = folder
+    for i in eachindex(fv)
+        fv[i]= folder_path(fv[i],root,foldertype)
+    end
+    fv
 end
 
 function get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
