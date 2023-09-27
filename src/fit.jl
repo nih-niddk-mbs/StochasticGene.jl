@@ -116,14 +116,13 @@ function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, n
         readdlm()
         return RNAData(name, gene, len, h)
     elseif datatype == "rnaoffon"
-        LC = readLCPDF_genetrap(root, gene)
-        readdlm(datafolder[1])
-        readdlm(datafolder[2])
-        len, h  = read_rna(gene, cond, tempfish, datafolder)
-        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])å
+        len, h  = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = readLCPDF_genetrap(gene,datafolder[2])
+        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
     elseif datatype == "rnadwelltimes"
-
-
+        len, h  = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = readLCPDF_genetrap(gene,datafolder[2])
+        return RNADwellTimeta(label, gene, len, h, LC[:, 1], [LC[:, n] for n in 2:end])
     elseif datatype == "trace"
         readdlm(datafolder)
         trace = read_tracefiles(datafolder, cond)
