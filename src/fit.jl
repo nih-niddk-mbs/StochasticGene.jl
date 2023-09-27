@@ -110,6 +110,8 @@ end
 TBW
 """
 function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
+
+    datatype = ["rna","off","on","off","on"]
     
     if datatype == "rna"
         len, h = read_rna(gene,cond,datafolder)
@@ -154,7 +156,11 @@ function load_model(datatype, fittedparam::Vector, fixedeffects::Tuple, transiti
         components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
     end
 
-
+    for i in eachindex(onstates)
+        if isempty(onstates[i])
+            onstates[i] = on_states(G, R, S, insertstep)
+        end
+    end
     if R == 0
         components
         if isempty(fixedeffects)
