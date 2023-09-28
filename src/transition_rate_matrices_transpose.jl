@@ -70,11 +70,11 @@ fields:
 nT, elementsT, elementsTA, elementsTI
 
 """
-struct TAIComponents <: AbstractTComponents
+struct TAIComponents{elementType} <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
-    elementsTA::Vector{Element}
-    elementsTI::Vector{Element}
+    elementsTA::Vector{elementType}
+    elementsTI::Vector{elementType}
 end
 """
 	struct TDComponents
