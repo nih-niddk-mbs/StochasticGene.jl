@@ -64,7 +64,7 @@ struct TComponents <: AbstractTComponents
 end
 
 """
-	struct TAIComponents
+	struct {elementType}
 
 fields:
 nT, elementsT, elementsTA, elementsTI
@@ -112,9 +112,9 @@ fields:
 mcomponents::MComponents
 tcomponents::TAIComponents
 """
-struct MTAIComponents
+struct MTAIComponents{elementType}
     mcomponents::MComponents
-    tcomponents::TAIComponents
+    tcomponents::TAIComponents{elementType}
 end
 """
  	MTDComponents
@@ -196,14 +196,13 @@ end
 
 return TAIComponent structure
 """
-function make_components_TAI(elementsT, nT::Int, onstates::Vector)
-    TAIComponents(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
+function make_components_TAI(elementsT, nT::Int, onstates::Vector{Int})
+    TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
 end
 
-
-function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
-    TAIComponents(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
-end
+# function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
+#     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
+# end
 
 function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
@@ -430,19 +429,19 @@ function set_elements_TA!(elementsTA, elementsT, onstates::Vector)
         end
     end
 end
-function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, interstep=1, base::Int=3)
-    for e in elementsT
-        wdigits = digits(div(e.b - 1, G), base=base, pad=R)[interstep:end]
-        if any(wdigits .> base - 2)
-            push!(elementsTA, e)
-        end
-    end
-end
+# function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, insertstep=1, base::Int=3)
+#     for e in elementsT
+#         wdigits = digits(div(e.b - 1, G), base=base, pad=R)[insertstep:end]
+#         if any(wdigits .> base - 2)
+#             push!(elementsTA, e)
+#         end
+#     end
+# end
 
 """
     set_elements_TI(elementsT,onstates)
 
-TBW
+
 """
 function set_elements_TI(elementsT, onstates)
     elementsTI = Vector{Element}(undef, 0)
@@ -454,7 +453,6 @@ end
     set_elements_TI!(elementsTI, elementsT, onstates::Vector)
 
 
-
 """
 function set_elements_TI!(elementsTI, elementsT, onstates::Vector)
     for e in elementsT
@@ -463,14 +461,14 @@ function set_elements_TI!(elementsTI, elementsT, onstates::Vector)
         end
     end
 end
-function set_elements_TI!(elementsTI, elementsT, G::Int, R::Int, base::Int=3)
-    for e in elementsT
-        wdigits = digits(div(e.b - 1, G), base=base, pad=R)
-        if ~any(wdigits .> base - 2)
-            push!(elementsTI, e)
-        end
-    end
-end
+# function set_elements_TI!(elementsTI, elementsT, G::Int, R::Int, base::Int=3)
+#     for e in elementsT
+#         wdigits = digits(div(e.b - 1, G), base=base, pad=R)
+#         if ~any(wdigits .> base - 2)
+#             push!(elementsTI, e)
+#         end
+#     end
+# end
 
 
 """
@@ -596,3 +594,7 @@ make_mat_T(components::AbstractTComponents, rates) = make_mat(components.element
 make_mat_TA(components::TAIComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
 
 make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
+
+make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
+
+make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
