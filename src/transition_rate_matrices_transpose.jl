@@ -161,7 +161,7 @@ return MTcomponents structure for GRS models
 
 for fitting traces and mRNA histograms
 """
-make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTcomponents(make_components_M(transitions, G, R, insertstep, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
+make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTcomponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
 
 """
     make_components_M(transitions, G, R, insertstep, decay, splicetype)
@@ -196,7 +196,7 @@ end
 
 return TAIComponent structure
 """
-function make_components_TAI(elementsT, nT::Int, onstates::Vector{Int})
+function make_components_TAI(elementsT, nT::Int, onstates::Vector)
     TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
 end
 
@@ -415,7 +415,7 @@ set_elements_TA(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_
 
 in place set onstate elements
 """
-set_elements_TA!(elementsTA, elementsT, onstates::Vector) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
+set_elements_TA!(elementsTA, elementsT, onstates) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
 
 """
     set_elements_TI!(elementsTI, elementsT, onstates::Vector)
@@ -428,7 +428,7 @@ set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_
 
 in place set off state elements
 """
-set_elements_TI!(elementsTI, elementsT, onstates::Vector) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
+set_elements_TI!(elementsTI, elementsT, onstates) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
 
 """
     set_elements_TX(elementsT, onstates::Vector{Int},f!)

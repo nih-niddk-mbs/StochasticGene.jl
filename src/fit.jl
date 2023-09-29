@@ -80,16 +80,16 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     end
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-    fit(nchains, data, model, options, joinpath(root,resultfolder), burst, optimize, writesamples)
+    fit(nchains, data, model, options, joinpath(root, resultfolder), burst, optimize, writesamples)
 end
 
-function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0,  priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    datafolder = folder_path(datafolder,root,"data")
+    datafolders = folder_path(datafolders, root, "data")
     data = load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
     model = load_model()
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
@@ -109,63 +109,41 @@ end
 
 TBW
 """
-function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
 
-    datatypes = ["rna","offon"]
-    datafolders = ["Genetrap/data/T120","Genetrap/data/dwelltimes"]
-    on_states = [Int[],Int[]]
-
-    if "rna" ∈ datatypes
-        len, h  = read_rna(gene, cond, tempfish, datafolder[1])
-        if "dwelltimes" ∈ datatypes
-            LC = read_dwelltimes(gene,datafolders[2:end])
-            RNADwellTimeData(label, gene, len, h, LC[1], LC[2],datatypes[2:end])
-        elseif "offon" ∈ datatypes
-            LC = read_dwelltimes(gene,datafolder[2])
-            RNALiveCellData(label, gene, len, h, LC[1], LC[2])
-        elseif "trace" ∈ datatypes
-            traces = read_trace
-            TraceRNAData(name, gene, interval, traces, len, h)
-        else
-            RNAData(name, gene, len, h)
-        end
+function read_dwelltimes(datapath)
+    bins = Vector{Vector}(undef, 0)
+    DT = Vector{Vector}(undef, 0)
+    for i in eachindex(dttypes)
+        LC = read_dwelltimes(gene, datapath[i])
+        push!(bins, LC[1])
+        push!(DT, LC[2])
     end
+    bins, DT
+end
 
-    if "trace" ∈ datatypes
-        traces = read_trace
-        TraceData("trace", gene, interval, trace)
-    elseif "tracenascent" ∈ datatypes
-        TraceNascentData(name, gene, interval, trace, nascent)
-    end
-
-
-
-
-
-
-    
+function load_data(datatype, dttype, datapath, name, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
-        len, h = read_rna(gene,cond,datafolder)
-        readdlm()
+        len, h = read_rna(gene, cond, datapath)
         return RNAData(name, gene, len, h)
     elseif datatype == "rnaoffon"
-        len, h  = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = readLCPDF_genetrap(gene,datafolder[2])
+        len, h = read_rna(gene, cond, tempfish, datapath[1])
+        LC = readLCPDF_genetrap(gene, datapath[2])
         return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
     elseif datatype == "rnadwelltimes"
-        len, h  = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = readLCPDF_genetrap(gene,datafolder[2])
-        return RNADwellTimeta(label, gene, len, h, LC[:, 1], [LC[:, n] for n in eachindex(LC[1,2:end])])
+        len, h = read_rna(gene, cond, tempfish, datapath[1])
+        LC = readLCPDF_genetrap(gene, datapaths[2:end])
+        bins, DT = read_dwelltimes(datapaths)
+        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
         readdlm(datafolder)
-        trace = read_tracefiles(datafolder, cond)
+        trace = read_tracefiles(datapath, cond)
         return TraceData("trace", gene, interval, trace)
     elseif datatype == "tracenascent"
-        trace = read_tracefiles(datafolder, cond)
+        trace = read_tracefiles(datapath, cond)
         return TraceNascentData(name, gene, interval, trace, nascent)
-    elseif datatype == "tracerna"
-        trace = read_tracefiles(datafolder, cond)
-        len, h = histograms_rna(datafolder, gene, fish)
+    elseif datatype == "rnatrace"
+        len, h = histograms_rna(datapath[1], gene, fish)
+        traces = read_tracefiles(datapath[2], cond)
         return TraceRNAData(name, gene, interval, traces, len, h)
     end
 end
@@ -176,43 +154,38 @@ end
 TBW
 """
 function load_model(data, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
-
-    if typeof(data) == RNAData
+    if typeof(data) <: AbtractRNAData
         components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
-    elseif datatype == "trace" || datatype == "tracenascent"
+    elseif typeof(data) <: AbstractTraceData
+        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_T(transitions, G, R, S, insertstep, "")
-    elseif datatype == "tracerna"
+    elseif typeof(data) <: AbstractTraceHistogramData
+        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_MT(transitions, G, R, S, insertstep, nhist, r[num_rates(transitions, R, S, insertstep)])
-    else
-        components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
-    end
-
-    for i in eachindex(onstates)
-        if isempty(onstates[i])
-            onstates[i] = on_states(G, R, S, insertstep)
+    elseif typeof(data) <: AbstractHistogramData
+        for i in eachindex(onstates)
+            if isempty(onstates[i])
+                onstates[i] = on_states(G, R, S, insertstep)
+            end
         end
+        reporter = onstates
+        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, r[num_rates(transitions, R, S, insertstep)])
     end
     if R == 0
-        components
-        if isempty(fixedeffects)
-            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
-        else
-            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
-        end
-    else
-        if isempty(onstates) && genetrap
-            reporter = on_states(G, R, S, insertstep)
-            if tracetype(datatype)
-                reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-            end
+        d =
             if isempty(fixedeffects)
-                GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+                model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
             else
-                GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(onstates)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+                model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
             end
-        end
+    else
+        d =
+            if isempty(fixedeffects)
+                GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+            else
+                GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+            end
     end
-
 end
 
 function load_model()
@@ -224,7 +197,18 @@ function load_model()
 
 end
 
-
+function model_prior(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0, decay)
+    if S > 0
+        S = R
+    end
+    nrates = num_rates(transitions, R, S, insertstep)
+    rm = fill(0.1, nrates)
+    rcv = [fill(priorcv, length(rm) - 1); 0.1]
+    if gene ∈ genes_gt()
+        rm[nrates] = decay #log(2.0) / (60 .* halflife_gt()[gene])
+    end
+    distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+end
 
 """
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
