@@ -217,6 +217,21 @@ end
 return state index for state (i,z)
 """
 state_index(G::Int, i, z) = i + G * (z - 1)
+
+
+
+"""
+    on_states(G, R, S, insertstep)
+
+return vector of onstates for GRS model given reporter appears at insertstep
+"""
+function on_states(G, R, S, insertstep)
+    base = S > 0 ? 3 : 2
+    onstates = Int[]
+    on_states!(onstates, G, R, insertstep, base)
+    onstates
+end
+
 """
     on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 
@@ -230,12 +245,6 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     end
 end
 
-function on_states(G, R, S, insertstep)
-    base = S > 0 ? 3 : 2
-    onstates = Int[]
-    on_states!(onstates, G, R, insertstep, base)
-    onstates
-end
 
 """
     off_states(nT,onstates)

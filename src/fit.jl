@@ -153,7 +153,7 @@ end
 
 TBW
 """
-function load_model(data, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
+function load_model(data, infolder, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
     if typeof(data) <: AbtractRNAData
         components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
     elseif typeof(data) <: AbstractTraceData
@@ -171,15 +171,15 @@ function load_model(data, fittedparam::Vector, fixedeffects::Tuple, transitions:
         reporter = onstates
         components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, r[num_rates(transitions, R, S, insertstep)])
     end
+    d = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    r = readrates()
     if R == 0
-        d =
             if isempty(fixedeffects)
                 model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
             else
                 model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
             end
     else
-        d =
             if isempty(fixedeffects)
                 GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
             else
