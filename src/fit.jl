@@ -118,8 +118,11 @@ function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, n
     if "rna" ∈ datatypes
         len, h  = read_rna(gene, cond, tempfish, datafolder[1])
         if "dwelltimes" ∈ datatypes
+            LC = read_dwelltimes(gene,datafolders[2:end])
+            RNADwellTimeData(label, gene, len, h, LC[1], LC[2],datatypes[2:end])
+        elseif "offon" ∈ datatypes
             LC = read_dwelltimes(gene,datafolder[2])
-            RNADwellTimeta(label, gene, len, h, LC[:, 1], [LC[:, n] for n in 2:end])
+            RNALiveCellData(label, gene, len, h, LC[1], LC[2])
         elseif "trace" ∈ datatypes
             traces = read_trace
             TraceRNAData(name, gene, interval, traces, len, h)
@@ -152,7 +155,7 @@ function load_data(datatype, datafolder, name, gene, cond, interval, tempfish, n
     elseif datatype == "rnadwelltimes"
         len, h  = read_rna(gene, cond, tempfish, datafolder[1])
         LC = readLCPDF_genetrap(gene,datafolder[2])
-        return RNADwellTimeta(label, gene, len, h, LC[:, 1], [LC[:, n] for n in 2:end])
+        return RNADwellTimeta(label, gene, len, h, LC[:, 1], [LC[:, n] for n in eachindex(LC[1,2:end])])
     elseif datatype == "trace"
         readdlm(datafolder)
         trace = read_tracefiles(datafolder, cond)
@@ -174,7 +177,7 @@ TBW
 """
 function load_model(data, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
 
-    if typeof(data) = RNAData
+    if typeof(data) == RNAData
         components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
     elseif datatype == "trace" || datatype == "tracenascent"
         components = make_components_T(transitions, G, R, S, insertstep, "")

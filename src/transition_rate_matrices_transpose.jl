@@ -197,7 +197,7 @@ end
 return TAIComponent structure
 """
 function make_components_TAI(elementsT, nT::Int, onstates::Vector{Int})
-    TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
+    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
 end
 
 # function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
@@ -404,31 +404,98 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
     end
 end
 
-
-
-
 """
     set_elements_TA(elementsT,onstates)
 
-TBW
+set onstate elements
 """
-function set_elements_TA(elementsT, onstates)
-    elementsTA = Vector{Element}(undef, 0)
+set_elements_TA(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TA!)
+"""
     set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-    elementsTA
+
+in place set onstate elements
+"""
+set_elements_TA!(elementsTA, elementsT, onstates::Vector) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
+
+"""
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+
+set off state elements
+"""
+set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TI!)
+"""
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+
+in place set off state elements
+"""
+set_elements_TI!(elementsTI, elementsT, onstates::Vector) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
+
+"""
+    set_elements_TX(elementsT, onstates::Vector{Int},f!)
+
+set on or off state elements for onstates
+"""
+function set_elements_TX(elementsT, onstates::Vector{Int}, f!)
+    elementsTX = Vector{Element}(undef, 0)
+    f!(elementsTX, elementsT, onstates::Vector)
+    elementsTX
 end
-"""
-    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-
 
 """
-function set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+    set_elements_TX(elementsT, onstates::Vector{Vector{Int}},f!)
+
+set on or off state elements for vector if onstates by calling f! (set_elements_TA! or set_elements_TI!)
+"""
+function set_elements_TX(elementsT, onstates::Vector{Vector{Int}}, f!)
+    elementsTX = Vector{Vector{Element}}(undef, length(onstates))
+    for i in eachindex(onstates)
+        eTX = Vector{Element}(undef, 0)
+        f!(eTX, elementsT, onstates::Vector)
+        elementsTX[i] = eTX
+    end
+    elementsTX
+end
+
+"""
+    set_elements_TX!(elementsTX, elementsT, onstates::Vector,f)
+
+in place set on or off state elements by calling f (∈ or ∉)
+"""
+function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
     for e in elementsT
-        if e.b ∈ onstates
-            push!(elementsTA, e)
+        if f(e.b, onstates)
+            push!(elementsTX, e)
         end
     end
 end
+
+
+# function set_elements_TA(elementsT, onstates::Vector{Int})
+#     elementsTA = Vector{Element}(undef, 0)
+#     set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+#     elementsTA
+# end
+
+# function set_elements_TA(elementsT, onstates::Vector{Vector{Int}})
+#     elementsTA = Vector{Vector{Element}}(undef,length(onstates))
+#     for i in eachindex(onstates)
+#         eTA = Vector{Element}(undef, 0)
+#         set_elements_TA!(eTA, elementsT, onstates::Vector)
+#         elementsTA[i] = eTA
+#     elementsTA
+# end
+"""
+    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+
+
+"""
+# function set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+#     for e in elementsT
+#         if e.b ∈ onstates
+#             push!(elementsTA, e)
+#         end
+#     end
+# end
 # function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, insertstep=1, base::Int=3)
 #     for e in elementsT
 #         wdigits = digits(div(e.b - 1, G), base=base, pad=R)[insertstep:end]
@@ -443,24 +510,27 @@ end
 
 
 """
-function set_elements_TI(elementsT, onstates)
-    elementsTI = Vector{Element}(undef, 0)
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-    elementsTI
-end
+# function set_elements_TI(elementsT, onstates)
+#     elementsTI = Vector{Element}(undef, 0)
+#     set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+#     elementsTI
+# end
+# function set_elements_TI(elementsT, onstates::Vector{Vector{Int}})
+#     elementsTI = Vector{Vector{Element}}(undef,length(onstates))
+#     for i in eachindex(onstates)
+#         eTi = Vector{Element}(undef, 0)
+#         set_elements_TI!(eTI, elementsT, onstates::Vector)
+#         elementsTI[i] = eTI
+#     elementsTI
+# end
 
-"""
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-
-
-"""
-function set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-    for e in elementsT
-        if e.b ∉ onstates
-            push!(elementsTI, e)
-        end
-    end
-end
+# function set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+#     for e in elementsT
+#         if e.b ∉ onstates
+#             push!(elementsTI, e)
+#         end
+#     end
+# end
 # function set_elements_TI!(elementsTI, elementsT, G::Int, R::Int, base::Int=3)
 #     for e in elementsT
 #         wdigits = digits(div(e.b - 1, G), base=base, pad=R)

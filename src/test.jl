@@ -82,11 +82,11 @@ options = test_options(1000);
 
 function test(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total=100000000, tol=1e-6)
     OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
-    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, insertstep, nalleles, nhist, bins, onstates)
+    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
     OFF, ON, mhist, modelOFF, modelON, histF
 end
 
-function test_chem(r, transitions, G, R, S, insertstep, nalleles, nhist, bins, onstates)
+function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     end

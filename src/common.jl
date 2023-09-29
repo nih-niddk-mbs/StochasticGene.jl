@@ -67,19 +67,19 @@ struct RNALiveCellData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
-    histRNA::Array
-    bins::Array
-    OFF::Array
-    ON::Array
+    histRNA::Vector
+    bins::Vector
+    OFF::Vector
+    ON::Vector
 end
 struct RNADwellTimeData <: AbstractHistogramData
     name::String
     gene::String
     nRNA::Int
     histRNA::Array
-    bins::Array
-    DwellTimes::Array
-    DTtypes::Array
+    bins::Vector{Vector}
+    DwellTimes::Vector{Vector}
+    DTtypes::Vector
 end
 struct TraceData{traceType} <: AbstractTraceData
     name::String
