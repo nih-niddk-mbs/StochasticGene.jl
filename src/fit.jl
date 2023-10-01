@@ -87,7 +87,7 @@ function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell
     fittedparam::Vector, fixedeffects::Tuple,
     transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[],
     decayrate=-1.0, splicetype="", ratetype="ml", root=".", propcv=0.01,
-    maxtime::Float64, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+    maxtime::Float64=600., samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
 
 
 
@@ -108,7 +108,7 @@ end
 
 datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatrace" => 4, "dwelltimes" => 5, "trace" => 5, "tracenascent" => 6)
 
-function datapath(root, gene, cond)
+function datafolder(root, gene, cond)
 
 
 end
@@ -119,40 +119,74 @@ end
 TBW
 """
 
-function read_dwelltimes(datapath)
+
+function occursin_file(a,b,file)
+    if isempty(a)
+        occursin(b,file)
+    elseif isempty(b)
+        occursin(a,file)
+    else
+        occursin(a,file) && occursin(b,file)
+    end
+end
+
+function readfile(gene::String, cond::String, datafolder::Vector)
     bins = Vector{Vector}(undef, 0)
     DT = Vector{Vector}(undef, 0)
-    for i in eachindex(dttypes)
-        LC = read_dwelltimes(gene, datapath[i])
-        push!(bins, LC[1])
-        push!(DT, LC[2])
+    for i in eachindex(datafolder)
+        c = readfile(gene, cond, datafolder[i])
+        push!(bins, c[:,1])
+        push!(DT, c[:,2])
     end
     bins, DT
 end
 
-function load_data(datatype, dttype, datapath, label, gene, cond, interval, tempfish, nascent)
+function readfile(gene::String, cond::String, path::String)
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            if occursin_file(gene, cond, target)
+                return readfile(target)
+            end
+        end
+    end
+end
+
+function readfile(file::String)
+    if occursin("csv", file)
+        a = readdlm(file, ',')
+    else
+        a = readdlm(file)
+    end
+    if eltype(a[1, :]) <: String
+        a = a[2:end, :]
+    end
+    return a
+end
+
+function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
-        len, h = read_rna(gene, cond, datapath)
+        len, h = read_rna(gene, cond, datafolder)
         return RNAData(label, gene, len, h)
     elseif datatype == "rnaoffon"
-        len, h = read_rna(gene, cond, tempfish, datapath[1])
-        LC = readLCPDF_genetrap(gene, datapath[2])
+        len, h = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = read_dwelltimes(gene, datafolder[2])
         return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
     elseif datatype == "rnadwelltimes"
-        len, h = read_rna(gene, cond, tempfish, datapath[1])
-        LC = readLCPDF_genetrap(gene, datapaths[2:end])
-        bins, DT = read_dwelltimes(datapaths)
+        len, h = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = read_dwelltimes(gene, cond, datafolders[2:end])
+        bins, DT = read_dwelltimes(datafolders)
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
         readdlm(datafolder)
-        trace = read_tracefiles(datapath, cond)
+        trace = read_tracefiles(datafolder, cond)
         return TraceData("trace", gene, interval, trace)
     elseif datatype == "tracenascent"
-        trace = read_tracefiles(datapath, cond)
+        trace = read_tracefiles(datafolder, cond)
         return TraceNascentData(label, gene, interval, trace, nascent)
     elseif datatype == "rnatrace"
-        len, h = histograms_rna(datapath[1], gene, fish)
-        traces = read_tracefiles(datapath[2], cond)
+        len, h = histograms_rna(datafolder[1], gene, fish)
+        traces = read_tracefiles(datafolder[2], cond)
         return TraceRNAData(label, gene, interval, traces, len, h)
     end
 end
@@ -205,15 +239,15 @@ TBW
 function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     if R == 0
         if isempty(fixedeffects)
-            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r,transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
+            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
         else
-            return GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r,transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            return GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     else
         if isempty(fixedeffects)
-            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r,transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, method, components, reporter)
+            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, method, components, reporter)
         else
-            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r,transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     end
 end
