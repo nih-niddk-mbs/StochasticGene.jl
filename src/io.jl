@@ -458,8 +458,8 @@ end
 
 TBW
 """
-filename(data, model::AbstractGRSMmodel) = filename(data.name, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
-filename(data, model::AbstractGMmodel) = filename(data.name, data.gene, model.G, model.nalleles)
+filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * txtstr
@@ -752,7 +752,7 @@ end
 # function save_data(file::String,data::TransientRNAData)
 #     f = open(file,"w")
 #     writedlm(f, [typeof(data)])
-#     writedlm(f,[data.name])
+#     writedlm(f,[data.label])
 #     writedlm(f,[data.gene])
 #     writedlm(f,[data.nRNA])
 #     writedlm(f,[data.time])

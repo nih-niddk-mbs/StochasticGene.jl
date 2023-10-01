@@ -83,14 +83,22 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
     fit(nchains, data, model, options, joinpath(root, resultfolder), burst, optimize, writesamples)
 end
 
-function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, inlabel::String, label::String, root=".", nalleles=2, propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, priorcv::Float64=10.0, decayrate=-1.0, splicetype="", ratetype="ml", onstates=Int[], burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell::String, datacond::String, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fittedparam::Vector, fixedeffects::Tuple,
+    transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[],
+    decayrate=-1.0, splicetype="", ratetype="ml", root=".", propcv=0.01,
+    maxtime::Float64, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+
+
+
+
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    datafolder = folder_path(datafolders, root, "data")
-    data = load_data(datatype, dttype, datafolder, name, gene, cond, interval, tempfish, nascent)
+    datafolder = folder_path(datafolder, root, "data")
+    data = load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     rp = model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0)
     model = load_model(data, infolder, rp, fittedparam, fixedeffects, transitions, label, gene, G, R, S, insertstep, onstates, weightind, decayrate, splicetype)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
@@ -106,7 +114,7 @@ function datapath(root, gene, cond)
 end
 
 """
-    load_data(datatype,datafolder,name,gene,cond,interval,tempfish,nascent)
+    load_data(datatype,datafolder,label,gene,cond,interval,tempfish,nascent)
 
 TBW
 """
@@ -122,10 +130,10 @@ function read_dwelltimes(datapath)
     bins, DT
 end
 
-function load_data(datatype, dttype, datapath, name, gene, cond, interval, tempfish, nascent)
+function load_data(datatype, dttype, datapath, label, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
         len, h = read_rna(gene, cond, datapath)
-        return RNAData(name, gene, len, h)
+        return RNAData(label, gene, len, h)
     elseif datatype == "rnaoffon"
         len, h = read_rna(gene, cond, tempfish, datapath[1])
         LC = readLCPDF_genetrap(gene, datapath[2])
@@ -141,11 +149,11 @@ function load_data(datatype, dttype, datapath, name, gene, cond, interval, tempf
         return TraceData("trace", gene, interval, trace)
     elseif datatype == "tracenascent"
         trace = read_tracefiles(datapath, cond)
-        return TraceNascentData(name, gene, interval, trace, nascent)
+        return TraceNascentData(label, gene, interval, trace, nascent)
     elseif datatype == "rnatrace"
         len, h = histograms_rna(datapath[1], gene, fish)
         traces = read_tracefiles(datapath[2], cond)
-        return TraceRNAData(name, gene, interval, traces, len, h)
+        return TraceRNAData(label, gene, interval, traces, len, h)
     end
 end
 
@@ -183,8 +191,10 @@ function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, trans
         components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decayrate)
     end
     priord = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
-    propcv = getcv(gene, G, nalleles,fittedparam,intlabl,infolder, root)
-    load_model(r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priord, propcv, components, reporter)
+    if propcv < 0
+        propcv = getcv(gene, G, nalleles, fittedparam, intlabl, infolder, root)
+    end
+    load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 """
@@ -192,18 +202,18 @@ end
 
 TBW
 """
-function load_model(r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priord, propcv, components, reporter)
+function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     if R == 0
         if isempty(fixedeffects)
-            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, priord, propcv, fittedparam, method, transitions, components, reporter)
+            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r,transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
         else
-            return GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, priord, propcv, fittedparam, fixedeffects, method, transitions, components, reporter)
+            return GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r,transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     else
         if isempty(fixedeffects)
-            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, priord, propcv, fittedparam, method, transitions, components, reporter)
+            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r,transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, method, components, reporter)
         else
-            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, priord, propcv, fittedparam, method, transitions, components, reporter)
+            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r,transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     end
 end

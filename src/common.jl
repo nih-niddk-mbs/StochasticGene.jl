@@ -43,13 +43,13 @@ abstract type AbstractTraceHistogramData <: AbstractHistogramData end
 
 # Data structures 
 #
-# Do not use underscore "_" in name
+# Do not use underscore "_" in label
 
 """
     Data structures
 
 arguments:
-name: label for the data set
+label: label for the data set
 gene: gene name (case sensitive)
 nRNA: length of histogram
 histRNA: RNA histograms
@@ -58,13 +58,13 @@ OFF:  OFF time probability density
 ON:: ON time probability density
 """
 struct RNAData{nType,hType} <: AbstractRNAData{hType}
-    name::String
+    label::String
     gene::String
     nRNA::nType
     histRNA::hType
 end
 struct RNALiveCellData <: AbstractHistogramData
-    name::String
+    label::String
     gene::String
     nRNA::Int
     histRNA::Vector
@@ -73,7 +73,7 @@ struct RNALiveCellData <: AbstractHistogramData
     ON::Vector
 end
 struct RNADwellTimeData <: AbstractHistogramData
-    name::String
+    label::String
     gene::String
     nRNA::Int
     histRNA::Array
@@ -82,20 +82,20 @@ struct RNADwellTimeData <: AbstractHistogramData
     DTtypes::Vector
 end
 struct TraceData{traceType} <: AbstractTraceData
-    name::String
+    label::String
     gene::String
     interval::Float64
     trace::traceType
 end
 struct TraceNascentData{traceType} <: AbstractTraceData
-    name::String
+    label::String
     gene::String
     interval::Float64
     trace::traceType
     nascent::Float64
 end
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
-    name::String
+    label::String
     gene::String
     interval::Float64
     trace::traceType
@@ -135,62 +135,62 @@ method: numerical method for solving Master equation
 -`reporters`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
+    rates::RateType
+    Gtransitions::Tuple
     G::Int
     nalleles::Int
-    rates::RateType
     rateprior::PriorType
     proposal::ProposalType
     fittedparam::ParamType
     method::MethodType
-    Gtransitions::Tuple
     components::ComponentType
     reporter::ReporterType
 end
 struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
+    rates::RateType
+    Gtransitions::Tuple
     G::Int
     nalleles::Int
-    rates::RateType
     rateprior::PriorType
     proposal::ProposalType
     fittedparam::ParamType
     fixedeffects::Tuple
     method::MethodType
-    Gtransitions::Tuple
     components::ComponentType
     reporter::ReporterType
 end
 
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
+    rates::RateType
+    Gtransitions::Tuple
     G::Int
     R::Int
     S::Int
     insertstep::Int
     nalleles::Int
     splicetype::String
-    rates::RateType
     rateprior::PriorType
     proposal::ProposalType
     fittedparam::ParamType
     method::MethodType
-    Gtransitions::Tuple
     components::ComponentType
     reporter::ReporterType
 end
 
 struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
+    rates::RateType
+    Gtransitions::Tuple
     G::Int
     R::Int
     S::Int
     insertstep::Int
     nalleles::Int
     splicetype::String
-    rates::RateType
     rateprior::PriorType
     proposal::ProposalType
     fittedparam::ParamType
     fixedeffects::Tuple
     method::MethodType
-    Gtransitions::Tuple
     components::ComponentType
     reporter::ReporterType
 end

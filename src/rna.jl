@@ -126,9 +126,9 @@ function data_rna(gene::String, cond::String, datafolder::String, fish::Bool, la
     data_rna(datafile, label, times, gene, false)
 end
 
-function data_rna(path, name, gene::String, fish::Bool)
+function data_rna(path, label, gene::String, fish::Bool)
     len, h = histograms_rna(path, gene, fish)
-    RNAData(name, gene, len, h)
+    RNAData(label, gene, len, h)
 end
 
 """

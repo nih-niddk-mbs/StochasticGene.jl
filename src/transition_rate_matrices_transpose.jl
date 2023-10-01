@@ -133,9 +133,14 @@ end
 	struct Indices
 
 index ranges for rates
+gamma: G transitions
+nu: R transitions
+eta: splice transitions
+decay: mRNA decay rate
+
 """
 struct Indices
-    gamma::Vector{Int}
+    gamma::Vector{Int} 
     nu::Vector{Int}
     eta::Vector{Int}
     decay::Int
@@ -625,18 +630,18 @@ end
 make_S_mat
 
 """
-function make_mat_U(total::Int, mu::Float64)
+function make_mat_U(total::Int, decay::Float64)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
     # Generate matrices for m transitions
-    Uplus[1, 2] = mu
+    Uplus[1, 2] = decay
     for m = 2:total-1
-        U[m, m] = -mu * (m - 1)
+        U[m, m] = -decay * (m - 1)
         Uminus[m, m-1] = 1
-        Uplus[m, m+1] = mu * m
+        Uplus[m, m+1] = decay * m
     end
-    U[total, total] = -mu * (total - 1)
+    U[total, total] = -decay * (total - 1)
     Uminus[total, total-1] = 1
     return U, Uminus, Uplus
 end
@@ -645,8 +650,8 @@ make_M_mat
 
 return M matrix used to compute steady state RNA distribution
 """
-function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, mu::Float64, total::Int)
-    U, Uminus, Uplus = make_mat_U(total, mu)
+function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
+    U, Uminus, Uplus = make_mat_U(total, decay)
     make_mat_M(T, B, U, Uminus, Uplus)
 end
 function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
