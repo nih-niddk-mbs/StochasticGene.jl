@@ -149,19 +149,20 @@ function load_data(datatype, dttype, datapath, name, gene, cond, interval, tempf
 end
 
 """
-    load_model()
+    load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
 
-TBW
+
 """
-function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
+function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind)
+    nhist = data.nRNA
     if typeof(data) <: AbtractRNAData
-        components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
+        components = make_components_M(transitions, G, 0, nhist, r[num_rates(transitions, R, S, insertstep)], "")
     elseif typeof(data) <: AbstractTraceData
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_T(transitions, G, R, S, insertstep, "")
     elseif typeof(data) <: AbstractTraceHistogramData
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-        components = make_components_MT(transitions, G, R, S, insertstep, nhist, r[num_rates(transitions, R, S, insertstep)])
+        components = make_components_MT(transitions, G, R, S, insertstep, nhist,  v)
     elseif typeof(data) <: AbstractHistogramData
         for i in eachindex(onstates)
             if isempty(onstates[i])
@@ -173,27 +174,22 @@ function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, trans
     end
     d = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if R == 0
-            if isempty(fixedeffects)
-                model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
-            else
-                model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
-            end
+        if isempty(fixedeffects)
+            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
+        else
+            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
+        end
     else
-            if isempty(fixedeffects)
-                GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
-            else
-                GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
-            end
+        if isempty(fixedeffects)
+            GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+        else
+            GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+        end
     end
 end
 
-function load_model()
-    make_reporter()
-    make_component()
-    make_prior()
-
-
-
+function load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates)
+    load_model(data, read_rates(infolder,label, gene, G, R, S, insertstep, nalleles), rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates)
 end
 
 function model_prior(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0, decay)
