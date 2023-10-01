@@ -89,9 +89,10 @@ function fit(nchains::Int, datatype::Int, gene::String, cell::String, datacond::
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    datafolders = folder_path(datafolders, root, "data")
-    data = load_data(datatype, datafolder, name, gene, cond, interval, tempfish, nascent)
-    model = load_model()
+    datafolder = folder_path(datafolders, root, "data")
+    data = load_data(datatype, dttype, datafolder, name, gene, cond, interval, tempfish, nascent)
+    rp = model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0)
+    model = load_model(data, infolder, rp, fittedparam, fixedeffects, transitions, label, gene, G, R, S, insertstep, onstates, weightind, decayrate, splicetype)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -149,20 +150,29 @@ function load_data(datatype, dttype, datapath, name, gene, cond, interval, tempf
 end
 
 """
+    load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind,decayrate)
+
+TBW
+"""
+function load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind, decayrate, propcv, splicetype)
+    load_model(data, read_rates(infolder, label, gene, G, R, S, insertstep, nalleles), rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates, weightind, decayrate, propcv, splicetype)
+end
+
+"""
     load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
 
 
 """
-function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind)
+function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind, decayrate, propcv, splicetype)
     nhist = data.nRNA
     if typeof(data) <: AbtractRNAData
-        components = make_components_M(transitions, G, 0, nhist, r[num_rates(transitions, R, S, insertstep)], "")
+        components = make_components_M(transitions, G, 0, nhist, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-        components = make_components_T(transitions, G, R, S, insertstep, "")
+        components = make_components_T(transitions, G, R, S, insertstep, splicetype)
     elseif typeof(data) <: AbstractTraceHistogramData
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-        components = make_components_MT(transitions, G, R, S, insertstep, nhist,  v)
+        components = make_components_MT(transitions, G, R, S, insertstep, nhist, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
         for i in eachindex(onstates)
             if isempty(onstates[i])
@@ -170,37 +180,45 @@ function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, trans
             end
         end
         reporter = onstates
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, r[num_rates(transitions, R, S, insertstep)])
+        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decayrate)
     end
-    d = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    priord = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    propcv = getcv(gene, G, nalleles,fittedparam,intlabl,infolder, root)
+    load_model(r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priord, propcv, components, reporter)
+end
+
+"""
+    load_model(r,fittedparam,fixedeffects,transitions,G,R,S,insertstep,priord,components,reporter)
+
+TBW
+"""
+function load_model(r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priord, propcv, components, reporter)
     if R == 0
         if isempty(fixedeffects)
-            model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
+            return GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, priord, propcv, fittedparam, method, transitions, components, reporter)
         else
-            model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
+            return GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, priord, propcv, fittedparam, fixedeffects, method, transitions, components, reporter)
         end
     else
         if isempty(fixedeffects)
-            GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+            return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, priord, propcv, fittedparam, method, transitions, components, reporter)
         else
-            GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, d, propcv, fittedparam, method, transitions, components, reporter)
+            return GRSMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, splicetype, r, priord, propcv, fittedparam, method, transitions, components, reporter)
         end
     end
 end
 
-function load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates)
-    load_model(data, read_rates(infolder,label, gene, G, R, S, insertstep, nalleles), rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates)
-end
 
-function model_prior(gene::String, r, transitions, G::Int, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0, decay)
+
+function model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0)
     if S > 0
         S = R
     end
     nrates = num_rates(transitions, R, S, insertstep)
     rm = fill(0.1, nrates)
     rcv = [fill(priorcv, length(rm) - 1); 0.1]
-    if gene ∈ genes_gt()
-        rm[nrates] = decay #log(2.0) / (60 .* halflife_gt()[gene])
+    if decayrate < 0
+        decayrate = get_decay(gene, cell, root)
     end
     distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
 end
@@ -433,6 +451,11 @@ function get_decay(gene::String, cell::String, root::String, col::Int=2)
     if isnothing(path)
         println(gene, " has no decay time")
         return -1.0
+    elseif cell == "HBEC"
+        if gene ∈ genes_gt()
+            # return log(2.0) / (60 .* halflife_gt()[gene])
+            get_decay(halflife_gt()[gene])
+        end
     else
         get_decay(gene, path, col)
     end
