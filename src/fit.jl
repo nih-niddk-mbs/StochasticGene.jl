@@ -84,10 +84,8 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
 end
 
 function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell::String, datacond::String, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple,
-    transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[],
-    decayrate=-1.0, splicetype="", ratetype="ml", root=".", propcv=0.01,
-    maxtime::Float64=600., samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+    fittedparam::Vector, fixedeffects::Tuple,transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[],decayrate=-1.0, splicetype="", ratetype="ml", 
+    root=".", propcv=0.01,maxtime::Float64=600., samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
 
 
 
@@ -118,7 +116,32 @@ end
 
 TBW
 """
-
+function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
+    if datatype == "rna"
+        len, h = read_rna(gene, cond, datafolder)
+        return RNAData(label, gene, len, h)
+    elseif datatype == "rnaoffon"
+        len, h = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = read_dwelltimes(gene, datafolder[2])
+        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
+    elseif datatype == "rnadwelltimes"
+        len, h = read_rna(gene, cond, tempfish, datafolder[1])
+        LC = read_dwelltimes(gene, cond, datafolders[2:end])
+        bins, DT = read_dwelltimes(datafolders)
+        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
+    elseif datatype == "trace"
+        readdlm(datafolder)
+        trace = read_tracefiles(datafolder, cond)
+        return TraceData("trace", gene, interval, trace)
+    elseif datatype == "tracenascent"
+        trace = read_tracefiles(datafolder, cond)
+        return TraceNascentData(label, gene, interval, trace, nascent)
+    elseif datatype == "rnatrace"
+        len, h = histograms_rna(datafolder[1], gene, fish)
+        traces = read_tracefiles(datafolder[2], cond)
+        return TraceRNAData(label, gene, interval, traces, len, h)
+    end
+end
 
 function occursin_file(a,b,file)
     if isempty(a)
@@ -159,37 +182,25 @@ function readfile(file::String)
         a = readdlm(file)
     end
     if eltype(a[1, :]) <: String
-        a = a[2:end, :]
+        a = float.(a[2:end, :])
     end
     return a
 end
 
-function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
-    if datatype == "rna"
-        len, h = read_rna(gene, cond, datafolder)
-        return RNAData(label, gene, len, h)
-    elseif datatype == "rnaoffon"
-        len, h = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = read_dwelltimes(gene, datafolder[2])
-        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
-    elseif datatype == "rnadwelltimes"
-        len, h = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = read_dwelltimes(gene, cond, datafolders[2:end])
-        bins, DT = read_dwelltimes(datafolders)
-        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
-    elseif datatype == "trace"
-        readdlm(datafolder)
-        trace = read_tracefiles(datafolder, cond)
-        return TraceData("trace", gene, interval, trace)
-    elseif datatype == "tracenascent"
-        trace = read_tracefiles(datafolder, cond)
-        return TraceNascentData(label, gene, interval, trace, nascent)
-    elseif datatype == "rnatrace"
-        len, h = histograms_rna(datafolder[1], gene, fish)
-        traces = read_tracefiles(datafolder[2], cond)
-        return TraceRNAData(label, gene, interval, traces, len, h)
+
+
+
+
+function scRNApath(gene::String, cond::String, datapath::String, root::String)
+    datapath = joinpath(root, datapath)
+    if cond == ""
+        joinpath(datapath, gene * ".txt")
+    else
+        joinpath(datapath, gene * "_" * cond * ".txt")
     end
 end
+scRNApath(gene, cond, datapath) = joinpath(datapath, gene * "_" * cond * ".txt")
+
 
 """
     load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind,decayrate)
