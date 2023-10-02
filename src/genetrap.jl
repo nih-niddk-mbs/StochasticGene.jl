@@ -129,6 +129,17 @@ end
 # end
 
 
+function flip_dwelltimes(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for file in files
+            target = joinpath(root, file)
+            c = readdlm(target,',')
+            writedlm(target,[c[:,1] c[:,3] c[:,2]],',')
+        end
+    end
+end
+
+
 """
 readrates_genetrap(infolder::String,ratetype::String,gene::String,label,G,R,nalleles,splicetype::String)
 

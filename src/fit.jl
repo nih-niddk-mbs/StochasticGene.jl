@@ -103,33 +103,28 @@ end
 
 datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatrace" => 4, "dwelltimes" => 5, "trace" => 5, "tracenascent" => 6)
 
-function datafolder(root, gene, cond)
-
-
-end
 
 """
     load_data(datatype,datafolder,label,gene,cond,interval,tempfish,nascent)
 
-TBW
+loads data structure
 """
 function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
-        len, h = readfile(gene, cond, datafolder)
+        len, h = read_rna(gene, cond, datafolder)
         return RNAData(label, gene, len, h)
     elseif datatype == "rnaoffon"
-        len, h = readfile(gene, cond, datafolder[1])
+        len, h = read_rna(gene, cond, datafolder[1])
         h = div.(h, tempfish)
         LC = readfile(gene, cond, datafolder[2])
-        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
+        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
     elseif datatype == "rnadwelltimes"
-        len, h = readfile(gene, cond, datafolder[1])
+        len, h = read_rna(gene, cond, datafolder[1])
         h = div.(h, tempfish)
         LC = readfile(gene, cond, datafolders[2:end])
         bins, DT = read_dwelltimes(datafolders)
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
-        readdlm(datafolder)
         trace = read_tracefiles(datafolder, cond)
         return TraceData("trace", gene, interval, trace)
     elseif datatype == "tracenascent"
@@ -142,13 +137,19 @@ function load_data(datatype, dttype, datafolder, label, gene, cond, interval, te
     end
 end
 
+
+function read_rna(gene,cond,datafolder)
+    h = readfile(gene,cond,datafolder)[:,1]
+    return length(h), h
+end
+
 function occursin_file(a, b, file)
     if isempty(a)
-        occursin(b, file)
+        occursin(Regex(b,"i"), file)
     elseif isempty(b)
-        occursin(a, file)
+        occursin(Regex(a,"i"), file)
     else
-        occursin(a, file) && occursin(b, file)
+        occursin(Regex(a,"i"), file) && occursin(Regex(b,"i"), file)
     end
 end
 
@@ -186,13 +187,6 @@ function readfile(file::String)
     return a
 end
 
-function RNApath(gene::String, cond::String, datapath::String)
-    if cond == ""
-        joinpath(datapath, gene * ".txt")
-    else
-        joinpath(datapath, gene * "_" * cond * ".txt")
-    end
-end
 
 """
     read_tracefiles(path::String,cond::String,col=3)
