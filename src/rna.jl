@@ -166,77 +166,77 @@ function histograms_rna(path::Array, gene::String, fish::Array{Bool,1})
     return lengths, h
 end
 
-# Prepare model structures
-"""
-model_rna(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
-model_rna(r::Vector,d::Vector,G::Int,nalleles::Int,propcv,fittedparam,fixedeffects,fish::Bool,method=0)
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,yieldprior,method)
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,method)
-model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
+# # Prepare model structures
+# """
+# model_rna(gene,cell,G,fish,fittedparam,fixedeffects,inlabel,infolder,nsets,root,data,verbose=true)
+# model_rna(r::Vector,d::Vector,G::Int,nalleles::Int,propcv,fittedparam,fixedeffects,fish::Bool,method=0)
+# model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,yieldprior,method)
+# model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,method)
+# model_rna(r,G,nalleles,nsets,propcv,fittedparam,decayprior,noisepriors,method)
 
-make model structure
+# make model structure
 
-"""
+# """
 
-function model_rna(data, gene::String, cell::String, G::Int, cv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate::Float64, fprior=Normal, priorcv=10.0, onstates=[G], verbose=true)
-    if decayrate < 0
-        decayrate = get_decay(gene, cell, root)
-    end
-    nalleles = alleles(gene, cell, root)
-    if verbose
-        println("alleles: ", nalleles)
-        if decayrate < 0
-            throw("decayrate < 0")
-        else
-            println("decay rate: ", decayrate)
-        end
-    end
-    if cv <= 0
-        cv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root, verbose)
-    end
-    if G == 1
-        ejectrate = mean_histogram(data.histRNA) * decayrate / nalleles * yieldprior
-    else
-        ejectrate = yieldprior
-    end
-    r = getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets, root, verbose)
-    model = model_rna(data.nRNA, r, G, nalleles, nsets, cv, fittedparam, fixedeffects, transitions, decayrate, ejectrate, fprior, priorcv, onstates)
-    return model
-end
+# function model_rna(data, gene::String, cell::String, G::Int, cv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate::Float64, fprior=Normal, priorcv=10.0, onstates=[G], verbose=true)
+#     if decayrate < 0
+#         decayrate = get_decay(gene, cell, root)
+#     end
+#     nalleles = alleles(gene, cell, root)
+#     if verbose
+#         println("alleles: ", nalleles)
+#         if decayrate < 0
+#             throw("decayrate < 0")
+#         else
+#             println("decay rate: ", decayrate)
+#         end
+#     end
+#     if cv <= 0
+#         cv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root, verbose)
+#     end
+#     if G == 1
+#         ejectrate = mean_histogram(data.histRNA) * decayrate / nalleles * yieldprior
+#     else
+#         ejectrate = yieldprior
+#     end
+#     r = getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets, root, verbose)
+#     model = model_rna(data.nRNA, r, G, nalleles, nsets, cv, fittedparam, fixedeffects, transitions, decayrate, ejectrate, fprior, priorcv, onstates)
+#     return model
+# end
 
-function model_rna(nRNA::Int, r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam, fixedeffects, transitions, decayprior, ejectprior, f=Normal, cv=10.0, onstates=[G])
-    d = prior_rna(r, G, nsets, fittedparam, decayprior, ejectprior, f, cv)
-    model_rna(nRNA, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, onstates)
-end
-function model_rna(nRNA::Int, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, method=0, onstates=[G])
-    # components = make_components_M(transitions,G,data.nRNA+2,r[end])
-    components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
-    if length(fixedeffects) > 0
-        model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
-    else
-        model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
-    end
-    return model
-end
+# function model_rna(nRNA::Int, r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam, fixedeffects, transitions, decayprior, ejectprior, f=Normal, cv=10.0, onstates=[G])
+#     d = prior_rna(r, G, nsets, fittedparam, decayprior, ejectprior, f, cv)
+#     model_rna(nRNA, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, onstates)
+# end
+# function model_rna(nRNA::Int, r::Vector, d, G::Int, nalleles, propcv, fittedparam, fixedeffects, transitions, method=0, onstates=[G])
+#     # components = make_components_M(transitions,G,data.nRNA+2,r[end])
+#     components = make_components_M(transitions, G, 0, nRNA + 2, r[end], "")
+#     if length(fixedeffects) > 0
+#         model = GMfixedeffectsmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, fixedeffects, method, transitions, components, onstates)
+#     else
+#         model = GMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, propcv, fittedparam, method, transitions, components, onstates)
+#     end
+#     return model
+# end
 
 
-function model_delay_rna(r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam::Array, decayprior, ejectprior, delayprior)
-    # propcv = proposal_cv_rna(propcv,fittedparam)
-    d = prior_rna(r, G, nsets, fittedparam, decayprior, ejectprior, delayprior)
-    GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G, nalleles, r, d, propcv, fittedparam, 1)
-end
+# function model_delay_rna(r::Vector, G::Int, nalleles::Int, nsets::Int, propcv, fittedparam::Array, decayprior, ejectprior, delayprior)
+#     # propcv = proposal_cv_rna(propcv,fittedparam)
+#     d = prior_rna(r, G, nsets, fittedparam, decayprior, ejectprior, delayprior)
+#     GMdelaymodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),Int64}(G, nalleles, r, d, propcv, fittedparam, 1)
+# end
 
-"""
-transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
+# """
+# transient_rna(nchains,gene::String,fittedparam,cond::Vector,G::Int,maxtime::Float64,infolder::String,resultfolder,datafolder,inlabel,label,nsets,runcycle::Bool=false,samplesteps::Int=40000,warmupsteps=20000,annealsteps=100000,temp=1.,tempanneal=100.,root = "/home/carsonc/scrna/")
 
-make structures for transient model fit
-"""
-function transient_rna(nchains, gene::String, cell, fittedparam, cond::Vector, G::Int, maxtime::Float64, infolder::String, resultfolder, datafolder, inlabel, label, nsets, runcycle::Bool=false, samplesteps::Int=40000, warmupsteps=20000, annealsteps=100000, temp=1.0, tempanneal=100.0, root="/home/carsonc/scrna/")
-    data = make_data(gene, cond, G, datafolder, label, nsets, root)
-    model = make_model(gene, cell, G, fittedparam, inlabel, infolder, nsets, root, data)
-    param, _ = initial_proposal(model)
-    return param, data, model
-end
+# make structures for transient model fit
+# """
+# function transient_rna(nchains, gene::String, cell, fittedparam, cond::Vector, G::Int, maxtime::Float64, infolder::String, resultfolder, datafolder, inlabel, label, nsets, runcycle::Bool=false, samplesteps::Int=40000, warmupsteps=20000, annealsteps=100000, temp=1.0, tempanneal=100.0, root="/home/carsonc/scrna/")
+#     data = make_data(gene, cond, G, datafolder, label, nsets, root)
+#     model = make_model(gene, cell, G, fittedparam, inlabel, infolder, nsets, root, data)
+#     param, _ = initial_proposal(model)
+#     return param, data, model
+# end
 
 """
 prior_rna(r::Vector,G::Int,nsets::Int,propcv,fittedparam::Array,decayprior,yieldprior)
@@ -360,50 +360,50 @@ function rescale_rate_rna(r, G, decayrate::Float64)
 end
 
 
-# Read in data and construct histograms
-"""
-read_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
-Construct mRNA count per cell histogram array of a gene
-"""
-function read_scrna(filename::String, threshold::Float64=0.99, nhistmax::Int=500)
-    if isfile(filename) && filesize(filename) > 0
-        x = readdlm(filename)[:, 1]
-        x = truncate_histogram(x, threshold, nhistmax)
-        if x == 0
-            dataFISH = Array{Int,1}(undef, 0)
-        else
-            dataFISH = x
-        end
-        return dataFISH
-    else
-        # println("data file not found")
-        return Array{Int,1}(undef, 0)
-    end
-end
+# # Read in data and construct histograms
+# """
+# read_scrna(filename::String,yield::Float64=.99,nhistmax::Int=1000)
+# Construct mRNA count per cell histogram array of a gene
+# """
+# function read_scrna(filename::String, threshold::Float64=0.99, nhistmax::Int=500)
+#     if isfile(filename) && filesize(filename) > 0
+#         x = readdlm(filename)[:, 1]
+#         x = truncate_histogram(x, threshold, nhistmax)
+#         if x == 0
+#             dataFISH = Array{Int,1}(undef, 0)
+#         else
+#             dataFISH = x
+#         end
+#         return dataFISH
+#     else
+#         # println("data file not found")
+#         return Array{Int,1}(undef, 0)
+#     end
+# end
 
-"""
-read_fish(path,gene,threshold)
-Read in FISH data from 7timepoint type folders
+# """
+# read_fish(path,gene,threshold)
+# Read in FISH data from 7timepoint type folders
 
-"""
-function read_fish(path::String, cond::String, threshold::Float64=0.98, maxlength=1800)
-    xr = zeros(maxlength)
-    lx = 0
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin(cond, target) && occursin("cellular", target)
-                # println(target)
-                x1 = readdlm(target)[:, 1]
-                x1 = truncate_histogram(x1, threshold, maxlength)
-                lx = length(x1)
-                # println(lx)
-                xr[1:min(lx, maxlength)] += x1[1:min(lx, maxlength)]
-            end
-        end
-    end
-    return truncate_histogram(xr, 1.0, maxlength)
-end
+# """
+# function read_fish(path::String, cond::String, threshold::Float64=0.98, maxlength=1800)
+#     xr = zeros(maxlength)
+#     lx = 0
+#     for (root, dirs, files) in walkdir(path)
+#         for file in files
+#             target = joinpath(root, file)
+#             if occursin(cond, target) && occursin("cellular", target)
+#                 # println(target)
+#                 x1 = readdlm(target)[:, 1]
+#                 x1 = truncate_histogram(x1, threshold, maxlength)
+#                 lx = length(x1)
+#                 # println(lx)
+#                 xr[1:min(lx, maxlength)] += x1[1:min(lx, maxlength)]
+#             end
+#         end
+#     end
+#     return truncate_histogram(xr, 1.0, maxlength)
+# end
 
 function read_fish(path1::String, cond1::String, path2::String, cond2::String, threshold::Float64=0.98)
     x1 = read_fish(path1, cond1, threshold)
@@ -428,47 +428,47 @@ function new_FISH(newroot::String, oldroot::String, rep::String)
 end
 
 # functions to build paths to RNA/FISH data and results
-"""
-scRNApath(gene::String,cond::String,datapath::String,root::String)
+# """
+# scRNApath(gene::String,cond::String,datapath::String,root::String)
 
-generate path to scRNA data for given gene and condition cond
-    data files must have format genename_cond.txt
-"""
-function scRNApath(gene::String, cond::String, datapath::String, root::String)
-    datapath = joinpath(root, datapath)
-    if cond == ""
-        joinpath(datapath, gene * ".txt")
-    else
-        joinpath(datapath, gene * "_" * cond * ".txt")
-    end
-end
-scRNApath(gene, cond, datapath) = joinpath(datapath, gene * "_" * cond * ".txt")
+# generate path to scRNA data for given gene and condition cond
+#     data files must have format genename_cond.txt
+# """
+# function scRNApath(gene::String, cond::String, datapath::String, root::String)
+#     datapath = joinpath(root, datapath)
+#     if cond == ""
+#         joinpath(datapath, gene * ".txt")
+#     else
+#         joinpath(datapath, gene * "_" * cond * ".txt")
+#     end
+# end
+# scRNApath(gene, cond, datapath) = joinpath(datapath, gene * "_" * cond * ".txt")
 
-"""
-FISHpath(gene,cond,datapath,root)
+# """
+# FISHpath(gene,cond,datapath,root)
 
-generate path to FISH data
-"""
-# FISHpath(gene,cond,datapath,root) = joinpath(joinpath(joinpath(root,datapath),gene),cond)
-FISHpath(gene, cond, datapath, root) = joinpath(root, datapath, gene, cond)
-FISHpath(gene, cond, datapath) = joinpath(datapath, gene, cond)
+# generate path to FISH data
+# """
+# # FISHpath(gene,cond,datapath,root) = joinpath(joinpath(joinpath(root,datapath),gene),cond)
+# FISHpath(gene, cond, datapath, root) = joinpath(root, datapath, gene, cond)
+# FISHpath(gene, cond, datapath) = joinpath(datapath, gene, cond)
 
-"""
-ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
+# """
+# ratepath_Gmodel(gene::String,cond::String,G::Int,nalleles::Int,label,folder,root)
 
-"""
-function ratepath_Gmodel(gene::String, cond::String, G::Int, nalleles::Int, label, folder, root)
-    path_Gmodel("rates", gene, G, nalleles, label * "-" * cond, folder, root)
-end
+# """
+# function ratepath_Gmodel(gene::String, cond::String, G::Int, nalleles::Int, label, folder, root)
+#     path_Gmodel("rates", gene, G, nalleles, label * "-" * cond, folder, root)
+# end
 
-"""
-path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
-"""
-function path_Gmodel(type, gene::String, G::Int, nalleles::Int, label::String, folder, root)
-    filelabel = label * "_" * gene * "_" * "$G" * "_" * "$nalleles" * ".txt"
-    ratefile = type * "_" * filelabel
-    joinpath(root, folder, ratefile)
-end
+# """
+# path_Gmodel(type,gene::String,G::Int,nalleles::Int,label::String,folder,root)
+# """
+# function path_Gmodel(type, gene::String, G::Int, nalleles::Int, label::String, folder, root)
+#     filelabel = label * "_" * gene * "_" * "$G" * "_" * "$nalleles" * ".txt"
+#     ratefile = type * "_" * filelabel
+#     joinpath(root, folder, ratefile)
+# end
 
 """
 stats_rna(genes::Vector,conds,datapath,threshold=.99)

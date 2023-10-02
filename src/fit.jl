@@ -94,8 +94,9 @@ function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell
     infolder = folder_path(infolder, root, "results")
     datafolder = folder_path(datafolder, root, "data")
     data = load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
-    rp = model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0)
-    model = load_model(data, infolder, rp, fittedparam, fixedeffects, transitions, label, gene, G, R, S, insertstep, onstates, weightind, decayrate, splicetype)
+    rp = model_prior(gene, cell, transitions, R, S, insertstep, fittedparam, priorcv)
+    r = read_rates(infolder, label, gene, G, R, S, insertstep, nalleles)
+    model = load_model(data, r, rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates, weightind, decayrate, propcv, splicetype)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -105,9 +106,9 @@ datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatr
 
 
 """
-    load_data(datatype,datafolder,label,gene,cond,interval,tempfish,nascent)
+    load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
 
-loads data structure
+return data structure
 """
 function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
@@ -121,7 +122,7 @@ function load_data(datatype, dttype, datafolder, label, gene, cond, interval, te
     elseif datatype == "rnadwelltimes"
         len, h = read_rna(gene, cond, datafolder[1])
         h = div.(h, tempfish)
-        LC = readfile(gene, cond, datafolders[2:end])
+        LC = readfiles(gene, cond, datafolders[2:end])
         bins, DT = read_dwelltimes(datafolders)
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
@@ -138,105 +139,8 @@ function load_data(datatype, dttype, datafolder, label, gene, cond, interval, te
 end
 
 
-function read_rna(gene,cond,datafolder)
-    h = readfile(gene,cond,datafolder)[:,1]
-    return length(h), h
-end
-
-function occursin_file(a, b, file)
-    if isempty(a)
-        occursin(Regex(b,"i"), file)
-    elseif isempty(b)
-        occursin(Regex(a,"i"), file)
-    else
-        occursin(Regex(a,"i"), file) && occursin(Regex(b,"i"), file)
-    end
-end
-
-function readfile(gene::String, cond::String, datafolder::Vector)
-    bins = Vector{Vector}(undef, 0)
-    DT = Vector{Vector}(undef, 0)
-    for i in eachindex(datafolder)
-        c = readfile(gene, cond, datafolder[i])
-        push!(bins, c[:, 1])
-        push!(DT, c[:, 2])
-    end
-    bins, DT
-end
-
-function readfile(gene::String, cond::String, path::String)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin_file(gene, cond, target)
-                return readfile(target)
-            end
-        end
-    end
-end
-
-function readfile(file::String)
-    if occursin("csv", file)
-        a = readdlm(file, ',')
-    else
-        a = readdlm(file)
-    end
-    if eltype(a[1, :]) <: String
-        a = float.(a[2:end, :])
-    end
-    return a
-end
-
-
 """
-    read_tracefiles(path::String,cond::String,col=3)
-
-read tracefiles
-"""
-function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
-    readfn = delim == ',' ? read_tracefile_csv : read_tracefile
-    read_tracefiles(path, cond, readfn, col)
-end
-
-function read_tracefiles(path::String, cond::String="", readfn::Function=read_tracefile, col=3)
-    traces = Vector[]
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin(cond, target)
-                push!(traces, readfn(target, col))
-            end
-        end
-    end
-    set = sum.(traces)
-    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
-end
-
-"""
-    read_tracefile(target::String,col=3)
-
-read single trace file
-"""
-read_tracefile(target::String, col=3) = readdlm(target)[:, col]
-
-
-read_tracefile_csv(target::String, col=3) = readdlm(target, ',')[:, col]
-
-
-
-
-
-"""
-    load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind,decayrate)
-
-TBW
-"""
-function load_model(data, infolder, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, label, gene, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind, decayrate, propcv, splicetype)
-    load_model(data, read_rates(infolder, label, gene, G, R, S, insertstep, nalleles), rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates, weightind, decayrate, propcv, splicetype)
-end
-
-"""
-    load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates)
+    load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind, decayrate, propcv, splicetype)
 
 
 """
@@ -269,7 +173,7 @@ end
 """
     load_model(r,fittedparam,fixedeffects,transitions,G,R,S,insertstep,priord,components,reporter)
 
-TBW
+
 """
 function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     if R == 0

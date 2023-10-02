@@ -92,36 +92,36 @@ function trace_prior(r, rcv, fittedparam, ind, f=Normal)
     # distribution_array(mulognormal(r[fittedparam],rcv[fittedparam]), sigmalognormal(rcv[fittedparam]), f)
 end
 
-"""
-    read_tracefiles(path::String,cond::String,col=3)
+# """
+#     read_tracefiles(path::String,cond::String,col=3)
 
-read tracefiles
-"""
-function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
-    readfn = delim == ',' ? read_tracefile_csv : read_tracefile
-    read_tracefiles(path, cond, readfn, col)
-end
+# read tracefiles
+# """
+# function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
+#     readfn = delim == ',' ? read_tracefile_csv : read_tracefile
+#     read_tracefiles(path, cond, readfn, col)
+# end
 
-function read_tracefiles(path::String, cond::String="", readfn::Function=read_tracefile, col=3)
-    traces = Vector[]
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin(cond, target)
-                push!(traces, readfn(target, col))
-            end
-        end
-    end
-    set = sum.(traces)
-    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
-end
+# function read_tracefiles(path::String, cond::String="", readfn::Function=read_tracefile, col=3)
+#     traces = Vector[]
+#     for (root, dirs, files) in walkdir(path)
+#         for file in files
+#             target = joinpath(root, file)
+#             if occursin(cond, target)
+#                 push!(traces, readfn(target, col))
+#             end
+#         end
+#     end
+#     set = sum.(traces)
+#     traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+# end
 
-"""
-    read_tracefile(target::String,col=3)
+# """
+#     read_tracefile(target::String,col=3)
 
-read single trace file
-"""
-read_tracefile(target::String, col=3) = readdlm(target)[:, col]
+# read single trace file
+# """
+# read_tracefile(target::String, col=3) = readdlm(target)[:, col]
 
 
-read_tracefile_csv(target::String, col=3) = readdlm(target, ',')[:, col]
+# read_tracefile_csv(target::String, col=3) = readdlm(target, ',')[:, col]

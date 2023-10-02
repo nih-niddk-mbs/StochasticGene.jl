@@ -571,9 +571,119 @@ write_MHsamples(file::String,samples::Matrix)
 """
 write_array(file::String, d::Array) = writedlm(file, d, header=false)
 
+"""
+    get_row()
+
+
+"""
 get_row() = Dict([("ml", 1); ("mean", 2); ("median", 3); ("last", 4)])
 
+"""
+    get_ratetype()
+
+
+"""
 get_ratetype() = invert_dict(get_row())
+
+
+
+
+"""
+    occursin_file(a, b, file)
+
+determine if string a or string b occurs in file (case insensitive)
+"""
+function occursin_file(a, b, file)
+    if isempty(a)
+        occursin(Regex(b, "i"), file)
+    elseif isempty(b)
+        occursin(Regex(a, "i"), file)
+    else
+        occursin(Regex(a, "i"), file) && occursin(Regex(b, "i"), file)
+    end
+end
+"""
+    readfile(file::String)
+
+read file accounting for delimiter and headers
+"""
+function readfile(file::String)
+    if occursin("csv", file)
+        a = readdlm(file, ',')
+    else
+        a = readdlm(file)
+    end
+    if eltype(a[1, :]) <: String
+        a = float.(a[2:end, :])
+    end
+    return a
+end
+"""
+    readfile(file::String, col::Int)
+
+read file and return given column
+"""
+readfile(file::String, col::Int) = readfile(file)[:, col]
+"""
+    readfile(gene::String, cond::String, path::String)
+
+read file if name includes gene and cond
+"""
+function readfile(gene::String, cond::String, path::String)
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            if occursin_file(gene, cond, target)
+                return readfile(target)
+            end
+        end
+    end
+end
+"""
+    readfiles(gene::String, cond::String, datafolder::Vector)
+
+read in a set of dwelltime files and return vector of time bins and values
+"""
+function readfiles(gene::String, cond::String, datafolder::Vector)
+    bins = Vector{Vector}(undef, 0)
+    DT = Vector{Vector}(undef, 0)
+    for i in eachindex(datafolder)
+        c = readfile(gene, cond, datafolder[i])
+        push!(bins, c[:, 1])
+        push!(DT, c[:, 2])
+    end
+    bins, DT
+end
+
+
+"""
+    read_rna(gene, cond, datafolder)
+
+read in rna histograms 
+"""
+function read_rna(gene, cond, datafolder)
+    h = readfile(gene, cond, datafolder)[:, 1]
+    return length(h), h
+end
+
+"""
+    read_tracefiles(path::String, gene::String, cond::String="", col=3)
+
+read in trace files
+"""
+function read_tracefiles(path::String, gene::String, cond::String="", col=3)
+    traces = Vector[]
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            occursin_file(gene, cond, target) && push!(traces, readfile(target, col))
+        end
+    end
+    set = sum.(traces)
+    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+end
+
+
 
 """
 readrates(file::String,row::Int)

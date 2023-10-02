@@ -243,6 +243,14 @@ datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
 datahistogram(data::RNALiveCellData) = [data.OFF; data.ON; data.histRNA]
 datahistogram(data::AbstractTraceHistogramData) = data.histRNA
 
+function datahistogram(data::RNADwellTimeData)
+    v = data.histRNA[1]
+    for i in 2:length(data.DwellTimes)
+        v = vcat(v, data.Dwelltimes[i])
+    end
+    return v
+end
+
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
@@ -325,7 +333,7 @@ end
 
 
 """
-    likelihoodarray(r,data::RNAData{T1,T2},model::AbstractGMmodel) where {T1 <: Array, T2 <: Array}
+    likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
 
 likelihood for multiple histograms, returns an array of pdfs
 """
@@ -338,12 +346,12 @@ function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where 
     trim_hist(h, data.nRNA)
 end
 
-"""
-    likelihoodarray(r,data::RNALiveCellData,model::GMmodel)
 
-likelihood for mRNA FISH histogram and ON and OFF dwell time data
 """
+    likelihoodarray(r, data::RNALiveCellData, model::AbstractGmodel)
 
+TBW
+"""
 function likelihoodarray(r, data::RNALiveCellData, model::AbstractGmodel)
     components = model.components
     onstates = model.reporter
