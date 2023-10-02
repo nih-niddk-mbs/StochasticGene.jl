@@ -84,11 +84,8 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
 end
 
 function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell::String, datacond::String, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple,transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[],decayrate=-1.0, splicetype="", ratetype="ml", 
-    root=".", propcv=0.01,maxtime::Float64=600., samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
-
-
-
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", ratetype="ml",
+    root=".", propcv=0.01, maxtime::Float64=600.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
 
     println(now())
     gene = check_genename(gene, "[")
@@ -118,15 +115,17 @@ TBW
 """
 function load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     if datatype == "rna"
-        len, h = read_rna(gene, cond, datafolder)
+        len, h = readfile(gene, cond, datafolder)
         return RNAData(label, gene, len, h)
     elseif datatype == "rnaoffon"
-        len, h = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = read_dwelltimes(gene, datafolder[2])
+        len, h = readfile(gene, cond, datafolder[1])
+        h = div.(h, tempfish)
+        LC = readfile(gene, cond, datafolder[2])
         return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 3], LC[:, 2])
     elseif datatype == "rnadwelltimes"
-        len, h = read_rna(gene, cond, tempfish, datafolder[1])
-        LC = read_dwelltimes(gene, cond, datafolders[2:end])
+        len, h = readfile(gene, cond, datafolder[1])
+        h = div.(h, tempfish)
+        LC = readfile(gene, cond, datafolders[2:end])
         bins, DT = read_dwelltimes(datafolders)
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
@@ -143,13 +142,13 @@ function load_data(datatype, dttype, datafolder, label, gene, cond, interval, te
     end
 end
 
-function occursin_file(a,b,file)
+function occursin_file(a, b, file)
     if isempty(a)
-        occursin(b,file)
+        occursin(b, file)
     elseif isempty(b)
-        occursin(a,file)
+        occursin(a, file)
     else
-        occursin(a,file) && occursin(b,file)
+        occursin(a, file) && occursin(b, file)
     end
 end
 
@@ -158,8 +157,8 @@ function readfile(gene::String, cond::String, datafolder::Vector)
     DT = Vector{Vector}(undef, 0)
     for i in eachindex(datafolder)
         c = readfile(gene, cond, datafolder[i])
-        push!(bins, c[:,1])
-        push!(DT, c[:,2])
+        push!(bins, c[:, 1])
+        push!(DT, c[:, 2])
     end
     bins, DT
 end
@@ -187,19 +186,50 @@ function readfile(file::String)
     return a
 end
 
-
-
-
-
-function scRNApath(gene::String, cond::String, datapath::String, root::String)
-    datapath = joinpath(root, datapath)
+function RNApath(gene::String, cond::String, datapath::String)
     if cond == ""
         joinpath(datapath, gene * ".txt")
     else
         joinpath(datapath, gene * "_" * cond * ".txt")
     end
 end
-scRNApath(gene, cond, datapath) = joinpath(datapath, gene * "_" * cond * ".txt")
+
+"""
+    read_tracefiles(path::String,cond::String,col=3)
+
+read tracefiles
+"""
+function read_tracefiles(path::String, cond::String, delim::AbstractChar, col=3)
+    readfn = delim == ',' ? read_tracefile_csv : read_tracefile
+    read_tracefiles(path, cond, readfn, col)
+end
+
+function read_tracefiles(path::String, cond::String="", readfn::Function=read_tracefile, col=3)
+    traces = Vector[]
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            if occursin(cond, target)
+                push!(traces, readfn(target, col))
+            end
+        end
+    end
+    set = sum.(traces)
+    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+end
+
+"""
+    read_tracefile(target::String,col=3)
+
+read single trace file
+"""
+read_tracefile(target::String, col=3) = readdlm(target)[:, col]
+
+
+read_tracefile_csv(target::String, col=3) = readdlm(target, ',')[:, col]
+
+
+
 
 
 """
