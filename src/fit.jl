@@ -84,7 +84,7 @@ function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixe
 end
 
 function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell::String, datacond::String, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", ratetype="ml",
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", ratetype="median",
     root=".", propcv=0.01, maxtime::Float64=600.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
 
     println(now())
@@ -95,12 +95,20 @@ function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell
     datafolder = folder_path(datafolder, root, "data")
     data = load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
     rp = model_prior(gene, cell, transitions, R, S, insertstep, fittedparam, priorcv)
-    r = read_rates(infolder, label, gene, G, R, S, insertstep, nalleles)
+    r = readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype)
     model = load_model(data, r, rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates, weightind, decayrate, propcv, splicetype)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
+function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
+    if R == 0
+        name = filename(label, gene, G, nalleles)
+    else
+        name = filename(label, gene, G, R, S, insertstep, nalleles)
+    end
+    readrates(joinpath(infolder, "rates" * name), get_row(ratetype))
+end
 
 datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatrace" => 4, "dwelltimes" => 5, "trace" => 5, "tracenascent" => 6)
 
@@ -165,7 +173,7 @@ function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, trans
     end
     priord = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     if propcv < 0
-        propcv = getcv(gene, G, nalleles, fittedparam, intlabl, infolder, root)
+        propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
     end
     load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
@@ -193,12 +201,14 @@ end
 
 
 
-function model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv=10.0)
+function model_prior(gene::String, cell, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv=10.0, root=".")
     if S > 0
         S = R
     end
-    nrates = num_rates(transitions, R, S, insertstep)
+    ntransitions = length(transitions)
+    nrates = num_rates(ntransitions, R, S, insertstep)
     rm = fill(0.1, nrates)
+    rm[collect(1:ntransitions)] .= 0.01
     rcv = [fill(priorcv, length(rm) - 1); 0.1]
     if decayrate < 0
         decayrate = get_decay(gene, cell, root)
@@ -430,18 +440,24 @@ end
 
 """
 function get_decay(gene::String, cell::String, root::String, col::Int=2)
-    path = get_file(root, "data/halflives", cell, "csv")
-    if isnothing(path)
-        println(gene, " has no decay time")
-        return -1.0
-    elseif cell == "HBEC"
-        if gene ∈ genes_gt()
+    if uppercase(cell) == "HBEC"
+        if uppercase(gene) ∈ uppercase.(genes_gt())
             # return log(2.0) / (60 .* halflife_gt()[gene])
-            get_decay(halflife_gt()[gene])
+            return get_decay(halflife_gt()[gene])
+        else
+            println(gene, " has no decay time")
+            return -1.0
         end
     else
-        get_decay(gene, path, col)
+        path = get_file(root, "data/halflives", cell, "csv")
+        if isnothing(path)
+            println(gene, " has no decay time")
+            return -1.0
+        else
+            return get_decay(gene, path, col)
+        end
     end
+
 end
 function get_decay(gene::String, path::String, col::Int)
     a = nothing
@@ -452,6 +468,7 @@ function get_decay(gene::String, path::String, col::Int)
     end
     get_decay(a, gene)
 end
+
 function get_decay(a, gene::String)
     if typeof(a) <: Number
         return get_decay(float(a))

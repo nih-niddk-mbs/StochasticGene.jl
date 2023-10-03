@@ -376,30 +376,30 @@ function rlabels(model::AbstractGMmodel)
     reshape(labels, 1, length(labels))
 end
 
-# function rlabels(model::String)
-#     G = parse(Int, model)
-#     n = G - 1
-#     Grates = Array{String,2}(undef, 1, 2 * n)
-#     for i = 0:n-1
-#         Grates[1, 2*i+1] = "Rate$i$(i+1)"
-#         Grates[1, 2*i+2] = "Rate$(i+1)$i"
-#     end
-#     return [Grates "Eject" "Decay"]
-# end
+function rlabels(model::String)
+    G = parse(Int, model)
+    n = G - 1
+    Grates = Array{String,2}(undef, 1, 2 * n)
+    for i = 0:n-1
+        Grates[1, 2*i+1] = "Rate$i$(i+1)"
+        Grates[1, 2*i+2] = "Rate$(i+1)$i"
+    end
+    return [Grates "Eject" "Decay"]
+end
 
-# function rlabels(model::String, conds::Vector)
-#     nsets = length(conds)
-#     r = rlabels(model)
-#     if nsets == 1
-#         return r
-#     else
-#         rates = r .* conds[1]
-#         for i = 2:nsets
-#             rates = [rates r .* conds[i]]
-#         end
-#         return rates
-#     end
-# end
+function rlabels(model::String, conds::Vector)
+    nsets = length(conds)
+    r = rlabels(model)
+    if nsets == 1
+        return r
+    else
+        rates = r .* conds[1]
+        for i = 2:nsets
+            rates = [rates r .* conds[i]]
+        end
+        return rates
+    end
+end
 
 function rlabels(labels::Matrix, conds::Vector)
     nsets = length(conds)
@@ -455,8 +455,9 @@ end
 
 """
     filename(data, model::AbstractGRSMmodel)
+    filename(data, model::AbstractGMmodel)
 
-TBW
+return output file names
 """
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
@@ -695,40 +696,57 @@ row
 4       last value of previous run
 """
 readrates(file::String) = readrates(file, 3)
-readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
+# readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
+readrates(file::String,row::Int) = readrow(file,row)
 
-# function get_row(ratetype)
-#     if ratetype == "ml"
-#         row = 1
-#     elseif ratetype == "mean"
-#         row = 2
-#     elseif ratetype == "median"
-#         row = 3
-#     elseif ratetype == "last"
-#         row = 4
+function get_row(ratetype)
+    if ratetype == "ml"
+        row = 1
+    elseif ratetype == "mean"
+        row = 2
+    elseif ratetype == "median"
+        row = 3
+    elseif ratetype == "last"
+        row = 4
+    else
+        row = 3
+    end
+    row
+end
+
+# function readrow(file::String, row, header=false)
+#     if isfile(file) && ~isempty(read(file))
+#         if header
+#             contents = readdlm(file, ',', header=true)[1]
+#         else
+#             contents = readdlm(file, ',', header=false)
+#         end
+#         if row <= size(contents, 1)
+#             m = contents[row, :]
+#             return m[.~isempty.(m)]
+#         else
+#             return [nothing]
+#         end
 #     else
-#         row = 1
+#         println(file)
 #     end
-#     row
 # end
 
-
-
-function readrow(file::String, row, header=false)
+function readrow(file::String, row, delim=',')
     if isfile(file) && ~isempty(read(file))
-        if header
-            contents = readdlm(file, ',', header=true)[1]
-        else
-            contents = readdlm(file, ',', header=false)
+        contents = readdlm(file, delim, header=false)
+        if eltype(contents) == Any
+            contents = readdlm(file, delim, header=true)[1]
         end
         if row <= size(contents, 1)
             m = contents[row, :]
             return m[.~isempty.(m)]
         else
-            return [nothing]
+            println("row too large, returning median")
+            return contents[3, :]
         end
     else
-        println(file)
+        println(file, "does not exist")
     end
 end
 
