@@ -80,7 +80,7 @@ function data_genetrap(root, label, gene, tempfish, tracefolder)
         else
             histFISH = readFISH_genetrap(root, gene, tempfish)
         end
-        return RNALiveCellData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
+        return RNAOffOnData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
     end
 end
 

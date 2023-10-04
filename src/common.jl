@@ -63,7 +63,7 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     nRNA::nType
     histRNA::hType
 end
-struct RNALiveCellData <: AbstractHistogramData
+struct RNAOffOnData <: AbstractHistogramData
     label::String
     gene::String
     nRNA::Int
@@ -240,7 +240,7 @@ function datahistogram(data::AbstractRNAData{Array{Array,1}})
     return v
 end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
-datahistogram(data::RNALiveCellData) = [data.OFF; data.ON; data.histRNA]
+datahistogram(data::RNAOffOnData) = [data.OFF; data.ON; data.histRNA]
 datahistogram(data::AbstractTraceHistogramData) = data.histRNA
 
 function datahistogram(data::RNADwellTimeData)
@@ -252,7 +252,7 @@ function datahistogram(data::RNADwellTimeData)
 end
 
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
-datapdf(data::RNALiveCellData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
+datapdf(data::RNAOffOnData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
@@ -348,11 +348,11 @@ end
 
 
 """
-    likelihoodarray(r, data::RNALiveCellData, model::AbstractGmodel)
+    likelihoodarray(r, data::RNAOffOnData, model::AbstractGmodel)
 
 TBW
 """
-function likelihoodarray(r, data::RNALiveCellData, model::AbstractGmodel)
+function likelihoodarray(r, data::RNAOffOnData, model::AbstractGmodel)
     components = model.components
     onstates = model.reporter
     T = make_mat_T(components.tcomponents, r)
@@ -364,12 +364,12 @@ function likelihoodarray(r, data::RNALiveCellData, model::AbstractGmodel)
     return [modelOFF, modelON, histF]
 end
 """
-    likelihoodarray(rin,data::RNALiveCellData,model::AbstractGRSMmodel)
+    likelihoodarray(rin,data::RNAOffOnData,model::AbstractGRSMmodel)
 
 Under construction
 """
 #
-# function likelihoodarray(rin, data::RNALiveCellData, model::AbstractGRSMmodel)
+# function likelihoodarray(rin, data::RNAOffOnData, model::AbstractGRSMmodel)
 #     r = copy(rin)
 #     if model.splicetype == "offdecay"
 #         # r[end-1] *= survival_fraction(nu, eta, model.R)

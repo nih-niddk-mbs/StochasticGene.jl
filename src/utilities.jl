@@ -541,7 +541,7 @@ function test_steadystatemodel(model::AbstractGMmodel, nhist)
     return g1, g2
 end
 
-function test_model(data::RNALiveCellData, model::GRSMmodel)
+function test_model(data::RNAOffOnData, model::GRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 """

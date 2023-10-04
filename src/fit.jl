@@ -83,9 +83,9 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 #     fit(nchains, data, model, options, joinpath(root, resultfolder), burst, optimize, writesamples)
 # end
 
-function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent,infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[],nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-     propcv=0.01, maxtime::Float64=10.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=0, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=10.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
     if decayrate < 0
         decayrate = get_decay(gene, cell, root)
     end
@@ -100,6 +100,7 @@ function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, c
     r = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind)
     model = load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    # return data, model, options
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -128,7 +129,7 @@ function load_data(datatype, dttype, datafolder, label, gene, datacond, interval
         len, h = read_rna(gene, datacond, datafolder[1])
         h = div.(h, tempfish)
         LC = readfile(gene, datacond, datafolder[2])
-        return RNALiveCellData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
+        return RNAOffOnData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
     elseif datatype == "rnadwelltimes"
         len, h = read_rna(gene, datacond, datafolder[1])
         h = div.(h, tempfish)
@@ -166,9 +167,13 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
-        for i in eachindex(onstates)
-            if isempty(onstates[i])
-                onstates[i] = on_states(G, R, S, insertstep)
+        if isempty(onstates)
+            onstates = on_states(G, R, S, insertstep)
+        else
+            for i in eachindex(onstates)
+                if isempty(onstates[i])
+                    onstates[i] = on_states(G, R, S, insertstep)
+                end
             end
         end
         reporter = onstates
@@ -180,6 +185,8 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     end
     load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
+
+
 
 """
     load_model(r,fittedparam,fixedeffects,transitions,G,R,S,insertstep,priord,components,reporter)
@@ -214,7 +221,7 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
     end
     rcv = fill(priorcv, length(rm))
-    rcv[num_rates(transitions, R, S, insertstep)] = .1
+    rcv[num_rates(transitions, R, S, insertstep)] = 0.1
     distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
 end
 
@@ -228,7 +235,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm[collect(1:ntransitions)] .= 0.01
     rm[nrates] = decayrate
     if noiseparams > 0
-        rm = [rm; fill(100., noiseparams)]
+        rm = [rm; fill(100.0, noiseparams)]
         rm[nrates+weightind] = 0.9
     end
     rm
