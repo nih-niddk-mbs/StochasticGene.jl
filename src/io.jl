@@ -746,7 +746,8 @@ function readrow(file::String, row, delim=',')
             return contents[3, :]
         end
     else
-        println(file, "does not exist")
+        println(file, " does not exist")
+        return Float64[]
     end
 end
 
