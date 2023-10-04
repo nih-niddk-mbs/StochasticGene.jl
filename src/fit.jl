@@ -94,9 +94,8 @@ function fit(nchains::Int, datatype::Int, dttype, datafolder, gene::String, cell
     infolder = folder_path(infolder, root, "results")
     datafolder = folder_path(datafolder, root, "data")
     data = load_data(datatype, dttype, datafolder, label, gene, cond, interval, tempfish, nascent)
-    rp = model_prior(gene, cell, transitions, R, S, insertstep, fittedparam, priorcv)
     r = readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype)
-    model = load_model(data, r, rp, fittedparam, fixedeffects, transitions, G, R, S, insertstep, onstates, weightind, decayrate, propcv, splicetype)
+    model = load_model(data, r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, onstates, weightind, decayrate, propcv, splicetype,root)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -152,7 +151,7 @@ end
 
 
 """
-function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, onstates, weightind, decayrate, propcv, splicetype)
+function load_model(data, r, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, priorcv, onstates, weightind, decayrate, propcv, splicetype, root)
     nhist = data.nRNA
     if typeof(data) <: AbtractRNAData
         components = make_components_M(transitions, G, 0, nhist, decayrate, splicetype)
@@ -171,7 +170,7 @@ function load_model(data, r, rp, fittedparam::Vector, fixedeffects::Tuple, trans
         reporter = onstates
         components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decayrate)
     end
-    priord = distribution_array(log.(rp[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    priord = model_prior(gene, cell, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, root)
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
     end
