@@ -85,10 +85,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=10.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
-    if decayrate < 0
-        decayrate = get_decay(gene, cell, root)
-    end
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
@@ -96,10 +93,12 @@ function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, c
     infolder = folder_path(infolder, root, "results")
     datafolder = folder_path(datafolder, root, "data")
     data = load_data(datatype, dttype, datafolder, label, gene, datacond, interval, tempfish, nascent)
-    occursin("trace", lowercase(datatype)) && (noiseparams = 0)
+    ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
+    decayrate < 0 && (decayrate = get_decay(gene, cell, root))
     isempty(rmean) && (rmean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
-    r = readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype)
+    r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = rmean)
+    println(r)
     model = load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     # return data, model, options
@@ -145,9 +144,11 @@ function load_data(datatype, dttype, datafolder, label, gene, datacond, interval
         trace = read_tracefiles(datafolder, datacond)
         return TraceNascentData(label, gene, interval, trace, nascent)
     elseif datatype == "rnatrace"
-        len, h = histograms_rna(datafolder[1], gene, fish)
+        len, h = read_rna(gene, datacond, datafolder[1])
         traces = read_tracefiles(datafolder[2], datacond)
         return TraceRNAData(label, gene, interval, traces, len, h)
+    else
+        throw(datatype," not found")
     end
 end
 
@@ -187,7 +188,6 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     end
     load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
-
 
 
 """
