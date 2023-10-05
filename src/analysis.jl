@@ -867,7 +867,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
     return h
 end
 
-function plot_histogram(data::RNAOffOnData, model::AbstractGmodel, filename="")
+function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
     h = likelihoodarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))

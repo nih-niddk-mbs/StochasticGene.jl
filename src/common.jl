@@ -39,7 +39,7 @@ abstract type AbstractRNAData{hType} <: AbstractHistogramData end
     
 abstract type for intensity time series data with RNA histogram data
 """
-abstract type AbstractTraceHistogramData <: AbstractHistogramData end
+abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
 
 # Data structures 
 #
@@ -63,14 +63,14 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     nRNA::nType
     histRNA::hType
 end
-struct RNAOffOnData <: AbstractHistogramData
+struct RNAOnOffData <: AbstractHistogramData
     label::String
     gene::String
     nRNA::Int
     histRNA::Vector
     bins::Vector
-    OFF::Vector
     ON::Vector
+    OFF::Vector
 end
 struct RNADwellTimeData <: AbstractHistogramData
     label::String
@@ -240,7 +240,7 @@ function datahistogram(data::AbstractRNAData{Array{Array,1}})
     return v
 end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
-datahistogram(data::RNAOffOnData) = [data.OFF; data.ON; data.histRNA]
+datahistogram(data::RNAOnOffData) = [data.OFF; data.ON; data.histRNA]
 datahistogram(data::AbstractTraceHistogramData) = data.histRNA
 
 function datahistogram(data::RNADwellTimeData)
@@ -252,7 +252,7 @@ function datahistogram(data::RNADwellTimeData)
 end
 
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
-datapdf(data::RNAOffOnData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
+datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
@@ -300,10 +300,10 @@ loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmod
 
 negative loglikelihood of time series traces and mRNA FISH steady state histogram
 """
-function loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmodel)
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents, r)
+    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA),eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
@@ -348,11 +348,11 @@ end
 
 
 """
-    likelihoodarray(r, data::RNAOffOnData, model::AbstractGmodel)
+    likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
 
 TBW
 """
-function likelihoodarray(r, data::RNAOffOnData, model::AbstractGmodel)
+function likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
     components = model.components
     onstates = model.reporter
     T = make_mat_T(components.tcomponents, r)
@@ -364,12 +364,12 @@ function likelihoodarray(r, data::RNAOffOnData, model::AbstractGmodel)
     return [modelOFF, modelON, histF]
 end
 """
-    likelihoodarray(rin,data::RNAOffOnData,model::AbstractGRSMmodel)
+    likelihoodarray(rin,data::RNAOnOffData,model::AbstractGRSMmodel)
 
 Under construction
 """
 #
-# function likelihoodarray(rin, data::RNAOffOnData, model::AbstractGRSMmodel)
+# function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
 #     r = copy(rin)
 #     if model.splicetype == "offdecay"
 #         # r[end-1] *= survival_fraction(nu, eta, model.R)

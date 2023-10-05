@@ -114,8 +114,6 @@ function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetyp
     readrates(joinpath(infolder, "rates" * name), get_row(ratetype))
 end
 
-datatype_dict() = Dict("rna" => 1, "rnaoffon" => 2, "rnadwelltimes" => 3, "rnatrace" => 4, "dwelltimes" => 5, "trace" => 5, "tracenascent" => 6)
-
 
 """
     load_data(datatype, dttype, datafolder, label, gene, datacond, interval, tempfish, nascent)
@@ -126,12 +124,12 @@ function load_data(datatype, dttype, datafolder, label, gene, datacond, interval
     if datatype == "rna"
         len, h = read_rna(gene, datacond, datafolder)
         return RNAData(label, gene, len, h)
-    elseif datatype == "rnaoffon"
+    elseif datatype == "rnaonoff"
         len, h = read_rna(gene, datacond, datafolder[1])
         h = div.(h, tempfish)
         LC = readfile(gene, datacond, datafolder[2])
-        return RNAOffOnData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
-    elseif datatype == "rnadwelltimes"
+        return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
+    elseif datatype == "rnadwelltime"
         len, h = read_rna(gene, datacond, datafolder[1])
         h = div.(h, tempfish)
         LC = readfiles(gene, datacond, datafolders[2:end])
@@ -143,12 +141,12 @@ function load_data(datatype, dttype, datafolder, label, gene, datacond, interval
     elseif datatype == "tracenascent"
         trace = read_tracefiles(datafolder, datacond)
         return TraceNascentData(label, gene, interval, trace, nascent)
-    elseif datatype == "rnatrace"
+    elseif datatype == "tracerna"
         len, h = read_rna(gene, datacond, datafolder[1])
         traces = read_tracefiles(datafolder[2], datacond)
         return TraceRNAData(label, gene, interval, traces, len, h)
     else
-        throw(datatype," not found")
+        throw("$datatype not included")
     end
 end
 

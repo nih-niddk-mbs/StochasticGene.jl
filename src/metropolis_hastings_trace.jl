@@ -623,3 +623,5 @@ function deviance(data::AbstractHistogramData, model::AbstractGmodel)
 end
 
 deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
+
+deviance(fits,data,model) = 0.

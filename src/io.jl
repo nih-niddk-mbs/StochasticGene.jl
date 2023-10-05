@@ -595,12 +595,13 @@ get_ratetype() = invert_dict(get_row())
 determine if string a or string b occurs in file (case insensitive)
 """
 function occursin_file(a, b, file)
+    occursin(Regex("DS_Store","i"),file) && return false
     if isempty(a)
-        occursin(Regex(b, "i"), file)
+        return occursin(Regex(b, "i"), file)
     elseif isempty(b)
-        occursin(Regex(a, "i"), file)
+        return occursin(Regex(a, "i"), file)
     else
-        occursin(Regex(a, "i"), file) && occursin(Regex(b, "i"), file)
+        return occursin(Regex(a, "i"), file) && occursin(Regex(b, "i"), file)
     end
 end
 """
@@ -610,14 +611,25 @@ read file accounting for delimiter and headers
 """
 function readfile(file::String)
     if occursin("csv", file)
-        a = readdlm(file, ',')
+        c = readfile_csv(file)
     else
-        a = readdlm(file)
+        c = readdlm(file)
+        if typeof(c[1]) <: AbstractString && occursin(",",c[1])
+            c = readdlm(file,',')
+        end
+        if eltype(c[1, 1]) <: String
+            c = float.(c[2:end, :])
+        end
     end
-    if eltype(a[1, :]) <: String
-        a = float.(a[2:end, :])
+    return c
+end
+
+function readfile_csv(file::String)
+    c = readdlm(file, ',')
+    if eltype(c[1, :]) <: String
+        c = float.(c[2:end, :])
     end
-    return a
+    return c
 end
 """
     readfile(file::String, col::Int)
