@@ -601,27 +601,4 @@ function hist_entropy(hist::Array{Array,1})
     end
     return l
 end
-"""
-deviance(logpredictions::Array,data::AbstractHistogramData)
-deviance(fits,data,model)
 
-returns Deviance
-
-use log of data histogram as loglikelihood of over fit model
-"""
-deviance(logpredictions::Array, data::AbstractHistogramData) = deviance(logpredictions, datapdf(data))
-
-
-function deviance(fits::Fit, data::AbstractHistogramData, model)
-    predictions = likelihoodfn(fits.parml, data, model)
-    deviance(log.(max.(predictions, eps())), datapdf(data))
-end
-
-function deviance(data::AbstractHistogramData, model::AbstractGmodel)
-    h = likelihoodfn(model.rates[model.fittedparam], data, model)
-    deviance(h, datapdf(data))
-end
-
-deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
-
-deviance(fits,data,model) = 0.

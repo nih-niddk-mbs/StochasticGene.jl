@@ -443,7 +443,30 @@ function compute_deviance(outfile, ratefile::String, cond, n, datafolder, root)
     end
     close(f)
 end
+"""
+deviance(logpredictions::Array,data::AbstractHistogramData)
+deviance(fits,data,model)
 
+returns Deviance
+
+use log of data histogram as loglikelihood of over fit model
+"""
+deviance(logpredictions::Array, data::AbstractHistogramData) = deviance(logpredictions, datapdf(data))
+
+
+function deviance(fits::Fit, data::AbstractHistogramData, model)
+    predictions = likelihoodfn(fits.parml, data, model)
+    deviance(log.(max.(predictions, eps())), datapdf(data))
+end
+
+function deviance(data::AbstractHistogramData, model::AbstractGmodel)
+    h = likelihoodfn(model.rates[model.fittedparam], data, model)
+    deviance(h, datapdf(data))
+end
+
+deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
+
+deviance(fits,data,model) = 0.
 
 frequency(ron, sd, rdecay) = (ron / rdecay, sd / rdecay)
 
@@ -867,7 +890,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
     return h
 end
 
-function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
+function plot_histogram(data::RNAOffOnData, model::AbstractGmodel, filename="")
     h = likelihoodarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))
