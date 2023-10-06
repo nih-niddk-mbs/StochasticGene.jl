@@ -466,7 +466,7 @@ end
 
 deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
 
-deviance(fits,data,model) = 0.
+deviance(fits,data,model) = -1.
 
 frequency(ron, sd, rdecay) = (ron / rdecay, sd / rdecay)
 
@@ -890,7 +890,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
     return h
 end
 
-function plot_histogram(data::RNAOffOnData, model::AbstractGmodel, filename="")
+function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
     h = likelihoodarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))

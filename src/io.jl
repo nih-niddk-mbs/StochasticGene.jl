@@ -123,6 +123,8 @@ function fields(file::String)
     else
         if length(v) == 6
             s = Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
+        elseif length(v) == 5
+            s = Result_Fields(v[1], v[2],"", v[3], v[4], v[5])
         else
             println(file)
             throw("Incorrect file name format")
@@ -272,9 +274,9 @@ function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vect
 end
 
 function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, fish::Bool, names, fittedparams)
-    assemble_rates(folder, files, label, cond, model)
+    labels = assemble_rates(folder, files, label, cond, model)
     assemble_measures(folder, files, label, cond, model)
-    labels = assemble_stats(folder, files, label, cond, model)
+    assemble_stats(folder, files, label, cond, model)
     if model != "1" && "burst" ∈ names
         assemble_burst_sizes(folder, files, label, cond, model)
     end
@@ -323,14 +325,14 @@ end
 
 function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, optlabels(labels, split(cond, "-")), read_optimized)
+    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, labels, read_optimized)
 end
 
 function assemble_stats(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
     statfiles = get_files(files, "param-stats", label, cond, model)
-    labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
-    assemble_files(folder, statfiles, outfile, statlabels(labels, split(cond, "-")), readstats)
+    labels = readdlm(joinpath(folder, statfiles[1]), ',', header=true)[2]
+    assemble_files(folder, statfiles, outfile, statlabels(labels), readstats)
 end
 
 function assemble_burst_sizes(folder, files, label, cond, model)
@@ -441,7 +443,7 @@ function statlabels(model::String, conds, fittedparams)
     return ["Gene" rates]
 end
 
-function statlabels(labels::Matrix, conds, fittedparams)
+function statlabels(labels::Matrix)
     l = ["Mean", "SD", "Median", "MAD"]
     rates = Matrix{String}(undef, 1, 0)
     for i in 1:4
@@ -756,7 +758,7 @@ end
 function readrow(file::String, row, delim=',')
     if isfile(file) && ~isempty(read(file))
         contents = readdlm(file, delim, header=false)
-        if eltype(contents) == Any
+        if ~(typeof(contents[1]) <: Number)
             contents = readdlm(file, delim, header=true)[1]
         end
         if row <= size(contents, 1)
@@ -780,6 +782,7 @@ end
 function readmeasures(file::String)
     d = readdeviance(file)
     w = readwaic(file)
+    println(file)
     a = readaccept(file)
     t = readtemp(file)
     r = readrhat(file)
@@ -823,7 +826,7 @@ function readstats(statfile::String)
 end
 
 function readmedian(statfile::String)
-    m = readrow(statfile, 3, true)
+    m = readrow(statfile, 3)
     reshape(m, 1, length(m))
 end
 
