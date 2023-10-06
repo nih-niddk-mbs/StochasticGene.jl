@@ -357,6 +357,15 @@ function rlabels(model::AbstractGRSMmodel)
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
+    if typeof(model.reporter) == ReporterComponents
+        for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
+            push!(labels, "noise_mean$i")
+            push!(labels, "noise_std$i")
+        end
+        for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
+            push!(labels, "bias$i")
+        end
+    end
     reshape(labels, 1, length(labels))
 end
 
@@ -595,7 +604,7 @@ get_ratetype() = invert_dict(get_row())
 determine if string a or string b occurs in file (case insensitive)
 """
 function occursin_file(a, b, file)
-    occursin(Regex("DS_Store","i"),file) && return false
+    occursin(Regex("DS_Store", "i"), file) && return false
     if isempty(a)
         return occursin(Regex(b, "i"), file)
     elseif isempty(b)
@@ -614,8 +623,8 @@ function readfile(file::String)
         c = readfile_csv(file)
     else
         c = readdlm(file)
-        if typeof(c[1]) <: AbstractString && occursin(",",c[1])
-            c = readdlm(file,',')
+        if typeof(c[1]) <: AbstractString && occursin(",", c[1])
+            c = readdlm(file, ',')
         end
         if eltype(c[1, 1]) <: String
             c = float.(c[2:end, :])
@@ -709,7 +718,7 @@ row
 """
 readrates(file::String) = readrates(file, 3)
 # readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
-readrates(file::String,row::Int) = readrow(file,row)
+readrates(file::String, row::Int) = readrow(file, row)
 
 function get_row(ratetype)
     if ratetype == "ml"

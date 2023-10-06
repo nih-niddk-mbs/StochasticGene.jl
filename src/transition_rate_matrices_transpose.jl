@@ -16,10 +16,10 @@
 
 structure for transition matrix elements
 fields: 
-`a`: row, 
-`b`: column
-`index`: rate vector index
-`pm`: sign of elements
+- `a`: row, 
+- `b`: column
+- `index`: rate vector index
+- `pm`: sign of elements
 
 """
 struct Element

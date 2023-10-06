@@ -85,7 +85,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+    propcv=0.01, maxtime::Float64=10.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
@@ -154,9 +154,6 @@ end
 """
     load_model(data, r, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
 
-    trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedparam; noiseparams=5, probfn=prob_GaussianMixture, weightind=5, propcv=0.05, priorprob=Normal, 
-    priormean=[fill(.1, num_rates(transitions, R, S, insertstep)); fill(100,noiseparams-1);.9], priorcv=[fill(10, num_rates(transitions, R, S, insertstep)); fill(.5, noiseparams)], fixedeffects=tuple(), onstates::Vector=[G],genetrap=false,nhist=20,nalleles=2)
-
 """
 function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     if typeof(data) <: AbstractRNAData
@@ -191,7 +188,6 @@ end
 """
     load_model(r,fittedparam,fixedeffects,transitions,G,R,S,insertstep,priord,components,reporter)
 
-
 """
 function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     if R == 0
@@ -210,11 +206,10 @@ function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, p
 end
 
 
-
 """
     model_prior(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv=10.0, noiseparams, weightind)
 
-TBW
+
 """
 function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv, noiseparams, weightind)
     if isempty(rm)
@@ -228,7 +223,7 @@ end
 """
     prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
 
-TBW
+
 """
 function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
     if S > 0
@@ -249,7 +244,7 @@ end
 """
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 
-TBW
+
 """
 function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
@@ -393,7 +388,6 @@ end
 write out run results and print out final loglikelihood and deviance
 """
 function finalize(data, model, fit, stats, measures, temp, writefolder, optimized, burst, writesamples)
-    writeall(writefolder, fit, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
     println("final max ll: ", fit.llml)
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
@@ -407,6 +401,7 @@ function finalize(data, model, fit, stats, measures, temp, writefolder, optimize
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
     end
+    writeall(writefolder, fit, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
 end
 
 

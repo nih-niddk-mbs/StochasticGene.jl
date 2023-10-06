@@ -117,22 +117,24 @@ abstract type AbstractGRSMmodel{ReporterType} <: AbstractGmodel end
     Model structures
 
 fields:
-G: number of G steps
-R: number of R steps
-S: indicator for splicing, 0 no splicing, > 1 splicing
-insertstep: R step where reporter is inserted (first step where reporter is visible)
-nalleles: number of alleles producing RNA
-splicetype: choices are "", "offeject", "offdecay"
-rates: transition rates
-rateprior: prior for rates
-proposal: MCMC proposal distribution
-fittedparam: indices of rates to be fitted
-    randomeffects: indices of rates that are fixed to each other, in the form of a 2tuple of vectors
+- `rates`: transition rates
+- `Gtransitions`:  tuple of vectors of G state transitions
+- `G`: number of G steps
+- `R`: number of R steps
+- `S`: indicator for splicing, 0 no splicing, > 1 splicing
+- `insertstep`: R step where reporter is inserted (first step where reporter is visible)
+- `nalleles`: number of alleles producing RNA
+- `splicetype`: choices are "", "offeject", "offdecay"
+- `rateprior`: prior distribution for rates
+- `proposal`: MCMC proposal distribution
+- `fittedparam`: indices of rates to be fitted
+- `fixedeffects`: indices of rates that are fixed to each other, in the form of a 2 tuple of vectors
     with index 1 the tied index vector and 2 the corresponding fitted index vector
-fixedeffects: tuple of vectors of rates that are locked together
-method: numerical method for solving Master equation
--`Gtransitions`:  tuple of vectors of G state transitions
--`reporters`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
+- `fixedeffects`: tuple of vectors of rates that are locked together
+- `method`: numerical method for solving Master equation
+- `components`: rate marix components
+-` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
+
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
@@ -199,6 +201,11 @@ end
 ReporterComponents
 
 structure for reporters
+
+- `n`: number of noise parameters
+- `per_state`: number of reporters per state
+- `probfn`: noise distribution e.g. prob_GaussianMixture
+- `weightind`: index for mixture model bias parameter (restricted to range [0,1])
 """
 struct ReporterComponents
     n::Int
