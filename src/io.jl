@@ -782,7 +782,6 @@ end
 function readmeasures(file::String)
     d = readdeviance(file)
     w = readwaic(file)
-    println(file)
     a = readaccept(file)
     t = readtemp(file)
     r = readrhat(file)
