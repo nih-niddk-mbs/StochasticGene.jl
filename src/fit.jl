@@ -157,6 +157,7 @@ end
 """
 function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     if typeof(data) <: AbstractRNAData
+        reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
         reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
@@ -192,7 +193,7 @@ end
 function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     if R == 0
         if isempty(fixedeffects)
-            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
+            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
         else
             return GMfixedeffectsmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end

@@ -17,12 +17,16 @@ function make_dataframes(resultfolder::String, datafolder::String, assemble=true
         lfiles = files[label.==get_label.(files)]
         dfl = Vector{Tuple}(undef, 0)
         for model in models
-            mfiles = lfiles[model.==get_model.(lfiles)]
-            dfm = Vector{DataFrame}(undef, 0)
-            for i in eachindex(mfiles)
-                push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datafolder, isfish(mfiles[i])))
+            if length(parse_model(model)) > 1
+                println("Not G model")
+            else
+                mfiles = lfiles[model.==get_model.(lfiles)]
+                dfm = Vector{DataFrame}(undef, 0)
+                for i in eachindex(mfiles)
+                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datafolder, isfish(mfiles[i])))
+                end
+                push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
             end
-            push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
         end
         push!(df, dfl)
     end
@@ -37,10 +41,21 @@ function make_dataframe(ratefile::String, datafolder::String, fish::Bool)
     df = leftjoin(df, df2, on=:Gene, makeunique=true)
     filename = splitpath(ratefile)[end]
     parts = fields(filename)
-    G = parse(Int, parts.model)
-    insertcols!(df, :Model => fill(G, size(df, 1)))
-    df = stack_dataframe(df, G, parts.cond)
-    add_moments!(df, datafolder, fish)
+    model = parse_model(parts.model)
+    if length(model) > 1
+        println("Not G model")
+    else
+        G = parse(Int, parts.model)
+        insertcols!(df, :Model => fill(G, size(df, 1)))
+        df = stack_dataframe(df, G, parts.cond)
+        add_moments!(df, datafolder, fish)
+    end
+end
+
+function parse_model(name::String)
+    d = parse(Int, name)
+    d > 9 && (d = digits(d))
+    d
 end
 
 function augment_dataframe(df, resultfolder)
@@ -466,7 +481,7 @@ end
 
 deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
 
-deviance(fits,data,model) = -1.
+deviance(fits, data, model) = -1.0
 
 frequency(ron, sd, rdecay) = (ron / rdecay, sd / rdecay)
 
