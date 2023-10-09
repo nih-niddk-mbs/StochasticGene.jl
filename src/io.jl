@@ -653,7 +653,7 @@ readfile(file::String, col::Int) = readfile(file)[:, col]
 
 read file if name includes gene and cond
 """
-function readfile(gene::String, cond::String, path::String)
+function readfile(gene::AbstractString, cond::AbstractString, path::AbstractString)
     for (root, dirs, files) in walkdir(path)
         for file in files
             target = joinpath(root, file)

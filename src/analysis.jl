@@ -118,9 +118,11 @@ function add_moments!(df::DataFrame, datafolder, fish::Bool)
     t = similar(m)
     i = 1
     for gene in df.Gene
-        m[i] = mean_histogram(get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish))
-        v[i] = var_histogram(get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish))
-        t[i] = moment_histogram(get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish), 3)
+        # get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish)
+        _, h = read_rna(gene, df[i,:Condition], datafolder)
+        m[i] = mean_histogram(h)
+        v[i] = var_histogram(h)
+        t[i] = moment_histogram(h, 3)
         i += 1
     end
     insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
@@ -793,6 +795,17 @@ function histograms(rin, cell, cond, G::Int, datafolder, fish, root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), fish)
     likelihoodarray(r, data, model)
+end
+
+function get_histogram_rna(gene, cond, datafolder, fish, root)
+    if fish
+        datapath = FISHpath(gene, cond, datafolder, root)
+        h = read_fish(datapath, cond, 0.98)
+    else
+        datapath = scRNApath(gene, cond, datafolder, root)
+        h = read_scrna(datapath, 0.99)
+    end
+    normalize_histogram(h)
 end
 
 function get_histogram_rna(gene, cond, datafolder, fish, root)
