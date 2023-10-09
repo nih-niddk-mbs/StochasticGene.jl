@@ -2,24 +2,6 @@
 
 # utilities.jl
 
-"""
- Strings
-"""
-
-const rchar = "rml"
-const rmchar = "rmean"
-const rqchar = "rquant"
-const wchar = "waic"
-const routchar = "rout"
-const runchar = "run"
-const chichar = "chi"
-const chioutchar = "chiout"
-const rlastchar = "rlast"
-const onchar = "LCON"
-const offchar = "LCOFF"
-const fishchar = "FISH"
-const txtstr = ".txt"
-
 
 """
     invert_dict(D)

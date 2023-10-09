@@ -1,111 +1,102 @@
 # biowulf.jl
 # functions for use on the NIH Biowulf super computer
 
-"""
-    makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median")
-
-    makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median")
-
-    Arguments
-    - `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
-    - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-    - `cell': cell type for halflives and allele numbers
-    - `swarmfile`: name of swarmfile to be executed by swarm
-    - `label`: label of output files produced
-    - `inlabel`: label of files used for initial conditions
-    - `timestamp`: label for time of sample (e.g. T120)
-    - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
-    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
-    - `datatype`: String that desecribes data type, e.g. "scRNA", "fish", "genetrap", "RNA-counts" (coming soon)
-    - `thresholdlow`: lower threshold for halflife for genes to be fit
-    - `threhsoldhigh`: upper threshold
-    - `conds`: string describing data treatment condition, e.g. "WT", "DMSO", use `-` for two conditions, e.g. "WT-AUXIN"
-    - `resultfolder`: folder for results
-    - `infolder`: folder for initial parameters
-    - `batchsize`: number of jobs per swarmfile, default = 1000
-    - `maxtime`: maximum wall time for run, default = 2 hrs
-    - `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
-    - 'nthreads`: number of Julia threads per processesor, default = 1
-    - `transient::Bool`: true means fit a time dependent transient model (T0, T30, T120)
-    - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-         (each vector in tuple is a fixed rate set)
-    - `juliafile`: name of file to be called by julia in swarmfile
-    - `fitscript`: name of fit file called by swarm file
-    - `root`: name of root directory for project, e.g. "scRNA\"
-    - `samplesteps`: number of MCMC sampling steps
-    - `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
-    - `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-    Arguments below usually do not need to be set
-    - `temp`: MCMC temperature
-    - `tempanneal`: annealing temperature
-    - `cv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-    - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
-    - `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-    - `burst`: if true then compute burst frequency
-    - `nalleles`: number of alleles, value in alleles folder will be used if it exists
-    - `optimize`: use optimizer to compute maximum likelihood value
-    - `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-    - `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-    - `writesamples`: write out MH samples if true, default is false
-    - `onstates`: vector of sojurn states (currently not implemented)
-
-
-    returns swarmfile that calls a julia file that is executed on biowulf
-
-    makeswarm(;fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
-decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
 """
+    makeswarm(; nchains::Int=2,nthreads::Int=1,swarmfile::String="fit", batchsize = 1000, juliafile::String="fitscript",, datatype::String="", dttype::String[], datafolder="", cell::String="", datacond::String="", interval=1.0, nascent=0.2, infolder::String="", resultfolder::String="", inlabel::String="", label::String="",
+    fittedparam::Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1,2],[2,1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", nalleles=2, priormean=[],  priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,modulemode=true)
 
-function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
-    if occursin.("-", conds)
-        cond = string.(split(conds, "-"))
-    else
-        cond = conds
-    end
-    if datatype == "rna"
-        genes = checkgenes(root, cond, datafolder, cell, thresholdlow, thresholdhigh)
-    elseif datatype == "rnaoffon"
-        genes = genes_gt()
-    end
-    makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, splicetype=splicetype, ratetype=ratetype, writesamples=writesamples)
+
+returns swarmfile used on biowulf
+
+Arguments
+- `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
+- 'nthreads`: number of Julia threads per processesor, default = 1
+- `swarmfile`: name of swarmfile to be executed by swarm
+- `batchsize`: number of jobs per swarmfile, default = 1000
+- `juliafile`: name of file to be called by julia in swarmfile
+- `thresholdlow`: lower threshold for halflife for genes to be fit
+- `threhsoldhigh`: upper threshold
+- `datatype`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `dttype`
+- `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+- `cell': cell type for halflives and allele numbers
+- `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
+- `interval`: frame interval of intensity traces
+- `nascent`: fraction of alleles exhibiting nascent rna
+- `infolder`: result folder used for initial parameters
+- `resultfolder`: folder for results of MCMC run
+- `label`: label of output files produced
+- `inlabel`: label of files used for initial conditions
+- `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+     (each vector in tuple is a fixed rate set)
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `insertstep`: R step where reporter is inserted
+- `root`: name of root directory for project, e.g. "scRNA\"
+- `nalleles`: number of alleles, value in alleles folder will be used if it exists  
+- `priormean`: mean of prior rate distribution
+- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+- `onstates`: vector of on or sojurn states
+- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
+- `probfn`: probability function for hmm observation probability (.e.g prob_GaussianMixture)
+- `noiseparams`: number of parameters of probfn
+- `weightind`: index of rate vector of bias probability of mixtures
+- `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `maxtime`: maximum wall time for run, default = 60 min
+- `samplesteps`: number of MCMC sampling steps
+- `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
+- `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+- `temp`: MCMC temperature
+- `tempanneal`: annealing temperature
+- `temprna`: reduce rna counts by temprna compared to dwell times
+- `burst`: if true then compute burst frequency
+- `optimize`: use optimizer to compute maximum likelihood value
+- `writesamples`: write out MH samples if true, default is false
+- `modulemode`: true for using StochasticGene module false for including file
+   
+"""
+function makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datafolder="", cell::String="HBEC", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, modulemode=true)
+
+    makeswarm(checkgenes(root, datacond, datafolder, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datafolder=datafolder, cell=cell, datacond=datacond, interval=interval, nascent=nascent, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
+        fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, root=root, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noiseparams=noiseparams, weightind=weightind, ratetype=ratetype,
+        propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, modulemode=modulemode)
 end
 
-function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", conds::String="MOCK", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
 
+
+"""
+    makeswarm(genes::Vector; datatype::String="rna", dttype::String[], datafolder="", cell::String="HCT116", datacond::String="DMSO", interval=1.0, nascent=0., infolder::String=, resultfolder::String, inlabel::String, label::String,
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,modulemode=true)
+
+
+"""
+function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datafolder="", cell::String="", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, modulemode=true)
     if R > 0
         if S > 0
             S = R
         end
         modelstring = "$G$R$S$insertstep"
     else
-        modelstring ="$G"
+        modelstring = "$G"
     end
 
-    if label == "label"
-        if datatype == "fish"
-            label = "FISH-ss"
-        elseif datatype == "scRNA"
-            label = "scRNA-ss"
-        elseif datatype == "genetrap"
-            label = "gt"
-        elseif datatype == "trace"
-            label = "trace"
-        end
-        label = label * "-" * cell
-        if ~isempty(timestamp)
-            label = label * "-" * timestamp
-        end
-        label = label * "_" * conds
-        if inlabel == "label"
-            inlabel = label
-        end
+    if isempty(label)
+        label = datatype * "-" * cell
+        typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
+    isempty(inlabel) && (inlabel = label)
 
     ngenes = length(genes)
     println("number of genes: ", ngenes)
@@ -118,14 +109,105 @@ function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1,
         end
     else
         sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
-        write_swarmfile(joinpath(root,sfile), nchains, nthreads, juliafile, genes)
+        write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, genes)
     end
-    # write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
-    write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
-decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+    write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+        fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+        decayrate, splicetype, probfn, noiseparams, weightind, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, modulemode)
 end
+"""
+    write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+    propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+
+"""
+function write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+    propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, modulemode)
+    # function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+    s = '"'
+    s3 = s * s * s
+    f = open(fitfile, "w")
+    if modulemode
+        write(f, "@everywhere using StochasticGene\n")
+    else
+        write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene.jl/src/test.jl$s)\n")
+    end
+    typeof(datafolder) <: AbstractString && (datafolder = "$s$datafolder$s")
+    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
+    # write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$splicetype$s,$s$ratetype$s,$writesamples)\n")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datafolder, ARGS[1], $s$cell$s, $datacond, $interval, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $priormean, $nalleles, $priorcv, $onstates, $decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
+    close(f)
+end
+# function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
+#     if occursin.("-", conds)
+#         cond = string.(split(conds, "-"))
+#     else
+#         cond = conds
+#     end
+#     if datatype == "rna"
+#         genes = checkgenes(root, cond, datafolder, cell, thresholdlow, thresholdhigh)
+#     elseif datatype == "rnaoffon"
+#         genes = genes_hbec()
+#     end
+#     makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, splicetype=splicetype, ratetype=ratetype, writesamples=writesamples)
+#  makeswarm(genes::Vector; datatype::String="rna", dttype::String[], datafolder="", cell::String="HCT116", datacond::String="DMSO", interval=1.0, nascent=0., infolder::String=, resultfolder::String, inlabel::String, label::String,
+#     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+#     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
+# write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+# end
+# function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", conds::String="MOCK", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), fixedeffects=(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
+
+#     if R > 0
+#         if S > 0
+#             S = R
+#         end
+#         modelstring = "$G$R$S$insertstep"
+#     else
+#         modelstring = "$G"
+#     end
+
+#     if label == "label"
+#         if datatype == "fish"
+#             label = "FISH-ss"
+#         elseif datatype == "scRNA"
+#             label = "scRNA-ss"
+#         elseif datatype == "genetrap"
+#             label = "gt"
+#         elseif datatype == "trace"
+#             label = "trace"
+#         end
+#         label = label * "-" * cell
+#         if ~isempty(timestamp)
+#             label = label * "-" * timestamp
+#         end
+#         label = label * "_" * conds
+#         if inlabel == "label"
+#             inlabel = label
+#         end
+#     end
+
+#     ngenes = length(genes)
+#     println("number of genes: ", ngenes)
+#     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
+#     if ngenes > batchsize
+#         batches = getbatches(genes, ngenes, batchsize)
+#         for batch in eachindex(batches)
+#             sfile = swarmfile * "_" * label * "_" * "$modelstring" * "_" * "$batch" * ".swarm"
+#             write_swarmfile(sfile, nchains, nthreads, juliafile, batches[batch])
+#         end
+#     else
+#         sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
+#         write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, genes)
+#     end
+#     # write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+#     write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+#         fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+#         decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+#         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+# end
 
 """
     fix(folder)
@@ -187,38 +269,7 @@ function rna_setup(root=".")
 
 end
 
-"""
-    write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
-decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
-write file the swarm file calls to execute julia code
-
-write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
-decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
-
-
-"""
-function write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
-decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
-# function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
-    f = open(fitfile, "w")
-    s = '"'
-    # write(f,"@everywhere using StochasticGene\n")
-    write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene/src/test.jl$s)\n")
-    write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$splicetype$s,$s$ratetype$s,$writesamples)\n")
-    write(f, "@time fit($nchains, $datatype, $dttype, $datafolder, ARGS[1], $s$cell$s, $s$datacond$s, $interval, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,
-$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $rmean, $nalleles, $priorcv, $onstates, 
-$decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $s$ratetype$s,
-$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
-
-    close(f)
-end
 
 function getbatches(genes, ngenes, batchsize)
     nbatches = div(ngenes, batchsize)
@@ -241,29 +292,58 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
     close(f)
 end
 
-function checkgenes(root, conds::Vector, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
-    genes = Vector{Vector{String}}(undef, 2)
-    if occursin.("-", datafolder)
-        datafolder = string.(split(datafolder, "-"))
-        for i in 1:2
-            genes[i] = checkgenes(root, conds[i], datafolder[i], celltype, thresholdlow, thresholdhigh)
-        end
-    else
-        for i in 1:2
-            genes[i] = checkgenes(root, conds[i], datafolder, celltype, thresholdlow, thresholdhigh)
-        end
+# function checkgenes(root, conds::Vector, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
+#     genes = Vector{Vector{String}}(undef, 2)
+#     if occursin.("-", datafolder)
+#         datafolder = string.(split(datafolder, "-"))
+#         for i in 1:2
+#             genes[i] = checkgenes(root, conds[i], datafolder[i], celltype, thresholdlow, thresholdhigh)
+#         end
+#     else
+#         for i in 1:2
+#             genes[i] = checkgenes(root, conds[i], datafolder, celltype, thresholdlow, thresholdhigh)
+#         end
+#     end
+#     intersect(genes[1], genes[2])
+# end
+
+# function checkgenes(root, cond::String, datafolder, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
+#     datafolder = folder_path(datafolder, root, "data")
+#     genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datafolder))
+#     alleles = get_alleles(root, cell)
+#     if ~isnothing(alleles)
+#         return intersect(genes, alleles)
+#     else
+#         return genes
+#     end
+# end
+function checkgenes(root, conds, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
+    genes = Vector{Vector{String}}(undef, 0)
+    typeof(conds) <: AbstractString && (conds = [conds])
+    typeof(datafolder) <: AbstractString && (datafolder = [datafolder])
+
+    for d in datafolder, c in conds
+        push!(genes, checkgenes(root, c, d, celltype, thresholdlow, thresholdhigh))
     end
-    intersect(genes[1], genes[2])
+    geneset = genes[1]
+    for g in genes
+        genesest = intersect(geneset, g)
+    end
+    return geneset
 end
 
-function checkgenes(root, cond::String, datafolder, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
-    datafolder = folder_path(datafolder, root, "data")
-    genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datafolder))
-    alleles = get_alleles(root, cell)
-    if ~isnothing(alleles)
-        return intersect(genes, alleles)
+function checkgenes(root, cond::String, datafolder::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
+    if cell == "HBEC"
+        return genes_hbec()
     else
-        return genes
+        datafolder = folder_path(datafolder, root, "data")
+        genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datafolder))
+        alleles = get_alleles(root, cell)
+        if ~isnothing(alleles)
+            return intersect(genes, alleles)
+        else
+            return genes
+        end
     end
 end
 
@@ -283,10 +363,10 @@ function folder_path(folder::String, root::String, folderatetype::String=""; mak
     f
 end
 
-function folder_path(folder::Vector,root,foldertype)
+function folder_path(folder::Vector, root, foldertype)
     fv = folder
     for i in eachindex(fv)
-        fv[i]= folder_path(fv[i],root,foldertype)
+        fv[i] = folder_path(fv[i], root, foldertype)
     end
     fv
 end

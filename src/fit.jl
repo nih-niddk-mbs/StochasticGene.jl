@@ -2,10 +2,18 @@
 #
 # Fit GRS models (generalized telegraph models) to RNA abundance and live cell imaging data
 #
+"""
+HBEC gene information
+"""
+genes_hbec() = ["CANX"; "DNAJC5"; "ERRFI1"; "KPNB1"; "MYH9"; "Rab7a"; "RHOA"; "RPAP3"; "Sec16A"; "SLC2A1"]
+genelength_hbec() = Dict([("Sec16A", 42960); ("SLC2A1", 33802); ("ERRFI1", 14615); ("RHOA", 52948); ("KPNB1", 33730); ("MYH9", 106741); ("DNAJC5", 40930); ("CANX", 32710); ("Rab7a", 88663); ("RPAP3", 44130); ("RAB7A", 88663); ("SEC16A", 42960)])
+MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("RHOA", 51109); ("KPNB1", 24000); ("MYH9", 71998); ("DNAJC5", 14857); ("CANX", 4861); ("Rab7a", 83257); ("RPAP3", 38610);("SEC16A", 5220); ("RAB7A", 83257)])
+halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
+
 
 """
     fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, rmean::Vector=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], 
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean::Vector=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], 
     decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
 
@@ -36,7 +44,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `insertstep`: R step where reporter is first observed
 - `root`: root folder of data and Results folders
 - `maxtime`: float maximum time for entire run
-- `rmean`: Vector of prior rate means
+- `priormean`: Vector of prior rate means
 - `nalleles`: number of alleles, value in alleles folder will be used if it exists
 - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
 - `onstates`: vector of sojourn or on states
@@ -99,8 +107,8 @@ end
 
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0,priormean=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
@@ -110,11 +118,12 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datafolder, gene::S
     data = load_data(datatype, dttype, datafolder, label, gene, datacond, interval, temprna, nascent)
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
-    isempty(rmean) && (rmean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
+    isempty(priormean) && (priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
+    isempty(fittedparam) && (fittedparam = collect(1:num_rates(transitions,R,S,insertstep)-1))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
-    isempty(r) && (r = rmean)
+    isempty(r) && (r = priormean)
     println(r)
-    model = load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     # return data, model, options
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -475,7 +484,7 @@ end
 """
 function get_decay(gene::String, cell::String, root::String, col::Int=2)
     if uppercase(cell) == "HBEC"
-        if uppercase(gene) ∈ uppercase.(genes_gt())
+        if uppercase(gene) ∈ uppercase.(genes_hbec())
             # return log(2.0) / (60 .* halflife_gt()[gene])
             return get_decay(halflife_gt()[gene])
         else

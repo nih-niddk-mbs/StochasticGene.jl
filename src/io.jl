@@ -474,7 +474,7 @@ filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
-filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * txtstr
+filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
 
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
