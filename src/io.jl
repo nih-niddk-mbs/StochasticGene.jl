@@ -708,9 +708,22 @@ function read_tracefiles(path::String, gene::String, cond::String="", col=3)
 end
 
 
+"""
+    readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
+
 
 """
+function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
+    if R == 0
+        name = filename(label, gene, G, nalleles)
+    else
+        name = filename(label, gene, G, R, S, insertstep, nalleles)
+    end
+    readrates(joinpath(infolder, "rates" * name), get_row(ratetype))
+end
+"""
 readrates(file::String,row::Int)
+readrates(file::String)
 
 row
 1       maximum likelihood
@@ -718,10 +731,16 @@ row
 3       median
 4       last value of previous run
 """
-readrates(file::String) = readrates(file, 3)
-# readrates(file::String, row::Int, header::Bool=true) = readrow(file, row, header)
 readrates(file::String, row::Int) = readrow(file, row)
 
+readrates(file::String) = readrates(file, 3)
+
+
+
+"""
+    get_row(ratetype)
+
+"""
 function get_row(ratetype)
     if ratetype == "ml"
         row = 1
@@ -736,24 +755,6 @@ function get_row(ratetype)
     end
     row
 end
-
-# function readrow(file::String, row, header=false)
-#     if isfile(file) && ~isempty(read(file))
-#         if header
-#             contents = readdlm(file, ',', header=true)[1]
-#         else
-#             contents = readdlm(file, ',', header=false)
-#         end
-#         if row <= size(contents, 1)
-#             m = contents[row, :]
-#             return m[.~isempty.(m)]
-#         else
-#             return [nothing]
-#         end
-#     else
-#         println(file)
-#     end
-# end
 
 function readrow(file::String, row, delim=',')
     if isfile(file) && ~isempty(read(file))

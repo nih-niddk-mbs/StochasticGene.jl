@@ -4,86 +4,61 @@
 #
 
 """
+    fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, rmean::Vector=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], 
+    decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
+
 fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
 # Arguments
 - `nchains`: number of MCMC chains
+- `datatype`: choices "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `ddtype`: Vector of dwell time types, e.g. "ON", "OFF"
+- `datafolder`: folder for data, string or array of strings
 - `gene`: gene name
 - `cell`: cell type
+- `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
+- `interval`: frame interval for traces
+- `nascent`: fraction of alleles exhibiting nascent rna
+- `infolder`: folder pointing to results used as initial conditions
+- `resultfolder`: folder for results
+- `inlabel`: name of input files (not including gene name but including condition)
+- `label`: = name of output files
 - `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
 - `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
 - `insertstep`: R step where reporter is first observed
-- `datatype`: data type, e.g. genetrap, scRNA, smFISH
+- `root`: root folder of data and Results folders
 - `maxtime`: float maximum time for entire run
-- `infolder`: folder pointing to results used as initial conditions
-- `resultfolder`: folder where results go
-- `datafolder`: folder for data, string or array of strings
-- `inlabel`: name of input files (not including gene name but including condition)
-- `label`: = name of output files
-- `nsets`: int number of rate sets
-- `cv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `transient::Bool`: true means fit a time dependent transient model (T0, T30, T120)
+- `rmean`: Vector of prior rate means
+- `nalleles`: number of alleles, value in alleles folder will be used if it exists
+- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+- `onstates`: vector of sojourn or on states
+- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
+- `probfn`: observation (noise) probability distribution for trace data
+- `noiseparams`: number of noise distribution parameters
+- `weightind`: rate vector index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
+- `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `samplesteps`: int number of samples
 - `warmupsteps`: int number of warmup steps
 - `annealsteps`: in number of annealing steps
 - `temp`: MCMC temperature
 - `tempanneal`: starting temperature for annealing
-- `root`: root folder of data and Results folders
-- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
-- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `tempfish`: temperature for scRNA distribution compared to dwell time distributions (reduces mRNA cell count by 1/fempfish)
 - `burst`: if true then compute burst frequency
-- `nalleles`: number of alleles, value in alleles folder will be used if it exists
 - `optimize`: use optimizer to compute maximum likelihood value
-- `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
-- `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `writesamples`: write out MH samples if true, default is false
-- `data`: data structure
 
 """
-
-# function fit(nchains::Int, gene::String, cell::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, datacond, G::Int, R::Int, S::Int, insertstep::Int, maxtime::Float64, infolder::String, resultfolder::String, datafolder::String, datatype::String, inlabel::String, label::String, nsets::Int, propcv=0.0, transient::Bool=false, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, root=".", priorcv::Float64=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="ml", writesamples=false, onstates=Int[], tempfish=1.0, tracedata=true)
-#     println(now())
-#     gene = check_genename(gene, "[")
-#     printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
-#     resultfolder = folder_path(resultfolder, root, "results", make=true)
-#     infolder = folder_path(infolder, root, "results")
-#     if datatype == "genetrap"
-#         data, model = genetrap(root, gene, transitions, G, R, S, insertstep, nalleles, splicetype, fittedparam, infolder, label, "ml", tempfish, priorcv, propcv, onstates, tracedata)
-#     elseif datatype == "scRNA" || datatype == "fish"
-#         datafolder = folder_path(datafolder, root, "data")
-#         if occursin("-", datafolder)
-#             datafolder = string.(split(datafolder, "-"))
-#         end
-#         if datatype == "fish"
-#             fish = true
-#             yieldprior = 1.0
-#         else
-#             fish = false
-#             yieldprior = 0.05
-#         end
-#         if occursin("-", datacond)
-#             datacond = string.(split(datacond, "-"))
-#         end
-#         if transient
-#             data = data_rna(gene, datacond, datafolder, fish, label, ["T0", "T30", "T120"], [0.0, 30.0, 120.0])
-#         else
-#             data = data_rna(gene, datacond, datafolder, fish, label)
-#         end
-#         model = model_rna(data, gene, cell, G, propcv, fittedparam, fixedeffects, transitions, inlabel, infolder, nsets, root, yieldprior, decayrate, Normal, priorcv, true)
-#     end
-#     println("size of histogram: ", data.nRNA)
-#     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-#     fit(nchains, data, model, options, joinpath(root, resultfolder), burst, optimize, writesamples)
-# end
-
-function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+function fit(nchains::Int, datatype::String, dttype::Vector, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", rmean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
@@ -105,13 +80,30 @@ function fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, c
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
-function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
-    if R == 0
-        name = filename(label, gene, G, nalleles)
-    else
-        name = filename(label, gene, G, R, S, insertstep, nalleles)
+"""
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
+
+
+"""
+function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
+    print_ll(data, model)
+    fit, stats, measures = run_mh(data, model, options, nchains)
+    optimized = 0
+    if optimize
+        try
+            optimized = Optim.optimize(x -> lossfn(x, data, model), fit.parml, LBFGS())
+        catch
+            @warn "Optimizer failed"
+        end
     end
-    readrates(joinpath(infolder, "rates" * name), get_row(ratetype))
+    if burst
+        bs = burstsize(fit, model)
+    else
+        bs = 0
+    end
+    finalize(data, model, fit, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
+    println(now())
+    get_rates(stats.medparam, model, false)
 end
 
 
@@ -154,6 +146,7 @@ end
 """
     load_model(data, r, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
 
+return model structure
 """
 function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     if typeof(data) <: AbstractRNAData
@@ -187,7 +180,7 @@ end
 
 
 """
-    load_model(r,fittedparam,fixedeffects,transitions,G,R,S,insertstep,priord,components,reporter)
+    load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 
 """
 function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
@@ -208,7 +201,7 @@ end
 
 
 """
-    model_prior(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv=10.0, noiseparams, weightind)
+    prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv, noiseparams, weightind)
 
 
 """
@@ -242,31 +235,6 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm
 end
 
-"""
-    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
-
-
-"""
-function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
-    print_ll(data, model)
-    fit, stats, measures = run_mh(data, model, options, nchains)
-    optimized = 0
-    if optimize
-        try
-            optimized = Optim.optimize(x -> lossfn(x, data, model), fit.parml, LBFGS())
-        catch
-            @warn "Optimizer failed"
-        end
-    end
-    if burst
-        bs = burstsize(fit, model)
-    else
-        bs = 0
-    end
-    finalize(data, model, fit, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
-    println(now())
-    get_rates(stats.medparam, model, false)
-end
 
 """
 lossfn(x,data,model)
