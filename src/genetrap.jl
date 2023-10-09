@@ -24,11 +24,11 @@ end
 
 """
 
-function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", splicetype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, tempfish=1.0, root::String=".", burst=false)
+function fit_genetrap(nchains, maxtime, gene::String, transitions, G::Int, R::Int, S::Int, insertstep::Int; onstates=[], priorcv=10.0, propcv=0.01, fittedparam=collect(1:num_rates(transitions, R, R, insertstep)-1), infolder::String="test", folder::String="test", samplesteps::Int=1000, nalleles::Int=2, label="gt", splicetype="", warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, root::String=".", burst=false)
     println(now())
     folder = folder_path(folder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, splicetype, fittedparam, infolder, folder, label, "ml", tempfish, priorcv, propcv, onstates)
+    data, model = genetrap(root, gene, transitions, G, R, S, insertstep, 2, splicetype, fittedparam, infolder, folder, label, "ml", temprna, priorcv, propcv, onstates)
     println("size of histogram: ", data.nRNA)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     println(model.rates)
@@ -51,34 +51,34 @@ genetrap()
 Load data, model and option structures for metropolis-hastings fit
 root is the folder containing data and results
 
-FISH counts is divided by tempfish to adjust relative weights of data
-set tempfish = 0 to equalize FISH and live cell counts, 
+FISH counts is divided by temprna to adjust relative weights of data
+set temprna = 0 to equalize FISH and live cell counts, 
 """
-function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, splicetype::String, fittedparam::Vector, infolder::String, label::String, ratetype::String, tempfish, priorcv, propcv, onstates, tracedata)
+function genetrap(root, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, splicetype::String, fittedparam::Vector, infolder::String, label::String, ratetype::String, temprna, priorcv, propcv, onstates, tracedata)
     r = readrates_genetrap(infolder, ratetype, gene, label, G, R, S, insertstep, nalleles, splicetype)
-    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, splicetype, fittedparam, tempfish, priorcv, propcv, onstates, tracedata)
+    genetrap(root, r, label, gene, transitions, G, R, S, insertstep, nalleles, splicetype, fittedparam, temprna, priorcv, propcv, onstates, tracedata)
 end
 
-function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, splicetype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), tempfish=1.0, priorcv=10.0, propcv=0.01, onstates=[], tracedata="")
-    data = R == 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, tempfish, tracedata)
+function genetrap(root, r, label::String, gene::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int=2, splicetype::String="", fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), temprna=1.0, priorcv=10.0, propcv=0.01, onstates=[], tracedata="")
+    data = R == 0 ? data_genetrap_FISH(root, label, gene) : data_genetrap(root, label, gene, temprna, tracedata)
     model = model_genetrap(gene, r, transitions, G, R, S, insertstep, fittedparam, nalleles, data.nRNA + 2, priorcv, propcv, onstates, splicetype)
     return data, model
 end
 
-function data_genetrap(root, label, gene, tempfish, tracefolder)
+function data_genetrap(root, label, gene, temprna, tracefolder)
     if ~isempty(tracefolder)
         traces = read_tracefiles(tracefolder,"",',')
-        histFISH = readFISH_genetrap(root, gene, tempfish)
+        histFISH = readFISH_genetrap(root, gene, temprna)
         return TraceRNAData("traceRNA", "test", interval, traces, length(histFISH),histFISH)  
     else
         LC = readLCPDF_genetrap(root, gene)
-        if tempfish == 0
+        if temprna == 0
             counts = Int(div(sum(LC[:, 2] + LC[:, 3]), 2))
             println(counts)
             # set FISH counts to mean of live cell counts
             histFISH = readFISH_genetrap(root, gene, counts)
         else
-            histFISH = readFISH_genetrap(root, gene, tempfish)
+            histFISH = readFISH_genetrap(root, gene, temprna)
         end
         return RNAOnOffData(label, gene, length(histFISH), histFISH, LC[:, 1], LC[:, 3], LC[:, 2])
     end

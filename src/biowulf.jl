@@ -55,6 +55,11 @@
 
     returns swarmfile that calls a julia file that is executed on biowulf
 
+    makeswarm(;fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
+decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+
 """
 
 function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions,R,S,insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
@@ -63,9 +68,9 @@ function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]),
     else
         cond = conds
     end
-    if datatype == "scRNA"
+    if datatype == "rna"
         genes = checkgenes(root, cond, datafolder, cell, thresholdlow, thresholdhigh)
-    elseif datatype == "genetrap"
+    elseif datatype == "rnaoffon"
         genes = genes_gt()
     end
     makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, splicetype=splicetype, ratetype=ratetype, writesamples=writesamples)
@@ -115,7 +120,11 @@ function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1,
         sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
         write_swarmfile(joinpath(root,sfile), nchains, nthreads, juliafile, genes)
     end
-    write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+    # write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+    write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
+decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 end
 
 """
@@ -179,17 +188,35 @@ function rna_setup(root=".")
 end
 
 """
-make_fitfile(fitfile,fittedparam,fixedeffects)
+    write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
+decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
-make the file the swarm file calls to execute julia code
+write file the swarm file calls to execute julia code
+
+write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
+decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+
 
 """
-function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
+function write_fitfile(fitfile,nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
+fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, rmean, nalleles, priorcv, onstates, 
+decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+# function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
     f = open(fitfile, "w")
     s = '"'
     # write(f,"@everywhere using StochasticGene\n")
     write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene/src/test.jl$s)\n")
     write(f, "@time fit($nchains,ARGS[1],$s$cell$s,$fittedparam,$fixedeffects,$transitions,$s$datacond$s,$G,$R,$S,$insertstep,$maxtime,$s$infolder$s,$s$resultfolder$s,$s$datafolder$s,$s$datatype$s,$s$inlabel$s,$s$label$s,$nsets,$cv,$transient,$samplesteps,$warmupsteps,$annealsteps,$temp,$tempanneal,$s$root$s,$priorcv,$decayrate,$burst,$nalleles,$optimize,$s$splicetype$s,$s$ratetype$s,$writesamples)\n")
+    write(f, "@time fit($nchains, $datatype, $dttype, $datafolder, ARGS[1], $s$cell$s, $s$datacond$s, $interval, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,
+$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $rmean, $nalleles, $priorcv, $onstates, 
+$decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $s$ratetype$s,
+$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
+
     close(f)
 end
 
