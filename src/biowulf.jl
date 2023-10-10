@@ -5,7 +5,7 @@
 """
     makeswarm(; nchains::Int=2,nthreads::Int=1,swarmfile::String="fit", batchsize = 1000, juliafile::String="fitscript",, datatype::String="", dttype::String[], datafolder="", cell::String="", datacond::String="", interval=1.0, nascent=0.2, infolder::String="", resultfolder::String="", inlabel::String="", label::String="",
     fittedparam::Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1,2],[2,1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", nalleles=2, priormean=[],  priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,modulemode=true)
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,src="")
 
 
 returns swarmfile used on biowulf
@@ -64,11 +64,11 @@ Arguments
 """
 function makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datafolder="", cell::String="HBEC", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, modulemode=true)
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
 
     makeswarm(checkgenes(root, datacond, datafolder, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datafolder=datafolder, cell=cell, datacond=datacond, interval=interval, nascent=nascent, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
         fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, root=root, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noiseparams=noiseparams, weightind=weightind, ratetype=ratetype,
-        propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, modulemode=modulemode)
+        propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, src=src)
 end
 
 
@@ -76,13 +76,13 @@ end
 """
     makeswarm(genes::Vector; datatype::String="rna", dttype::String[], datafolder="", cell::String="HCT116", datacond::String="DMSO", interval=1.0, nascent=0., infolder::String=, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,modulemode=true)
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,src="")
 
 
 """
 function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datafolder="", cell::String="", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, modulemode=true)
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     if R > 0
         if S > 0
             S = R
@@ -113,7 +113,7 @@ function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::St
     end
     write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
-        decayrate, splicetype, probfn, noiseparams, weightind, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, modulemode)
+        decayrate, splicetype, probfn, noiseparams, weightind, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
 end
 """
     write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
@@ -125,15 +125,15 @@ end
 function write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-    propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, modulemode)
+    propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
     # function write_fitfile(fitfile, nchains, cell, datacond, G, R, S, transitions, insertstep, onstates, maxtime, fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
     s = '"'
     s3 = s * s * s
     f = open(fitfile, "w")
-    if modulemode
+    if isempty(src)
         write(f, "@everywhere using StochasticGene\n")
     else
-        write(f, "@everywhere include($s/Users/carsonc/github/StochasticGene.jl/src/test.jl$s)\n")
+        write(f, "@everywhere include($s$src$s)\n")
     end
     typeof(datafolder) <: AbstractString && (datafolder = "$s$datafolder$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
