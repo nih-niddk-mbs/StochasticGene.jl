@@ -44,9 +44,9 @@ Arguments
 - `onstates`: vector of on or sojurn states
 - `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn`: probability function for hmm observation probability (.e.g prob_GaussianMixture)
+- `probfn`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
 - `noiseparams`: number of parameters of probfn
-- `weightind`: index of rate vector of bias probability of mixtures
+- `weightind`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
 - `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime`: maximum wall time for run, default = 60 min
@@ -141,73 +141,6 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, dat
     write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datafolder, ARGS[1], $s$cell$s, $datacond, $interval, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $priormean, $nalleles, $priorcv, $onstates, $decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
     close(f)
 end
-# function makeswarm(; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, conds::String="NULL", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), fixedeffects=tuple(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
-#     if occursin.("-", conds)
-#         cond = string.(split(conds, "-"))
-#     else
-#         cond = conds
-#     end
-#     if datatype == "rna"
-#         genes = checkgenes(root, cond, datafolder, cell, thresholdlow, thresholdhigh)
-#     elseif datatype == "rnaoffon"
-#         genes = genes_hbec()
-#     end
-#     makeswarm(genes, G=G, R=R, S=S, transitions=transitions, insertstep=insertstep, onstates=onstates, cell=cell, infolder=infolder, swarmfile=swarmfile, label=label, inlabel=inlabel, timestamp=timestamp, nsets=nsets, datafolder=datafolder, datatype=datatype, conds=conds, resultfolder=resultfolder, batchsize=batchsize, maxtime=maxtime, nchains=nchains, nthreads=nthreads, transient=transient, fittedparam=fittedparam, fixedeffects=fixedeffects, juliafile=juliafile, root=root, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, cv=cv, priorcv=priorcv, decayrate=decayrate, burst=burst, nalleles=nalleles, optimize=optimize, splicetype=splicetype, ratetype=ratetype, writesamples=writesamples)
-#  makeswarm(genes::Vector; datatype::String="rna", dttype::String[], datafolder="", cell::String="HCT116", datacond::String="DMSO", interval=1.0, nascent=0., infolder::String=, resultfolder::String, inlabel::String, label::String,
-#     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", priormean=[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-#     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
-# write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
-# end
-# function makeswarm(genes::Vector; G::Int=2, R::Int=0, S::Int=0, transitions=([1, 2], [2, 1]), insertstep::Int=1, onstates=Int[], cell="HCT116", swarmfile::String="fit", label="label", inlabel="label", timestamp="", nsets=1, datafolder::String="HCT116_testdata", datatype="scRNA", conds::String="MOCK", resultfolder::String="fit_result", infolder=resultfolder, batchsize=1000, maxtime=60.0, nchains::Int=2, nthreads::Int=1, transient::Bool=false, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), fixedeffects=(), juliafile::String="fitscript", root=".", samplesteps::Int=40000, warmupsteps=20000, annealsteps=0, temp=1.0, tempanneal=100.0, cv=0.02, priorcv=10.0, decayrate=-1.0, burst=false, nalleles=2, optimize=false, splicetype="", ratetype="median", writesamples=false)
-
-#     if R > 0
-#         if S > 0
-#             S = R
-#         end
-#         modelstring = "$G$R$S$insertstep"
-#     else
-#         modelstring = "$G"
-#     end
-
-#     if label == "label"
-#         if datatype == "fish"
-#             label = "FISH-ss"
-#         elseif datatype == "scRNA"
-#             label = "scRNA-ss"
-#         elseif datatype == "genetrap"
-#             label = "gt"
-#         elseif datatype == "trace"
-#             label = "trace"
-#         end
-#         label = label * "-" * cell
-#         if ~isempty(timestamp)
-#             label = label * "-" * timestamp
-#         end
-#         label = label * "_" * conds
-#         if inlabel == "label"
-#             inlabel = label
-#         end
-#     end
-
-#     ngenes = length(genes)
-#     println("number of genes: ", ngenes)
-#     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
-#     if ngenes > batchsize
-#         batches = getbatches(genes, ngenes, batchsize)
-#         for batch in eachindex(batches)
-#             sfile = swarmfile * "_" * label * "_" * "$modelstring" * "_" * "$batch" * ".swarm"
-#             write_swarmfile(sfile, nchains, nthreads, juliafile, batches[batch])
-#         end
-#     else
-#         sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
-#         write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, genes)
-#     end
-#     # write_fitfile(joinpath(root,juliafile), nchains, cell, conds, G, R, S, transitions, insertstep, onstates, float(maxtime), fittedparam, fixedeffects, infolder, resultfolder, datafolder, datatype, inlabel, label, nsets, transient, samplesteps, warmupsteps, annealsteps, temp, tempanneal, root, cv, priorcv, decayrate, burst, nalleles, optimize, splicetype, ratetype, writesamples)
-#     write_fitfile(fitfile, nchains, datatype, dttype, datafolder, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label,
-#         fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
-#         decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
-#         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
-# end
 
 """
     fix(folder)
@@ -271,6 +204,11 @@ end
 
 
 
+"""
+    getbatches(genes, ngenes, batchsize)
+
+
+"""
 function getbatches(genes, ngenes, batchsize)
     nbatches = div(ngenes, batchsize)
     batches = Vector{Vector{String}}(undef, nbatches + 1)
@@ -282,6 +220,11 @@ function getbatches(genes, ngenes, batchsize)
     return batches
 end
 
+"""
+    write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
+
+
+"""
 function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
     f = open(sfile, "w")
     for gene in genes
@@ -292,31 +235,11 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
     close(f)
 end
 
-# function checkgenes(root, conds::Vector, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
-#     genes = Vector{Vector{String}}(undef, 2)
-#     if occursin.("-", datafolder)
-#         datafolder = string.(split(datafolder, "-"))
-#         for i in 1:2
-#             genes[i] = checkgenes(root, conds[i], datafolder[i], celltype, thresholdlow, thresholdhigh)
-#         end
-#     else
-#         for i in 1:2
-#             genes[i] = checkgenes(root, conds[i], datafolder, celltype, thresholdlow, thresholdhigh)
-#         end
-#     end
-#     intersect(genes[1], genes[2])
-# end
+"""
+    checkgenes(root, conds, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
 
-# function checkgenes(root, cond::String, datafolder, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
-#     datafolder = folder_path(datafolder, root, "data")
-#     genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datafolder))
-#     alleles = get_alleles(root, cell)
-#     if ~isnothing(alleles)
-#         return intersect(genes, alleles)
-#     else
-#         return genes
-#     end
-# end
+
+"""
 function checkgenes(root, conds, datafolder, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
     genes = Vector{Vector{String}}(undef, 0)
     typeof(conds) <: AbstractString && (conds = [conds])
@@ -332,6 +255,11 @@ function checkgenes(root, conds, datafolder, celltype::String, thresholdlow::Flo
     return geneset
 end
 
+"""
+    checkgenes(root, cond::String, datafolder::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
+
+
+"""
 function checkgenes(root, cond::String, datafolder::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
     if cell == "HBEC"
         return genes_hbec()
@@ -347,6 +275,11 @@ function checkgenes(root, cond::String, datafolder::String, cell::String, thresh
     end
 end
 
+"""
+    folder_path(folder::String, root::String, folderatetype::String=""; make=false)
+
+
+"""
 function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
     f = folder
     if ~ispath(folder)
@@ -363,6 +296,11 @@ function folder_path(folder::String, root::String, folderatetype::String=""; mak
     f
 end
 
+"""
+    folder_path(folder::Vector, root, foldertype)
+
+TBW
+"""
 function folder_path(folder::Vector, root, foldertype)
     fv = folder
     for i in eachindex(fv)
@@ -371,11 +309,21 @@ function folder_path(folder::Vector, root, foldertype)
     fv
 end
 
+"""
+    get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
+
+TBW
+"""
 function get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
     path = get_file(root, "data/halflives", cell, "csv")
     get_halflives(path, thresholdlow, thresholdhigh)
 end
 
+"""
+    get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
+
+TBW
+"""
 function get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
     genes = Vector{String}(undef, 0)
     halflives = readdlm(hlpath, ',')
@@ -389,8 +337,14 @@ function get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
     return genes
 end
 
-get_alleles(root, cell) = get_alleles(get_file(root, "data/alleles", cell, "csv"))
 
+"""
+    get_alleles(allelepath)
+    get_alleles(root, cell) = get_alleles(get_file(root, "data/alleles", cell, "csv"))
+
+
+TBW
+"""
 function get_alleles(allelepath)
     if ~isnothing(allelepath)
         return readdlm(allelepath, ',')[2:end, 1]
@@ -399,8 +353,16 @@ function get_alleles(allelepath)
     end
 end
 
+get_alleles(root, cell) = get_alleles(get_file(root, "data/alleles", cell, "csv"))
+
 get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
 
+"""
+    get_file(folder, filetype, suffix)
+    get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
+
+TBW
+"""
 function get_file(folder, filetype, suffix)
     if ispath(folder)
         files = readdir(folder)
@@ -417,6 +379,13 @@ function get_file(folder, filetype, suffix)
     nothing
 end
 
+get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
+
+"""
+    findjobs(folder)
+
+TBW
+"""
 function findjobs(folder)
     files = readdir(folder)
     files = files[occursin.("swarm_", files)]
@@ -426,6 +395,11 @@ function findjobs(folder)
     unique(files)
 end
 
+"""
+    fixruns(jobs, message="FAILED")
+
+TBW
+"""
 function fixruns(jobs, message="FAILED")
     runlist = Vector{String}(undef, 0)
     for job in jobs
@@ -449,6 +423,11 @@ function fixruns(jobs, message="FAILED")
     return runlist
 end
 
+"""
+    writeruns(runs, outfile="fitfix.swarm")
+
+TBW
+"""
 function writeruns(runs, outfile="fitfix.swarm")
 
     f = open(outfile, "w")
@@ -459,6 +438,11 @@ function writeruns(runs, outfile="fitfix.swarm")
 
 end
 
+"""
+    findswarm(job)
+
+TBW
+"""
 function findswarm(job)
     sc = "Swarm Command"
     line = read(pipeline(`jobhist $job`, `grep $sc`), String)
@@ -470,11 +454,21 @@ end
     get_missing_genes(datafolder::String,folder::String,cell,type,label,cond,model)
 """
 
+"""
+    get_missing_genes(datafolder::String, resultfolder::String, cell, filetype, label, cond, model, root=".")
+
+TBW
+"""
 function get_missing_genes(datafolder::String, resultfolder::String, cell, filetype, label, cond, model, root=".")
     genes = checkgenes(root, cond, datafolder, cell, 0.0, 1e8)
     get_missing_genes(genes, folder_path(resultfolder, root, "results"), filetype, label, cond, model)
 end
 
+"""
+    get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)
+
+TBW
+"""
 function get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)
     genes1 = get_genes(resultfolder, filetype, label, cond, model)
     get_missing_genes(genes, genes1)
@@ -482,6 +476,11 @@ end
 
 get_missing_genes(genes, genes1) = union(setdiff(genes1, genes), setdiff(genes, genes1))
 
+"""
+    scan_swarmfiles(jobid, folder=".")
+
+TBW
+"""
 function scan_swarmfiles(jobid, folder=".")
     if ~(typeof(jobid) <: String)
         jobid = string(jobid)
@@ -495,6 +494,11 @@ function scan_swarmfiles(jobid, folder=".")
     return genes
 end
 
+"""
+    scan_swarmfile(file)
+
+TBW
+"""
 function scan_swarmfile(file)
     genes = Array{String,1}(undef, 0)
     contents = readdlm(file, '\t')
@@ -505,6 +509,11 @@ function scan_swarmfile(file)
     return genes
 end
 
+"""
+    scan_fitfile(file, folder=".")
+
+TBW
+"""
 function scan_fitfile(file, folder=".")
     genes = Array{String,1}(undef, 0)
     joinpath(folder, file)

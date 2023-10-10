@@ -1,3 +1,5 @@
+# This file is part of StochasticGene.jl   
+
 ### hmm.jl
 ### Fit discrete HMMs and continuous hidden Markov process models directly to intensity traces
 ###

@@ -1,3 +1,5 @@
+# This file is part of StochasticGene.jl   
+
 # fit.jl
 #
 # Fit GRS models (generalized telegraph models) to RNA abundance and live cell imaging data
@@ -52,7 +54,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
 - `probfn`: observation (noise) probability distribution for trace data
 - `noiseparams`: number of noise distribution parameters
-- `weightind`: rate vector index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
+- `weightind`: noise parameter index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
 - `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `samplesteps`: int number of samples
@@ -485,8 +487,8 @@ end
 function get_decay(gene::String, cell::String, root::String, col::Int=2)
     if uppercase(cell) == "HBEC"
         if uppercase(gene) ∈ uppercase.(genes_hbec())
-            # return log(2.0) / (60 .* halflife_gt()[gene])
-            return get_decay(halflife_gt()[gene])
+            # return log(2.0) / (60 .* halflife_hbec()[gene])
+            return get_decay(halflife_hbec()[gene])
         else
             println(gene, " has no decay time")
             return -1.0
