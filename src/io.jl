@@ -39,26 +39,26 @@ end
 # statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
 
 """
-  write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
+  write_dataframes(resultfolder::String,datapath::String;measure::Symbol=:AIC,assemble::Bool=true)
 
   collates run results into a csv file
 
 Arguments
 - `resultfolder`: name of folder with result files
-- `datafolder`: name of folder where data is stored
+- `datapath`: name of folder where data is stored
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 """
 
 
 
-function write_dataframes(resultfolder::String, datafolder::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
-    write_dataframes_only(resultfolder, datafolder, assemble=assemble, fittedparams=fittedparams)
+function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
+    write_dataframes_only(resultfolder, datapath, assemble=assemble, fittedparams=fittedparams)
     write_winners(resultfolder, measure)
 end
 
-function write_dataframes_only(resultfolder::String, datafolder::String; assemble::Bool=true, fittedparams=Int[])
-    dfs = make_dataframes(resultfolder, datafolder, assemble, fittedparams)
+function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, fittedparams=Int[])
+    dfs = make_dataframes(resultfolder, datapath, assemble, fittedparams)
     for df in dfs
         for dff in dfs
             for dfff in dff
@@ -86,7 +86,7 @@ function write_winners(resultfolder, measure)
 end
 
 """
-write_augmented(summaryfile::String,resultfolder,datafolder;fishdata=false)
+write_augmented(summaryfile::String,resultfolder,datapath;fishdata=false)
 
 Augment summary file with G=2 burst size, model predicted moments, and fit measures
 
@@ -147,11 +147,11 @@ function get_genes(file::String)
     return r[:, 1]
 end
 
-get_genes(root, cond, datafolder) = get_genes(cond, joinpath(root, datafolder))
+get_genes(root, cond, datapath) = get_genes(cond, joinpath(root, datapath))
 
-function get_genes(cond, datafolder)
+function get_genes(cond, datapath)
     genes = Vector{String}(undef, 0)
-    files = readdir(datafolder)
+    files = readdir(datapath)
     for file in files
         if occursin(cond, file)
             push!(genes, split(file, "_")[1])
@@ -216,24 +216,24 @@ get_burstsummaryfiles(files::Vector) = get_summaryfiles(files, "burst")
 get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(folder))
 
 """
-write_moments(outfile,genelist,cond,datafolder,fish,root)
+write_moments(outfile,genelist,cond,datapath,fish,root)
 
 """
-function write_moments(outfile, genelist, cond, datafolder, fish, root)
+function write_moments(outfile, genelist, cond, datapath, fish, root)
     f = open(outfile, "w")
     writedlm(f, ["Gene" "Expression Mean" "Expression Variance"], ',')
     for gene in genelist
-        h = get_histogram_rna(gene, cond, datafolder, fish, root)
+        h = get_histogram_rna(gene, cond, datapath, fish, root)
         writedlm(f, [gene mean_histogram(h) var_histogram(h)], ',')
     end
     close(f)
 end
 
 """
-    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datafolder::String,fish,root,outfolder = "histograms")
+    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datapath::String,fish,root,outfolder = "histograms")
 
 """
-function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datafolder::String, fish, root, outfolder="histograms")
+function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapath::String, fish, root, outfolder="histograms")
     ratefile = joinpath(resultfolder, ratefile)
     rates, head = readdlm(ratefile, ',', header=true)
     outfolder = joinpath(resultfolder, outfolder)
@@ -242,7 +242,7 @@ function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datafo
     end
     cond = string.(split(datacond, "-"))
     for r in eachrow(rates)
-        h = histograms(r, cell, cond, G, datafolder, fish, root)
+        h = histograms(r, cell, cond, G, datapath, fish, root)
         for i in eachindex(cond)
             f = open(joinpath(outfolder, string(r[1]) * cond[i] * ".txt"), "w")
             writedlm(f, h[i])
@@ -666,15 +666,15 @@ function readfile(gene::AbstractString, cond::AbstractString, path::AbstractStri
     end
 end
 """
-    readfiles(gene::String, cond::String, datafolder::Vector)
+    readfiles(gene::String, cond::String, datapath::Vector)
 
 read in a set of dwelltime files and return vector of time bins and values
 """
-function readfiles(gene::String, cond::String, datafolder::Vector)
+function readfiles(gene::String, cond::String, datapath::Vector)
     bins = Vector{Vector}(undef, 0)
     DT = Vector{Vector}(undef, 0)
-    for i in eachindex(datafolder)
-        c = readfile(gene, cond, datafolder[i])
+    for i in eachindex(datapath)
+        c = readfile(gene, cond, datapath[i])
         push!(bins, c[:, 1])
         push!(DT, c[:, 2])
     end
@@ -683,12 +683,12 @@ end
 
 
 """
-    read_rna(gene, cond, datafolder)
+    read_rna(gene, cond, datapath)
 
 read in rna histograms 
 """
-function read_rna(gene, cond, datafolder)
-    h = readfile(gene, cond, datafolder)[:, 1]
+function read_rna(gene, cond, datapath)
+    h = readfile(gene, cond, datapath)[:, 1]
     return length(h), h
 end
 

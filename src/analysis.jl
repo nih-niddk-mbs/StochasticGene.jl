@@ -3,10 +3,10 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datafolder::String)
+    make_dataframes(resultfolder::String,datapath::String)
 
 """
-function make_dataframes(resultfolder::String, datafolder::String, assemble=true, fittedparams=Int[])
+function make_dataframes(resultfolder::String, datapath::String, assemble=true, fittedparams=Int[])
     if assemble
         assemble_all(resultfolder, fittedparams=fittedparams)
     end
@@ -25,7 +25,7 @@ function make_dataframes(resultfolder::String, datafolder::String, assemble=true
                 mfiles = lfiles[model.==get_model.(lfiles)]
                 dfm = Vector{DataFrame}(undef, 0)
                 for i in eachindex(mfiles)
-                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datafolder, isfish(mfiles[i])))
+                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, isfish(mfiles[i])))
                 end
                 push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
             end
@@ -37,7 +37,7 @@ end
 
 statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
-function make_dataframe(ratefile::String, datafolder::String, fish::Bool)
+function make_dataframe(ratefile::String, datapath::String, fish::Bool)
     df = read_dataframe(ratefile)
     df2 = read_dataframe(statfile_from_ratefile(ratefile))
     df = leftjoin(df, df2, on=:Gene, makeunique=true)
@@ -50,7 +50,7 @@ function make_dataframe(ratefile::String, datafolder::String, fish::Bool)
         G = parse(Int, parts.model)
         insertcols!(df, :Model => fill(G, size(df, 1)))
         df = stack_dataframe(df, G, parts.cond)
-        add_moments!(df, datafolder, fish)
+        add_moments!(df, datapath, fish)
     end
 end
 
@@ -103,25 +103,25 @@ function add_measures(df, resultfolder::String, G)
     leftjoin(df, dm, on=join_cols(df))
 end
 
-function add_mean!(df::DataFrame, datafolder, fish::Bool)
-    # root = string(split(abspath(datafolder),"data")[1])
+function add_mean!(df::DataFrame, datapath, fish::Bool)
+    # root = string(split(abspath(datapath),"data")[1])
     m = Vector{Float64}(undef, length(df.Gene))
     i = 1
     for gene in df.Gene
-        m[i] = mean_histogram(get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish))
+        m[i] = mean_histogram(get_histogram_rna(string(gene), df[i, :Condition], datapath, fish))
         i += 1
     end
     insertcols!(df, :Expression => m)
 end
 
-function add_moments!(df::DataFrame, datafolder, fish::Bool)
+function add_moments!(df::DataFrame, datapath, fish::Bool)
     m = Vector{Float64}(undef, length(df.Gene))
     v = similar(m)
     t = similar(m)
     i = 1
     for gene in df.Gene
-        # get_histogram_rna(string(gene), df[i, :Condition], datafolder, fish)
-        _, h = read_rna(gene, df[i,:Condition], datafolder)
+        # get_histogram_rna(string(gene), df[i, :Condition], datapath, fish)
+        _, h = read_rna(gene, df[i,:Condition], datapath)
         m[i] = mean_histogram(h)
         v[i] = var_histogram(h)
         t[i] = moment_histogram(h, 3)
@@ -448,16 +448,16 @@ returns list of genes that have deviance greater than `threshold' in 'measurefil
 """
 large_deviance(measurefile, threshold) = filter_gene(measurefile, "Deviance", threshold)
 
-function deviance(r, cond, n, datafolder, root)
-    h, hd = histograms(r, cell, cond, n, datafolder, root)
+function deviance(r, cond, n, datapath, root)
+    h, hd = histograms(r, cell, cond, n, datapath, root)
     deviance(h, hd)
 end
 
-function compute_deviance(outfile, ratefile::String, cond, n, datafolder, root)
+function compute_deviance(outfile, ratefile::String, cond, n, datapath, root)
     f = open(outfile, "w")
     rates, head = readdlm(ratefile, ',', header=true)
     for r in eachrow(rates)
-        d = deviance(r, cond, n, datafolder, root)
+        d = deviance(r, cond, n, datapath, root)
         writedlm(f, [gene d], ',')
     end
     close(f)
@@ -787,46 +787,42 @@ end
 
 
 """
-    histograms(r,cell,cond,n::Int,datafolder,root)
+    histograms(r,cell,cond,n::Int,datapath,root)
 
 """
-function histograms(rin, cell, cond, G::Int, datafolder, fish, root)
+function histograms(rin, cell, cond, G::Int, datapath, fish, root)
     gene = string(rin[1])
     r = float.(rin[2:end])
-    data = data_rna(gene, cond, datafolder, fish, "label", root)
+    data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), fish)
     likelihoodarray(r, data, model)
 end
 
-function get_histogram_rna(gene, cond, datafolder, fish, root)
+
+
+function get_histogram_rna(gene, datacond, datapath)
+    _, h = read_rna(gene, datacond, datapath)
+    normalize_histogram(h)
+end
+
+function get_histogram_rna(gene, cond, datapath, fish, root)
     if fish
-        datapath = FISHpath(gene, cond, datafolder, root)
+        datapath = FISHpath(gene, cond, datapath, root)
         h = read_fish(datapath, cond, 0.98)
     else
-        datapath = scRNApath(gene, cond, datafolder, root)
+        datapath = scRNApath(gene, cond, datapath, root)
         h = read_scrna(datapath, 0.99)
     end
     normalize_histogram(h)
 end
 
-function get_histogram_rna(gene, cond, datafolder, fish, root)
+function get_histogram_rna(gene, cond, datapath, fish)
     if fish
-        datapath = FISHpath(gene, cond, datafolder, root)
+        datapath = FISHpath(gene, cond, datapath)
         h = read_fish(datapath, cond, 0.98)
     else
-        datapath = scRNApath(gene, cond, datafolder, root)
-        h = read_scrna(datapath, 0.99)
-    end
-    normalize_histogram(h)
-end
-
-function get_histogram_rna(gene, cond, datafolder, fish)
-    if fish
-        datapath = FISHpath(gene, cond, datafolder)
-        h = read_fish(datapath, cond, 0.98)
-    else
-        datapath = scRNApath(gene, cond, datafolder)
+        datapath = scRNApath(gene, cond, datapath)
         h = read_scrna(datapath, 0.99)
     end
     normalize_histogram(h)
@@ -835,7 +831,7 @@ end
 
 """
 plot_histogram()
-plot_histogram(ratefile::String,datafolder;fish=false,root=".",row=2)
+plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
 
 functions to plot data and model predicted histograms
 
@@ -855,14 +851,14 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
 end
 
 
-function plot_histogram(ratefile::String, datafolder; fish=false, root=".", row=2)
+function plot_histogram(ratefile::String, datapath; fish=false, root=".", row=2)
     r = readrow(ratefile, row)
     println(r)
     parts = fields(ratefile)
     label = parts.label
     cond = parts.cond
     G = parts.model
-    data = data_rna(parts.gene, parts.cond, datafolder, fish, parts.label, root)
+    data = data_rna(parts.gene, parts.cond, datapath, fish, parts.label, root)
     model = model_rna(r, r, parse(Int, parts.model), parse(Int, parts.nalleles), 0.01, [], (), 0)
     # model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
     plot_histogram(data, model)
@@ -870,13 +866,13 @@ function plot_histogram(ratefile::String, datafolder; fish=false, root=".", row=
 end
 
 
-function plot_histogram(gene::String, cell::String, G::Int, cond::String, fish::Bool, ratefile::String, datafolder::String, root::String=".")
+function plot_histogram(gene::String, cell::String, G::Int, cond::String, fish::Bool, ratefile::String, datapath::String, root::String=".")
     rates = readdlm(ratefile, ',', header=true)
     r = rates[1][findfirst(rates[1][:, 1] .== gene)[1], 2:end]
     # if yield > 0 && ~fish
     #     r[end] = yield
     # end
-    data = data_rna(gene, cond, datafolder, fish, "label", root)
+    data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
     println(typeof(model))
@@ -885,8 +881,8 @@ function plot_histogram(gene::String, cell::String, G::Int, cond::String, fish::
     return m, data, model
 end
 
-function plot_histogram(gene::String, cell::String, G::String, cond::String, fish::Bool, label::String, ratefolder::String, datafolder::String, nsets::Int, root::String, fittedparam=[1], verbose=false)
-    data = data_rna(gene, cond, datafolder, fish, label, root)
+function plot_histogram(gene::String, cell::String, G::String, cond::String, fish::Bool, label::String, ratefolder::String, datapath::String, nsets::Int, root::String, fittedparam=[1], verbose=false)
+    data = data_rna(gene, cond, datapath, fish, label, root)
     model = model_rna(gene, cell, G, fish, 0.01, fittedparam, (), label, ratefolder, nsets, root, data, verbose)
     m = plot_histogram(data, model)
     return m, data, model

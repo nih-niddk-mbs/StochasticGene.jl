@@ -14,12 +14,12 @@ halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPN
 
 
 """
-    fit(nchains::Int, datatype::String, dttype, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fit(nchains::Int, datatype::String, dttype, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean::Vector=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], 
     decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
 
-fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median",writesamples=false)
+fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datapath::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median",writesamples=false)
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
@@ -27,7 +27,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `nchains`: number of MCMC chains
 - `datatype`: choices "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
 - `ddtype`: Vector of dwell time types, e.g. "ON", "OFF"
-- `datafolder`: folder for data, string or array of strings
+- `datapath`: folder for data, string or array of strings
 - `gene`: gene name
 - `cell`: cell type
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
@@ -67,57 +67,18 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `optimize`: use optimizer to compute maximum likelihood value
 - `writesamples`: write out MH samples if true, default is false
 
-function fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datafolder::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,rnatype="",rtype="median",writesamples=false)
-    println(now())
-    gene = check_genename(gene,"[")
-    printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
-
-    resultfolder = folder_path(resultfolder,root,"results",make=true)
-    infolder = folder_path(infolder,root,"results")
-
-    if datatype == "genetrap"
-        # data = data_genetrap_FISH(root,label,gene)
-        # model = model_genetrap(data,gene,transitions,G,R,nalleles,rnatype,fittedparam,fixedeffects,infolder,label,rtype,root)
-        data,model = genetrap(root,gene,transitions,G,R,nalleles,rnatype,fittedparam,infolder,resultfolder,label,"median",1.)
-    else
-        datafolder = folder_path(datafolder,root,"data")
-        if occursin("-",datafolder)
-            datafolder = string.(split(datafolder,"-"))
-        end
-        if datatype == "fish"
-            fish = true
-            yieldprior = 1.
-        else
-            fish = false
-            yieldprior = 0.05
-        end
-        if occursin("-",datacond)
-            datacond = string.(split(datacond,"-"))
-        end
-        if transient
-            data = data_rna(gene,datacond,datafolder,fish,label,["T0","T30","T120"],[0.,30.,120.])
-        else
-            data = data_rna(gene,datacond,datafolder,fish,label)
-        end
-        model = model_rna(data,gene,cell,G,cv,fittedparam,fixedeffects,transitions,inlabel,infolder,nsets,root,yieldprior,decayrate,Normal,priorcv,true)
-    end
-    println("size of histogram: ",data.nRNA)
-
-    options = MHOptions(samplesteps,warmupsteps,annealsteps,maxtime,temp,tempanneal)
-    fit(nchains,data,model,options,temp,resultfolder,burst,optimize,writesamples,root)    # fit(nchains,data,gene,cell,fittedparam,fixedeffects,transitions,datacond,G,maxtime,infolder,resultfolder,datafolder,fish,inlabel,label,nsets,cv,transient,samplesteps,warmupsteps,annealsteps,temp,tempanneal,root,yieldprior,priorcv,decayrate)
-end
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datafolder, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0,priormean=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
-    printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
-    datafolder = folder_path(datafolder, root, "data")
-    data = load_data(datatype, dttype, datafolder, label, gene, datacond, interval, temprna, nascent)
+    datapath = folder_path(datapath, root, "data")
+    data = load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
     isempty(priormean) && (priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
@@ -159,34 +120,33 @@ end
 
 
 """
-    load_data(datatype, dttype, datafolder, label, gene, datacond, interval, temprna, nascent)
+    load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
 
 return data structure
 """
-function load_data(datatype, dttype, datafolder, label, gene, datacond, interval, temprna, nascent)
+function load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
     if datatype == "rna"
-        len, h = read_rna(gene, datacond, datafolder)
+        len, h = read_rna(gene, datacond, datapath)
         return RNAData(label, gene, len, h)
     elseif datatype == "rnaonoff"
-        len, h = read_rna(gene, datacond, datafolder[1])
+        len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
-        LC = readfile(gene, datacond, datafolder[2])
+        LC = readfile(gene, datacond, datapath[2])
         return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
     elseif datatype == "rnadwelltime"
-        len, h = read_rna(gene, datacond, datafolder[1])
+        len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
-        LC = readfiles(gene, datacond, datafolders[2:end])
-        bins, DT = read_dwelltimes(datafolders)
+        bins, DT = read_dwelltimes(datapaths[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
-        trace = read_tracefiles(datafolder, datacond)
+        trace = read_tracefiles(datapath, datacond)
         return TraceData("trace", gene, interval, trace)
     elseif datatype == "tracenascent"
-        trace = read_tracefiles(datafolder, datacond)
+        trace = read_tracefiles(datapath, datacond)
         return TraceNascentData(label, gene, interval, trace, nascent)
     elseif datatype == "tracerna"
-        len, h = read_rna(gene, datacond, datafolder[1])
-        traces = read_tracefiles(datafolder[2], datacond)
+        len, h = read_rna(gene, datacond, datapath[1])
+        traces = read_tracefiles(datapath[2], datacond)
         return TraceRNAData(label, gene, interval, traces, len, h)
     else
         throw("$datatype not included")
@@ -381,20 +341,20 @@ function print_ll(data, model, message="initial ll: ")
 end
 
 """
-printinfo(gene,G,datacond,datafolder,infolder,resultfolder,maxtime)
+printinfo(gene,G,datacond,datapath,infolder,resultfolder,maxtime)
 
 print out run information
 """
-function printinfo(gene, G, datacond, datafolder, infolder, resultfolder, maxtime)
+function printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
     println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
-    println("data: ", datafolder)
+    println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)
     println("maxtime: ", maxtime)
 end
 
-function printinfo(gene, G, R, S, insertstep, datacond, datafolder, infolder, resultfolder, maxtime)
+function printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     if R == 0
-        printinfo(gene, G, datacond, datafolder, infolder, resultfolder, maxtime)
+        printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
     else
         println("Gene: ", gene, " G R S insertstep: ", G, R, S, insertstep)
         println("in: ", infolder, " out: ", resultfolder)
