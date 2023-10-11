@@ -127,7 +127,7 @@ function fields(file::String)
         if length(v) == 6
             s = Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
         elseif length(v) == 5
-            s = Result_Fields(v[1], v[2],"", v[3], v[4], v[5])
+            s = Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
         else
             println(file)
             throw("Incorrect file name format")
@@ -252,7 +252,6 @@ function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapa
     end
 end
 
-
 """
     assemble_all(folder;fittedparams)
 
@@ -301,6 +300,11 @@ function assemble_files(folder::String, files::Vector, outfile::String, header, 
     end
 end
 
+"""
+    assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
+
+TBW
+"""
 function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
     ratefiles = get_files(files, "rates", label, cond, model)
@@ -310,6 +314,11 @@ function assemble_rates(folder::String, files::Vector, label::String, cond::Stri
     return labels
 end
 
+"""
+    assemble_measures(folder::String, files, label::String, cond::String, model::String)
+
+TBW
+"""
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * model * ".csv")
     header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
@@ -326,11 +335,21 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
     close(f)
 end
 
+"""
+    assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
+
+TBW
+"""
 function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, labels, read_optimized)
 end
 
+"""
+    assemble_stats(folder::String, files, label::String, cond::String, model::String)
+
+TBW
+"""
 function assemble_stats(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
     statfiles = get_files(files, "param-stats", label, cond, model)
@@ -338,6 +357,11 @@ function assemble_stats(folder::String, files, label::String, cond::String, mode
     assemble_files(folder, statfiles, outfile, statlabels(labels), readstats)
 end
 
+"""
+    assemble_burst_sizes(folder, files, label, cond, model)
+
+TBW
+"""
 function assemble_burst_sizes(folder, files, label, cond, model)
     outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
@@ -436,6 +460,11 @@ rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fitte
 
 ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
+"""
+    statlabels(model::String, conds, fittedparams)
+
+TBW
+"""
 function statlabels(model::String, conds, fittedparams)
     label = ["Mean", "SD", "Median", "MAD"]
     Grates = rlabels(model, conds, fittedparams)
@@ -455,6 +484,11 @@ function statlabels(labels::Matrix)
     return ["Gene" rates]
 end
 
+"""
+    optlabels(model::String, conds, fittedparams)
+
+TBW
+"""
 optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fittedparams) "LL" "Convergence"]
 
 optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds) "LL" "Convergence"]
@@ -600,9 +634,6 @@ get_row() = Dict([("ml", 1); ("mean", 2); ("median", 3); ("last", 4)])
 """
 get_ratetype() = invert_dict(get_row())
 
-
-
-
 """
     occursin_file(a, b, file)
 
@@ -616,6 +647,35 @@ function occursin_file(a, b, file)
         return occursin(Regex(a, "i"), file)
     else
         return occursin(Regex(a, "i"), file) && occursin(Regex(b, "i"), file)
+    end
+end
+
+"""
+    read_rna(gene, cond, datapath)
+
+read in rna histograms 
+"""
+function read_rna(gene, cond, datapath)
+    h = readfile(gene, cond, datapath)[:, 1]
+    return length(h), h
+end
+"""
+    readfile(gene::String, cond::String, path::String)
+
+read file if name includes gene and cond
+"""
+function readfile(gene::AbstractString, cond::AbstractString, path::AbstractString)
+    if isfile(path)
+        return readfile(path)
+    else
+        for (root, dirs, files) in walkdir(path)
+            for file in files
+                target = joinpath(root, file)
+                if occursin_file(gene, cond, target)
+                    return readfile(target)
+                end
+            end
+        end
     end
 end
 """
@@ -651,21 +711,7 @@ end
 read file and return given column
 """
 readfile(file::String, col::Int) = readfile(file)[:, col]
-"""
-    readfile(gene::String, cond::String, path::String)
 
-read file if name includes gene and cond
-"""
-function readfile(gene::AbstractString, cond::AbstractString, path::AbstractString)
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            if occursin_file(gene, cond, target)
-                return readfile(target)
-            end
-        end
-    end
-end
 """
     readfiles(gene::String, cond::String, datapath::Vector)
 
@@ -683,15 +729,7 @@ function readfiles(gene::String, cond::String, datapath::Vector)
 end
 
 
-"""
-    read_rna(gene, cond, datapath)
 
-read in rna histograms 
-"""
-function read_rna(gene, cond, datapath)
-    h = readfile(gene, cond, datapath)[:, 1]
-    return length(h), h
-end
 
 """
     read_tracefiles(path::String, gene::String, cond::String="", col=3)

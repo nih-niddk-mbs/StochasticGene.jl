@@ -20,7 +20,7 @@ Arguments
 - `threhsoldhigh`: upper threshold
 - `datatype`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
 - `dttype`
-- `datapath`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
+- `datapath`: path to data file or folder or array of files or folders
 - `cell': cell type for halflives and allele numbers
 - `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `interval`: frame interval of intensity traces
@@ -59,7 +59,7 @@ Arguments
 - `burst`: if true then compute burst frequency
 - `optimize`: use optimizer to compute maximum likelihood value
 - `writesamples`: write out MH samples if true, default is false
-- `modulemode`: true for using StochasticGene module false for including file
+- `src`: path to folder containing StochasticGene.jl/src
    
 """
 function makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",

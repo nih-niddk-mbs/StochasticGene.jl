@@ -27,7 +27,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `nchains`: number of MCMC chains
 - `datatype`: choices "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
 - `ddtype`: Vector of dwell time types, e.g. "ON", "OFF"
-- `datapath`: folder for data, string or array of strings
+- `datapath`: path to file or folder for data, string or array of strings
 - `gene`: gene name
 - `cell`: cell type
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
