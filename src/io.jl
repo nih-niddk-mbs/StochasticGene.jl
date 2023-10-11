@@ -86,13 +86,14 @@ function write_winners(resultfolder, measure)
 end
 
 """
-write_augmented(summaryfile::String,resultfolder,datapath;fishdata=false)
+    write_augmented(summaryfile::String, resultfolder::String)
+
+write_augmented(summaryfile::String,resultfolder,datapath)
 
 Augment summary file with G=2 burst size, model predicted moments, and fit measures
 
 
 """
-# write_augmented(summaryfile::String,resultfolder) = CSV.write(summaryfile,augment_dataframe(read_dataframe(summaryfile),resultfolder))
 function write_augmented(summaryfile::String, resultfolder::String)
     if ~ispath(summaryfile)
         summaryfile = joinpath(resultfolder, summaryfile)
@@ -216,24 +217,24 @@ get_burstsummaryfiles(files::Vector) = get_summaryfiles(files, "burst")
 get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(folder))
 
 """
-write_moments(outfile,genelist,cond,datapath,fish,root)
+write_moments(outfile,genelist,cond,datapath,root)
 
 """
-function write_moments(outfile, genelist, cond, datapath, fish, root)
+function write_moments(outfile, genelist, cond, datapath, root)
     f = open(outfile, "w")
     writedlm(f, ["Gene" "Expression Mean" "Expression Variance"], ',')
     for gene in genelist
-        h = get_histogram_rna(gene, cond, datapath, fish, root)
+        h = get_histogram_rna(gene, cond, datapath, root)
         writedlm(f, [gene mean_histogram(h) var_histogram(h)], ',')
     end
     close(f)
 end
 
 """
-    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datapath::String,fish,root,outfolder = "histograms")
+    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datapath::String,root,outfolder = "histograms")
 
 """
-function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapath::String, fish, root, outfolder="histograms")
+function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapath::String, root, outfolder="histograms")
     ratefile = joinpath(resultfolder, ratefile)
     rates, head = readdlm(ratefile, ',', header=true)
     outfolder = joinpath(resultfolder, outfolder)
@@ -242,7 +243,7 @@ function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapa
     end
     cond = string.(split(datacond, "-"))
     for r in eachrow(rates)
-        h = histograms(r, cell, cond, G, datapath, fish, root)
+        h = histograms(r, cell, cond, G, datapath, root)
         for i in eachindex(cond)
             f = open(joinpath(outfolder, string(r[1]) * cond[i] * ".txt"), "w")
             writedlm(f, h[i])
@@ -266,16 +267,16 @@ function assemble_all(folder::String; fittedparams=Int[])
     if isempty(fittedparams)
         fittedparams = collect(1:num_rates(models[1])-1)
     end
-    assemble_all(folder, files, labels, conds, models, names, fittedparams)
+    assemble_all(folder, files, labels, conds, models, names)
 end
 
-function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names, fittedparams)
+function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names)
     for l in labels, c in conds, g in models
-        assemble_all(folder, files, l, c, g, isfish(l), names, fittedparams)
+        assemble_all(folder, files, l, c, g, names)
     end
 end
 
-function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, fish::Bool, names, fittedparams)
+function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, names)
     labels = assemble_rates(folder, files, label, cond, model)
     assemble_measures(folder, files, label, cond, model)
     assemble_stats(folder, files, label, cond, model)

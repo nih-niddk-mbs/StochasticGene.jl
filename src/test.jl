@@ -20,11 +20,11 @@ using Test
 
 
 include("common.jl")
-include("transition_rate_matrices_transpose.jl")
-include("chemical_master_new.jl")
+include("transition_rate_matrices.jl")
+include("chemical_master.jl")
 include("simulator.jl")
 include("utilities.jl")
-include("metropolis_hastings_trace.jl")
+include("metropolis_hastings.jl")
 include("trace.jl")
 include("hmm.jl")
 include("io.jl")
