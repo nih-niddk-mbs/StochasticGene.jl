@@ -80,6 +80,9 @@ include("analysis.jl")
 # functions for use on NIH cluster Biowulf
 include("biowulf.jl")
 
+# functions for hidden markov models
+include("hmm.jl")
+
 """
 A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.
 
