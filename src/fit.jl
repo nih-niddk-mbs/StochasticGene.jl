@@ -9,7 +9,7 @@ HBEC gene information
 """
 genes_hbec() = ["CANX"; "DNAJC5"; "ERRFI1"; "KPNB1"; "MYH9"; "Rab7a"; "RHOA"; "RPAP3"; "Sec16A"; "SLC2A1"]
 genelength_hbec() = Dict([("Sec16A", 42960); ("SLC2A1", 33802); ("ERRFI1", 14615); ("RHOA", 52948); ("KPNB1", 33730); ("MYH9", 106741); ("DNAJC5", 40930); ("CANX", 32710); ("Rab7a", 88663); ("RPAP3", 44130); ("RAB7A", 88663); ("SEC16A", 42960)])
-MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("RHOA", 51109); ("KPNB1", 24000); ("MYH9", 71998); ("DNAJC5", 14857); ("CANX", 4861); ("Rab7a", 83257); ("RPAP3", 38610);("SEC16A", 5220); ("RAB7A", 83257)])
+MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("RHOA", 51109); ("KPNB1", 24000); ("MYH9", 71998); ("DNAJC5", 14857); ("CANX", 4861); ("Rab7a", 83257); ("RPAP3", 38610); ("SEC16A", 5220); ("RAB7A", 83257)])
 halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
 
 
@@ -70,7 +70,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
-    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0,priormean=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
@@ -82,7 +82,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
     isempty(priormean) && (priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
-    isempty(fittedparam) && (fittedparam = collect(1:num_rates(transitions,R,S,insertstep)-1))
+    isempty(fittedparam) && (fittedparam = collect(1:num_rates(transitions, R, S, insertstep)-1))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
     println(r)
@@ -220,9 +220,15 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     if isempty(rm)
         rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
     end
-    rcv = fill(priorcv, length(rm))
-    rcv[num_rates(transitions, R, S, insertstep)] = 0.1
-    distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    if priorcv isa Number
+        rcv = fill(priorcv, length(rm))
+        rcv[num_rates(transitions, R, S, insertstep)] = 0.1
+    end
+    if length(rcv) == length(rm)
+        return distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    else
+        throw("priorcv not the same length as prior mean")
+    end
 end
 
 """

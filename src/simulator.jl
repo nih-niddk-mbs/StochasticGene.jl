@@ -1,4 +1,5 @@
 # This file is part of StochasticGene.jl
+
 # simulator.jl
 # Functions to simulate Markov gene transcription models
 # Uses hybrid first and next reaction method
@@ -165,6 +166,25 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 end
 
 
+"""
+    simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+
+return vector of traces
+"""
+function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
+    trace = Array{Array{Float64}}(undef, ntrials)
+    for i in eachindex(trace)
+        trace[i] = simulator(r[1:end-4], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, 2]
+    end
+    trace
+end
+
+"""
+    simulate_trace(r,transitions,G,R,interval,totaltime,onstates=[G])
+
+simulate a trace
+"""
+simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r, transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-4:end])[1:end-1, :]
 
 
 """

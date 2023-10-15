@@ -23,6 +23,11 @@ export
     rna_setup,
     makeswarm,
     fit,
+    run_mh,
+    metropolis_hastings,
+    prob_Gaussian,
+    prob_GaussianMixture,
+    prob_GaussianMixture_6,
     make_dataframes,
     write_dataframes,
     write_dataframes_only,
@@ -36,7 +41,9 @@ export
     write_histograms,
     plot_histogram,
     simulator,
-    new_FISH
+    simulate_trace,
+    simulate_trace_vector,
+    new_FISHfolder
 
 ### Source files
 
@@ -58,21 +65,12 @@ include("chemical_master.jl")
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_matrices.jl")
 
-# functions for fitting time series traces
-include("trace.jl")
-
 # Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
 include("simulator.jl")
 include("telegraphsplice.jl")
 
 # functions for fitting models to data
 include("fit.jl")
-
-# functions specific for Gene Trap experiments of Wan et al.
-include("genetrap.jl")
-
-# functions for scRNA and FISH experiments of Trzaskoma et al.
-include("rna.jl")
 
 # functions for post fit analysis and plots
 include("analysis.jl")
@@ -82,6 +80,15 @@ include("biowulf.jl")
 
 # functions for hidden markov models
 include("hmm.jl")
+
+# # functions for fitting time series traces
+# include("trace.jl")
+
+# # functions specific for Gene Trap experiments of Wan et al.
+# include("genetrap.jl")
+
+# # functions for scRNA and FISH experiments of Trzaskoma et al.
+# include("rna.jl")
 
 """
 A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.

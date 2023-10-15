@@ -411,6 +411,11 @@ function read_fish(path1::String, cond1::String, path2::String, cond2::String, t
     combine_histogram(x1, x2)
 end
 # function to create a FISH directory
+"""
+    new_FISH(newroot::String, oldroot::String, rep::String)
+
+TBW
+"""
 function new_FISH(newroot::String, oldroot::String, rep::String)
     for (root, dirs, files) in walkdir(oldroot)
         for dir in dirs

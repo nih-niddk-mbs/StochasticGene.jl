@@ -1,3 +1,5 @@
+# This file is part of StochasticGene.jl  
+
 # metropolis_hastings.jl
 
 
