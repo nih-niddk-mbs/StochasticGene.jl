@@ -386,7 +386,7 @@ function rlabels(model::AbstractGRSMmodel)
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
-    if typeof(model.reporter) == ReporterComponents
+    if typeof(model.reporter) == hmmReporter
         for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
             push!(labels, "noise_mean$i")
             push!(labels, "noise_std$i")
@@ -660,6 +660,19 @@ function read_rna(gene, cond, datapath)
     return length(h), h
 end
 """
+    readfiles(gene::String, cond::String, datapath::Vector)
+
+read in a set of files
+"""
+function readfiles(gene::String, cond::String, datapath::Vector)
+    c = Vector{Vector}(undef, 0)
+    for i in eachindex(datapath)
+        push!(c, readfile(gene, cond, datapath[i]))
+    end
+    c
+end
+
+"""
     readfile(gene::String, cond::String, path::String)
 
 read file if name includes gene and cond
@@ -691,16 +704,16 @@ function readfile(file::String)
         if typeof(c[1]) <: AbstractString && occursin(",", c[1])
             c = readdlm(file, ',')
         end
-        if eltype(c[1, 1]) <: String
-            c = float.(c[2:end, :])
-        end
+    end
+    if typeof(c[1, 1]) <: AbstractString
+        c = float.(c[2:end, :])
     end
     return c
 end
 
 function readfile_csv(file::String)
     c = readdlm(file, ',')
-    if eltype(c[1, :]) <: String
+    if typeof(c[1, :]) <: AbstractString
         c = float.(c[2:end, :])
     end
     return c
@@ -712,24 +725,22 @@ read file and return given column
 """
 readfile(file::String, col::Int) = readfile(file)[:, col]
 
+
 """
-    readfiles(gene::String, cond::String, datapath::Vector)
+    read_dwelltimes(datapath)
 
 read in a set of dwelltime files and return vector of time bins and values
 """
-function readfiles(gene::String, cond::String, datapath::Vector)
+function read_dwelltimes(datapath)
     bins = Vector{Vector}(undef, 0)
     DT = Vector{Vector}(undef, 0)
     for i in eachindex(datapath)
-        c = readfile(gene, cond, datapath[i])
+        c = readfile(datapath[i])
         push!(bins, c[:, 1])
         push!(DT, c[:, 2])
     end
     bins, DT
 end
-
-
-
 
 """
     read_tracefiles(path::String, gene::String, cond::String="", col=3)

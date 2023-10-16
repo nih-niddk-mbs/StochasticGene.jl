@@ -200,7 +200,7 @@ struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
 end
 
 """
-ReporterComponents
+hmmReporter
 
 structure for reporters
 
@@ -209,13 +209,12 @@ structure for reporters
 - `probfn`: noise distribution e.g. prob_GaussianMixture
 - `weightind`: index for mixture model bias parameter (restricted to range [0,1])
 """
-struct ReporterComponents
+struct hmmReporter
     n::Int
     per_state::Vector{Int}
     probfn::Function
     weightind::Int
 end
-
 
 """
     print_model(model::AbstractModel)
@@ -253,9 +252,9 @@ datahistogram(data::RNAOnOffData) = [data.OFF; data.ON; data.histRNA]
 datahistogram(data::AbstractTraceHistogramData) = data.histRNA
 
 function datahistogram(data::RNADwellTimeData)
-    v = data.histRNA[1]
-    for i in 2:length(data.DwellTimes)
-        v = vcat(v, data.Dwelltimes[i])
+    v = data.histRNA
+    for d in data.DwellTimes
+        v = vcat(v, d)
     end
     return v
 end
@@ -263,11 +262,20 @@ end
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
+datapdf(data::RNADwellTimeData) =[data.histRNA;(make_array(data.DwellTimes))]
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
     v = normalize_histogram(data.histRNA[1])
     for i in 2:length(data.histRNA)
         v = vcat(v, normalize_histogram(data.histRNA[i]))
+    end
+    return v
+end
+
+function datapdf(data::RNADwellTimeData)
+    v = normalize_histogram(data.histRNA)
+    for d in data.DwellTimes
+        v = vcat(v, normalize_histogram(d))
     end
     return v
 end
@@ -313,7 +321,7 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA),eps()))
+    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
@@ -340,7 +348,6 @@ function likelihoodfn(param, data::AbstractHistogramData, model::AbstractGmodel)
     make_array(h)
 end
 
-
 """
     likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
 
@@ -355,11 +362,12 @@ function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where 
     trim_hist(h, data.nRNA)
 end
 
-
 """
     likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
 
-TBW
+    #     if model.splicetype == "offdecay"
+    #         # r[end-1] *= survival_fraction(nu, eta, model.R)
+    #     end
 """
 function likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
     components = model.components
@@ -375,24 +383,15 @@ end
 """
     likelihoodarray(rin,data::RNAOnOffData,model::AbstractGRSMmodel)
 
-Under construction
 """
-#
-# function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
-#     r = copy(rin)
-#     if model.splicetype == "offdecay"
-#         # r[end-1] *= survival_fraction(nu, eta, model.R)
-#     end
-#     components = model.components
-#     onstates = model.reporter
-#     T = make_mat_T(components.tcomponents, r)
-#     TA = make_mat_TA(components.tcomponents, r)
-#     TI = make_mat_TI(components.tcomponents, r)
-#     M = make_mat_M(components.mcomponents, r)
-#     histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
-#     modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
-#     return [modelOFF, modelON, histF]
-# end
+
+function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
+    r = copy(rin)
+    if model.splicetype == "offdecay"
+        r[end-1] *= survival_fraction(nu, eta, model.R)
+    end
+    likelihoodarray(r,data,model)
+end
 
 """
     likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
@@ -402,17 +401,24 @@ likelihood of an array of dwell time histograms
 function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     r = copy(rin)
     tcomponents = model.components.tcomponents
-    T = make_mat(tcomponents.elementsT, r, tcomponents.nT)
+    onstates = model.reporter
+    elementsT = tcomponents.elementsT
+    T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
     hists = Vector{Vector}(undef, length(data.DTtypes))
-    for (i, Dtype) in enumerate(data.DTtypes)
-        TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-        S = Dtype == "ON" ? ontimeCDF(data.bins[i], model.G, model.R, TD, pss, 1) : offtimeCDF(data.bins[i], r, model.G, model.R, TD, pss, 1)
-        hists[i] = pdf_from_cdf(data.bins[i], S)
-    end
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     push!(hists, histF)
+    for (i, Dtype) in enumerate(data.DTtypes)
+        TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+        if Dtype == "OFF"
+            nonzeros = nonzero_rows(TD)
+            hists[i] = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+        else
+            hists[i] = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates), init_SA(r, onstates[i], elementsT, pss))
+        end
+    end
+
     return hists
 end
 
@@ -452,12 +458,12 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-# function transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) 
+# function transform_rates(r, model::AbstractGRSMmodel{hmmReporter}) 
 #     n = num_rates(model)
 #     [log.(r[1:n + model.reporter.weightind-1]); logit(r[n + model.reporter.weightind:end])]
 # end
 
-transform_rates(r, model::AbstractGRSMmodel{ReporterComponents}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+transform_rates(r, model::AbstractGRSMmodel{hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
 """
@@ -468,14 +474,14 @@ inverse transform MH parameters on real domain back to rate domain
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+inverse_transform_rates(p, model::AbstractGRSMmodel{hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
 
-# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{ReporterComponents})
+# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{hmmReporter})
 #     n = num_rates(model)
 #     vcat(exp.(p[1:n + model.reporter.weightind-1]), invlogit(p[n + model.reporter.weightind:end]))
 # end
-# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{ReporterComponents})
+# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{hmmReporter})
 #     wind = num_rates(model) + model.reporter.weightind
 #     if wind ∈ model.fittedparam
 #         n = findfirst(wind .== model.fittedparam)
@@ -485,7 +491,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{ReporterComponents}) = trans
 #     end
 # end
 
-# function inverse_transform_rates(p::Matrix, model::AbstractGRSMmodel{ReporterComponents})
+# function inverse_transform_rates(p::Matrix, model::AbstractGRSMmodel{hmmReporter})
 #     wind = num_rates(model) + model.reporter.weightind
 #     if wind ∈ model.fittedparam
 #         n = findfirst(wind .== model.fittedparam)
@@ -525,7 +531,7 @@ function get_rates(param, model::AbstractGmodel, inverse=true)
 end
 
 
-# function get_rates(param, model::AbstractGRSMmodel{ReporterComponents}, inverse=true)
+# function get_rates(param, model::AbstractGRSMmodel{hmmReporter}, inverse=true)
 #     if inverse
 #         p = transform_rates(model.rates,model)
 #         p[model.fittedparam] = param

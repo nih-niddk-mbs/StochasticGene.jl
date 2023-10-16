@@ -479,6 +479,7 @@ end
 
 function deviance(data::AbstractHistogramData, model::AbstractGmodel)
     h = likelihoodfn(model.rates[model.fittedparam], data, model)
+    println(h)
     deviance(h, datapdf(data))
 end
 

@@ -19,8 +19,6 @@ halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPN
     decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
 
-fit(nchains::Int,gene::String,cell::String,fittedparam::Vector,fixedeffects::Tuple,transitions::Tuple,datacond,G::Int,R::Int,S::Int,maxtime::Float64,infolder::String,resultfolder::String,datapath::String,datatype::String,inlabel::String,label::String,nsets::Int,cv=0.,transient::Bool=false,samplesteps::Int=1000000,warmupsteps=0,annealsteps=0,temp=1.,tempanneal=100.,root = ".",priorcv::Float64=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,splicetype="",ratetype="median",writesamples=false)
-
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
 # Arguments
@@ -86,7 +84,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
     println(r)
-    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, dttype, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     # return data, model, options
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -99,23 +97,24 @@ end
 """
 function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
-    fit, stats, measures = run_mh(data, model, options, nchains)
+    fits, stats, measures = run_mh(data, model, options, nchains)
     optimized = 0
     if optimize
         try
-            optimized = Optim.optimize(x -> lossfn(x, data, model), fit.parml, LBFGS())
+            optimized = Optim.optimize(x -> lossfn(x, data, model), fits.parml, LBFGS())
         catch
             @warn "Optimizer failed"
         end
     end
     if burst
-        bs = burstsize(fit, model)
+        bs = burstsize(fits, model)
     else
         bs = 0
     end
-    finalize(data, model, fit, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
+    finalize(data, model, fits, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
     println(now())
     get_rates(stats.medparam, model, false)
+    return fits,data,model
 end
 
 
@@ -136,7 +135,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
     elseif datatype == "rnadwelltime"
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
-        bins, DT = read_dwelltimes(datapaths[2:end])
+        bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
         trace = read_tracefiles(datapath, datacond)
@@ -159,15 +158,15 @@ end
 
 return model structure
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, ddtype, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     if typeof(data) <: AbstractRNAData
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
-        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+        reporter = hmmReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_T(transitions, G, R, S, insertstep, splicetype)
     elseif typeof(data) <: AbstractTraceHistogramData
-        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+        reporter = hmmReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
         if isempty(onstates)
@@ -177,10 +176,19 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
                 if isempty(onstates[i])
                     onstates[i] = on_states(G, R, S, insertstep)
                 end
+                onstates[i] = Int64.(onstates[i])
             end
         end
         reporter = onstates
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate)
+        if typeof(data) <: RNADwellTimeData
+            if length(onstates) == length(data.DTtypes)
+                components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
+            else
+                throw("length of onstates and dttype not the same")
+            end
+        else
+            components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
+        end
     end
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noiseparams, weightind)
     if propcv < 0
@@ -262,15 +270,15 @@ Compute loss function
 lossfn(x, data, model) = loglikelihood(x, data, model)[1]
 
 """
-burstsize(fit,model::AbstractGMmodel)
+burstsize(fits,model::AbstractGMmodel)
 
 Compute burstsize and stats using MCMC chain
 
 """
-function burstsize(fit, model::AbstractGMmodel)
+function burstsize(fits, model::AbstractGMmodel)
     if model.G > 1
         b = Float64[]
-        for p in eachcol(fit.param)
+        for p in eachcol(fits.param)
             r = get_rates(p, model)
             push!(b, r[2*model.G-1] / r[2*model.G-2])
         end
@@ -279,13 +287,13 @@ function burstsize(fit, model::AbstractGMmodel)
         return 0
     end
 end
-function burstsize(fit::Fit, model::GRSMmodel)
+function burstsize(fits::Fit, model::GRSMmodel)
     if model.G > 1
         b = Float64[]
-        L = size(fit.param, 2)
+        L = size(fits.param, 2)
         rho = 100 / L
         println(rho)
-        for p in eachcol(fit.param)
+        for p in eachcol(fits.param)
             r = get_rates(p, model)
             if rand() < rho
                 push!(b, burstsize(r, model))
@@ -369,25 +377,25 @@ function printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resu
 end
 
 """
-    finalize(data,model,fit,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
+    finalize(data,model,fits,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
 
 write out run results and print out final loglikelihood and deviance
 """
-function finalize(data, model, fit, stats, measures, temp, writefolder, optimized, burst, writesamples)
-    println("final max ll: ", fit.llml)
+function finalize(data, model, fits, stats, measures, temp, writefolder, optimized, burst, writesamples)
+    println("final max ll: ", fits.llml)
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
-    println("ML rates: ", inverse_transform_rates(fit.parml, model))
-    println("Acceptance: ", fit.accept, "/", fit.total)
+    println("ML rates: ", inverse_transform_rates(fits.parml, model))
+    println("Acceptance: ", fits.accept, "/", fits.total)
     if typeof(data) <: AbstractHistogramData
-        println("Deviance: ", deviance(fit, data, model))
+        println("Deviance: ", deviance(fits, data, model))
     end
     println("rhat: ", maximum(measures.rhat))
     if optimized != 0
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
     end
-    writeall(writefolder, fit, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
+    writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
 end
 
 

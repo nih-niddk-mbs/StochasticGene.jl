@@ -140,7 +140,7 @@ decay: mRNA decay rate
 
 """
 struct Indices
-    gamma::Vector{Int} 
+    gamma::Vector{Int}
     nu::Vector{Int}
     eta::Vector{Int}
     decay::Int
@@ -158,6 +158,15 @@ function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist,
     MTAIComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TAI(elementsT, nT, onstates))
 end
 
+function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    c = Vector{Element}[]
+    for i in eachindex(onstates)
+        dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
+    end
+    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, c))
+end
 
 """
     make_components_MT(transitions,G,R,S,insertstep,decay,splicetype="")
@@ -214,6 +223,8 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     make_components_TAI(elementsT, nT, onstates)
 end
+
+
 
 
 """
@@ -483,78 +494,6 @@ function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
     end
 end
 
-
-# function set_elements_TA(elementsT, onstates::Vector{Int})
-#     elementsTA = Vector{Element}(undef, 0)
-#     set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-#     elementsTA
-# end
-
-# function set_elements_TA(elementsT, onstates::Vector{Vector{Int}})
-#     elementsTA = Vector{Vector{Element}}(undef,length(onstates))
-#     for i in eachindex(onstates)
-#         eTA = Vector{Element}(undef, 0)
-#         set_elements_TA!(eTA, elementsT, onstates::Vector)
-#         elementsTA[i] = eTA
-#     elementsTA
-# end
-"""
-    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-
-
-"""
-# function set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-#     for e in elementsT
-#         if e.b ∈ onstates
-#             push!(elementsTA, e)
-#         end
-#     end
-# end
-# function set_elements_TA!(elementsTA, elementsT, G::Int, R::Int, insertstep=1, base::Int=3)
-#     for e in elementsT
-#         wdigits = digits(div(e.b - 1, G), base=base, pad=R)[insertstep:end]
-#         if any(wdigits .> base - 2)
-#             push!(elementsTA, e)
-#         end
-#     end
-# end
-
-"""
-    set_elements_TI(elementsT,onstates)
-
-
-"""
-# function set_elements_TI(elementsT, onstates)
-#     elementsTI = Vector{Element}(undef, 0)
-#     set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-#     elementsTI
-# end
-# function set_elements_TI(elementsT, onstates::Vector{Vector{Int}})
-#     elementsTI = Vector{Vector{Element}}(undef,length(onstates))
-#     for i in eachindex(onstates)
-#         eTi = Vector{Element}(undef, 0)
-#         set_elements_TI!(eTI, elementsT, onstates::Vector)
-#         elementsTI[i] = eTI
-#     elementsTI
-# end
-
-# function set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-#     for e in elementsT
-#         if e.b ∉ onstates
-#             push!(elementsTI, e)
-#         end
-#     end
-# end
-# function set_elements_TI!(elementsTI, elementsT, G::Int, R::Int, base::Int=3)
-#     for e in elementsT
-#         wdigits = digits(div(e.b - 1, G), base=base, pad=R)
-#         if ~any(wdigits .> base - 2)
-#             push!(elementsTI, e)
-#         end
-#     end
-# end
-
-
 """
     set_elements_T(transitions, G, R, S, indices::Indices, splicetype::String)
 
@@ -671,7 +610,7 @@ end
 """
 make_T_mat
 
-
+construct matrices from elements
 """
 make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
 

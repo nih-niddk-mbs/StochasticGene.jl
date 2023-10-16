@@ -56,7 +56,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
 
     # println(reporters)
     if R > 0
-        reporter = ReporterComponents(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions,R,S,insertstep) + weightind)
+        reporter = hmmReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions,R,S,insertstep) + weightind)
         if isempty(fixedeffects)
             return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(G, R, S, insertstep, nalleles, "", r, d, propcv, fittedparam, method, transitions, components, reporter)
         else
