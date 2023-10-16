@@ -405,7 +405,7 @@ function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
-    hists = Vector{Vector}(undef, length(data.DTtypes))
+    hists = Vector[]
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     push!(hists, histF)
@@ -413,12 +413,15 @@ function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
         TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
         if Dtype == "OFF"
             nonzeros = nonzero_rows(TD)
-            hists[i] = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+        elseif Dtype == "ON"
+            h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
         else
-            hists[i] = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates), init_SA(r, onstates[i], elementsT, pss))
+            # h = ontimePDF(data.bins[i], TD, [1,0], [0,1])
+            h = normalize_histogram(data.DwellTimes[3])
         end
+        push!(hists, h)
     end
-
     return hists
 end
 

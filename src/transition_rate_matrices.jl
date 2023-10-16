@@ -163,7 +163,16 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     c = Vector{Element}[]
     for i in eachindex(onstates)
-        dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
+        if dttype[i] == "ON"
+            push!(c, set_elements_TA(elementsT, onstates[i]))
+        elseif dttype[i] == "OFF"
+            push!(c, set_elements_TI(elementsT, onstates[i]))
+        elseif dttype[i] == "ONG"
+            push!(c, set_elements_TA(elementsT, onstates[i]))
+        else
+            push!(c, set_elements_TI(elementsT, onstates[i]))
+        end
+        # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
     end
     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, c))
 end

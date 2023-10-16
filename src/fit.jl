@@ -180,7 +180,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
             end
         end
         reporter = onstates
-        if typeof(data) <: RNADwellTimeData
+        if typeof(data) == RNADwellTimeData
             if length(onstates) == length(data.DTtypes)
                 components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
             else
