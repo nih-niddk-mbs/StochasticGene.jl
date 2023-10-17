@@ -86,6 +86,7 @@ nT, elementsT, elementsTD:: Vector{Vector{Element}}
 struct TDComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
+    elementsTG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
 
@@ -161,6 +162,7 @@ end
 function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsTG = set_elements_T(transitions, indices.gamma)
     c = Vector{Element}[]
     for i in eachindex(onstates)
         if dttype[i] == "ON"
@@ -168,13 +170,13 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
         elseif dttype[i] == "OFF"
             push!(c, set_elements_TI(elementsT, onstates[i]))
         elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsT, onstates[i]))
-        else
-            push!(c, set_elements_TI(elementsT, onstates[i]))
+            push!(c, set_elements_TA(elementsTG, onstates[i]))
+        elseif ddtype[i] == "OFFG"
+            push!(c, set_elements_TI(elementsTG, onstates[i]))
         end
         # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
     end
-    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, c))
+    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
 end
 
 """
@@ -274,7 +276,7 @@ end
 """
     off_states(nT,onstates)
 
-return barrier (off) states, complement of sojurn (on) states
+return barrier (off) states, complement of sojourn (on) states
 """
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 

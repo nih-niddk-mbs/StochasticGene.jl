@@ -318,7 +318,7 @@ end
 """
     firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
 
-decide if transition exits or enters sojurn states then in place update appropriate histogram
+decide if transition exits or enters sojourn states then in place update appropriate histogram
 """
 function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
     if before == 1 && after == 0  # turn off

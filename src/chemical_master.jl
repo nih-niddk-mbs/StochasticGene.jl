@@ -46,7 +46,7 @@ end
 - `method`: 1 for directly solving ODE otherwise use eigendecomposition
 """
 function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
-    t = [0; tin]
+    t = [2*tin[1]-tin[2]; tin]
     S = time_evolve(t, Td, Sinit, method)
     return sum(S[:, barrier], dims=2)[:, 1]
 end
@@ -91,15 +91,15 @@ given by transition probability of entering live states in steady state
 (probability of barrier state multiplied by transition rate to live state)
 
 - `r`: transition rates
-- `sojurn`: set of sojurn states (e.g. onstates for ON Time distribution)
+- `sojourn`: set of sojourn states (e.g. onstates for ON Time distribution)
 - `elements`: vector of Elements (transition rate matrix element structures)
 - `pss`: steady state distribution
 
 """
-function init_S(r::Vector, sojurn::Vector, elements::Vector, pss)
+function init_S(r::Vector, sojourn::Vector, elements::Vector, pss)
     Sinit = zeros(length(pss))
     for e in elements
-        if e.b != e.a && (e.a ∈ sojurn && e.b ∉ sojurn)
+        if e.b != e.a && (e.a ∈ sojourn && e.b ∉ sojourn)
             Sinit[e.a] += pss[e.b] * r[e.index]
         end
     end

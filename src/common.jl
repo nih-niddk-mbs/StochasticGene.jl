@@ -262,7 +262,7 @@ end
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
-datapdf(data::RNADwellTimeData) =[data.histRNA;(make_array(data.DwellTimes))]
+datapdf(data::RNADwellTimeData) = [data.histRNA; (make_array(data.DwellTimes))]
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
     v = normalize_histogram(data.histRNA[1])
@@ -390,7 +390,7 @@ function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
     if model.splicetype == "offdecay"
         r[end-1] *= survival_fraction(nu, eta, model.R)
     end
-    likelihoodarray(r,data,model)
+    likelihoodarray(r, data, model)
 end
 
 """
@@ -400,25 +400,36 @@ likelihood of an array of dwell time histograms
 """
 function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
     r = copy(rin)
+    G = model.G
     tcomponents = model.components.tcomponents
     onstates = model.reporter
     elementsT = tcomponents.elementsT
+    elementsTG = tcomponents.elementsTG
     T = make_mat(elementsT, r, tcomponents.nT)
+    TG = make_mat(elementsTG, r, G)
     pss = normalized_nullspace(T)
+    pssG = normalized_nullspace(TG)
     hists = Vector[]
     M = make_mat_M(model.components.mcomponents, r)
     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     push!(hists, histF)
     for (i, Dtype) in enumerate(data.DTtypes)
-        TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
         if Dtype == "OFF"
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
             nonzeros = nonzero_rows(TD)
             h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
         elseif Dtype == "ON"
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
             h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
-        else
-            # h = ontimePDF(data.bins[i], TD, [1,0], [0,1])
-            h = normalize_histogram(data.DwellTimes[3])
+        elseif Dtype == "OFFG"
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsT, pssG, collect(1:G)))
+        elseif Dtype == "ONG"
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
+            # else
+            #     h = ontimePDF(data.bins[i], TD, [1,0], [0,1])
+            #     # h = normalize_histogram(data.DwellTimes[3])
         end
         push!(hists, h)
     end

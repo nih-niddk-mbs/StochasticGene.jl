@@ -45,7 +45,7 @@ Arguments
 - `priormean`: mean of prior rate distribution
 - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
 - `nalleles`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates`: vector of on or sojurn states
+- `onstates`: vector of on or sojourn states
 - `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
