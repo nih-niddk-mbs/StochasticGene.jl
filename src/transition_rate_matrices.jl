@@ -171,7 +171,7 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
             push!(c, set_elements_TI(elementsT, onstates[i]))
         elseif dttype[i] == "ONG"
             push!(c, set_elements_TA(elementsTG, onstates[i]))
-        elseif ddtype[i] == "OFFG"
+        elseif dttype[i] == "OFFG"
             push!(c, set_elements_TI(elementsTG, onstates[i]))
         end
         # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
@@ -245,14 +245,20 @@ return state index for state (i,z)
 """
 state_index(G::Int, i, z) = i + G * (z - 1)
 
-
+function on_states(onstates,G,R,S,insertstep)
+    if isempty(onstates)
+        return on_states(G, R, S, insertstep)
+    else
+        return on_states(onstates,G,R,S)
+    end
+end
 
 """
     on_states(G, R, S, insertstep)
 
 return vector of onstates for GRS model given reporter appears at insertstep
 """
-function on_states(G, R, S, insertstep)
+function on_states(G::Int, R, S, insertstep)
     base = S > 0 ? 3 : 2
     onstates = Int[]
     on_states!(onstates, G, R, insertstep, base)
@@ -272,7 +278,16 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     end
 end
 
-
+function on_states(onstates::Vector,G,R,S)
+    base = S > 0 ? 3 : 2
+    o = Int[]
+    for i in 1:G, z in 1:base^R
+        if i ∈ onstates
+            push!(o, state_index(G, i, z))
+        end
+    end
+    o
+end
 """
     off_states(nT,onstates)
 
@@ -495,7 +510,7 @@ end
 """
     set_elements_TX!(elementsTX, elementsT, onstates::Vector,f)
 
-in place set on or off state elements by calling f (∈ or ∉)
+add elements to elementsTX if column element satisfies f (∈ or ∉)
 """
 function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
     for e in elementsT

@@ -78,40 +78,34 @@ options = test_options(1000);
 
 """
 
-function test(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total=100000000, tol=1e-6)
-    OFF, ON, mhist = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
-    modelOFF, modelON, histF = test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
-    OFF, ON, mhist, modelOFF, modelON, histF
-end
-
-function test_chem(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins)
-    if isempty(onstates)
-        onstates = on_states(G, R, S, insertstep)
+function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.01:0.1:10), collect(0.01:0.1:10)], total=1000000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
+    hs = test_sim(r, transitions, G, R, S, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
+    h = test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
+    l = 0
+    for i in eachindex(h)
+        l += norm(h[i] - hs[i])
     end
-    components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, r[num_rates(transitions, R, S, insertstep)])
-    T = make_mat_T(components.tcomponents, r)
-    TA = make_mat_TA(components.tcomponents, r)
-    TI = make_mat_TI(components.tcomponents, r)
-    M = make_mat_M(components.mcomponents, r)
-    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-    # pss = normalized_nullspace(T)
-    # nonzeros = nonzero_rows(TI)
-    # base = S > 0 ? 3 : 2
-    # nT = G * base^R
-    # SAinit = init_SA(r, onstates, components.tcomponents.elementsT, pss)
-    # SIinit = init_SI(r, onstates, components.tcomponents.elementsT, pss, nonzeros)
-    # offstates = off_states(nT, onstates)
-    # modelON = ontimePDF(bins, TA, offstates, SAinit)
-    # modelOFF = offtimePDF(bins, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), SIinit)
-
-
-    histF = steady_state(M, components.mcomponents.nT, nalleles, nhist)
-    modelOFF, modelON = offonPDF(bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
- 
-    modelOFF, modelON, histF
+    return h, hs, l, isapprox(make_array(h),make_array(hs),rtol=0.01)
 end
 
-test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins) = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins)
+function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
+    for i in eachindex(onstates)
+        if isempty(onstates[i])
+            # onstates[i] = on_states(onstates[i], G, R, S, insertstep)
+            onstates[i] = on_states(G, R, S, insertstep)
+        end
+        onstates[i] = Int64.(onstates[i])
+    end
+    components = make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
+    likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
+end
+
+function test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins, total, tol)
+    h = Vector{Vector}(undef, 5)
+    h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
+    h[5], h[4], _ = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[2], bins=bins[2], totalsteps=total, tol=tol)
+    h
+end
 
 function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsets=1, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
     data = data_rna(gene, datacond, datapath, fish, label)
@@ -121,13 +115,14 @@ function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2
     return stats.medparam, fits.llml, model
 end
 
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0,splicetype="")
+function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="")
     OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
+    h = test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins, total, tol)
     data = RNAOnOffData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
     model = model_genetrap("", rinit, transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, splicetype)
     options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nworkers())
-    model = model_genetrap("", get_rates(fits.parml,model), transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, splicetype)
+    model = model_genetrap("", get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, splicetype)
     fits, stats, measures, data, model, options
 end
 
@@ -137,7 +132,7 @@ function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 
     model = trace_model(rinit, transitions, G, R, S, insertstep, fittedparam)
     options = trace_options(samplesteps=nsamples)
     fits, stats, measures = run_mh(data, model, options, nworkers())
-    model = trace_model(get_rates(fits.parml,model), transitions, G, R, S, insertstep, fittedparam)
+    model = trace_model(get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam)
     fits, stats, measures, data, model, options
 end
 

@@ -205,7 +205,7 @@ Solve master equation problem using eigen decomposition
 function time_evolve_eig(t, M::AbstractMatrix, Sinit::Vector)
     vals, vects = eig_decompose(M)
     weights = solve_vector(vects, Sinit)
-    time_evolve(t, vals, vects, weights)
+    time_evolve_eig(t, vals, vects, weights)
 end
 """
     time_evolve_eig(t::Float64, vals::Vector, vects::Matrix, weights::Vector)

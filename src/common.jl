@@ -398,44 +398,81 @@ end
 
 likelihood of an array of dwell time histograms
 """
-function likelihoodarray(rin, data::RNADwellTimeData, model::AbstractGRSMmodel)
-    r = copy(rin)
-    G = model.G
-    tcomponents = model.components.tcomponents
-    onstates = model.reporter
+likelihoodarray(r, data::RNADwellTimeData, model::AbstractGRSMmodel) =
+    likelihoodarray(r,model.G,model.components,data.bins,model.reporter,data.DTtypes,model.nalleles,data.nRNA)
+
+#     G = model.G
+#     tcomponents = model.components.tcomponents
+#     onstates = model.reporter
+#     elementsT = tcomponents.elementsT
+#     elementsTG = tcomponents.elementsTG
+#     T = make_mat(elementsT, r, tcomponents.nT)
+#     pss = normalized_nullspace(T)
+#     TG = make_mat(elementsTG, r, G)
+#     pssG = normalized_nullspace(TG)
+#     hists = Vector[]
+#     M = make_mat_M(model.components.mcomponents, r)
+#     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+#     push!(hists, histF)
+#     for (i, Dtype) in enumerate(data.DTtypes)
+#         if Dtype == "OFF"
+#             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+#             nonzeros = nonzero_rows(TD)
+#             h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+#         elseif Dtype == "ON"
+#             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+#             h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+#         elseif Dtype == "OFFG"
+#             TD = make_mat(tcomponents.elementsTD[i], r, G)
+#             h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
+#         elseif Dtype == "ONG"
+#             TD = make_mat(tcomponents.elementsTD[i], r, G)
+#             h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
+#         end
+#         push!(hists, h)
+#     end
+#     return hists
+# end
+
+
+
+"""
+    likelihoodarray(r,G,components,bins,onstates,dttype,nalleles,nRNA)
+
+
+"""
+function likelihoodarray(r,G,components,bins,onstates,dttype,nalleles,nRNA)
+    tcomponents = components.tcomponents
+    mcomponents = components.mcomponents
     elementsT = tcomponents.elementsT
-    elementsTG = tcomponents.elementsTG
     T = make_mat(elementsT, r, tcomponents.nT)
-    TG = make_mat(elementsTG, r, G)
     pss = normalized_nullspace(T)
+    elementsTG = tcomponents.elementsTG
+    TG = make_mat(elementsTG, r, G)
     pssG = normalized_nullspace(TG)
     hists = Vector[]
-    M = make_mat_M(model.components.mcomponents, r)
-    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    M = make_mat_M(mcomponents, r)
+    histF = steady_state(M, mcomponents.nT, nalleles, nRNA)
     push!(hists, histF)
-    for (i, Dtype) in enumerate(data.DTtypes)
+    for (i, Dtype) in enumerate(dttype)
         if Dtype == "OFF"
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
             nonzeros = nonzero_rows(TD)
-            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+            h = offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
         elseif Dtype == "ON"
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-            h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+            h = ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
         elseif Dtype == "OFFG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsT, pssG, collect(1:G)))
+            h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
         elseif Dtype == "ONG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
-            # else
-            #     h = ontimePDF(data.bins[i], TD, [1,0], [0,1])
-            #     # h = normalize_histogram(data.DwellTimes[3])
+            h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
         end
         push!(hists, h)
     end
     return hists
 end
-
 """
     transform_array(v::Array, index::Int, f1::Function, f2::Function)
 
@@ -472,11 +509,6 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-# function transform_rates(r, model::AbstractGRSMmodel{hmmReporter}) 
-#     n = num_rates(model)
-#     [log.(r[1:n + model.reporter.weightind-1]); logit(r[n + model.reporter.weightind:end])]
-# end
-
 transform_rates(r, model::AbstractGRSMmodel{hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
@@ -491,30 +523,6 @@ inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 inverse_transform_rates(p, model::AbstractGRSMmodel{hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
 
-# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{hmmReporter})
-#     n = num_rates(model)
-#     vcat(exp.(p[1:n + model.reporter.weightind-1]), invlogit(p[n + model.reporter.weightind:end]))
-# end
-# function inverse_transform_rates(p::Vector, model::AbstractGRSMmodel{hmmReporter})
-#     wind = num_rates(model) + model.reporter.weightind
-#     if wind ∈ model.fittedparam
-#         n = findfirst(wind .== model.fittedparam)
-#         return vcat(exp.(p[1:n-1]), invlogit(p[n:end]))
-#     else
-#        return exp.(p)
-#     end
-# end
-
-# function inverse_transform_rates(p::Matrix, model::AbstractGRSMmodel{hmmReporter})
-#     wind = num_rates(model) + model.reporter.weightind
-#     if wind ∈ model.fittedparam
-#         n = findfirst(wind .== model.fittedparam)
-#         return vcat(exp.(p[1:n-1,:]), invlogit(p[n:end,:]))
-#     else
-#        return exp.(p)
-#     end
-# end
-
 """
     get_param(model)
 
@@ -523,10 +531,6 @@ get fitted parameters from model
 get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-# get_param(r, model::AbstractGmodel) = transform_rates(r[model.fittedparam], model)
-
-# get_param(r, model::AbstractGRSMmodel) = transform_rates(r, model)[model.fittedparam]
 
 
 """
@@ -543,19 +547,6 @@ function get_rates(param, model::AbstractGmodel, inverse=true)
     end
     return r
 end
-
-
-# function get_rates(param, model::AbstractGRSMmodel{hmmReporter}, inverse=true)
-#     if inverse
-#         p = transform_rates(model.rates,model)
-#         p[model.fittedparam] = param
-#         r = inverse_transform_rates(p,model)
-#     else
-#         r = copy_r(model)
-#         r[model.fittedparam] = param
-#     end
-#     return r
-# end
 
 get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param, model, inverse)
 

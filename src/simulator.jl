@@ -128,14 +128,14 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 
         if onoff
             # find before and after states for the same allele to define dwell time histograms 
-            before = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(initial ∈ onstates)
+            before = isempty(onstates) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G,state,allele) ∈ onstates)
         end
 
         if verbose
             println("---")
             println("m:", m)
             println(state)
-            println(before)
+            onoff && println(before)
             println(tau)
             println("t:", t)
             println(rindex)
@@ -146,7 +146,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
 
         if onoff
-            after = R > 0 ? num_reporters(state, allele, G, R, insertstep) : Int(final ∈ onstates)
+            after = isempty(onstates) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G,state,allele) ∈ onstates)
             firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
         end
         if traceinterval > 0
@@ -165,7 +165,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
 end
 
-
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
 
@@ -173,7 +172,7 @@ return vector of traces
 """
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
-    for i in eachindex(trace)
+    for i in eachindex(trace)p
         trace[i] = simulator(r[1:end-4], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, 2]
     end
     trace
@@ -277,7 +276,7 @@ function intensity(state, G, R, S, d)
     max(rand(d[stateindex]), 0)
 end
 
-
+gstate(G,state,allele) = argmax(state[1:G, allele])
 
 """
     state_index(state::Array,G,allele)
@@ -288,7 +287,7 @@ returns state index given state vector
 state_index(state::Array, G, allele) = argmax(state[1:G, allele])
 
 function state_index(state::Array, G, R, S, allele=1)
-    Gstate = argmax(state[1:G, allele])
+    Gstate = gstate(G,state,allele)
     if R == 0
         return Gstate
     else
