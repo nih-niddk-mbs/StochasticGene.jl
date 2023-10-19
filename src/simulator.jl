@@ -46,7 +46,7 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
 """
-    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
+    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75, .9], verbose::Bool=false, offeject::Bool=false)
 
 Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
 If trace is set to true, it returns a nascent mRNA trace
@@ -155,9 +155,9 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end  # while
     verbose && println(steps)
     counts = max(sum(mhist), 1)
-    mhist /= counts
+    # mhist /= counts
     if onoff
-        return histofftdd / max(sum(histofftdd), 1), histontdd / max(sum(histontdd), 1), mhist[1:nhist]
+        return histofftdd, histontdd, mhist[1:nhist]
     elseif traceinterval > 0.0
         return make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn,reporterfn)
     else
@@ -172,8 +172,9 @@ return vector of traces
 """
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
-    for i in eachindex(trace)p
-        trace[i] = simulator(r[1:end-4], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=r[end-3:end])[1:end-1, 2]
+    par=r[end-4:end]
+    for i in eachindex(trace)
+        trace[i] = simulator(r[1:end-5], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=par)[1:end-1, 2]
     end
     trace
 end

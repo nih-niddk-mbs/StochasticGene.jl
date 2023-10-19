@@ -385,54 +385,54 @@ end
 
 """
 
-function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
-    r = copy(rin)
-    if model.splicetype == "offdecay"
-        r[end-1] *= survival_fraction(nu, eta, model.R)
-    end
-    likelihoodarray(r, data, model)
-end
+# function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
+#     r = copy(rin)
+#     if model.splicetype == "offdecay"
+#         r[end-1] *= survival_fraction(nu, eta, model.R)
+#     end
+#     likelihoodarray(r, data, model)
+# end
 
 """
     likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
 
 likelihood of an array of dwell time histograms
 """
-likelihoodarray(r, data::RNADwellTimeData, model::AbstractGRSMmodel) =
-    likelihoodarray(r,model.G,model.components,data.bins,model.reporter,data.DTtypes,model.nalleles,data.nRNA)
+function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGRSMmodel)
+    # likelihoodarray(r,model.G,model.components,data.bins,model.reporter,data.DTtypes,model.nalleles,data.nRNA)
 
-#     G = model.G
-#     tcomponents = model.components.tcomponents
-#     onstates = model.reporter
-#     elementsT = tcomponents.elementsT
-#     elementsTG = tcomponents.elementsTG
-#     T = make_mat(elementsT, r, tcomponents.nT)
-#     pss = normalized_nullspace(T)
-#     TG = make_mat(elementsTG, r, G)
-#     pssG = normalized_nullspace(TG)
-#     hists = Vector[]
-#     M = make_mat_M(model.components.mcomponents, r)
-#     histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
-#     push!(hists, histF)
-#     for (i, Dtype) in enumerate(data.DTtypes)
-#         if Dtype == "OFF"
-#             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-#             nonzeros = nonzero_rows(TD)
-#             h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
-#         elseif Dtype == "ON"
-#             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-#             h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
-#         elseif Dtype == "OFFG"
-#             TD = make_mat(tcomponents.elementsTD[i], r, G)
-#             h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
-#         elseif Dtype == "ONG"
-#             TD = make_mat(tcomponents.elementsTD[i], r, G)
-#             h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
-#         end
-#         push!(hists, h)
-#     end
-#     return hists
-# end
+    G = model.G
+    tcomponents = model.components.tcomponents
+    onstates = model.reporter
+    elementsT = tcomponents.elementsT
+    elementsTG = tcomponents.elementsTG
+    T = make_mat(elementsT, r, tcomponents.nT)
+    pss = normalized_nullspace(T)
+    TG = make_mat(elementsTG, r, G)
+    pssG = normalized_nullspace(TG)
+    hists = Vector[]
+    M = make_mat_M(model.components.mcomponents, r)
+    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    push!(hists, histF)
+    for (i, Dtype) in enumerate(data.DTtypes)
+        if Dtype == "OFF"
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+            nonzeros = nonzero_rows(TD)
+            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+        elseif Dtype == "ON"
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+            h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+        elseif Dtype == "OFFG"
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
+        elseif Dtype == "ONG"
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
+        end
+        push!(hists, h)
+    end
+    return hists
+end
 
 
 

@@ -25,7 +25,7 @@ include("chemical_master.jl")
 include("simulator.jl")
 include("utilities.jl")
 include("metropolis_hastings.jl")
-include("trace.jl")
+# include("trace.jl")
 include("hmm.jl")
 include("io.jl")
 include("biowulf.jl")
@@ -85,7 +85,7 @@ function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.00023
     for i in eachindex(h)
         l += norm(h[i] - hs[i])
     end
-    return h, hs, l, isapprox(make_array(h),make_array(hs),rtol=0.01)
+    return h, hs, l, isapprox(make_array(h), make_array(hs), rtol=0.01)
 end
 
 function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
@@ -101,36 +101,50 @@ function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates
 end
 
 function test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins, total, tol)
-    h = Vector{Vector}(undef, 5)
+    h = Vector{Vector}(undef, 3)
     h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
-    h[5], h[4], _ = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[2], bins=bins[2], totalsteps=total, tol=tol)
+    for i in eachindex(onstates)[begin+1:end]
+        hoff, hon, _ = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[i], bins=bins[i], totalsteps=total, tol=tol)
+        push!(h, hon)
+        push!(h, hoff)
+    end
     h
 end
 
-function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsets=1, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
-    data = data_rna(gene, datacond, datapath, fish, label)
-    model = model_rna(data, r, G, nalleles, nsets, propcv, fittedparam, fixedeffects, transitions, decayrate, ejectprior)
-    options = MHOptions(100000, 0, 0, 1000.0, 1.0, 1.0)
+function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsets=1, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
+    data = load_data("rna", [], folder_path(datapath, root, "data"), label, gene, datacond, 1.0, 1.0, 1.0)
+    # model = load_model(data, r, Float64[], fittedparam, fixedeffects, transitions, G, 0, 0, 1, nalleles, 10.0, Int[], r[end], propcv, "", prob_GaussianMixture, 5, 5)
     fits, stats, measures = run_mh(data, model, options, nworkers())
     return stats.medparam, fits.llml, model
 end
 
-function test_fit_histograms(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=[fill(0.01, length(rtarget) - 1); rtarget[end]], nsamples=1000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="")
-    OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
-    h = test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins, total, tol)
-    data = RNAOnOffData("test", "test", nhist, mhist, bins[2:end], OFF[1:end-1], ON[1:end-1])
-    model = model_genetrap("", rinit, transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, splicetype)
-    options = MHOptions(nsamples, 0, 0, 1000.0, 1.0, 1.0)
+function test_fit_rnaoffon(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=fill(0.01, num_rates(transitions, R, S, insertstep)), nsamples=100000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="")
+    # OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
+    OFF, ON, hRNA = simulator(rtarget, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins, totalsteps=3000)
+    hRNA = div.(hRNA, 30)
+    data = RNAOnOffData("test", "test", nhist, hRNA, bins, ON, OFF)
+    model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, nalleles, priorcv, onstates, rtarget[end], propcv, splicetype, prob_GaussianMixture, 5, 5)
+    options = MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nworkers())
-    model = model_genetrap("", get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam, nalleles, nhist, priorcv, propcv, onstates, splicetype)
     fits, stats, measures, data, model, options
 end
 
-function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.0, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep)); [20, 5, 100, 10]], nsamples=1000, onstates=[G], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4], propcv=0.01, cv=100.0, interval=1.0)
+
+function test_fit_rnadwelltime(; rtarget=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nsamples=100000, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.01:0.1:10), collect(0.01:0.1:10)], dttype=["ON", "OFF", "ONG", "OFFG"], fittedparam=collect(1:length(rtarget)-1), propcv=0.01, priorcv=10.0, splicetype="")
+    h = test_sim(rtarget, transitions, G, R, S, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], 30000, 1e-6)
+    data = RNADwellTimeData("test", "test", nRNA, h[1], bins, h[2:end], dttype)
+    rinit = prior_ratemean(transitions, R, S, insertstep, rtarget[end], 0, 0)
+    model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, nalleles, priorcv, onstates, rtarget[end], propcv, splicetype, prob_GaussianMixture, 5, 5)
+    options = MHOptions(nsamples, 1000, 0, 120.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options, nworkers())
+    fits, stats, measures, data, model, options
+end
+
+function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70, 0.1], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep)); [20, 5, 100, 10, 0.9]], nsamples=1000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+5)], propcv=0.01, cv=100.0, interval=1.0)
     traces = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    data = trace_data(traces, interval)
-    model = trace_model(rinit, transitions, G, R, S, insertstep, fittedparam)
-    options = trace_options(samplesteps=nsamples)
+    data = TraceData("trace", "test", interval, traces)
+    model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_GaussianMixture, 5, 5)
+    options = MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nworkers())
     model = trace_model(get_rates(fits.parml, model), transitions, G, R, S, insertstep, fittedparam)
     fits, stats, measures, data, model, options

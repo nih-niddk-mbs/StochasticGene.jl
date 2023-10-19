@@ -84,7 +84,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
     println(r)
-    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, dttype, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     # return data, model, options
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -158,7 +158,7 @@ end
 
 return model structure
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, ddtype, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     if typeof(data) <: AbstractRNAData
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
@@ -184,7 +184,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
             if length(onstates) == length(data.DTtypes)
                 components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
             else
-                throw("length of onstates and dttype not the same")
+                throw("length of onstates and data.DTtypes not the same")
             end
         else
             components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
@@ -400,41 +400,42 @@ end
 
 
 
-"""
-getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
+# """
+# getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
 
-"""
-function getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets::Int, root, verbose)
-    r = getr(gene, G, nalleles, inlabel, infolder, root, verbose)
-    if ~isnothing(r)
-        if length(r) == 2 * G * nsets + 1
-            for n in nsets
-                r[2*G*n-1] *= clamp(r[2*G*nsets+1], eps(Float64), 1 - eps(Float64))
-            end
-            return r[1:2*G*nsets]
-        end
-        if length(r) == 2 * G * nsets
-            if verbose
-                println("init rates: ", r)
-            end
-            return r
-        end
-    end
-    println("No r")
-    setr(G, nsets, decayrate, ejectrate)
-end
+# """
+# function getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets::Int, root, verbose)
+#     r = getr(gene, G, nalleles, inlabel, infolder, root, verbose)
+#     if ~isnothing(r)
+#         if length(r) == 2 * G * nsets + 1
+#             for n in nsets
+#                 r[2*G*n-1] *= clamp(r[2*G*nsets+1], eps(Float64), 1 - eps(Float64))
+#             end
+#             return r[1:2*G*nsets]
+#         end
+#         if length(r) == 2 * G * nsets
+#             if verbose
+#                 println("init rates: ", r)
+#             end
+#             return r
+#         end
+#     end
+#     println("No r")
+#     setr(G, nsets, decayrate, ejectrate)
+# end
 
-function getr(gene, G, nalleles, inlabel, infolder, root, verbose)
-    ratefile = path_Gmodel("rates", gene, G, nalleles, inlabel, infolder, root)
-    if verbose
-        println("rate file: ", ratefile)
-    end
-    if isfile(ratefile)
-        return readrates(ratefile, 3)
-    else
-        return nothing
-    end
-end
+# function getr(gene, G, nalleles, inlabel, infolder, root, verbose)
+#     ratefile = path_Gmodel("rates", gene, G, nalleles, inlabel, infolder, root)
+#     if verbose
+#         println("rate file: ", ratefile)
+#     end
+#     if isfile(ratefile)
+#         return readrates(ratefile, 3)
+#     else
+#         return nothing
+#     end
+# end
+
 function getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root, verbose=true)
     paramfile = path_Gmodel("param-stats", gene, G, nalleles, inlabel, infolder, root)
     if isfile(paramfile)
