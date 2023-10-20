@@ -1,37 +1,37 @@
 
-using Distributions
-using StatsBase
-using Statistics
-using DelimitedFiles
-using Dates
-using Distributed
-using LinearAlgebra
-using Plots
-using SparseArrays
-using DifferentialEquations
-using LSODA
-using DataFrames
-using FFTW
-using Downloads
-using CSV
-using MultivariateStats
-using Optim
-using Test
+# using Distributions
+# using StatsBase
+# using Statistics
+# using DelimitedFiles
+# using Dates
+# using Distributed
+# using LinearAlgebra
+# using Plots
+# using SparseArrays
+# using DifferentialEquations
+# using LSODA
+# using DataFrames
+# using FFTW
+# using Downloads
+# using CSV
+# using MultivariateStats
+# using Optim
+# using Test
 
 
-include("common.jl")
-include("transition_rate_matrices.jl")
-include("chemical_master.jl")
-include("simulator.jl")
-include("utilities.jl")
-include("metropolis_hastings.jl")
-# include("trace.jl")
-include("hmm.jl")
-include("io.jl")
-include("biowulf.jl")
-include("fit.jl")
-include("analysis.jl")
-include("biowulf.jl")
+# include("common.jl")
+# include("transition_rate_matrices.jl")
+# include("chemical_master.jl")
+# include("simulator.jl")
+# include("utilities.jl")
+# include("metropolis_hastings.jl")
+# # include("trace.jl")
+# include("hmm.jl")
+# include("io.jl")
+# include("biowulf.jl")
+# include("fit.jl")
+# include("analysis.jl")
+# include("biowulf.jl")
 
 """
 test(r,transitions,G,nhist,nalleles,onstates,bins)
@@ -79,13 +79,14 @@ options = test_options(1000);
 """
 
 function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.01:0.1:10), collect(0.01:0.1:10)], total=1000000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
-    hs = test_sim(r, transitions, G, R, S, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
+    hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
     h = test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
+    hs = normalize_histogram.(hs)
     l = 0
     for i in eachindex(h)
         l += norm(h[i] - hs[i])
     end
-    return h, hs, l, isapprox(make_array(h), make_array(hs), rtol=0.01)
+    return make_array(h), make_array(hs), l, isapprox(make_array(h), make_array(hs), rtol=0.01)
 end
 
 function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
@@ -100,11 +101,11 @@ function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates
     likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 end
 
-function test_sim(r, transitions, G, R, S, nhist, nalleles, onstates, bins, total, tol)
+function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
     h = Vector{Vector}(undef, 3)
-    h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
+    h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
     for i in eachindex(onstates)[begin+1:end]
-        hoff, hon, _ = simulator(r, transitions, G, R, S, nhist, nalleles, onstates=onstates[i], bins=bins[i], totalsteps=total, tol=tol)
+        hoff, hon, _ = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[i], bins=bins[i], totalsteps=total, tol=tol)
         push!(h, hon)
         push!(h, hoff)
     end

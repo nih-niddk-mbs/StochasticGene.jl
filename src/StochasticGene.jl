@@ -40,9 +40,11 @@ export
     assemble_all,
     write_histograms,
     plot_histogram,
+    plot,
     simulator,
     simulate_trace,
     simulate_trace_vector,
+    on_states,
     new_FISHfolder
 
 ### Source files
