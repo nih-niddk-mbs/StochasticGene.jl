@@ -67,10 +67,12 @@ export
     make_components_TAI,
     likelihoodarray,
     likelihoodfn,
+    datapdf,
     normalize_histogram,
     norm,
     make_array,
     folder_path,
+    get_rates,
     new_FISHfolder
 
 ### Source files
