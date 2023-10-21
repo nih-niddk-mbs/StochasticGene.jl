@@ -1,10 +1,10 @@
 # StochasticGene.jl
 
-Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data can range from distributions of mRNA counts per cell (either through single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data) to dwell time distributions of single pre-RNA molecules in the act of transcription imaged in live cells. The models are continuous Markov systems with an arbitrary number of G (gene) states, R (pre-RNA) steps with stochastic transitions between the states, and S splice sites (usually same as R). The gene always occupies one of the G states and there are reversible transitions between G states that you specify.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied simulating elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell and coupling between alleles. Each R step is considered visible when occupied; the first R step represents the time the inserted reporter is first observable. In the original model in Rodriguez et al. Cell (2018), the reporter was in the exon and thus was carried out to the last step and ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states) where an mRNA molecule can be stochastically produced when the gene occupies the active G state.  When fitting the model to single cell RNA (scRNA) sequence data, the predicted mRNA counts are further subjected to a stochastic process to account for the reduction in the number of mRNA captured and measured (i.e. technical noise).
+Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The models are continuous Markov systems with an arbitrary number of G (gene) states, R (pre-RNA) steps with stochastic transitions between the states, and S splice sites (usually same as R). The gene always occupies one of the G states and there are reversible transitions between G states that you specify.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied simulating elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied. For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you would select the reporter insertstep to be one and all R steps are visible. But if the reporter is transcribed late then you would choose a later R step, like step 3, and only R steps after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in the exon and thus was visible to the last step and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states) where an mRNA molecule can be stochastically produced when the gene occupies the active G state.  When fitting the model to single cell RNA (scRNA) sequence data, the predicted mRNA counts are further subjected to a stochastic process to account for the reduction in the number of mRNA captured and measured (i.e. technical noise). You can also specify reporters for G states and even more than one simultaneous reporter.
 
-The package has functions to specify the models, prepare the data, compute the predicted dwell time distributions from live cell imaging measurements and intracellular mRNA distributions (either smFISH or scRNA), apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data and compute posterior distributions, and simulate the models.
+The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data and compute posterior distributions, and simulate the models.
 
-StochasticGene can run on small data sets on a laptop or large data sets on a multiprocessor machine such as NIH Biowulf. There are functions that generate swarm files to be submitted and process and analyze the results.
+StochasticGene can run on small data sets on a laptop or large data sets on a multiprocessor cluster such as NIH Biowulf. There are functions that generate swarm files to be submitted and process and analyze the results.
 
 
 
@@ -41,17 +41,17 @@ You can check if all tests pass by running
 ```
 julia> ] test StochasticGene
 ```
-(don't worry if it doesn't work as I sometimes forget to update it to match changes in code)
+(this could take 10 or more minutes)
 
 Command "]" brings you into the Julia Package environment, "Ctrl C" gets out
 
-StochasticGene will be updated periodically, to update on Julia type
+StochasticGene will be updated periodically, to update to a new version type
 
 ```
 julia> ] update StochasticGene
 ```
 
-StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  The files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.
+StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.
 
 ```
 julia> using StochasticGene
@@ -61,8 +61,33 @@ julia> rna_setup("scRNA")
 
 or any other name you choose for the root directory.
 
+### Fitting data with StochasticGene
+
+To fit a model, you need to load data and choose a model. Data types allowed are stationary histograms (mRNA but could be any entity), intensity traces (e.g. trk files), and dwell time histograms. The data is assumed to be identified by gene or a condition. Different data types can also be combined and specified : "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", and "tracerna".
+
+ The fit function.
+
+ 
+a=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+
+
+
+### Example Use on Unix
+If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
+
+In Bash, type:
+
+```
+Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
+
+Bash> bash fit_scRNA-ss-MOCK_2.swarm &
+
+```
+
+This will execute each gene in the swarm file sequentially. To run several genes in parallel, you can break the run up into multiple swarm files and execute each swarm file separately.  You can also trade off time with the number of chains, so if you have a large processor machine run each gene on many processors, e.g. 64, for a short amount of time, e.g. 15 min.
+
 ### Example Use on Biowulf to fit scRNA data:
-### Contact me if you have any questions or need instructions on fitting other types of data like live cell recordings of ON and OFF dwell times
+
 
 Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
 
@@ -80,7 +105,7 @@ Create swarm files using the command in the JULIA repl:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,transitions = ([1,2],[2,1]),conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",root = ".")
+julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,datatype = "rna",G=2,transitions = ([1,2],[2,1]),datacond = "MOCK",resultfolder ="HCT_scRNA",datapath = "HCT116_testdata/",root = ".")
 ```
 
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
@@ -90,7 +115,7 @@ To fit all the genes in the data folder use:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "scRNA",G=2,transitions = ([1,2],[2,1]), conds = "MOCK",resultfolder ="HCT_scRNA",datafolder = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "rna",G=2,transitions = ([1,2],[2,1]), datacond = "MOCK",resultfolder ="HCT_scRNA",datapath = "HCT116_testdata/",nsets=1,root = ".")
 ```
 
 (for G = 3, use transitions = ([1,2],[2,1],[2,3],[3,2]), for 3 state Kinetic Proofreading model use transitions = ([1,2],[2,1],[2,3],[3,1]))
@@ -153,25 +178,11 @@ julia> write_augmented("results/HCT_scRNAtest/Summary_HCT116-scRNA-ss_MOCK_2.csv
 
 ```
 
-### Example Use on Unix
-If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
-
-In Bash, type:
-
-```
-Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
-
-Bash> bash fit_scRNA-ss-MOCK_2.swarm &
-
-```
-
-This will execute each gene in the swarm file sequentially. To run several genes in parallel, you can break the run up into multiple swarm files and execute each swarm file separately.  You can also trade off time with the number of chains, so if you have a large processor machine run each gene on many processors, e.g. 64, for a short amount of time, e.g. 15 min.
-
 ### Simulations
-Simulate any GRSM model using function simulator, which will produce steady state mRNA histograms and ON and OFF live cell histograms if desired.  API below.
+Simulate any GRSM model using function simulator, which can produce steady state mRNA histograms, simulated intensity traces, and ON and OFF live cell histograms as selected.
 
 ### Units
-The code assumes the rates have units of inverse minutes and the half lives in the `halflives` file are in hours. When comparing to stationary mRNA distributions, either FISH or scRNA, the rate units are relative. Scaling all the rates by a constant will not affect the results. In these cases, it is often convenient to scale all the rates by the mRNA decay time, which is the last entry of the rate array. The rate units matter when considering or evaluating histograms of gene ON and OFF times. The code assumes that these dwell time histogram have units of minutes (i.e. the reciprocal of the rate units). Thus, if you wish to treat the units of the rates as inverse seconds (by scaling each rate by a factor of 60 for example) then the code will assume the live cell histograms (either in data or generated by the simulators) will also have units of seconds.  The `range` vector may need to be adjusted to accomodate the new units.
+StochasticGene assumes all rates have units of inverse minutes and the half lives in the `halflives` file are in hours. When computing or fitting stationary mRNA distributions, the rate units are relative. Scaling all the rates by a constant will not affect the results. In these cases, it is sometimes convenient to scale all the rates by the mRNA decay time, which is the last entry of the rate array. The rate units matter when considering or evaluating traces and histograms of ON and OFF times. The code assumes that these dwell time histogram have units of minutes (i.e. the reciprocal of the rate units). 
 
 ### API:
 

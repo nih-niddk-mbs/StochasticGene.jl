@@ -86,7 +86,6 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     println(r)
     model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-    # return data, model, options
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -114,7 +113,7 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     finalize(data, model, fits, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
     println(now())
     get_rates(stats.medparam, model, false)
-    return fits,data,model
+    return fits, stats, measures
 end
 
 
