@@ -14,7 +14,9 @@ halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPN
 
 
 """
-    fit(nchains::Int, datatype::String, dttype, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String,
+    fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean::Vector=Float64[], nalleles=2, priorcv::Float64=10.0, onstates=Int[], 
     decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
@@ -81,6 +83,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
     isempty(priormean) && (priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
     isempty(fittedparam) && (fittedparam = collect(1:num_rates(transitions, R, S, insertstep)-1))
+
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
     println(r)
@@ -88,6 +91,44 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
+
+function default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams)
+    n = num_rates(transitions, R, S, insertstep)
+    fittedparam = collect(1:n-1)
+    if occursin("trace", datatype)
+        fittedparam = vcat(fittedparam, collect(n:n+noiseparams))
+    end
+    fittedparam
+end
+"""
+    fit(; nchains::Int=2, datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+
+
+"""
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+    if R > 0
+        if S > 0
+            S = R
+        end
+        modelstring = "$G$R$S$insertstep"
+    else
+        modelstring = "$G"
+    end
+    if isempty(label)
+        label = datatype * "-" * cell
+        typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
+    end
+    isempty(inlabel) && (inlabel = label)
+
+    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, ratetype,
+        propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
+
+end
+
 
 """
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)

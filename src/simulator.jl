@@ -165,6 +165,11 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
 end
 
+function simulate_data(datatype,datapath)
+
+
+end
+
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
 

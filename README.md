@@ -10,10 +10,11 @@ StochasticGene can run on small data sets on a laptop or large data sets on a mu
 
 ### Using StochasticGene
 
-
 ### Installation
 
-StochasticGene is a registered Julia package.  To install on Biowulf, log on and at the prompt type:
+The following assumes that Julia has already been installed. If not go to https://julialang.org/downloads/. Julia has already been installed on the NIH Biowulf system but StochasticGene must be installed by each individual user.
+
+To install StochasticGene on Biowulf, log on and at the prompt type:
 
 ```
 [username@biowulf ~]$ sinteractive --mem=64G
@@ -23,47 +24,63 @@ This generates an interactive session
 ```
 [username@biowulf ~]$ module load julialang
 ```
-Loads Julia for use
+This loads Julia for use.  These two steps are only necessary on Biowulf. 
 
 ```
 [username@biowulf ~]$ julia - t 1
 ```
-Starts Julia (with a single thread):
+Starts Julia (with a single thread). If on a MAC or a regular UNIX system, you can start by just typing at the prompt Julia.
 
-To install StochasticGene run the following in the Julia REPL:
+After Julia opens you will be in the interactive Julia REPL.
+
+To install StochasticGene run the following:
 
 ```
 julia> ] add StochasticGene
 ```
 
-You can check if all tests pass by running
+The command "]" brings you into the Julia Package environment, "Ctrl C" gets you out
+
+After the package has installed, you can check if it works by running
 
 ```
 julia> ] test StochasticGene
 ```
 (this could take 10 or more minutes)
 
-Command "]" brings you into the Julia Package environment, "Ctrl C" gets out
-
-StochasticGene will be updated periodically, to update to a new version type
+StochasticGene will be updated on Github periodically, to update to a new version type
 
 ```
 julia> ] update StochasticGene
 ```
 
-StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.
+StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup()` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
+
+After installing StochasticGene, you can set up the folder structure by typing
 
 ```
 julia> using StochasticGene
 
 julia> rna_setup("scRNA")
 ```
-
 or any other name you choose for the root directory.
 
 ### Fitting data with StochasticGene
 
-To fit a model, you need to load data and choose a model. Data types allowed are stationary histograms (mRNA but could be any entity), intensity traces (e.g. trk files), and dwell time histograms. The data is assumed to be identified by gene or a condition. Different data types can also be combined and specified : "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", and "tracerna".
+To fit a model, you need to load data and choose a model. Data allowed are stationary histograms (e.g. smFISH or scRNA), intensity traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, rna histograms from smFISH can be fit together with multiple traces or dwell time histograms from live cell recordings.
+
+Models are distringuished by the number of G states, transitions between G states, number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn states (i.e. R steps or G states where the reporter is visible) called "on states" must also be specified.
+
+The first example using the test data installed by rna_setup(root) is to fit a stationary RNA histogram.  Thwo files are in the folder "root/data/HCT116_testdata", where root is specified by the user.  The default is the folder in which julia was launched.
+
+fits,stats,measures = fit(1,)
+
+fit(1,"rna",[],[],"MYC","HCT116","",0,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),([1,2],[2,1]),2,0,0,1)
+
+"rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", and "tracerna".
+
+
+
 
  The fit function.
 
