@@ -175,19 +175,11 @@ end
 
 """
 function rna_setup(root=".")
-
-    data = joinpath(root, "data")
-    results = joinpath(root, "results")
+    folder_setup(root)
     alleles = joinpath(data, "alleles")
     halflives = joinpath(data, "halflives")
     testdata = joinpath(data, "HCT116_testdata")
 
-    if ~ispath(data)
-        mkpath(data)
-    end
-    if ~ispath(results)
-        mkpath(results)
-    end
     if ~ispath(alleles)
         mkpath(alleles)
     end
@@ -206,9 +198,23 @@ function rna_setup(root=".")
     end
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/CENPL_MOCK.txt", "$testdata/CENPL_MOCK.txt")
     Downloads.download("https://raw.githubusercontent.com/nih-niddk-mbs/StochasticGene.jl/master/data/HCT116_testdata/MYC_MOCK.txt", "$testdata/MYC_MOCK.txt")
-
 end
 
+"""
+    folder_setup(root=".")
+
+creates data and results folders (if they do not already exit)
+"""
+function folder_setup(root=".")
+    data = joinpath(root, "data")
+    results = joinpath(root, "results")
+    if ~ispath(data)
+        mkpath(data)
+    end
+    if ~ispath(results)
+        mkpath(results)
+    end
+end
 
 
 """

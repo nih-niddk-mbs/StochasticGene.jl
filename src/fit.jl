@@ -151,7 +151,6 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
     end
 end
 
-
 """
     load_model(data, r, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
 
@@ -195,7 +194,6 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     end
     load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
-
 
 """
     load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)

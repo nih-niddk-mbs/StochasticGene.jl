@@ -21,6 +21,7 @@ using Optim
 
 export
     rna_setup,
+    folder_setup,
     makeswarm,
     RNAData,
     RNAOnOffData,

@@ -67,9 +67,12 @@ To fit a model, you need to load data and choose a model. Data types allowed are
 
  The fit function.
 
- 
+
 a=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
 
+a=fit(4,"rnatrace",[],["FISH","traces"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+
+fit(4,"rnadwelltime",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
 
 
 ### Example Use on Unix
