@@ -144,19 +144,19 @@ datatype: data files
 "tracerna": same with RNA histogram
 
 
-```
+
 
 The datapath can point to a folder or a file.  If it points to a folder then the code will look for a file identified by the gene and datacond.
 
 
-
+```
 
 v=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
 
 v=fit(4,"rnatrace",[],["FISH","traces"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
 
 v=fit(4,"rnadwelltime",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
-
+```
 
 
 
