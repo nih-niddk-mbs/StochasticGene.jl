@@ -14,22 +14,10 @@ StochasticGene can run on small data sets on a laptop or large data sets on a mu
 
 The following assumes that Julia has already been installed. If not go to https://julialang.org/downloads/. Julia has already been installed on the NIH Biowulf system but StochasticGene must be installed by each individual user.
 
-To install StochasticGene on Biowulf, log on and at the prompt type:
+To install StochasticGene, open a terminal and type
 
 ```
-[username@biowulf ~]$ sinteractive --mem=64G
-```
-This generates an interactive session
-
-```
-[username@biowulf ~]$ module load julialang
-```
-This loads Julia for use.  These two steps are only necessary on Biowulf. 
-
-```
-[username@biowulf ~]$ julia - t 1
-```
-Starts Julia (with a single thread). If on a MAC or a regular UNIX system, you can start by just typing at the prompt Julia.
+Bash> julia
 
 After Julia opens you will be in the interactive Julia REPL.
 
@@ -54,6 +42,26 @@ StochasticGene will be updated on Github periodically, to update to a new versio
 julia> ] update StochasticGene
 ```
 
+
+To install StochasticGene on Biowulf, log on and at the prompt type:
+
+```
+[username@biowulf ~]$ sinteractive --mem=64G
+```
+This generates an interactive session
+
+```
+[username@biowulf ~]$ module load julialang
+```
+This loads Julia for use.  These two steps are only necessary on Biowulf. 
+
+```
+[username@biowulf ~]$ julia - t 1
+```
+Starts Julia (with a single thread). Then continue as before
+
+
+
 StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup()` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
 
 After installing StochasticGene, you can set up the folder structure by typing
@@ -71,15 +79,59 @@ To fit a model, you need to load data and choose a model. Data allowed are stati
 
 Models are distringuished by the number of G states, transitions between G states, number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn states (i.e. R steps or G states where the reporter is visible) called "on states" must also be specified.
 
-The first example using the test data installed by rna_setup(root) is to fit a stationary RNA histogram.  Thwo files are in the folder "root/data/HCT116_testdata", where root is specified by the user.  The default is the folder in which julia was launched.
+Data can be fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing ```fit()```, will fit the mock rna histogram data installed by rna_setup(root) with a simple two state telegraph model (2 G stsates, no R steps).  Thwo files are in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables, resulting in
 
-fits,stats,measures = fit(1,)
+```
+julia> fits, stats, measures, data, model, options = fit();
+2023-10-24T10:22:10.782
+Gene: MYC G: 2 Treatment:  MOCK
+data: HCT116_testdata/
+in: HCT116_test out: HCT116_test
+maxtime: 60.0
+./results/HCT116_test/rates_rna-HCT116_MOCK_MYC_2_2.txt does not exist
+[0.01, 0.01, 0.1, 0.032430525886402085]
+initial ll: 38980.680174070265
+final max ll: 21755.280380669064
+median ll: 21755.280645984076
+Median fitted rates: [0.020960969159742875, 0.142016620787, 1.1015638965800167]
+ML rates: [0.020979229436880756, 0.1423818501792811, 1.10350961139495]
+Acceptance: 325538/613219
+Deviance: 0.007326880506251085
+rhat: 1.0105375337987144
+2023-10-24T10:24:11.295
+```
+The semicolon is not necessary but suppresses printing the returned variables.
 
-fit(1,"rna",[],[],"MYC","HCT116","",0,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),([1,2],[2,1]),2,0,0,1)
+The `fit` function prints out information about the time, the data, the model, and information about the results. A more detailed version is given in the returned variables and written to the folder "./results/HCT116_test". You can use the results of a previous run as an initial condition. In this case, there were no previous runs and thus the function used a default starting point, which is also the prior. In this particular run, only three rates were fitted, and the median of the posterior and the maximum likelihood parameters are printed out. `Acceptance` shows that in the allotted 60 seconds of real time, out of 613219 samples, 325538 were accepted by the Metropolis-Hastings MCMC algorithm. The `Deviance` is the difference in likelihood between a perfect fit and the given fit. Zero indicates a perfect fit and anything less than one is a good fit. `rhat` is a measure of how close to convergence the run achieved with 1 being ideal. In this particular run, only one chain was used. More chains can be specified and each run on it's own processor. To use more chains, you need to specify more processors by staring Julia with
+
+```
+Bash> julia -p 4
+
+julia> @everywhere using StochasticGene
+
+julia> fits, stats, measures, data, model, options = fit(nchains=4);
+2023-10-24T10:55:16.232
+Gene: MYC G: 2 Treatment:  MOCK
+data: HCT116_testdata/
+in: HCT116_test out: HCT116_test
+maxtime: 60.0
+[0.020960969159742875, 0.142016620787, 1.1015638965800167, 0.032430525886402085]
+initial ll: 21755.280645984076
+final max ll: 21755.280378544387
+median ll: 21755.282721546962
+Median fitted rates: [0.020936177089260818, 0.14140674439592604, 1.0983188350949695]
+ML rates: [0.020970183926180535, 0.14229910450327884, 1.10310357519155]
+Acceptance: 713078/1342174
+Deviance: 0.0073268798846403485
+rhat: 1.0018023969479748
+2023-10-24T10:56:31.337
+
+```
+
 
 "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", and "tracerna".
 
-
+```
 
 
  The fit function.
