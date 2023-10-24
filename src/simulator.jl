@@ -78,7 +78,9 @@ If trace is set to true, it returns a nascent mRNA trace
  	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, probfn=prob_GaussianMixture, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false, offeject::Bool=false)
+simulator(; transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, nalleles=2, onstates=Int[], splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5) = 0
+
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, splicetype="", probfn=prob_GaussianMixture, onstates::Vector{Int}=Int[], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
     if length(r) < num_rates(transitions, R, S, insertstep)
         throw("r has too few elements")
     end

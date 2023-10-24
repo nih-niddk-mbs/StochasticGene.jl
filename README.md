@@ -60,8 +60,6 @@ This loads Julia for use.  These two steps are only necessary on Biowulf.
 ```
 Starts Julia (with a single thread). Then continue as before
 
-
-
 StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup()` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
 
 After installing StochasticGene, you can set up the folder structure by typing
@@ -128,37 +126,42 @@ rhat: 1.0018023969479748
 
 ```
 
+Type of data are fit by specifying the `datatype` variable. The choices are the strings 
 
-"rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", and "tracerna".
+datatype: data files
 
-```
+"rna": rna histogram file
 
+"rnaonoff": rna histogram file with another file of the ON and OFF dwelltime distributions
 
- The fit function.
+"rnadwelltime": rna histogram and multiple dwell times in single two column files of bins and dwelltimes histograms
 
+"trace", inensity files like trk files
 
-a=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+"tracenascent", same with nascent RNA fraction, trace files are in a folder
 
-a=fit(4,"rnatrace",[],["FISH","traces"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+"tracerna": same with RNA histogram
 
-fit(4,"rnadwelltime",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
-
-
-### Example Use on Unix
-If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
-
-In Bash, type:
-
-```
-Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
-
-Bash> bash fit_scRNA-ss-MOCK_2.swarm &
 
 ```
 
-This will execute each gene in the swarm file sequentially. To run several genes in parallel, you can break the run up into multiple swarm files and execute each swarm file separately.  You can also trade off time with the number of chains, so if you have a large processor machine run each gene on many processors, e.g. 64, for a short amount of time, e.g. 15 min.
+The datapath can point to a folder or a file.  If it points to a folder then the code will look for a file identified by the gene and datacond.
+
+
+
+
+v=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+
+v=fit(4,"rnatrace",[],["FISH","traces"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+
+v=fit(4,"rnadwelltime",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+
+
+
 
 ### Example Use on Biowulf to fit scRNA data:
+
+The data can also be fit in batch mode using swarm files.  To do so, you create swarm files.
 
 
 Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
@@ -250,6 +253,20 @@ julia> write_augmented("results/HCT_scRNAtest/Summary_HCT116-scRNA-ss_MOCK_2.csv
 
 ```
 
+### Example Use on Unix
+If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
+
+In Bash, type:
+
+```
+Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
+
+Bash> bash fit_scRNA-ss-MOCK_2.swarm &
+
+```
+
+This will execute each gene in the swarm file sequentially. To run several genes in parallel, you can break the run up into multiple swarm files and execute each swarm file separately.  You can also trade off time with the number of chains, so if you have a large processor machine run each gene on many processors, e.g. 64, for a short amount of time, e.g. 15 min.
+
 ### Simulations
 Simulate any GRSM model using function simulator, which can produce steady state mRNA histograms, simulated intensity traces, and ON and OFF live cell histograms as selected.
 
@@ -257,6 +274,58 @@ Simulate any GRSM model using function simulator, which can produce steady state
 StochasticGene assumes all rates have units of inverse minutes and the half lives in the `halflives` file are in hours. When computing or fitting stationary mRNA distributions, the rate units are relative. Scaling all the rates by a constant will not affect the results. In these cases, it is sometimes convenient to scale all the rates by the mRNA decay time, which is the last entry of the rate array. The rate units matter when considering or evaluating traces and histograms of ON and OFF times. The code assumes that these dwell time histogram have units of minutes (i.e. the reciprocal of the rate units). 
 
 ### API:
+
+```
+    fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+
+
+Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
+
+# Arguments
+- `nchains`: number of MCMC chains
+- `datatype`: choices "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `ddtype`: Vector of dwell time types, e.g. "ON", "OFF"
+- `datapath`: path to file or folder for data, string or array of strings
+- `gene`: gene name
+- `cell`: cell type
+- `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
+- `interval`: frame interval for traces
+- `nascent`: fraction of alleles exhibiting nascent rna
+- `infolder`: folder pointing to results used as initial conditions
+- `resultfolder`: folder for results
+- `inlabel`: name of input files (not including gene name but including condition)
+- `label`: = name of output files
+- `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
+- `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `insertstep`: R step where reporter is first observed
+- `root`: root folder of data and Results folders
+- `maxtime`: float maximum time for entire run
+- `priormean`: Vector of prior rate means
+- `nalleles`: number of alleles, value in alleles folder will be used if it exists
+- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+- `onstates`: vector of sojourn or on states
+- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
+- `probfn`: observation (noise) probability distribution for trace data
+- `noiseparams`: number of noise distribution parameters
+- `weightind`: noise parameter index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
+- `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `samplesteps`: int number of samples
+- `warmupsteps`: int number of warmup steps
+- `annealsteps`: in number of annealing steps
+- `temp`: MCMC temperature
+- `tempanneal`: starting temperature for annealing
+- `temprna`: temperature for scRNA distribution compared to dwell time distributions (reduces mRNA cell count by 1/temprna)
+- `burst`: if true then compute burst frequency
+- `optimize`: use optimizer to compute maximum likelihood value
+- `writesamples`: write out MH samples if true, default is false
+
+```
 
 ```
  makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
