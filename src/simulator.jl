@@ -46,31 +46,33 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
 """
-    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, onstates::Vector{Int}=[G], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75, .9], verbose::Bool=false, offeject::Bool=false)
+    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int=1, nalleles::Int=1; nhist::Int=0, onstates::Vector{Int}=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum,  splicetype="", verbose::Bool=false)
 
 Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
 If trace is set to true, it returns a nascent mRNA trace
 
 #Arguments
-	- `r`: vector of rates
-	- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-	- `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
-	- `nhist::Int`: Size of mRNA histogram
-	- `nalleles`: Number of alleles
-
+- `r`: vector of rates
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
+- `insertstep`: reporter insertion step
+ 	
 #Named arguments
-    - `onstates::Vector`: a vector of ON G states
-	- `bins::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
-	- `totalsteps::Int=10000000`: maximum number of simulation steps
-	- `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram (not used when traces are made)
-    - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
-	- `par=[30, 14, 200, 75, 0.2]`: Vector of 5 parameters for noise model [background mean, background std, signal mean, signal std, weight of background <= 1]
-    - `verbose::Bool=false`: flag for printing state information
-    - `offeject`::Bool : true if splice is off pathway
-
-
+- `nalleles`: Number of alleles
+- `nhist::Int`: Size of mRNA histogram
+- `onstates::Vector`: a vector of ON states (use empty set for any R step is ON) or vector of vector of ON states
+- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
+- `probfn`=prob_GaussianMixture: reporter distribution
+- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
+- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
+- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
+- `totaltime`::Float64=0.0: total time of simulation
+- `splicetype`::String: splice action
+- `reporterfn`=sum: how individual reporters are combined
+- `verbose::Bool=false`: flag for printing state information
+    
 #Examples:
 
     julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
@@ -78,10 +80,11 @@ If trace is set to true, it returns a nascent mRNA trace
  	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
 """
-simulator(; transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, nalleles=2, onstates=Int[], splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5) = 0
-
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, nhist::Int, nalleles::Int; insertstep::Int=1, splicetype="", probfn=prob_GaussianMixture, onstates::Vector{Int}=Int[], bins::Vector{Float64}=Float64[], totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, traceinterval::Float64=0.0, par=[50, 20, 250, 75], verbose::Bool=false)
-    if length(r) < num_rates(transitions, R, S, insertstep)
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int=1, nalleles::Int=1; nhist::Int=0, onstates::Vector{Int}=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    if probfn == prob_GaussianMixture
+        noiseparams = 5
+    end
+    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams
         throw("r has too few elements")
     end
     if insertstep > R > 0
@@ -99,10 +102,18 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         onoff = false
     else
         onoff = true
-        ndt = length(bins)
-        dt = bins[2] - bins[1]
-        histofftdd = zeros(Int, ndt)
-        histontdd = zeros(Int, ndt)
+        ndt = Int[]
+        dt = Float64[]
+        histoffdd = Vector{Int}[]
+        histondd = Vector{Int}[]
+        if eltype(onstates) <: Vector
+        end
+        for i in onstates
+            ndt = length(bins)
+            dt = bins[2] - bins[1]
+            histofftdd = zeros(Int, ndt)
+            histontdd = zeros(Int, ndt)
+        end
     end
     if traceinterval > 0
         tracelog = [(t, state[:, 1])]
@@ -130,7 +141,9 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 
         if onoff
             # find before and after states for the same allele to define dwell time histograms 
-            before = isempty(onstates) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G,state,allele) ∈ onstates)
+            for i in eachindex(onstates)
+                before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+            end
         end
 
         if verbose
@@ -148,8 +161,10 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
 
         if onoff
-            after = isempty(onstates) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G,state,allele) ∈ onstates)
-            firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
+            for i in eachindex(onstates)
+                after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+                firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+            end
         end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
@@ -161,13 +176,13 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     if onoff
         return histofftdd, histontdd, mhist[1:nhist]
     elseif traceinterval > 0.0
-        return make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn,reporterfn)
+        return make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)
     else
         return mhist[1:nhist]
     end
 end
 
-function simulate_data(datatype,datapath)
+function simulate_data(datatype, datapath)
 
 
 end
@@ -179,7 +194,7 @@ return vector of traces
 """
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
-    par=r[end-4:end]
+    par = r[end-4:end]
     for i in eachindex(trace)
         trace[i] = simulator(r[1:end-5], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=par)[1:end-1, 2]
     end
@@ -246,7 +261,7 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, probfn,reporterfn=sum)
+function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, probfn, reporterfn=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
@@ -284,7 +299,7 @@ function intensity(state, G, R, S, d)
     max(rand(d[stateindex]), 0)
 end
 
-gstate(G,state,allele) = argmax(state[1:G, allele])
+gstate(G, state, allele) = argmax(state[1:G, allele])
 
 """
     state_index(state::Array,G,allele)
@@ -295,7 +310,7 @@ returns state index given state vector
 state_index(state::Array, G, allele) = argmax(state[1:G, allele])
 
 function state_index(state::Array, G, R, S, allele=1)
-    Gstate = gstate(G,state,allele)
+    Gstate = gstate(G, state, allele)
     if R == 0
         return Gstate
     else
