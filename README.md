@@ -18,6 +18,7 @@ To install StochasticGene, open a terminal and type
 
 ```
 Bash> julia
+```
 
 After Julia opens you will be in the interactive Julia REPL.
 
