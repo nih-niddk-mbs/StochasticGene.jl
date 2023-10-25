@@ -104,15 +104,14 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         onoff = true
         ndt = Int[]
         dt = Float64[]
-        histoffdd = Vector{Int}[]
-        histondd = Vector{Int}[]
-        if eltype(onstates) <: Vector
-        end
-        for i in onstates
-            ndt = length(bins)
-            dt = bins[2] - bins[1]
-            histofftdd = zeros(Int, ndt)
-            histontdd = zeros(Int, ndt)
+        histofftdd = Vector{Int}[]
+        histontdd = Vector{Int}[]
+        n = eltype(onstates) <: Vector ? length(onstates) : 1
+        for i in 1:n
+            push!(ndt,length(bins[i]))
+            push!(dt,bins[i][2] - bins[i][1])
+            push!(histofftdd,zeros(Int, ndt))
+            push!(histontdd,zeros(Int, ndt))
         end
     end
     if traceinterval > 0
@@ -141,7 +140,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 
         if onoff
             # find before and after states for the same allele to define dwell time histograms 
-            for i in eachindex(onstates)
+            for i in 1:n
                 before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
             end
         end
@@ -161,7 +160,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
 
         if onoff
-            for i in eachindex(onstates)
+            for i in 1:n
                 after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
                 firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
             end
