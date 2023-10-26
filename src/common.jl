@@ -262,7 +262,6 @@ end
 datapdf(data::AbstractRNAData{Array{Float64,1}}) = normalize_histogram(data.histRNA)
 datapdf(data::RNAOnOffData) = [normalize_histogram(data.OFF); normalize_histogram(data.ON); normalize_histogram(data.histRNA)]
 datapdf(data::AbstractTraceHistogramData) = normalize_histogram(data.histRNA)
-datapdf(data::RNADwellTimeData) = [data.histRNA; (make_array(data.DwellTimes))]
 
 function datapdf(data::AbstractRNAData{Array{Array,1}})
     v = normalize_histogram(data.histRNA[1])

@@ -139,9 +139,9 @@ end
 
 function test_fit_rnaonoff(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=fill(0.01, num_rates(transitions, R, S, insertstep)), nsamples=100000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="")
     # OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
-    OFF, ON, hRNA = simulator(rtarget, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins, totalsteps=3000)
-    hRNA = div.(hRNA, 30)
-    data = StochasticGene.RNAOnOffData("test", "test", nhist, hRNA, bins, ON, OFF)
+    h = simulator(rtarget, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins, totalsteps=3000)
+    hRNA = div.(h[1], 30)
+    data = StochasticGene.RNAOnOffData("test", "test", nhist, hRNA, bins, h[2], h[3])
     model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, nalleles, priorcv, onstates, rtarget[end], propcv, splicetype, prob_GaussianMixture, 5, 5)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)

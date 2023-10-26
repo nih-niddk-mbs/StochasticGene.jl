@@ -392,8 +392,6 @@ function get_file(folder, filetype, suffix)
     nothing
 end
 
-get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
-
 """
     findjobs(folder)
 

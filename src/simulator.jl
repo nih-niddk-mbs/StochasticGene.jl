@@ -97,11 +97,11 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         onoff = false
     else
         onoff = true
-        nn = eltype(onstates) <: Vector ? length(onstates) : 1
-        if nn == 1
+        if ~(eltype(onstates) <: Vector)
             bins = [bins]
             onstates = [onstates] 
         end
+        nn = length(onstates)
         tIA = fill(zeros(Float64, nalleles), nn)
         tAI = fill(zeros(Float64, nalleles), nn)
         before = Vector{Int}(undef, nn)
@@ -118,6 +118,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         end
     end
     if traceinterval > 0
+        par = r[end-noiseparams+1:end]
         tracelog = [(t, state[:, 1])]
     end
     if verbose
@@ -176,11 +177,11 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     counts = max(sum(mhist), 1)
     # mhist /= counts
     if onoff
-        dt = Vector[]
+        dwelltimes = Vector[]
         push!(dt, mhist[1:nhist])
         for i in eachindex(histontdd)
-            push!(dt, histontdd[i])
-            push!(dt, histofftdd[i])
+            push!(dwelltimes, histontdd[i])
+            push!(dwelltimes, histofftdd[i])
         end
         return dt
     elseif traceinterval > 0.0
