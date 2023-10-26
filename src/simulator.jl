@@ -203,8 +203,10 @@ end
 
 return vector of traces
 """
-function simulate_trace_vector()
-
+function simulate_trace_vector(datapath::String,ntrials::Int,interval,onstates)
+    for i in 1:ntrials
+        writedlm(datapath,simulate_trace(r,transitions,G,R,S,insertstep,interval,onstates))
+    end
 end
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
@@ -219,7 +221,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
+simulate_trace(r, transitions, G, R, S, insertstep,interval,onstates; totaltime=1000., reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
 
 
 """
@@ -274,13 +276,12 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, probfn, reporterfn=sum)
+function make_trace(tracelog, G, R, S, onstates::Vector{Int}, interval, par, insertstep, probfn, reporterfn=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
-
-    if R > 0
+    if isempty(onstates)
         reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
     else
         reporters = num_reporters_per_state(G, onstates)
@@ -297,6 +298,19 @@ function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, prob
         frame += interval
     end
     return trace
+end
+
+
+"""
+    make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
+
+"""
+function make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
+    traces = Vector[]
+    for o in onstates
+        push!(traces,make_trace(tracelog, G, R, S, o, interval, par, insertstep, probfn, reporterfn))
+    end
+    traces
 end
 
 """
@@ -345,11 +359,11 @@ end
 return number of states with R steps > 1
 """
 function num_reporters(state::Matrix, allele, G, R, insertstep)
-    r = 0
+    reporters = 0
     for i in G+insertstep:G+R
-        r = r + Int(state[i, allele] > 1)
+        reporters = reporters + Int(state[i, allele] > 1)
     end
-    r
+    reporters
 end
 """
     firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
