@@ -102,10 +102,10 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             onstates = [onstates] 
         end
         nn = length(onstates)
-        tIA = fill(zeros(Float64, nalleles), nn)
-        tAI = fill(zeros(Float64, nalleles), nn)
+        tIA = Vector{Float64}[]
+        tAI = Vector{Float64}[]
         before = Vector{Int}(undef, nn)
-        after = similar(before)
+        after = Vector{Int}(undef, nn)
         ndt = Int[]
         dt = Float64[]
         histofftdd = Vector{Int}[]
@@ -115,6 +115,8 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             push!(dt, bins[i][2] - bins[i][1])
             push!(histofftdd, zeros(Int, ndt[i]))
             push!(histontdd, zeros(Int, ndt[i]))
+            push!(tIA, zeros(nalleles))
+            push!(tAI, zeros(nalleles))
         end
     end
     if traceinterval > 0
@@ -153,7 +155,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println("---")
             println("m:", m)
             println(state)
-            onoff && println(before)
+            onoff && println("before",before)
             println(tau)
             println("t:", t)
             println(rindex)
@@ -168,13 +170,20 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
                 after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
                 firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
             end
+            verbose && println(tAI)
+            verbose && println(tIA)
+            # for i in eachindex(onstates)
+            #     # after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+            #     firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+            # end
+            # verbose && println("after:",after)
         end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
         end
     end  # while
     verbose && println(steps)
-    counts = max(sum(mhist), 1)
+    # counts = max(sum(mhist), 1)
     # mhist /= counts
     if onoff
         dwelltimes = Vector[]
