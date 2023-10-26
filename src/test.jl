@@ -77,7 +77,7 @@ options = test_options(1000);
 @time fit,stats,measures = run_mh(data,model,options);
 
 """
-function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.01:0.1:10), collect(0.01:0.1:10)], total=1000000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
+function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:10), collect(0.1:0.1:10)], total=1000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
     h = test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
     hs = StochasticGene.normalize_histogram.(hs)
@@ -85,30 +85,23 @@ function test(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.00023
     for i in eachindex(h)
         l += StochasticGene.norm(h[i] - hs[i])
     end
-    return make_array(h), make_array(hs), l, isapprox(make_array(h), make_array(hs), rtol=0.01)
+    return StochasticGene.make_array(h), StochasticGene.make_array(hs), l, isapprox(StochasticGene.make_array(h), StochasticGene.make_array(hs), rtol=0.01)
 end
 
 function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, bins, dttype)
     for i in eachindex(onstates)
         if isempty(onstates[i])
             # onstates[i] = on_states(onstates[i], G, R, S, insertstep)
-            onstates[i] = on_states(G, R, S, insertstep)
+            onstates[i] = StochasticGene.on_states(G, R, S, insertstep)
         end
         onstates[i] = Int64.(onstates[i])
     end
-    components = make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
-    likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
+    components = StochasticGene.make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[StochasticGene.num_rates(transitions, R, S, insertstep)], "")
+    StochasticGene.likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 end
 
 function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
-    h = Vector{Vector}(undef, 3)
-    h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
-    for i in eachindex(onstates)[begin+1:end]
-        hoff, hon, _ = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[i], bins=bins[i], totalsteps=total, tol=tol)
-        push!(h, hon)
-        push!(h, hoff)
-    end
-    h
+    StochasticGene.simulator(r, transitions, G, R, S, insertstep, nhist=nhist,nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
 
 function fit_rna_test(root=".")

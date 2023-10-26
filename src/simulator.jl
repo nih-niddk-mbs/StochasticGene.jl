@@ -46,7 +46,7 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
 """
-    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int=1, nalleles::Int=1; nhist::Int=0, onstates::Vector{Int}=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum,  splicetype="", verbose::Bool=false)
+    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
 Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
 If trace is set to true, it returns a nascent mRNA trace
@@ -80,11 +80,8 @@ If trace is set to true, it returns a nascent mRNA trace
  	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
 
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int=1, nalleles::Int=1; nhist::Int=0, onstates::Vector{Int}=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
-    if probfn == prob_GaussianMixture
-        noiseparams = 5
-    end
-    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams
+function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
         throw("r has too few elements")
     end
     if insertstep > R > 0
@@ -96,22 +93,28 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
-    tIA = zeros(Float64, nalleles)
-    tAI = zeros(Float64, nalleles)
     if length(bins) < 1
         onoff = false
     else
         onoff = true
+        nn = eltype(onstates) <: Vector ? length(onstates) : 1
+        if nn == 1
+            bins = [bins]
+            onstates = [onstates] 
+        end
+        tIA = fill(zeros(Float64, nalleles), nn)
+        tAI = fill(zeros(Float64, nalleles), nn)
+        before = Vector{Int}(undef, nn)
+        after = similar(before)
         ndt = Int[]
         dt = Float64[]
         histofftdd = Vector{Int}[]
         histontdd = Vector{Int}[]
-        n = eltype(onstates) <: Vector ? length(onstates) : 1
-        for i in 1:n
-            push!(ndt,length(bins[i]))
-            push!(dt,bins[i][2] - bins[i][1])
-            push!(histofftdd,zeros(Int, ndt))
-            push!(histontdd,zeros(Int, ndt))
+        for i in eachindex(onstates)
+            push!(ndt, length(bins[i]))
+            push!(dt, bins[i][2] - bins[i][1])
+            push!(histofftdd, zeros(Int, ndt[i]))
+            push!(histontdd, zeros(Int, ndt[i]))
         end
     end
     if traceinterval > 0
@@ -140,7 +143,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
 
         if onoff
             # find before and after states for the same allele to define dwell time histograms 
-            for i in 1:n
+            for i in eachindex(onstates)
                 before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
             end
         end
@@ -160,7 +163,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
 
         if onoff
-            for i in 1:n
+            for i in eachindex(onstates)
                 after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
                 firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
             end
@@ -173,9 +176,17 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     counts = max(sum(mhist), 1)
     # mhist /= counts
     if onoff
-        return histofftdd, histontdd, mhist[1:nhist]
+        dt = Vector[]
+        push!(dt, mhist[1:nhist])
+        for i in eachindex(histontdd)
+            push!(dt, histontdd[i])
+            push!(dt, histofftdd[i])
+        end
+        return dt
     elseif traceinterval > 0.0
-        return make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)
+        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
+    elseif onoff && traceinterval > 0
+        return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
         return mhist[1:nhist]
     end
@@ -191,11 +202,13 @@ end
 
 return vector of traces
 """
+function simulate_trace_vector()
+
+end
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
-    par = r[end-4:end]
     for i in eachindex(trace)
-        trace[i] = simulator(r[1:end-5], transitions, G, R, S, 1, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, par=par)[1:end-1, 2]
+        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
     end
     trace
 end
@@ -205,7 +218,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r, transitions, G, R, S, 2, 1, insertstep=insertstep, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, par=r[end-4:end])[1:end-1, :]
+simulate_trace(r, transitions, G, R, S, interval, totaltime; insertstep=1, onstates=Int[], reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
 
 
 """
@@ -265,6 +278,7 @@ function make_trace(tracelog, G, R, S, onstates, interval, par, insertstep, prob
     trace = Matrix(undef, 0, 2)
     state = tracelog[1][2]
     frame = interval
+
     if R > 0
         reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
     else

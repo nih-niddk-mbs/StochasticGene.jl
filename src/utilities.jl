@@ -627,11 +627,11 @@ function meantime(r::Vector)
 end
 
 """
-    make_array(v::Array)
+    make_array(v)
 
-convert array of arrays into a single array
+convert containuer of arrays into a single array
 """
-function make_array(v::Array)
+function make_array(v)
     vconcat = Float64[]
     for v in v
         vconcat = [vconcat; v]

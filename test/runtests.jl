@@ -23,14 +23,7 @@ function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates
 end
 
 function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
-    h = Vector{Vector}(undef, 3)
-    h[3], h[2], h[1] = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
-    for i in eachindex(onstates)[begin+1:end]
-        hoff, hon, _ = simulator(r, transitions, G, R, S, nhist, nalleles, insertstep=insertstep, onstates=onstates[i], bins=bins[i], totalsteps=total, tol=tol)
-        push!(h, hon)
-        push!(h, hoff)
-    end
-    h
+    simulator(r, transitions, G, R, S, insertstep, nhist=nhist,nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
 
 function test_fit_rna(; gene="CENPL", cell="HCT116", fish=false, G=2, nalleles=2, nsamples=100000, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), ejectprior=0.05, r=[0.01, 0.1, 1.0, 0.01006327034802035], decayrate=0.01006327034802035, datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
@@ -44,7 +37,7 @@ end
 
 function test_fit_rnaonoff(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=fill(0.01, num_rates(transitions, R, S, insertstep)), nsamples=100000, nhist=20, nalleles=2, onstates=Int[], bins=collect(0:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="")
     # OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
-    OFF, ON, hRNA = simulator(rtarget, transitions, G, R, S, nhist, nalleles, onstates=onstates, bins=bins, totalsteps=3000)
+    hRNA, ON, OFF  = simulator(rtarget, transitions, G, R, S, insertstep, nalleles=nalleles, nhist=nhist,  onstates=onstates, bins=bins, totalsteps=3000)
     hRNA = div.(hRNA, 30)
     data = StochasticGene.RNAOnOffData("test", "test", nhist, hRNA, bins, ON, OFF)
     model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, nalleles, priorcv, onstates, rtarget[end], propcv, splicetype, prob_GaussianMixture, 5, 5)
@@ -66,7 +59,7 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 2.0, 0.23, 0.02, 0.25, 0.17, 0.
 end
 
 function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70, 0.9], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep)); [20, 5, 100, 10, 0.9]], nsamples=1000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+5)], propcv=0.01, cv=100.0, interval=1.0)
-    traces = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    _, traces = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, traces)
     model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_GaussianMixture, 5, 5)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)

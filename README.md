@@ -17,7 +17,7 @@ The following assumes that Julia has already been installed. If not go to https:
 To install StochasticGene, open a terminal and type
 
 ```
-Bash> julia
+$ julia
 ```
 
 After Julia opens you will be in the interactive Julia REPL.
@@ -74,11 +74,11 @@ or any other name you choose for the root directory.
 
 ### Fitting data with StochasticGene
 
-To fit a model, you need to load data and choose a model. Data allowed are stationary histograms (e.g. smFISH or scRNA), intensity traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, rna histograms from smFISH can be fit together with multiple traces or dwell time histograms from live cell recordings.
+To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, rna histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
 
-Models are distringuished by the number of G states, transitions between G states, number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn states (i.e. R steps or G states where the reporter is visible) called "on states" must also be specified.
+Models are distringuished by the number of G states, transitions between G states, number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn states (i.e. R steps or G states where the reporter is visible) are called "on states" must also be specified. Multiple sets of on states are allowed.
 
-Data can be fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing ```fit()```, will fit the mock rna histogram data installed by rna_setup(root) with a simple two state telegraph model (2 G stsates, no R steps).  Thwo files are in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables, resulting in
+Data are fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing ```fit()```, will fit the mock rna histogram data installed by rna_setup(root) with a simple two state telegraph model (2 G stsates, no R steps).  Data is in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables. Running `fit` gives
 
 ```
 julia> fits, stats, measures, data, model, options = fit();
@@ -99,12 +99,14 @@ Deviance: 0.007326880506251085
 rhat: 1.0105375337987144
 2023-10-24T10:24:11.295
 ```
-The semicolon is not necessary but suppresses printing the returned variables.
+The semicolon is not necessary but suppresses printing the returned variables. 
 
-The `fit` function prints out information about the time, the data, the model, and information about the results. A more detailed version is given in the returned variables and written to the folder "./results/HCT116_test". You can use the results of a previous run as an initial condition. In this case, there were no previous runs and thus the function used a default starting point, which is also the prior. In this particular run, only three rates were fitted, and the median of the posterior and the maximum likelihood parameters are printed out. `Acceptance` shows that in the allotted 60 seconds of real time, out of 613219 samples, 325538 were accepted by the Metropolis-Hastings MCMC algorithm. The `Deviance` is the difference in likelihood between a perfect fit and the given fit. Zero indicates a perfect fit and anything less than one is a good fit. `rhat` is a measure of how close to convergence the run achieved with 1 being ideal. In this particular run, only one chain was used. More chains can be specified and each run on it's own processor. To use more chains, you need to specify more processors by staring Julia with
+The data is fit using `run_mh(data,model,options,nchains)` (which runs a Metropolis-Hastings MCMC algorithm), where `data`, `model`, and `options` are structures (Julia types) constructed by `fit` and returned. (`nchains` is the number of MCMC chains, each running on a separate processor).  `run_mh` returns three structures `fits`, `stats`, and `measures`, which give the results (Bayesian posteriors) and measures of the quality of the fit and are saved to the folder "./results/HCT116_test", which is specified by the `resultfolder` argument.
+
+During the run, the `fit` function prints out some of the information in fits, stats, and measures structures. `fit` will look for previous results in the folder specified by the argument `infolder` as an initial condition to start the MCMC run. In this case, there were no previous runs and thus the function used a default starting point, which is also the prior. Three rates were fit (set by argument `fittedparams`) in this run; the median of the posterior and the maximum likelihood parameters are printed. The run was capped to a maximum of 60 seconds of real time and `Acceptance` shows that out of 613219 samples, 325538 were accepted by the MCMC algorithm. The positive number `Deviance` is the difference in likelihood between a perfect fit and the resulting fit. `rhat` is a measure of MCMC convergence with 1 being ideal. In this particular run, only one chain was used so the measures is not very informative. To use more chains, specify more processors with
 
 ```
-Bash> julia -p 4
+$ julia -p 4
 
 julia> @everywhere using StochasticGene
 
@@ -127,27 +129,23 @@ rhat: 1.0018023969479748
 
 ```
 
-Type of data are fit by specifying the `datatype` variable. The choices are the strings 
+The `datatype` argument is a String that specifies the types of data to be fit. The choices are 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA fraction input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
 
-datatype: data files
+### Example fitting traces
 
-"rna": rna histogram file
+We can simulate some mock trace data with
 
-"rnaonoff": rna histogram file with another file of the ON and OFF dwelltime distributions
+```
+$ julia -p 4
 
-"rnadwelltime": rna histogram and multiple dwell times in single two column files of bins and dwelltimes histograms
+julia> nworkers()
+4
 
-"trace", inensity files like trk files
+julia> simulate_trace_files(datapath = "data/testdata/traces/test.trk")
 
-"tracenascent", same with nascent RNA fraction, trace files are in a folder
+julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,datapath="data/testdata/traces/test.trk",gene="test",datacond="");
 
-"tracerna": same with RNA histogram
-
-
-
-
-The datapath can point to a folder or a file.  If it points to a folder then the code will look for a file identified by the gene and datacond.
-
+```
 
 ```
 
