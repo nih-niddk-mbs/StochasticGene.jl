@@ -178,12 +178,12 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     # mhist /= counts
     if onoff
         dwelltimes = Vector[]
-        push!(dt, mhist[1:nhist])
+        push!(dwelltimes, mhist[1:nhist])
         for i in eachindex(histontdd)
             push!(dwelltimes, histontdd[i])
             push!(dwelltimes, histofftdd[i])
         end
-        return dt
+        return dwelltimes
     elseif traceinterval > 0.0
         return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     elseif onoff && traceinterval > 0
