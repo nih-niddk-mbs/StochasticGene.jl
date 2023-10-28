@@ -172,11 +172,6 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             end
             verbose && println(tAI)
             verbose && println(tIA)
-            # for i in eachindex(onstates)
-            #     # after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-            #     firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
-            # end
-            # verbose && println("after:",after)
         end
         if traceinterval > 0
             push!(tracelog, (t, state[:, 1]))
@@ -202,19 +197,17 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
 end
 
-function simulate_data(datatype, datapath)
-
-
-end
 
 """
     simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
 
 return vector of traces
 """
-function simulate_trace_vector(datapath::String,ntrials::Int,interval,onstates)
+function simulate_trace_data(datapath::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
     for i in 1:ntrials
-        writedlm(datapath,simulate_trace(r,transitions,G,R,S,insertstep,interval,onstates))
+        trace=simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+        l = length(trace)
+        writedlm(datapath,[zeros(l) zeros(l) trace collect(1:l)])
     end
 end
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
