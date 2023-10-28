@@ -411,6 +411,15 @@ function rlabels(model::AbstractGMmodel)
     end
     push!(labels, "Eject")
     push!(labels, "Decay")
+    if typeof(model.reporter) == hmmReporter
+        for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
+            push!(labels, "noise_mean$i")
+            push!(labels, "noise_std$i")
+        end
+        for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
+            push!(labels, "bias$i")
+        end
+    end
     reshape(labels, 1, length(labels))
 end
 

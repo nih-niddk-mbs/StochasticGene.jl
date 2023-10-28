@@ -1,20 +1,17 @@
 # StochasticGene.jl
 
-Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The models are continuous Markov systems with an arbitrary number of G (gene) states, R (pre-RNA) steps with stochastic transitions between the states, and S splice sites (usually same as R). The gene always occupies one of the G states and there are reversible transitions between G states that you specify.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied simulating elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied. For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you would select the reporter insertstep to be one and all R steps are visible. But if the reporter is transcribed late then you would choose a later R step, like step 3, and only R steps after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in the exon and thus was visible to the last step and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states) where an mRNA molecule can be stochastically produced when the gene occupies the active G state.  When fitting the model to single cell RNA (scRNA) sequence data, the predicted mRNA counts are further subjected to a stochastic process to account for the reduction in the number of mRNA captured and measured (i.e. technical noise). You can also specify reporters for G states and even more than one simultaneous reporter.
+Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, and S splice sites (usually same as R). The gene always occupies one of the G states and there are random reversible (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather thabn usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors).
 
-The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data and compute posterior distributions, and simulate the models.
+The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data (i.e. compute Bayesian posterior distributions), and explicitly simulate models.
 
 StochasticGene can run on small data sets on a laptop or large data sets on a multiprocessor cluster such as NIH Biowulf. There are functions that generate swarm files to be submitted and process and analyze the results.
 
 
-
-### Using StochasticGene
-
-### Installation
+### Installing StochasticGene
 
 The following assumes that Julia has already been installed. If not go to https://julialang.org/downloads/. Julia has already been installed on the NIH Biowulf system but StochasticGene must be installed by each individual user.
 
-To install StochasticGene, open a terminal and type
+To install StochasticGene on a local computer, open a terminal and type
 
 ```
 $ julia
@@ -22,7 +19,7 @@ $ julia
 
 After Julia opens you will be in the interactive Julia REPL.
 
-To install StochasticGene run the following:
+Run the following:
 
 ```
 julia> ] add StochasticGene
@@ -37,12 +34,11 @@ julia> ] test StochasticGene
 ```
 (this could take 10 or more minutes)
 
-StochasticGene will be updated on Github periodically, to update to a new version type
+StochasticGene will be updated on Github periodically. To update to a new version type
 
 ```
 julia> ] update StochasticGene
 ```
-
 
 To install StochasticGene on Biowulf, log on and at the prompt type:
 
@@ -54,33 +50,37 @@ This generates an interactive session
 ```
 [username@biowulf ~]$ module load julialang
 ```
-This loads Julia for use.  These two steps are only necessary on Biowulf. 
+This loads Julia for use. 
 
 ```
 [username@biowulf ~]$ julia - t 1
 ```
 Starts Julia (with a single thread). Then continue as before
 
-StochasticGene requires a specific directory structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command `rna_setup()` will create the folder structure. New allele numbers and halflives for new cells can be added directly to the folders.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
+### Creating folder structure to run StochasticGene
 
-After installing StochasticGene, you can set up the folder structure by typing
+StochasticGene requires a specific directory or folder structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command 
 
 ```
 julia> using StochasticGene
 
 julia> rna_setup("scRNA")
 ```
-or any other name you choose for the root directory.
+will create the folder structure in the folder `scRNA` with the `data` and `results` subfolders, with some mock data in the `data` folder. Typing `rna_setup()` will assume the current folder is the root. Files for allele numbers and halflives for desired cell types can be added directly to the `data` folder.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
 
 ### Fitting data with StochasticGene
 
-To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, rna histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
+To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity time traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, rna histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
 
-Models are distringuished by the number of G states, transitions between G states, number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn states (i.e. R steps or G states where the reporter is visible) are called "on states" must also be specified. Multiple sets of on states are allowed.
+Models are distringuished by the number of G states, the transition graph between G states (i.e. which G states can transitions to which other G states), number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn or "on" states (i.e. R steps or G states where the reporter is visible) must also be specified. Multiple sets of on states are allowed.
 
-Data are fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing ```fit()```, will fit the mock rna histogram data installed by rna_setup(root) with a simple two state telegraph model (2 G stsates, no R steps).  Data is in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables. Running `fit` gives
+Data are fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing `fit()`, will fit the mock rna histogram data installed by `rna_setup(root)` with a simple two state telegraph model (2 G stsates, no R steps).  Data is in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables. 
+
+To fit on a single processor, type
 
 ```
+julia> using StochasticGene
+
 julia> fits, stats, measures, data, model, options = fit();
 2023-10-24T10:22:10.782
 Gene: MYC G: 2 Treatment:  MOCK
@@ -99,11 +99,11 @@ Deviance: 0.007326880506251085
 rhat: 1.0105375337987144
 2023-10-24T10:24:11.295
 ```
-The semicolon is not necessary but suppresses printing the returned variables. 
+The semicolon is not necessary but suppresses printing the returned variables. You only need to type `using StochasticGene` once per session.
 
-The data is fit using `run_mh(data,model,options,nchains)` (which runs a Metropolis-Hastings MCMC algorithm), where `data`, `model`, and `options` are structures (Julia types) constructed by `fit` and returned. (`nchains` is the number of MCMC chains, each running on a separate processor).  `run_mh` returns three structures `fits`, `stats`, and `measures`, which give the results (Bayesian posteriors) and measures of the quality of the fit and are saved to the folder "./results/HCT116_test", which is specified by the `resultfolder` argument.
+The data is fit using the function `run_mh(data,model,options,nchains)` (which runs a Metropolis-Hastings MCMC algorithm), where `data`, `model`, and `options` are structures (Julia types) constructed by `fit` and returned. `nchains` is the number of MCMC chains, each running on a separate processor.  The three structures `fits`, `stats`, and `measures` (returned by `run_mh` and `fit`, give the fit results (Bayesian posteriors) and measures of the quality of the fit and are also saved to the folder "./results/HCT116_test", which is specified by the `resultfolder` argument.
 
-During the run, the `fit` function prints out some of the information in fits, stats, and measures structures. `fit` will look for previous results in the folder specified by the argument `infolder` as an initial condition to start the MCMC run. In this case, there were no previous runs and thus the function used a default starting point, which is also the prior. Three rates were fit (set by argument `fittedparams`) in this run; the median of the posterior and the maximum likelihood parameters are printed. The run was capped to a maximum of 60 seconds of real time and `Acceptance` shows that out of 613219 samples, 325538 were accepted by the MCMC algorithm. The positive number `Deviance` is the difference in likelihood between a perfect fit and the resulting fit. `rhat` is a measure of MCMC convergence with 1 being ideal. In this particular run, only one chain was used so the measures is not very informative. To use more chains, specify more processors with
+During the run, the `fit` function prints out some of the information in fits, stats, and measures structures. `fit` will look for previous results in the folder specified by the argument `infolder` as an initial condition to start the MCMC run. In this case, there were no previous runs and thus the default was used, which is the priors of the parameters. In this run three rates were fit (set by argument `fittedparams`); the median of the posterior and the maximum likelihood parameters of the resulting fits are printed. The run was capped to a maximum of 60 seconds of real time (set by the argument `maxtime`) and `Acceptance` shows that out of 613219 MCMC samples, 325538 were accepted by the MCMC algorithm. The positive number `Deviance` is the difference in likelihood between a perfect fit and the resulting fit (for histograms only). `rhat` is a measure of MCMC convergence with 1 being ideal. In this particular run, only one chain was used so the measures are not very informative. To use more chains, specify more processors with
 
 ```
 $ julia -p 4
@@ -129,42 +129,68 @@ rhat: 1.0018023969479748
 
 ```
 
-The `datatype` argument is a String that specifies the types of data to be fit. The choices are 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA fraction input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
+The `datatype` argument is a String that specifies the types of data to be fit. Currently, there are six choices: 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA fraction input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
 
 ### Example fitting traces
 
-We can simulate some mock trace data with
+Start Julia with multiple processors.
 
 ```
 $ julia -p 4
 
+```
+Using `sinteractive` on Biowulf, you may need to also declare a single thread with
+```
+$ julia -p 4 -t 1
+
+```
+You can see how many processors have been called with
+
+```
+
 julia> nworkers()
 4
 
-julia> simulate_trace_files(datapath = "data/testdata/traces/test.trk")
+julia @everywere using StochasticGene
+```
 
-julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,datapath="data/testdata/traces/test.trk",gene="test",datacond="");
+You can create some simulated mock trace data with
 
 ```
 
+julia> simulate_trace_data("data/testtraces/")
+
 ```
 
-v=fit(4,"rnaoffon",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
+which generates 10 mock trk files in folder "data/testraces". See API below for the parameters used in the simulated data.
 
-v=fit(4,"rnatrace",[],["FISH","traces"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
-
-v=fit(4,"rnadwelltime",[],["FISH","dwelltime"],"DNAJC5","HBEC","",5/3,0.,"10-4","10-4","gt","gt",[1, 2, 3, 4, 6,7,8,9,10],tuple(),transitions,2,1,0,1,"/Users/carsonc/Box/Larson/GeneTrap_analysis/")
 ```
 
+julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, datapath="data/testtraces", gene="test", datacond="", decayrate=1.);
+2023-10-28T15:39:16.955
+Gene: test G R S insertstep: 3221
+in: HCT116_test out: HCT116_test
+maxtime: 60.0
+./results/HCT116_test/rates_trace-HCT116__test_3221_2.txt does not exist
+[0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 100.0, 100.0, 100.0, 100.0, 0.9]
+initial ll: 59437.54504442659
+final max ll: 52085.58823772918
+median ll: 55631.823149864926
+Median fitted rates: [0.010164892707601266, 0.010415494521142342, 0.009888467865883247, 0.010565680996634689, 0.1051981476344431, 0.09544095249917071, 0.09473989790249088, 0.10045726361481444, 0.10418638776390472, 63.19680508738758, 56.794573780192, 119.72050615415071, 97.22874914820788, 0.9031904231186259]
+ML rates: [0.008648315183072212, 0.01105818085890487, 0.01104728099474845, 0.011437834075767405, 0.09527550344438158, 0.11007539741898248, 0.08145019422061348, 0.09898368400856507, 0.1051451404740429, 37.71078406511133, 29.49680612047366, 171.40544543928038, 100.94919964017241, 0.9036456980377264]
+Acceptance: 770/1525
+rhat: 2.9216933196063533
+2023-10-28T15:40:18.448
+
+```
+In this run, `rhat` is close to 3 indicating that the number of samples was insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
 
 
-### Example Use on Biowulf to fit scRNA data:
+### Batch fitting on Biowulf using `swarm`.
 
 The data can also be fit in batch mode using swarm files.  To do so, you create swarm files.
 
-
-Fit the scRNA histogram in all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
-
+For example, you can fit all the scRNA histogram of all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
 
 First move into the root directory you created and launch julia:
 
@@ -172,7 +198,6 @@ First move into the root directory you created and launch julia:
 [username@biowulf ~]$ cd scRNA
 
 [username@biowulf ~]$ julia - t 1
-
 ```
 
 Create swarm files using the command in the JULIA repl:
@@ -181,7 +206,6 @@ julia> using StochasticGene
 
 julia> makeswarm(["CENPL","MYC"],cell="HCT116",maxtime = 600.,nchains = 8,datatype = "rna",G=2,transitions = ([1,2],[2,1]),datacond = "MOCK",resultfolder ="HCT_scRNA",datapath = "HCT116_testdata/",root = ".")
 ```
-
 The genes are listed as a vector of strings. You only need to type `using StochasticGene` once per session.
 This will create two files.  The first will end in `.swarm` and the second will end in `.jl`
 

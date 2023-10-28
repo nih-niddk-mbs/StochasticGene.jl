@@ -56,6 +56,7 @@ export
     simulator,
     simulate_trace,
     simulate_trace_vector,
+    simulate_trace_data,
     on_states,
     num_rates,
     load_data,
