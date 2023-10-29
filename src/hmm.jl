@@ -474,7 +474,7 @@ function predicted_states(trace::Vector, interval::Float64, model::AbstractGmode
     predicted_states(model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, interval, trace)
 end
 """
-    predicted_states(r, N, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+    predicted_states(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
 
 TBW
 """
@@ -485,7 +485,7 @@ function predicted_states(r::Vector, N::Int, elementsT, noiseparams, reporters_p
 end
 
 """
-    predicted_trace(ts,model)
+    predicted_trace(ts::Vector, model)
 
 TBW
 """
@@ -499,9 +499,9 @@ function predicted_trace(ts::Vector, model)
 end
 
 """
-    predicted_trace(r,data,model)
+    predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
 
-TBW
+return predicted traces of fits using Viterbi algorithm
 """
 function predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
     predicted_trace(predicted_states(data, model), model)

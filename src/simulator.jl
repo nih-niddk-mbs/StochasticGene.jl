@@ -48,8 +48,7 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 """
     simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
-Simulate any GRSM model. Returns steady state mRNA histogram and if bins not a null vector will return ON and OFF time histograms.
-If trace is set to true, it returns a nascent mRNA trace
+Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null vector will return a vector of the mRNA histogram and ON and OFF time histograms. If traceinterval > 0, it will return a vector containing the mRNA histogram and the traces
 
 #Arguments
 - `r`: vector of rates
@@ -73,11 +72,9 @@ If trace is set to true, it returns a nascent mRNA trace
 - `reporterfn`=sum: how individual reporters are combined
 - `verbose::Bool=false`: flag for printing state information
     
-#Examples:
+#Example:
 
-    julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
-
- 	julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],bins=collect(1.:100.))
+julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
 
 """
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
@@ -199,9 +196,9 @@ end
 
 
 """
-    simulate_trace_vector(r, par, transitions, G, R, onstates, interval, steps, ntrials)
+    simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
 
-return vector of traces
+create simulated trace files in datafolder
 """
 function simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
     ~ispath(datafolder) && mkpath(datafolder)

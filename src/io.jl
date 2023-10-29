@@ -39,6 +39,8 @@ end
 # statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
 
 """
+    write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
+
   write_dataframes(resultfolder::String,datapath::String;measure::Symbol=:AIC,assemble::Bool=true)
 
   collates run results into a csv file
@@ -49,9 +51,6 @@ Arguments
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 """
-
-
-
 function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
     write_dataframes_only(resultfolder, datapath, assemble=assemble, fittedparams=fittedparams)
     write_winners(resultfolder, measure)

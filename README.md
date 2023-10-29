@@ -279,7 +279,7 @@ julia> write_augmented("results/HCT_scRNAtest/Summary_HCT116-scRNA-ss_MOCK_2.csv
 ### Example Use on Unix
 If not running on Biowulf, the same swarm files can be used, although they will not be run in parallel.
 
-In Bash, type:
+e.g. in UNIX Bash, type:
 
 ```
 Bash> chmod 744 fit_scRNA-ss-MOCK_2.swarm
@@ -292,6 +292,37 @@ This will execute each gene in the swarm file sequentially. To run several genes
 
 ### Simulations
 Simulate any GRSM model using function simulator, which can produce steady state mRNA histograms, simulated intensity traces, and ON and OFF live cell histograms as selected.
+
+The following will simulate the steady state mRNA histogram, and ON and OFF dwelltime distributions, for an intron reporter inserted at the first R step, and for a transcription factor reporter visible in the G states 2 and 3.
+
+```
+julia> r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231]
+10-element Vector{Float64}:
+ 0.038
+ 1.0
+ 0.23
+ 0.02
+ 0.25
+ 0.17
+ 0.02
+ 0.06
+ 0.02
+ 0.000231
+
+julia> transitions=([1, 2], [2, 1], [2, 3], [3, 1])
+([1, 2], [2, 1], [2, 3], [3, 1])
+
+julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
+5-element Vector{Vector}:
+ [102.03717039741856, 142.59069980711823, 88.32384512491423, 5.3810781196239645, 11.34932791013432, 20.045265169892332, 98.28644192386656, 58.86668672945706, 84.28930404506343, 38.33804408987862  …  0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+ [729817, 620509, 530022, 456147, 397358, 349669, 315092, 284930, 261379, 241602  …  361, 369, 296, 300, 285, 266, 241, 216, 189, 190]
+ [242326, 290704, 293370, 275618, 249325, 221256, 195222, 171730, 151167, 134806  …  18965, 18726, 18406, 18488, 18409, 18305, 17786, 17447, 17398, 17380]
+ [2895640, 2557764, 2264680, 2001941, 1771559, 1567632, 1391091, 1228585, 1086723, 964156  …  7995, 7824, 7987, 7858, 8022, 7839, 7848, 7858, 7974, 7920]
+ [116520, 116748, 115010, 115952, 114249, 114426, 114428, 113435, 113013, 112732  …  56077, 56462, 55967, 55863, 55710, 55549, 55092, 54988, 54984, 54528]
+
+```
+
+h is a vector containing 5 histograms. Although, not all data will include both ON and OFF time histograms, `simulator` automatically computes both.
 
 ### Units
 StochasticGene assumes all rates have units of inverse minutes and the half lives in the `halflives` file are in hours. When computing or fitting stationary mRNA distributions, the rate units are relative. Scaling all the rates by a constant will not affect the results. In these cases, it is sometimes convenient to scale all the rates by the mRNA decay time, which is the last entry of the rate array. The rate units matter when considering or evaluating traces and histograms of ON and OFF times. The code assumes that these dwell time histogram have units of minutes (i.e. the reciprocal of the rate units). 
@@ -351,135 +382,138 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 ```
 
 ```
- makeswarm(;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",thresholdlow::Float64=0.,thresholdhigh::Float64=1e8,conds::String="MOCK",resultfolder::String= "fit_result",infolder=resultfolder,batchsize=1000,maxtime = 60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv = 0.02,priorcv= 10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
-
-    function makeswarm(genes::Vector;G::Int=2,R::Int=0,S::Int=0,transitions=([1,2],[2,1]),cell="HCT116",swarmfile::String="fit",label="label",inlabel="label",timestamp="",nsets=1,datafolder::String="HCT116_testdata",datatype="scRNA",conds::String="MOCK",resultfolder::String="fit_result",infolder=resultfolder,batchsize=1000,maxtime=60.,nchains::Int=2,nthreads::Int=1,transient::Bool=false,fittedparam=collect(1:2*G-1),fixedeffects=(),juliafile::String="fitscript",root=".",samplesteps::Int=40000,warmupsteps=20000,annealsteps=0,temp=1.,tempanneal=100.,cv=0.02,priorcv=10.,decayrate=-1.,burst=true,nalleles=2,optimize=true,type="",rtype="median")
-
-    Arguments
-    - `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
-    - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-    - `cell': cell type for halflives and allele numbers
-    - `swarmfile`: name of swarmfile to be executed by swarm
-    - `label`: label of output files produced
-    - `inlabel`: label of files used for initial conditions
-    - `timestamp`: label for time of sample (e.g. T120)
-    - `nsets`: number of histograms to be fit (e.g. one for wild type and one for perturbation)
-    - `datafolder`: folder holding histograms, if two folders use `-` (hyphen) to separate, e.g.  "data\folder1-data\folder2"
-    - `datatype`: String that desecribes data file type, e.g. "scRNA", "fish", "genetrap"
-    - `thresholdlow`: lower threshold for halflife for genes to be fit
-    - `threhsoldhigh`: upper threshold
-    - `conds`: string describing data treatment condition, e.g. "WT", "DMSO", use `-` for two conditions, e.g. "WT-AUXIN"
-    - `resultfolder`: folder for results
-    - `infolder`: folder for initial parameters
-    - `batchsize`: number of jobs per swarmfile, default = 1000
-    - `maxtime`: maximum wall time for run, default = 2 hrs
-    - `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
-    - 'nthreads`: number of Julia threads per processesor, default = 1
-    - `transient::Bool`: true means fit a time dependent transient model (T0, T30, T120)
-    - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-    - `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-         (each vector in tuple is a fixed rate set)
-    - `juliafile`: name of file to be called by julia in swarmfile
-    - `fitscript`: name of fit file called by swarm file
-    - `root`: name of root directory for project, e.g. "scRNA\"
-    - `samplesteps`: number of MCMC sampling steps
-    - `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
-    - `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-    Arguments below usually do not need to be set
-    - `temp`: MCMC temperature
-    - `tempanneal`: annealing temperature
-    - `cv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-    - 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
-    - `decayrate`: decay rate of mRNA, if set to -1, value in decayrate file will be used
-    - `burst`: if true then compute burst frequency
-    - `nalleles`: number of alleles, it will be overridden by allele file if it exists
-    - `optimize`: use optimizer to compute maximum likelihood value
-    - `type`: switch used for GRS models, choices include "", "offeject"
-    - `rtype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-    - `writesamples`: write out MH samples if true, default is false
+    makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+    fittedparam::Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1,2],[2,1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", nalleles=2, priormean=[],  priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
+    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,src="")
 
 
-    returns swarmfile that calls a julia file that is executed on biowulf
+returns swarmfile used on biowulf
+
+Arguments
+- `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
+- 'nthreads`: number of Julia threads per processesor, default = 1
+- `swarmfile`: name of swarmfile to be executed by swarm
+- `batchsize`: number of jobs per swarmfile, default = 1000
+- `juliafile`: name of file to be called by julia in swarmfile
+- `thresholdlow`: lower threshold for halflife for genes to be fit
+- `threhsoldhigh`: upper threshold
+- `datatype`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `dttype`
+- `datapath`: path to data file or folder or array of files or folders
+- `cell': cell type for halflives and allele numbers
+- `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
+- `interval`: frame interval of intensity traces
+- `nascent`: fraction of alleles exhibiting nascent rna
+- `infolder`: result folder used for initial parameters
+- `resultfolder`: folder for results of MCMC run
+- `label`: label of output files produced
+- `inlabel`: label of files used for initial conditions
+- `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+     (each vector in tuple is a fixed rate set)
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `insertstep`: R step where reporter is inserted
+- `root`: name of root directory for project, e.g. "scRNA"
+- `priormean`: mean of prior rate distribution
+- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
+- `nalleles`: number of alleles, value in alleles folder will be used if it exists  
+- `onstates`: vector of on or sojourn states
+- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
+- `probfn`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
+- `noiseparams`: number of parameters of probfn
+- `weightind`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
+- `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `maxtime`: maximum wall time for run, default = 60 min
+- `samplesteps`: number of MCMC sampling steps
+- `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
+- `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+- `temp`: MCMC temperature
+- `tempanneal`: annealing temperature
+- `temprna`: reduce rna counts by temprna compared to dwell times
+- `burst`: if true then compute burst frequency
+- `optimize`: use optimizer to compute maximum likelihood value
+- `writesamples`: write out MH samples if true, default is false
+- `src`: path to folder containing StochasticGene.jl/src
+   
 ```
+    returns swarmfile that calls a julia file executed on biowulf
+
+
 
 
 ```
-  write_dataframes(resultfolder::String,datafolder::String;measure::Symbol=:AIC,assemble::Bool=true)
+run_mh(data,model,options)
+
+returns fits, stats, measures
+
+Run Metropolis-Hastings MCMC algorithm and compute statistics of results
+
+-`data`: AbstractExperimentalData structure
+-`model`: AbstractGmodel structure with a logprior function
+-`options`: MHOptions structure
+
+model and data must have a likelihoodfn function
+```
+```
+    write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
+
+  write_dataframes(resultfolder::String,datapath::String;measure::Symbol=:AIC,assemble::Bool=true)
 
   collates run results into a csv file
 
 Arguments
 - `resultfolder`: name of folder with result files
-- `datafolder`: name of folder where data is stored
+- `datapath`: name of folder where data is stored
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 ```
+```
+    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+
+Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null vector will return a vector of the mRNA histogram and ON and OFF time histograms. If traceinterval > 0, it will return a vector containing the mRNA histogram and the traces
+
+#Arguments
+- `r`: vector of rates
+- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G`: number of gene states
+- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
+- `insertstep`: reporter insertion step
+ 	
+#Named arguments
+- `nalleles`: Number of alleles
+- `nhist::Int`: Size of mRNA histogram
+- `onstates::Vector`: a vector of ON states (use empty set for any R step is ON) or vector of vector of ON states
+- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
+- `probfn`=prob_GaussianMixture: reporter distribution
+- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
+- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
+- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
+- `totaltime`::Float64=0.0: total time of simulation
+- `splicetype`::String: splice action
+- `reporterfn`=sum: how individual reporters are combined
+- `verbose::Bool=false`: flag for printing state information
+    
+#Example:
+
+julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
 
 ```
-write_winners(resultfolder,measure)
-
-Write best performing model for measure (e.g. AIC, WAIC, Deviance)
-
 ```
+    simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
 
-```
-write_augmented(summaryfile::String,resultfolder::String)
-
-Augment summary file with burst size (for G > 1), model predicted moments, and fit measures
-
-
-```
-
-```
-	simulator(r::Vector{Float64},transitions,G::Int,R::Int,S::Int,nhist::Int,nalleles::Int;onstates::Vector{Int}=[G],range::Vector{Float64}=Float64[],total::Int=10000000,tol::Float64=1e-6,verbose::Bool=false)
-
-	Simulate any GRSM model. Returns steady state mRNA histogram and if range not a null vector will return ON and OFF time histograms.
-    If trace is set to true, it returns a nascent mRNA trace
-
-	Arguments
-	  - `r`: vector of rates
-	  - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and 
-    ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-	  - `G`: number of gene states
-    - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-    - `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
-	  - `nhist::Int`: Size of mRNA histogram
-	  - `nalleles`: Number of alleles
-
-	Named arguments
-    - `onstates::Vector`: a vector of ON G states
-	  - `range::Vector{Float64}=Float64[]`: vector of time bins for ON and OFF histograms
-	  - `totalsteps::Int=10000000`: maximum number of simulation steps
-	  - `tol::Float64=1e-6`: convergence error tolerance for mRNA histogram (not used when outputting traces)
-    - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made. May need to try different totalsteps to get
-    desired length of trace
-    - `verbose::Bool=false`: flag for printing state information
-
-
-  ### Examples
-
-  julia> trace = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,100,1,onstates=[2,3],traceinterval=100.,totalsteps = 1000)
-
-  julia> hoff,hon,mhist = simulator([.1,.02,.1,.05,.01,.01],([1,2],[2,1],[2,3],[3,1]),3,0,0,20,1,onstates=[2,3],range=collect(1.:100.))
-
-
+create simulated trace files in datafolder
 ```
 
 ```
-new_FISH(newroot::String,oldroot::String,rep::String)
+    predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
 
-Create new folder for FISH data with only one replicate
-
-Arguments
-  - `newroot`: new data folder e.g. HCT_T120_FISH_rep1
-  - `oldroot`: old data folder e.g. HCT_T120_FISH
-  - `rep`: name of replicate folder e.g. rep1
-
-### Example
-
-julia> new_FISH("data/HCT_T120_8genes_FISH_rep1","data/HCT_T120_8genes_FISH","rep1")
-
-
+return predicted traces of fits using Viterbi algorithm
 ```
