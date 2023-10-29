@@ -443,7 +443,6 @@ Arguments
 - `src`: path to folder containing StochasticGene.jl/src
    
 ```
-    returns swarmfile that calls a julia file executed on biowulf
 
 
 
