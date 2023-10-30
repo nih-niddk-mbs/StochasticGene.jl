@@ -26,7 +26,6 @@ MultivariateStats = "0.10.2"
 Optim = "1.7.8"
 Plots = "1.39.0"
 StatsBase = "0.34.2"
-Downloads = "1.5.3"
 julia = "1.7"
 
 [extras]
