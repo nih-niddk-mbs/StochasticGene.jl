@@ -14,6 +14,17 @@
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
+function ll_hmm_hierarchical(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    for i in eachindex(trace)
+        T = length(trace[i])
+        loga, logp0 = make_logap(r[i], interval, elementsT, nT)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, nT)
     ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, loga, logp0)
