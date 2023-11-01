@@ -113,7 +113,7 @@ end
 abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
-abstract type AbstractGRSMmodel{ReporterType} <: AbstractGmodel end
+abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
 
 """
     Model structures
@@ -164,7 +164,7 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     reporter::ReporterType
 end
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -181,7 +181,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{ReporterType}
+struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -507,7 +507,7 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-transform_rates(r, model::AbstractGRSMmodel{hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+transform_rates(r, model::AbstractGRSMmodel{typeof(r),hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
 """
@@ -518,7 +518,7 @@ inverse transform MH parameters on real domain back to rate domain
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-inverse_transform_rates(p, model::AbstractGRSMmodel{hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+inverse_transform_rates(p, model::AbstractGRSMmodel{typeof(p),hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
 
 """
