@@ -343,6 +343,16 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
+function loglikelihood(param,data::AbstractTraceData,model::GRSMhierarchicalmodel)
+    llg, llgp = ll_hmm_hierarchical(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    d = distribution_array(param[:,n], param[:,n+1])
+    lhp = 0
+    for n in eachrow(param)
+    for i in eachindex(param[:,n])
+        lhp -= logpdf(d[i], param[i,n])
+    end
+    return llg + sum(llp), vcat(llgp,lhp)
+end
 
 # Likelihood functions
 
@@ -611,6 +621,11 @@ function logprior(param, model::AbstractGmodel)
         p -= logpdf(d[i], param[i])
     end
     return p
+end
+
+function logprior(param, model::GRSMhierarchicalmodel)
+
+
 end
 
 """

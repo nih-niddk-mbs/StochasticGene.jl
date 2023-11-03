@@ -213,6 +213,26 @@ function trim_hist(h::Array, nh::Array)
 end
 
 """
+    distribution_array(param::Vector, cv, dist=Normal)
+
+"""
+function distribution_array(param::Vector, cv, dist=Normal)
+    d = []
+    for i in eachindex(param)
+        if dist == LogNormal
+            push!(d, LogNormal_meancv(param[i], cv[i]))
+        elseif dist == Gamma
+            push!(d, Gamma_meancv(param[i], cv[i]))
+        else
+            push!(d, dist(param[i], cv[i]))
+        end
+
+    end
+    return d
+end
+
+
+"""
 LogNormal_array(param,cv)
 Prior distribution arrays
 """
@@ -243,7 +263,7 @@ function LogNormalBeta_array(param, cv, ind)
 end
 
 """
-distribution_array(param,cv,dist)
+    distributionBeta_array(param::Vector, cv::Vector, ind::Int, dist=LogNormal)
 
 fill an array with dist(param,cv)
 """
@@ -258,24 +278,7 @@ function distributionBeta_array(param::Vector, cv::Vector, ind::Int, dist=LogNor
     return d
 end
 
-"""
-distribution_array(param::Vector,cv,dist=LogNormal)
 
-"""
-function distribution_array(param::Vector, cv, dist=Normal)
-    d = []
-    for i in eachindex(param)
-        if dist == LogNormal
-            push!(d, LogNormal_meancv(param[i], cv[i]))
-        elseif dist == Gamma
-            push!(d, Gamma_meancv(param[i], cv[i]))
-        else
-            push!(d, dist(param[i], cv[i]))
-        end
-
-    end
-    return d
-end
 
 """
 Gamma_meancv(mean,cv)
