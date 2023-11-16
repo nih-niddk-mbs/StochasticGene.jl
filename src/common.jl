@@ -138,19 +138,19 @@ fields:
 -` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 
 """
+# struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
+#     rates::RateType
+#     Gtransitions::Tuple
+#     G::Int
+#     nalleles::Int
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
-    rates::RateType
-    Gtransitions::Tuple
-    G::Int
-    nalleles::Int
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -164,24 +164,24 @@ struct GMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,
     reporter::ReporterType
 end
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
+# struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     rates::RateType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
 
-struct GRSMfixedeffectsmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Int
