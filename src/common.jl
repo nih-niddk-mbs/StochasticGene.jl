@@ -343,15 +343,16 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
-function loglikelihood(param,data::AbstractTraceData,model::GRSMhierarchicalmodel)
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     llg, llgp = ll_hmm_hierarchical(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    d = distribution_array(param[:,n], param[:,n+1])
+    d = distribution_array(param[:, n], param[:, n+1])
     lhp = 0
     for n in eachrow(param)
-    for i in eachindex(param[:,n])
-        lhp -= logpdf(d[i], param[i,n])
+        for i in eachindex(param[:, n])
+            lhp -= logpdf(d[i], param[i, n])
+        end
     end
-    return llg + sum(llp), vcat(llgp,lhp)
+    return llg + sum(llp), vcat(llgp, lhp)
 end
 
 # Likelihood functions
@@ -468,7 +469,7 @@ end
 
 
 """
-function likelihoodarray(r,G,components,bins,onstates,dttype,nalleles,nRNA)
+function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
     tcomponents = components.tcomponents
     mcomponents = components.mcomponents
     elementsT = tcomponents.elementsT
@@ -572,20 +573,31 @@ function get_rates(param, model::AbstractGmodel, inverse=true)
     else
         r[model.fittedparam] = param
     end
-    return r
+    fixed_rates(r, model.fixedeffects)
 end
 
-get_rates(param, model::GRSMfixedeffectsmodel; inverse=true) = fixed_rates(param, model, inverse)
+function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
+    rv = copy_r(model)
+    for r in rv
+        if inverse
+            r[model.fittedparam] = inverse_transform_rates(param, model)
+        else
+            r[model.fittedparam] = param
+        end
+    end
+    fixed_rates(r, model.fixedeffects)
+end
 
 """
-    fixed_rates(param,model,inverse)
+    fixed_rates(r, fixedeffects)
 
-apply fixed effects on rates
+TBW
 """
-function fixed_rates(param, model::GRSMfixedeffectsmodel, inverse)
-    r = get_rates(param, model, inverse)
-    for effect in model.fixedeffects
-        r[effect[2:end]] .= r[effect[1]]
+function fixed_rates(r, fixedeffects)
+    if ~isempty(fixedeffects)
+        for effect in model.fixedeffects
+            r[effect[2:end]] .= r[effect[1]]
+        end
     end
     return r
 end
