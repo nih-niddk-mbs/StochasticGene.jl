@@ -282,6 +282,13 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     end
     rm
 end
+
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, ndata)
+    r = Float64[]
+    for i in 1:ndata
+        append!(r, prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
+    end
+end
 """
     default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams)
 
