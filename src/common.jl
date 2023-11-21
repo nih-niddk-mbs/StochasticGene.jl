@@ -560,6 +560,11 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
+function get_param(model::GRSMhierarchicalmodel)
+
+
+end
+
 
 """
     get_rates(param,model)
