@@ -242,6 +242,16 @@ function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, p
     end
 end
 
+
+function make_fitted()
+    fitted = [fittedparams,repeat(fittedparams,2)]
+end
+
+function make_fixed()
+
+
+end
+
 """
     prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv, noiseparams, weightind)
 
