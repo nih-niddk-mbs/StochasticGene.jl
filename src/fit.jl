@@ -33,8 +33,9 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `resultfolder`: folder for results
 - `inlabel`: name of input files (not including gene name but including condition)
 - `label`: = name of output files
-- `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
-- `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
+- `fittedparam`: vector of rate indices to be fit
+- `fixedeffects`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
+(only first parameter should be included in fixedeffects) 
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
@@ -243,8 +244,11 @@ function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, p
 end
 
 
-function make_fitted()
-    fitted = [fittedparams,repeat(fittedparams,2)]
+function make_fitted(fittedparams,N)
+    for f in fittedparams
+        for i in 
+        fitted = [fittedparams,repeat(fittedparams,2)]
+    end
 end
 
 function make_fixed()

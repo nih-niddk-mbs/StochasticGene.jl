@@ -34,8 +34,8 @@ Arguments
 - `label`: label of output files produced
 - `inlabel`: label of files used for initial conditions
 - `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-     (each vector in tuple is a fixed rate set)
+- `fixedeffects`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+     (only first parameter should be included in fixedeffects)
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
