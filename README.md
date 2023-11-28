@@ -107,7 +107,6 @@ During the run, the `fit` function prints out some of the information in fits, s
 
 The two state telegraph model has 4 transition rates, which are stored in a single vector. The order is 1) G state transitions (in the order as specified by the transition vector), 2) eject rate, 3) decay rate.  For general GRSM models, the order is 1) G state transitions 2) R transitions, 3) S transitions, 4) decay.  If there is no splicing then the S transitions are left out.  Not all the rates need to be fitted. In the above example, the decay rate is not fitted. This is specified by the fittedparams argument (see API). The posterior median, mean, standard deviations, and MADs will only be for the fitted params.
 
-
 In this particular run, only one chain was used so the measures are not very informative. To use more chains, specify more processors with
 
 ```
