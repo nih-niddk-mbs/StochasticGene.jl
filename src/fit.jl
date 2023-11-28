@@ -244,16 +244,21 @@ function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, p
 end
 
 
+"""
+    make_fitted(fittedparams,N)
+
+
+"""
 function make_fitted(fittedparams,N)
-    for f in fittedparams
-        for i in 
-        fitted = [fittedparams,repeat(fittedparams,2)]
-    end
+    [fittedparams[1];repeat(fittedparams[2],N)]
 end
 
-function make_fixed()
-
-
+function make_fixed(fixedeffects,n)
+    fixed = 
+    for f in fixedeffects
+        fixed = f
+    end
+    fixed
 end
 
 """
@@ -297,9 +302,9 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm
 end
 
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, ndata)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nsamples)
     r = Float64[]
-    for i in 1:ndata
+    for i in 1:nsamples
         append!(r, prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
     end
 end
