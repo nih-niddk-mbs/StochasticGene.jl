@@ -344,9 +344,7 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rmean,rsig,par,r = get_hyperparams(param,model)
-    n = num_rates(model) + model.reporter.n
-    nh = model.hyperparams[1]
+    rmean,rsig,par,r,n,nh = prepare_params(param,model)
     llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     d = distribution_array(rmean, rsig)
     lhp = 0
@@ -356,6 +354,23 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
         end
     end
     return llg + sum(llp), vcat(llgp, lhp)
+end
+
+function prepare_params(param,model)
+    r = get_rates(param,model)
+
+
+end
+
+function get_rates(param, model::GRSMhierarchicalmodel, inverse=true)
+    r = copy_r(model)
+    if inverse
+        r[model.fittedparam] = inverse_transform_rates(param, model)
+    else
+        r[model.fittedparam] = param
+    end
+    r[noiseparams] = r[meannoiseparams]
+    fixed_rates(r, model.fixedeffects)
 end
 
 # Likelihood functions
@@ -596,11 +611,7 @@ function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
-function hierarchical_params(model::GRSMhierarchicalmodel)
-    
 
-
-end
 
 """
     fixed_rates(r, fixedeffects)
