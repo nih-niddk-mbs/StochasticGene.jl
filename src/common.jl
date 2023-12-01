@@ -538,7 +538,7 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
         n = findfirst(index .== mask)
         if typeof(v) <: Vector
             return vcat(f1(v[1:n-1]), f2(v[n:end]))
-        else
+        # else
             return vcat(f1(v[1:n-1, :]), f2(v[n:end, :]))
         end
     else
@@ -555,7 +555,7 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-transform_rates(r, model::AbstractGRSMmodel{typeof(r),hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
 """
@@ -566,7 +566,7 @@ inverse transform MH parameters on real domain back to rate domain
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-inverse_transform_rates(p, model::AbstractGRSMmodel{typeof(p),hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
 
 """

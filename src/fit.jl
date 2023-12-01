@@ -249,16 +249,17 @@ end
 
 
 """
-function make_fitted(fittedparams,nsamples)
-    [fittedparams[1];repeat(fittedparams[2],nsamples)]
+function make_fitted(fittedparams,nrates,nsamples)
+    [fittedparams .++ i*nrates for i in 0:nsamples-1]
 end
 
-function make_fixed(fixedeffects,nrates,nsamples)
+function make_fixed(fixedeffects,hyperparams,nrates,nsamples)
     fixed = Int[]
     for f in fixedeffects
-        if isempty(f[1])
-            push!(fixed, [f[2] + i*nrates for i in 1:nsamples])
-        end
+        push!(fixed, f)
+    end
+    for h in hyperparams
+            push!(fixed, [h + i*nrates for i in 0:nsamples-1])
     end
     tuple(fixed...)
 end
