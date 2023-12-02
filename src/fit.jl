@@ -250,11 +250,15 @@ end
 
 """
 function make_fitted(fittedparams,nrates,nsamples)
-    [fittedparams .++ i*nrates for i in 0:nsamples-1]
+    f = copy(fittedparams)
+    for i in 1:nsamples + 1
+        append!(f, fittedparams .+ i*nrates)
+    end
+    f
 end
 
 function make_fixed(fixedeffects,hyperparams,nrates,nsamples)
-    fixed = Int[]
+    fixed = Vector{Int}[]
     for f in fixedeffects
         push!(fixed, f)
     end
