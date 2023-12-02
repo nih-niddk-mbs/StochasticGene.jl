@@ -138,18 +138,6 @@ fields:
 -` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 
 """
-# struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
-#     rates::RateType
-#     Gtransitions::Tuple
-#     G::Int
-#     nalleles::Int
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     method::MethodType
-#     components::ComponentType
-#     reporter::ReporterType
-# end
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
     Gtransitions::Tuple
@@ -163,23 +151,6 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     components::ComponentType
     reporter::ReporterType
 end
-
-# struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-#     rates::RateType
-#     Gtransitions::Tuple
-#     G::Int
-#     R::Int
-#     S::Int
-#     insertstep::Int
-#     nalleles::Int
-#     splicetype::String
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     method::MethodType
-#     components::ComponentType
-#     reporter::ReporterType
-# end
 
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
@@ -201,7 +172,9 @@ end
 
 struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    hyperparams::Vector
+    nsets::Int
+    nrates::Int
+    nindividuals::Int
     Gtransitions::Tuple
     G::Int
     R::Int
@@ -344,11 +317,11 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rmean,rsig,par,r,n,nh = prepare_params(param,model)
+    r,hyper = prepare_params(param,model)
     llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     d = distribution_array(rmean, rsig)
     lhp = 0
-    for p in eachcol(par)
+    for h in eachcol(hyper)
         for i in eachindex(p)
             lhp -= logpdf(d[i], p[i])
         end
@@ -357,20 +330,8 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function prepare_params(param,model)
-    r = get_rates(param,model)
-
-
-end
-
-function get_rates(param, model::GRSMhierarchicalmodel, inverse=true)
-    r = copy_r(model)
-    if inverse
-        r[model.fittedparam] = inverse_transform_rates(param, model)
-    else
-        r[model.fittedparam] = param
-    end
-    r[noiseparams] = r[meannoiseparams]
-    fixed_rates(r, model.fixedeffects)
+    r = reshape(get_rates(param,model),model.nrates,model.nsets+model.nindividuals)
+    return r[:,model.nsets+1:end],r[model.fittedparam,1:model.nsets]
 end
 
 # Likelihood functions

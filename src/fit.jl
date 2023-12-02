@@ -52,7 +52,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `probfn`: observation (noise) probability distribution for trace data
 - `noiseparams`: number of noise distribution parameters
 - `weightind`: noise parameter index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
-- `hyperparams`: tuple of hyper parameters
+- `hierarchical`: tuple of number of hyper parameter sets (e.g. mean rates, std rates), fittedparams for individuals of hierarchical model, individual rates set to pool rate
 - `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `samplesteps`: int number of samples
@@ -66,7 +66,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `writesamples`: write out MH samples if true, default is false
 
 """
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hyperparams=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     if R > 0
         if S > 0
             S = R
@@ -80,11 +80,11 @@ function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
     isempty(inlabel) && (inlabel = label)
-    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hyperparams, ratetype,
+    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
 end
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hyperparams=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
@@ -100,7 +100,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
     println(r)
-    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hyperparams)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -172,7 +172,7 @@ end
 
 return model structure
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hyperparams)
+function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
     if typeof(data) <: AbstractRNAData
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
@@ -208,38 +208,26 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
     end
-    load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hyperparams)
+    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
 end
 
 """
-    load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
 
 """
-# function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     if R == 0
-#         if isempty(fixedeffects)
-#             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, method, components, reporter)
-#         else
-#             return GMfixedeffectsmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         end
-#     else
-#         if isempty(fixedeffects)
-#             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, method, components, reporter)
-#         else
-#             return GRSMfixedeffectsmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         end
-#     end
-# end
-
-function load_model(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hyperparams)
-    if isempty(hyperparams)
+function load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+    if isempty(hierarchical)
         if R == 0
             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     else
-        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyperparams, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        nrates = num_rates(transitions, R, S, insertstep) + reporter.num_reporters_per_state
+        nindividuals = length(data.trace)
+        fittedparam = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+        fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
+        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1],nrates, nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     end
 end
 
@@ -249,24 +237,24 @@ end
 
 
 """
-function make_fitted(fittedhyperparams,fittedparams,nhyper,nrates,nsamples)
-    f = copy(fittedhyperparams)
+function make_fitted(fittedpool, npool, fittedindividual, nrates, nindividuals)
+    f = copy(fittedpool)
     for i in 1:nhyper-1
-        append!(f, fittedhyperparams)
+        append!(f, fittedpool .+ i * nrates)
     end
-    for i in 1:nsamples
-        append!(f, fittedparams .+ (i+1)*nrates)
+    for i in 1:nindividuals
+        append!(f, fittedindividual .+ (i + npool - 1) * nrates)
     end
     f
 end
 
-function make_fixed(fixedeffects,hyperparams,nrates,nsamples)
+function make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
     fixed = Vector{Int}[]
-    for f in fixedeffects
+    for f in fixedpool
         push!(fixed, f)
     end
-    for h in hyperparams
-            push!(fixed, [h + i*nrates for i in 0:nsamples-1])
+    for h in fixedindividual
+        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
     end
     tuple(fixed...)
 end
@@ -312,9 +300,9 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm
 end
 
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nsamples)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals)
     r = Float64[]
-    for i in 1:nsamples
+    for i in 1:nindividuals
         append!(r, prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
     end
 end

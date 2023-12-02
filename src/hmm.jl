@@ -18,7 +18,7 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     logpredictions = Array{Float64}(undef, 0)
     for i in eachindex(trace)
         T = length(trace[i])
-        loga, logp0 = make_logap(r[1:n,i], interval, elementsT, nT)
+        loga, logp0 = make_logap(r[:,i], interval, elementsT, nT)
         logb = set_logb(trace[i], nT, r[end-noiseparams+1:end,i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
