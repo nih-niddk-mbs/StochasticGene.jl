@@ -249,10 +249,13 @@ end
 
 
 """
-function make_fitted(fittedparams,nrates,nsamples)
-    f = copy(fittedparams)
-    for i in 1:nsamples + 1
-        append!(f, fittedparams .+ i*nrates)
+function make_fitted(fittedhyperparams,fittedparams,nhyper,nrates,nsamples)
+    f = copy(fittedhyperparams)
+    for i in 1:nhyper-1
+        append!(f, fittedhyperparams)
+    end
+    for i in 1:nsamples
+        append!(f, fittedparams .+ (i+1)*nrates)
     end
     f
 end
