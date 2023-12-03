@@ -317,21 +317,23 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    r,hyper = prepare_params(param,model)
+    r, pm, psig = prepare_params(param, model)
     llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    d = distribution_array(rmean, rsig)
+    d = distribution_array(pm, psig)
     lhp = 0
-    for h in eachcol(hyper)
-        for i in eachindex(p)
-            lhp -= logpdf(d[i], p[i])
-        end
+    for i in eachindex(p)
+        lhp -= logpdf(d[i], p[i])
     end
     return llg + sum(llp), vcat(llgp, lhp)
 end
 
-function prepare_params(param,model)
-    r = reshape(get_rates(param,model),model.nrates,model.nsets+model.nindividuals)
-    return r[:,model.nsets+1:end],r[model.fittedparam,1:model.nsets]
+function prepare_params(param, model)
+    r = reshape(get_rates(param, model), model.nrates, model.nsets + model.nindividuals)
+    rm = r[model.fittedparam, 1]
+    if model.nsets == 2
+        rsig = sigmalognormal(r[model.fittedparam, 2])
+    end
+    return r[:, model.nsets+1:end], rm, rsig
 end
 
 # Likelihood functions
@@ -441,8 +443,6 @@ function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGRSMmodel)
     return hists
 end
 
-
-
 """
     likelihoodarray(r,G,components,bins,onstates,dttype,nalleles,nRNA)
 
@@ -499,15 +499,13 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
         n = findfirst(index .== mask)
         if typeof(v) <: Vector
             return vcat(f1(v[1:n-1]), f2(v[n:end]))
-        # else
+        else
             return vcat(f1(v[1:n-1, :]), f2(v[n:end, :]))
         end
     else
         return f1(v)
     end
 end
-
-
 
 """
     transform_rates(r,model::AbstractGmodel)
@@ -538,11 +536,6 @@ get fitted parameters from model
 get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-function get_param(model::GRSMhierarchicalmodel)
-
-
-end
 
 
 """

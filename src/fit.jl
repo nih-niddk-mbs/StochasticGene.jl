@@ -94,8 +94,13 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     data = load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
-    isempty(priormean) && (priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
-    # isempty(fittedparam) && (fittedparam = collect(1:num_rates(transitions, R, S, insertstep)-1))
+    if isempty(priormean)
+        if isempty(hierarchical)
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind)
+        else
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind, length(data.trace), hierarchical[1])
+        end
+    end
     isempty(fittedparam) && (fittedparam = default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
@@ -223,14 +228,13 @@ function load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicet
             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     else
-        nrates = num_rates(transitions, R, S, insertstep) + reporter.num_reporters_per_state
+        nrates = num_rates(transitions, R, S, insertstep) + reporter.n
         nindividuals = length(data.trace)
         fittedparam = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
         fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1],nrates, nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1], nrates, nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     end
 end
-
 
 """
     make_fitted(fittedparams,N)
@@ -239,7 +243,7 @@ end
 """
 function make_fitted(fittedpool, npool, fittedindividual, nrates, nindividuals)
     f = copy(fittedpool)
-    for i in 1:nhyper-1
+    for i in 1:npool-1
         append!(f, fittedpool .+ i * nrates)
     end
     for i in 1:nindividuals
@@ -300,11 +304,16 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm
 end
 
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals)
-    r = Float64[]
-    for i in 1:nindividuals
-        append!(r, prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind))
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals, npools, cv = 1.)
+    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
+    r = rm
+    if npools == 2
+        append!(r, cv .* rm)
     end
+    for i in 1:nindividuals
+        append!(r, rm)
+    end
+    r
 end
 """
     default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams)
@@ -536,7 +545,6 @@ function get_decay(gene::String, cell::String, root::String, col::Int=2)
             return get_decay(gene, path, col)
         end
     end
-
 end
 function get_decay(gene::String, path::String, col::Int)
     a = nothing
