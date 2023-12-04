@@ -172,10 +172,7 @@ end
 
 struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    nsets::Int
-    nrates::Int
-    npars::Int
-    nindividuals::Int
+    pool::Pool
     Gtransitions::Tuple
     G::Int
     R::Int
@@ -192,16 +189,16 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct hyper
-    nhypersets::Int
-    totalrates::Int
-    nparams::Int
+struct Pool
+    npoolsets::Int
+    npoolparams::Int
+    npoolrates::Int
+    nindividualparams::Int
     nindividuals::Int
-    
 end
 
 """
-hmmReporter
+HMMReporter
 
 structure for reporters
 
@@ -210,7 +207,7 @@ structure for reporters
 - `probfn`: noise distribution e.g. prob_GaussianMixture
 - `weightind`: index for mixture model bias parameter (restricted to range [0,1])
 """
-struct hmmReporter
+struct HMMReporter
     n::Int
     per_state::Vector{Int}
     probfn::Function
@@ -528,7 +525,7 @@ log transform rates to real domain
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},hmmReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 
 """
@@ -539,7 +536,7 @@ inverse transform MH parameters on real domain back to rate domain
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},hmmReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
 
 """

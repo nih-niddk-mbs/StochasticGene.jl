@@ -182,10 +182,10 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
-        reporter = hmmReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_T(transitions, G, R, S, insertstep, splicetype)
     elseif typeof(data) <: AbstractTraceHistogramData
-        reporter = hmmReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
         if isempty(onstates)

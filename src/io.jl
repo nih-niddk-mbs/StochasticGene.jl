@@ -385,7 +385,7 @@ function rlabels(model::AbstractGRSMmodel)
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
-    if typeof(model.reporter) == hmmReporter
+    if typeof(model.reporter) == HMMReporter
         for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
             push!(labels, "noise_mean$i")
             push!(labels, "noise_std$i")
@@ -410,7 +410,7 @@ function rlabels(model::AbstractGMmodel)
     end
     push!(labels, "Eject")
     push!(labels, "Decay")
-    if typeof(model.reporter) == hmmReporter
+    if typeof(model.reporter) == HMMReporter
         for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
             push!(labels, "noise_mean$i")
             push!(labels, "noise_std$i")
