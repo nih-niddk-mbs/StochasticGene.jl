@@ -104,7 +104,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     isempty(fittedparam) && (fittedparam = default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     isempty(r) && (r = priormean)
-    println(r)
+    println(length(r))
     model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -306,7 +306,7 @@ end
 
 function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals, npools, cv = 1.)
     rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
-    r = rm
+    r = copy(rm)
     if npools == 2
         append!(r, cv .* rm)
     end
