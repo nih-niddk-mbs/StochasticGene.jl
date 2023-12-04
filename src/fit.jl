@@ -159,7 +159,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
         trace = read_tracefiles(datapath, datacond)
-        return TraceData("trace", gene, interval, trace)
+        return TraceData(label, gene, interval, trace)
     elseif datatype == "tracenascent"
         trace = read_tracefiles(datapath, datacond)
         return TraceNascentData(label, gene, interval, trace, nascent)
