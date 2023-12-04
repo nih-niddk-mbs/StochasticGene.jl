@@ -107,6 +107,31 @@ end
 
 # Model structures
 
+struct Pool
+    nsets::Int
+    nparams::Int
+    nrates::Int
+    nindividualparams::Int
+    nindividuals::Int
+end
+
+"""
+HMMReporter
+
+structure for reporters
+
+- `n`: number of noise parameters
+- `per_state`: number of reporters per state
+- `probfn`: noise distribution e.g. prob_GaussianMixture
+- `weightind`: index for mixture model bias parameter (restricted to range [0,1])
+"""
+struct HMMReporter
+    n::Int
+    per_state::Vector{Int}
+    probfn::Function
+    weightind::Int
+end
+
 """
     Abstract model types
 """
@@ -189,30 +214,7 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct Pool
-    npoolsets::Int
-    npoolparams::Int
-    npoolrates::Int
-    nindividualparams::Int
-    nindividuals::Int
-end
 
-"""
-HMMReporter
-
-structure for reporters
-
-- `n`: number of noise parameters
-- `per_state`: number of reporters per state
-- `probfn`: noise distribution e.g. prob_GaussianMixture
-- `weightind`: index for mixture model bias parameter (restricted to range [0,1])
-"""
-struct HMMReporter
-    n::Int
-    per_state::Vector{Int}
-    probfn::Function
-    weightind::Int
-end
 
 """
     print_model(model::AbstractModel)
@@ -338,13 +340,13 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function prepare_params(param, model)
-    r = reshape(get_rates(param, model), model.nrates, model.nsets + model.nindividuals)
-    pm = param[1:model.npars]
-    if model.nsets == 2
-        psig = sigmalognormal(param[model.nrates+1:model.nrates+model.npars])
+    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nsets + model.pool.nindividuals)
+    pm = param[1:model.pool.nparams]
+    if model.pool.nsets == 2
+        psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
     end
-    p = reshape(param[end-model.npars*model.nindividuals+1:end],model.npars,model.nindividuals)
-    return r[:, model.nsets+1:end], p, pm, psig
+    p = reshape(param[model.pool.nsets*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
+    return r[:, model.pool.nsets+1:end], p, pm, psig
 end
 
 # Likelihood functions
@@ -511,7 +513,7 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
         if typeof(v) <: Vector
             return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
         else
-            return vcat(f1(v[1:n-1, :]), f2(v[n, :]), f2(v[n+1:end,:]))
+            return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end,:]))
         end
     else
         return f1(v)
@@ -619,15 +621,10 @@ compute log of the prior
 function logprior(param, model::AbstractGmodel)
     d = model.rateprior
     p = 0
-    for i in eachindex(param)
+    for i in eachindex(d)
         p -= logpdf(d[i], param[i])
     end
     return p
-end
-
-function logprior(param, model::GRSMhierarchicalmodel)
-
-
 end
 
 """

@@ -372,6 +372,10 @@ end
 TBW
 """
 function rlabels(model::AbstractGRSMmodel)
+    rlabels_GRSM(model)
+end
+
+function rlabels_GRSM(model)
     labels = String[]
     for t in model.Gtransitions
         push!(labels, "Rate$(t[1])$(t[2])")
@@ -393,6 +397,15 @@ function rlabels(model::AbstractGRSMmodel)
         for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
             push!(labels, "bias$i")
         end
+    end
+    reshape(labels, 1, length(labels))
+end
+
+function rlabels(model::GRSMhierarchicalmodel)
+    labels = String[]
+    l = rlabels_GRSM(model)
+    for i in 1:model.pool.nsets + model.pool.nindividuals
+        append!(labels,l)
     end
     reshape(labels, 1, length(labels))
 end

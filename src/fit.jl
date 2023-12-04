@@ -209,7 +209,13 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
             components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
         end
     end
-    priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noiseparams, weightind)
+    if isempty(hierarchical)
+        priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noiseparams, weightind)
+    else
+        nsets = hierarchical[1]
+        nrates = num_rates(transitions, R, S, insertstep) + noiseparams
+        priord = prior_distribution(rm[1:nsets*nrates], transitions, R, S, insertstep, make_fitted(fittedparam,nsets,[],nrates,0), decayrate, priorcv, noiseparams, weightind)
+    end
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
     end
@@ -230,9 +236,10 @@ function load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicet
     else
         nrates = num_rates(transitions, R, S, insertstep) + reporter.n
         nindividuals = length(data.trace)
+        pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals)
         fittedparam = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
         fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1], nrates, length(hierarchical[2]), nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     end
 end
 
@@ -304,7 +311,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm
 end
 
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals, npools, cv = 1.)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind, nindividuals, npools, cv=1.0)
     rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
     r = copy(rm)
     if npools == 2
