@@ -174,6 +174,7 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     rates::RateType
     nsets::Int
     nrates::Int
+    npars::Int
     nindividuals::Int
     Gtransitions::Tuple
     G::Int
@@ -317,23 +318,28 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    r, pm, psig = prepare_params(param, model)
+    r, p, pm, psig = prepare_params(param, model)
     llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     d = distribution_array(pm, psig)
-    lhp = 0
-    for i in eachindex(p)
-        lhp -= logpdf(d[i], p[i])
+    lhp = Float64[]
+    for pc in eachcol(p)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc += logpdf(d[i], pc[i])
+        end
+        push!(lhp,lhpc)
     end
-    return llg + sum(llp), vcat(llgp, lhp)
+    return llg + sum(lhp), vcat(llgp, lhp)
 end
 
 function prepare_params(param, model)
     r = reshape(get_rates(param, model), model.nrates, model.nsets + model.nindividuals)
-    rm = r[model.fittedparam, 1]
+    pm = param[1:model.npars]
     if model.nsets == 2
-        rsig = sigmalognormal(r[model.fittedparam, 2])
+        psig = sigmalognormal(param[model.nrates+1:model.nrates+model.npars])
     end
-    return r[:, model.nsets+1:end], rm, rsig
+    p = reshape(param[end-model.npars*model.nindividuals+1:end],model.npars,model.nindividuals)
+    return r[:, model.nsets+1:end], p, pm, psig
 end
 
 # Likelihood functions
@@ -498,9 +504,9 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
     if index ∈ mask
         n = findfirst(index .== mask)
         if typeof(v) <: Vector
-            return vcat(f1(v[1:n-1]), f2(v[n:end]))
+            return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
         else
-            return vcat(f1(v[1:n-1, :]), f2(v[n:end, :]))
+            return vcat(f1(v[1:n-1, :]), f2(v[n, :]), f2(v[n+1:end,:]))
         end
     else
         return f1(v)
@@ -574,7 +580,7 @@ TBW
 """
 function fixed_rates(r, fixedeffects)
     if ~isempty(fixedeffects)
-        for effect in model.fixedeffects
+        for effect in fixedeffects
             r[effect[2:end]] .= r[effect[1]]
         end
     end

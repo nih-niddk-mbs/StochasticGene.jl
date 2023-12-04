@@ -232,7 +232,7 @@ function load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicet
         nindividuals = length(data.trace)
         fittedparam = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
         fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1], nrates, nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hierarchical[1], nrates, length(hierarchical[2]), nindividuals, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     end
 end
 
