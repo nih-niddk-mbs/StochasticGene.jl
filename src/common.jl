@@ -192,6 +192,14 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
+struct hyper
+    nhypersets::Int
+    totalrates::Int
+    nparams::Int
+    nindividuals::Int
+    
+end
+
 """
 hmmReporter
 
