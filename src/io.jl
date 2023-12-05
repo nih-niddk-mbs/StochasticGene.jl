@@ -557,6 +557,29 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     end
 end
 
+function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
+    name = filename(data, model)
+    write_pool(joinpath(path, "pool" * name), fits, stats, model)
+    if ~isdir(path)
+        mkpath(path)
+    end
+    name = filename(data, model)
+    write_rates(joinpath(path, "rates" * name), fits, stats, model)
+    write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
+    write_param_stats(joinpath(path, "param-stats" * name), stats, model)
+    write_pool(joinpath(path, "pool" * name), fits, stats, model)
+    if optimized != 0
+        write_optimized(joinpath(path, "optimized" * name), optimized)
+    end
+    if burst != 0
+        write_burstsize(joinpath(path, "burst" * name), burst)
+    end
+    if writesamples
+        write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
+        write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_rates(fits.param, model)))
+    end
+end
+
 """
 write_rates(file::String,fits)
 
@@ -575,11 +598,22 @@ function write_rates(file::String, fits::Fit, stats, model)
     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
     close(f)
 
-    # writedlm(f,[stats.meanparam],',')
-    # writedlm(f,[stats.stdparam],',')
-    # writedlm(f,[stats.medparam],',')
-    # writedlm(f,[stats.madparam],',')
 end
+"""
+    write_pool(file::String, fits::Fit, stats, model)
+
+
+"""
+function write_pool(file::String, fits::Fit, stats, model)
+    f = open(file, "w")
+    writedlm(f, rlabels(model)[1:1,1:model.pool.nrates], ',')  # labels
+    writedlm(f, [get_rates(fits.parml, model)[1:model.pool.nrates]], ',')  # max posterior
+    writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.pool.nrates]], ',')  # mean posterior
+    writedlm(f, [get_rates(stats.medparam, model, false)[1:model.pool.nrates]], ',')  # median posterior
+    writedlm(f, [get_rates(fits.param[:, end], model)[1:model.pool.nrates]], ',')  # last sample
+    close(f)
+end
+
 """
 write_measures(file,fits,waic,dev)
 """
