@@ -98,7 +98,6 @@ function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::St
     else
         modelstring = "$G"
     end
-
     if isempty(label)
         label = datatype * "-" * cell
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)

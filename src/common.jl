@@ -332,7 +332,7 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     for pc in eachcol(p)
         lhpc = 0
         for i in eachindex(pc)
-            lhpc += logpdf(d[i], pc[i])
+            lhpc -= logpdf(d[i], pc[i])
         end
         push!(lhp,lhpc)
     end
