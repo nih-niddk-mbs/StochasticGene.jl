@@ -28,7 +28,7 @@ Arguments
 - `cell': cell type for halflives and allele numbers
 - `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `interval`: frame interval of intensity traces
-- `nascent`: fraction of alleles exhibiting nascent rna
+- `nascent`: vector of number of spots, and total number of cells
 - `infolder`: result folder used for initial parameters
 - `resultfolder`: folder for results of MCMC run
 - `label`: label of output files produced

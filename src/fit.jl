@@ -28,7 +28,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell`: cell type
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
 - `interval`: frame interval for traces
-- `nascent`: fraction of alleles exhibiting nascent rna
+- `nascent`: vector of number of spots, and total number of cells
 - `infolder`: folder pointing to results used as initial conditions
 - `resultfolder`: folder for results
 - `inlabel`: name of input files (not including gene name but including condition)
@@ -66,7 +66,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `writesamples`: write out MH samples if true, default is false
 
 """
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1,2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     if R > 0
         if S > 0
             S = R
@@ -91,6 +91,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
+    nascent[2] *= nalleles
     data = load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
@@ -173,7 +174,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
 end
 
 """
-    load_model(data, r, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind)
+    load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
 
 return model structure
 """
@@ -219,17 +220,17 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
     end
-    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, 1, components, reporter, hierarchical)
 end
 
 """
     load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
 
 """
-function load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
     if isempty(hierarchical)
         if R == 0
-            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components), typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end

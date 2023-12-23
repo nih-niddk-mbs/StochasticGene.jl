@@ -43,16 +43,17 @@ end
 
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
     a, p0 = make_ap(r, interval, elementsT, nT)
-    lln = ll_nascent(length(trace) * length(trace[1]), p0, reporters_per_state, nascent)
+    lln = ll_nascent(p0, reporters_per_state, nascent)
     ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(p0))
     push!(logpredictions, lln)
     ll += lln
     ll, logpredictions
 end
 
-function ll_nascent(β, p0, reporters_per_state, nascent)
+function ll_nascent(p0, reporters_per_state, nascent)
     pn = sum(p0[reporters_per_state.>0])
-    -β * (nascent * log(pn) + (1.0 - nascent) * log(1 - pn))
+    d = Binomial(nascent[2],pn)
+    -logpdf(d,nascent[1])
 end
 
 """

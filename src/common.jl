@@ -94,7 +94,7 @@ struct TraceNascentData{traceType} <: AbstractTraceData
     gene::String
     interval::Float64
     trace::traceType
-    nascent::Float64
+    nascent::Vector{Int}
 end
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
