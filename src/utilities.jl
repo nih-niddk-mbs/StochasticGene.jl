@@ -474,6 +474,20 @@ function splicesiteusage(r::Vector, n::Int, nr::Int)
 end
 
 """
+    onstate_prob(model)
+
+Calculate onstate probability for trace models
+
+    
+"""
+function onstate_occupancy(param,model)
+    r = get_rates(param, model)
+    Qtr = make_mat(model.components.elementsT, r, model.components.nT)
+    p0=normalized_nullspace(Qtr)
+    sum(p0[model.reporter.per_state.>0])
+end
+
+"""
 burstoccupancy(n,nr,r)
 Burst size distribution of GRS  model
 for total pre-mRNA occupancy and
