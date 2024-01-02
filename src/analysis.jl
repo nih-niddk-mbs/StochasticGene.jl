@@ -847,7 +847,7 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     if ~isempty(outfile)
         CSV.write(outfile, df)
     end
-    df
+    return df, normalized_nullspace(T)
 end
 
 

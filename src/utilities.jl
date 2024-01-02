@@ -474,18 +474,19 @@ function splicesiteusage(r::Vector, n::Int, nr::Int)
 end
 
 """
-    onstate_prob(model)
+    onstate_prob(r,components::TComponents)
 
-Calculate onstate probability for trace models
-
-    
 """
-function onstate_occupancy(param,model)
-    r = get_rates(param, model)
-    Qtr = make_mat(model.components.elementsT, r, model.components.nT)
+function onstate_prob(r,components::TComponents,reporter_per_state)
+    Qtr = make_mat(components.elementsT, r, components.nT)
     p0=normalized_nullspace(Qtr)
-    sum(p0[model.reporter.per_state.>0])
+    return sum(p0[reporter_per_state.>0]), p0
 end
+
+onstate_prob(param,model::AbstractGmodel) = onstate_prob(get_rates(param, model),model.components,model.reporter.per_state)
+
+onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates,model.components,model.reporter.per_state)
+ 
 
 """
 burstoccupancy(n,nr,r)
