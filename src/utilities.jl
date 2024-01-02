@@ -311,6 +311,8 @@ sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 mulognormal(mean, cv) = log.(mean) - 0.5 * log.(1 .+ cv .^ 2)
 
+mean_dwelltime(x,t) = t' * x
+
 """
 mean_histogram(x)
 

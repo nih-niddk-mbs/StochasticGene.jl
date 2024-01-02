@@ -82,8 +82,8 @@ export
 # Type system and common functions
 include("common.jl")
 
-# commonly used functions
-include("utilities.jl")
+# Transition rate matrices of stochastic models defining master equations
+include("transition_rate_matrices.jl")
 
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
@@ -94,8 +94,8 @@ include("io.jl")
 # Chemical master equation solutions of stochastic models for likelihood functions in fitting algorithms
 include("chemical_master.jl")
 
-# Transition rate matrices of stochastic models defining master equations
-include("transition_rate_matrices.jl")
+# commonly used functions
+include("utilities.jl")
 
 # Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
 include("simulator.jl")
