@@ -186,7 +186,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         end
         return dwelltimes
     elseif traceinterval > 0.0
-        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
+        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
     elseif onoff && traceinterval > 0
         return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
@@ -273,7 +273,7 @@ Return array of frame times and intensities
 
 - `tracelog`: Vector if Tuples of (time,state of allele 1)
 - `interval`: Number of minutes between frames
-- `onstates`: Vector of G on states
+- `onstates`: Vector of G on states, empty for GRS models
 - `G` and `R` as defined in simulator
 
 """
@@ -350,7 +350,7 @@ function state_index(state::Array, G, R, S, allele=1)
             base = 2
             Rstates = Int.(state[G+1:end, allele] .> 0)
         end
-        return (Gstate - 1) * base^R + decimal(Rstates, base) + 1
+        return Gstate + G*decimal(Rstates, base)
     end
 end
 

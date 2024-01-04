@@ -843,11 +843,12 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     TA = make_mat_TA(components, r)
     TI = make_mat_TI(components, r)
     OFF, ON = offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
+    hs = simulator(r, transitions, G, R, S, insertstep, bins=bins)
     df = DataFrame(time=bins, OFF=OFF, ON=ON)
     if ~isempty(outfile)
         CSV.write(outfile, df)
     end
-    return df, normalized_nullspace(T)
+    return df, normalized_nullspace(T), hs[2]/sum(hs[2]),hs[3]/sum(hs[3])
 end
 
 
@@ -864,6 +865,10 @@ function plot_histogram(ratefile::String, datapath; root=".", row=2)
     # model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
     plot_histogram(data, model)
     return data, model
+end
+
+function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
+    simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
 
 
