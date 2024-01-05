@@ -96,7 +96,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         onoff = true
         if ~(eltype(onstates) <: Vector)
             bins = [bins]
-            onstates = [onstates] 
+            onstates = [onstates]
         end
         nn = length(onstates)
         tIA = Vector{Float64}[]
@@ -152,7 +152,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             println("---")
             println("m:", m)
             println(state)
-            onoff && println("before",before)
+            onoff && println("before", before)
             println(tau)
             println("t:", t)
             println(rindex)
@@ -200,13 +200,13 @@ end
 
 create simulated trace files in datafolder
 """
-function simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
+function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
     ~ispath(datafolder) && mkpath(datafolder)
     for i in 1:ntrials
-        trace=simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
         l = length(trace)
-        datapath = joinpath(datafolder,"testtrace$i.trk")
-        writedlm(datapath,[zeros(l) zeros(l) trace collect(1:l)])
+        datapath = joinpath(datafolder, "testtrace$i.trk")
+        writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
     end
 end
 function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
@@ -222,7 +222,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, insertstep,interval,onstates; totaltime=1000., reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
 
 
 """
@@ -309,17 +309,25 @@ end
 function make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
     traces = Vector[]
     for o in onstates
-        push!(traces,make_trace(tracelog, G, R, S, o, interval, par, insertstep, probfn, reporterfn))
+        push!(traces, make_trace(tracelog, G, R, S, o, interval, par, insertstep, probfn, reporterfn))
     end
     traces
 end
 
-function onstate_prob(tracelog,reporters)
-    on = reporters(state_index(tracelog[1][2])) > 0 
+function onstate_prob(tracelog, reporters, G, R, S)
+    previous = reporters[state_index(tracelog[1][2], G, R, S)] > 0
+    time = tracelog[1][1]
+    timeon = 0.0
     for t in tracelog[2:end]
-        stateindex = reporters(state_index(t[2])) > 0
-
-
+        current = reporters[state_index(t[2], G, R, S)] > 0
+        if ~previous || current
+            time = t[1]
+        elseif previous
+            timeon += t[1] - time
+        end
+        previous = current
+    end
+    return timeon / tracelog[end][1]
 end
 
 """
@@ -353,12 +361,12 @@ function state_index(state::Array, G, R, S, allele=1)
     else
         if S > 0
             base = 3
-            Rstates = state[G+1:end, allele]
+            Rstate = state[G+1:end, allele]
         else
             base = 2
-            Rstates = Int.(state[G+1:end, allele] .> 0)
+            Rstate = Int.(state[G+1:end, allele] .> 0)
         end
-        return Gstate + G*decimal(Rstates, base)
+        return Gstate + G * decimal(Rstate, base)
     end
 end
 
