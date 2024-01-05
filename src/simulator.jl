@@ -314,6 +314,14 @@ function make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, 
     traces
 end
 
+function onstate_prob(tracelog,reporters)
+    on = reporters(state_index(tracelog[1][2])) > 0 
+    for t in tracelog[2:end]
+        stateindex = reporters(state_index(t[2])) > 0
+
+
+end
+
 """
     intensity(state,onstates,G,R)
 
