@@ -1,7 +1,7 @@
 name = "StochasticGene"
 uuid = "a2598c62-e771-4eb8-9887-959a94ab00ef"
 authors = ["Carson C Chow <ccc1685@users.noreply.github.com> and contributors"]
-version = "1.0.0"
+version = "1.1.0"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
