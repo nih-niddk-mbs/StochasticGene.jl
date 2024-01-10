@@ -540,6 +540,11 @@ function compute_rhat(fits::Vector{Fit})
 end
 
 
+"""
+    compute_rhat(params::Vector{Array})
+
+
+"""
 function compute_rhat(params::Vector{Array})
     N = chainlength(params)
     M = length(params)

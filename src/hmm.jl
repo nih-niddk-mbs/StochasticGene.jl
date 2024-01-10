@@ -85,7 +85,7 @@ return log of a and p0
 """
 function make_logap(r, interval, elementsT, N)
     a, p0 = make_ap(r, interval, elementsT, N)
-    log.(max.(a, 0)), log.(p0)
+    log.(max.(a, 0)), log.(max.(p0,0))
 end
 
 """

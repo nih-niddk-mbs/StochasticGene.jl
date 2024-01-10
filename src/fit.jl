@@ -104,8 +104,15 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     end
     isempty(fittedparam) && (fittedparam = default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
-    isempty(r) && (r = priormean)
-    println(length(r))
+    if isempty(r)
+        r = priormean
+        println("No prior")
+    end
+    if isempty(hierarchical) 
+        println(r)
+    else
+        println(length(r))
+    end
     model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
