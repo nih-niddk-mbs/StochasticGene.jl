@@ -52,7 +52,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `probfn`: observation (noise) probability distribution for trace data
 - `noiseparams`: number of noise distribution parameters
 - `weightind`: noise parameter index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
-- `hierarchical`: tuple of number of hyper parameter sets (e.g. mean rates, std rates), fittedparams for individuals of hierarchical model, individual rates set to pool rate
+- `hierarchical`: tuple of number of hyper parameter sets, minimum of 2 (e.g. mean rates, std rates), fittedparams for individuals of hierarchical model, individual rates set to pool rate
 - `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `samplesteps`: int number of samples
