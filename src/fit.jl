@@ -549,7 +549,7 @@ function get_decay(gene::String, cell::String, root::String, col::Int=2)
             return get_decay(halflife_hbec()[gene])
         else
             println(gene, " has no decay time")
-            return -1.0
+            return 1.0
         end
     else
         path = get_file(root, "data/halflives", cell, "csv")
@@ -576,7 +576,7 @@ function get_decay(a, gene::String)
         return get_decay(float(a))
     else
         println(gene, " has no decay time")
-        return -1.0
+        return 1.0
     end
 end
 get_decay(a::Float64) = log(2) / a / 60.0
