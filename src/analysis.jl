@@ -120,7 +120,7 @@ function add_moments!(df::DataFrame, datapath)
     t = similar(m)
     i = 1
     for gene in df.Gene
-        _, h = read_rna(gene, df[i,:Condition], datapath)
+        _, h = read_rna(gene, df[i, :Condition], datapath)
         m[i] = mean_histogram(h)
         v[i] = var_histogram(h)
         t[i] = moment_histogram(h, 3)
@@ -283,7 +283,8 @@ function best_measure(folder::String, measure::Symbol)
                 end
             end
             # println(best_measure(dm,measure))
-            push!(df, ("Winners_$(label)_$(cond)_$(string(measure)).csv", best_measure(dm, measure)))
+            bm = best_measure(dm, measure)
+            ~isempty(bm) && push!(df, ("Winners_$(label)_$(cond)_$(string(measure)).csv", bm))
         end
     end
     return df
@@ -295,20 +296,22 @@ function best_measure(dfs::Vector, measure::Symbol)
     for d in dfs
         ngenes = push!(ngenes, length(d[:, :Gene]))
     end
-    others = setdiff(eachindex(dfs), argmax(ngenes))
-    for d in eachrow(dfs[argmax(ngenes)])
-        l = d[measure]
-        model = d[:Model]
-        for k in others
-            dc = dfs[k][dfs[k].Gene.==d.Gene, :]
-            if ~isempty(dc)
-                if dc[1, measure] < l
-                    l = dc[1, measure]
-                    model = dc[1, :Model]
+    if ~isempty(ngenes)
+        others = setdiff(eachindex(dfs), argmax(ngenes))
+        for d in eachrow(dfs[argmax(ngenes)])
+            l = d[measure]
+            model = d[:Model]
+            for k in others
+                dc = dfs[k][dfs[k].Gene.==d.Gene, :]
+                if ~isempty(dc)
+                    if dc[1, measure] < l
+                        l = dc[1, measure]
+                        model = dc[1, :Model]
+                    end
                 end
             end
+            push!(df, Dict(:Gene => d.Gene, :Winner => model, measure => l))
         end
-        push!(df, Dict(:Gene => d.Gene, :Winner => model, measure => l))
     end
     return df
 end
@@ -848,7 +851,7 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     if ~isempty(outfile)
         CSV.write(outfile, df)
     end
-    return df, normalized_nullspace(T), hs[2]/sum(hs[2]),hs[3]/sum(hs[3])
+    return df, normalized_nullspace(T), hs[2] / sum(hs[2]), hs[3] / sum(hs[3])
 end
 
 

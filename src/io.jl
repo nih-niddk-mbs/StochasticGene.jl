@@ -77,9 +77,11 @@ Write best performing model for measure
 """
 function write_winners(resultfolder, measure)
     df = best_measure(resultfolder, measure)
-    for i in eachindex(df)
-        csvfile = joinpath(resultfolder, df[i][1])
-        CSV.write(csvfile, df[i][2])
+    if ~isempty(df)
+        for i in eachindex(df)
+            csvfile = joinpath(resultfolder, df[i][1])
+            CSV.write(csvfile, df[i][2])
+        end
     end
     nothing
 end
@@ -174,9 +176,12 @@ end
 
 get_files(folder::String, resultname, label, cond, model) = get_files(get_resultfiles(folder), resultname, label, cond, model)
 
+file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& (getfield.(parts, :model) .== model)
+
 function get_files(files::Vector, resultname, label, cond, model)
     parts = fields.(files)
-    files[(getfield.(parts, :name).==resultname).&(getfield.(parts, :label).==label).&(getfield.(parts, :cond).==cond).&(getfield.(parts, :model).==model)]
+    files[file_indices(parts, resultname, label, cond, model)]
+    # files[(getfield.(parts, :name).==resultname).&(getfield.(parts, :label).==label).&(getfield.(parts, :cond).==cond).&(getfield.(parts, :model).==model)]
 end
 
 get_gene(file::String) = fields(file).gene
@@ -269,8 +274,9 @@ function assemble_all(folder::String; fittedparams=Int[])
 end
 
 function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names)
+    parts = fields.(files)
     for l in labels, c in conds, g in models
-        assemble_all(folder, files, l, c, g, names)
+        any(file_indices(parts, "rates", l, c, g) .== 1) && assemble_all(folder, files, l, c, g, names)
     end
 end
 
@@ -404,8 +410,8 @@ end
 function rlabels(model::GRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
-    for i in 1:model.pool.nsets + model.pool.nindividuals
-        append!(labels,l)
+    for i in 1:model.pool.nsets+model.pool.nindividuals
+        append!(labels, l)
     end
     reshape(labels, 1, length(labels))
 end
@@ -606,7 +612,7 @@ end
 """
 function write_pool(file::String, fits::Fit, stats, model)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1,1:model.pool.nrates], ',')  # labels
+    writedlm(f, rlabels(model)[1:1, 1:model.pool.nrates], ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)[1:model.pool.nrates]], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.pool.nrates]], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)[1:model.pool.nrates]], ',')  # median posterior
