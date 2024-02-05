@@ -70,7 +70,7 @@ will create the folder structure in the folder `scRNA` with the `data` and `resu
 
 ### Fitting data with StochasticGene
 
-To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity time traces (e.g. trk files), nascent RNA fraction (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, RNA histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
+To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity time traces (e.g. trk files), nascent RNA data (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, RNA histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
 
 Models are distringuished by the number of G states, the transition graph between G states (i.e. which G states can transitions to which other G states), number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn or "on" states (i.e. R steps or G states where the reporter is visible) must also be specified. Multiple sets of on states are allowed.
 
@@ -133,7 +133,7 @@ rhat: 1.0018023969479748
 
 ```
 
-The `datatype` argument is a String that specifies the types of data to be fit. Currently, there are six choices: 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA fraction input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
+The `datatype` argument is a String that specifies the types of data to be fit. Currently, there are six choices: 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
 
 ### Example fitting traces
 
@@ -334,7 +334,7 @@ StochasticGene assumes all rates have units of inverse minutes and the half live
 ### API:
 
 ```
-    fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=0.5, infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+    fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1,2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
 
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
@@ -348,7 +348,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell`: cell type
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
 - `interval`: frame interval for traces
-- `nascent`: fraction of alleles exhibiting nascent rna
+- `nascent`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
 - `infolder`: folder pointing to results used as initial conditions
 - `resultfolder`: folder for results
 - `inlabel`: name of input files (not including gene name but including condition)
@@ -386,7 +386,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 ```
 
 ```
-    makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", interval=1.0, nascent=0.5, infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", interval=1.0, nascent=[1,2], infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     fittedparam::Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1,2],[2,1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", nalleles=2, priormean=[],  priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
@@ -409,7 +409,7 @@ Arguments
 - `cell': cell type for halflives and allele numbers
 - `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `interval`: frame interval of intensity traces
-- `nascent`: fraction of alleles exhibiting nascent rna
+- `nascent`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
 - `infolder`: result folder used for initial parameters
 - `resultfolder`: folder for results of MCMC run
 - `label`: label of output files produced
