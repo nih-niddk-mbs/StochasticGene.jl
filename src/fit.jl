@@ -28,7 +28,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell`: cell type
 - `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
 - `interval`: frame interval for traces
-- `nascent`: vector of number of spots, and total number of cells
+- `nascent`: vector of number of spots and total number of locations
 - `infolder`: folder pointing to results used as initial conditions
 - `resultfolder`: folder for results
 - `inlabel`: name of input files (not including gene name but including condition)
@@ -91,7 +91,6 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
-    nascent[2] *= nalleles
     data = load_data(datatype, dttype, datapath, label, gene, datacond, interval, temprna, nascent)
     ~occursin("trace", lowercase(datatype)) && (noiseparams = 0)
     decayrate < 0 && (decayrate = get_decay(gene, cell, root))
