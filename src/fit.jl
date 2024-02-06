@@ -35,12 +35,13 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `label`: = name of output files
 - `fittedparam`: vector of rate indices to be fit
 - `fixedeffects`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-(only first parameter should be included in fixedeffects) 
+    (only first parameter should be included in fixedeffects) 
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
 - `insertstep`: R step where reporter is first observed
+- `Gfamily`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
 - `root`: root folder of data and Results folders
 - `maxtime`: float maximum time for entire run
 - `priormean`: Vector of prior rate means
@@ -66,20 +67,9 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `writesamples`: write out MH samples if true, default is false
 
 """
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1,2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
-    if R > 0
-        if S > 0
-            S = R
-        end
-        modelstring = "$G$R$S$insertstep"
-    else
-        modelstring = "$G"
-    end
-    if isempty(label)
-        label = datatype * "-" * cell
-        typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
-    end
-    isempty(inlabel) && (inlabel = label)
+
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1, 2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+    create_label!(label, inlabel, datacond, cell, Gfamily)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
@@ -107,7 +97,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
         r = priormean
         println("No prior")
     end
-    if isempty(hierarchical) 
+    if isempty(hierarchical)
         println(r)
     else
         println(length(r))
@@ -221,7 +211,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     else
         nsets = hierarchical[1]
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        priord = prior_distribution(rm[1:nsets*nrates], transitions, R, S, insertstep, make_fitted(fittedparam,nsets,[],nrates,0), decayrate, priorcv, noiseparams, weightind)
+        priord = prior_distribution(rm[1:nsets*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nsets, [], nrates, 0), decayrate, priorcv, noiseparams, weightind)
     end
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
@@ -236,7 +226,7 @@ end
 function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
     if isempty(hierarchical)
         if R == 0
-            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components), typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
