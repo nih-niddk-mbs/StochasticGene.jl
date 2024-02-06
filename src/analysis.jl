@@ -846,7 +846,7 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     OFF, ON = offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
     if simulate
         hs = simulator(r, transitions, G, R, S, insertstep, bins=bins)
-        df = DataFrame(time=bins, ON=ON, OFF=OFF, SimON=hs[2] / sum(hs[2]), SimOFF=hs[3] / sum(hs[3]), mRNA = hs[1])
+        df = DataFrame(time=bins, ON=ON, OFF=OFF, SimON=hs[2] / sum(hs[2]), SimOFF=hs[3] / sum(hs[3]))
     else
         df = DataFrame(time=bins, ON=ON, OFF=OFF)
     end
