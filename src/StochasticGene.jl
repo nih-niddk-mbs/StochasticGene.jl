@@ -50,6 +50,7 @@ export
     large_rhat,
     assemble_all,
     write_histograms,
+    make_ONOFFhistograms
     plot_histogram,
     plot,
     plot!,
@@ -76,6 +77,7 @@ export
     folder_path,
     get_rates,
     new_FISHfolder
+    
 
 ### Source files
 

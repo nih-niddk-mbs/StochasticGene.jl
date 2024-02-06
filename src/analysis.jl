@@ -833,28 +833,39 @@ end
 
 
 """
-plot_histogram()
-plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
+    make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")
 
-functions to plot data and model predicted histograms
-
+simulations and master equation solutions of dwell time histograms
 """
-function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")
+function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="",simulate=false)
     onstates = on_states(G, R, S, insertstep)
     components = make_components_TAI(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
     TA = make_mat_TA(components, r)
     TI = make_mat_TI(components, r)
     OFF, ON = offonPDF(bins, r, T, TA, TI, components.nT, components.elementsT, onstates)
-    hs = simulator(r, transitions, G, R, S, insertstep, bins=bins)
-    df = DataFrame(time=bins, OFF=OFF, ON=ON)
+    if simulate
+        hs = simulator(r, transitions, G, R, S, insertstep, bins=bins)
+        df = DataFrame(time=bins, ON=ON, OFF=OFF, SimON=hs[2] / sum(hs[2]), SimOFF=hs[3] / sum(hs[3]), mRNA = hs[1])
+    else
+        df = DataFrame(time=bins, ON=ON, OFF=OFF)
+    end
     if ~isempty(outfile)
         CSV.write(outfile, df)
     end
-    return df, normalized_nullspace(T), hs[2] / sum(hs[2]), hs[3] / sum(hs[3])
+    return df
 end
 
 
+"""
+    plot_histogram(ratefile::String, datapath; root=".", row=2)
+
+    plot_histogram()
+    plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
+    
+    functions to plot data and model predicted histograms
+    
+"""
 function plot_histogram(ratefile::String, datapath; root=".", row=2)
     fish = false
     r = readrow(ratefile, row)
