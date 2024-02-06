@@ -50,7 +50,7 @@ export
     large_rhat,
     assemble_all,
     write_histograms,
-    make_ONOFFhistograms
+    make_ONOFFhistograms,
     plot_histogram,
     plot,
     plot!,
