@@ -89,7 +89,7 @@ function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::St
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
 
     modelstring = create_modelstring(G, R, S, insertstep)
-    create_label!(label, inlabel, datacond, cell, Gfamily)
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     ngenes = length(genes)
     println("number of genes: ", ngenes)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
@@ -138,10 +138,10 @@ end
     create_label(label,inlabel,datacond,cell,Gfamily)
 
 """
-function create_label(label, inlabel, datacond, cell, Gfamily)
+function create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     if isempty(label)
         label = datatype * "-" * cell
-        ~isempty(Gfamily) && (label * "-" * Gfamily)
+        ~isempty(Gfamily) && (label = label * "-" * Gfamily)
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
     isempty(inlabel) && (inlabel = label)
