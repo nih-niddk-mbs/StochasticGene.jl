@@ -39,7 +39,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, if S > 0 is not R it will be set to R)
 - `insertstep`: R step where reporter is first observed
 - `Gfamily`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
 - `root`: root folder of data and Results folders
@@ -77,6 +77,10 @@ end
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, interval, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
+    if S > 0 && S ≠ R
+        println("Setting S = R")
+        S = R
+    end
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
