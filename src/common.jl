@@ -88,12 +88,18 @@ struct TraceData{traceType} <: AbstractTraceData
     gene::String
     interval::Float64
     trace::traceType
+    background::traceType
+    fraction::Float64
+    transient::Float64
 end
 struct TraceNascentData{traceType} <: AbstractTraceData
     label::String
     gene::String
     interval::Float64
     trace::traceType
+    background::traceType
+    fraction::Float64
+    transient::Float64
     nascent::Vector{Int}
 end
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
@@ -102,6 +108,9 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     interval::Float64
     trace::traceType
     nRNA::Int
+    background::traceType
+    fraction::Float64
+    transient::Float64
     histRNA::hType
 end
 
