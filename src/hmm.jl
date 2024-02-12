@@ -38,6 +38,12 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
+    for t in trace[2]
+        T = length(t)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, trace[3]/length(trace[2]) * logsumexp(l[:, T]))
+    end
     -sum(logpredictions), -logpredictions
 end
 
