@@ -808,12 +808,13 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, gene::String, cond::String="", col=3)
+function read_tracefiles(path::String, gene::String, start::Int, cond::String="", col=3)
     traces = Vector[]
     for (root, dirs, files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
-            occursin_file(gene, cond, target) && push!(traces, readfile(target, col))
+            t = readfile(target, col)
+            occursin_file(gene, cond, target) && push!(traces, t[start:end])
         end
     end
     set = sum.(traces)

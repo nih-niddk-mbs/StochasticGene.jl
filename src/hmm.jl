@@ -32,7 +32,7 @@ end
 
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
-    for t in trace
+    for t in trace[1]
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)

@@ -24,8 +24,8 @@ write swarm and fit files used on biowulf
 - `datapath=""`: path to data file or folder or array of files or folders
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `interval=1.0`: frame interval of intensity traces
-- `nascent=[1,2]`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
+- `interval=[1.0, 1.]`: vector of frame interval of intensity traces and transient time
+- `nascent=[1,2,1.]`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
 - `label::String=""`: label of output files produced

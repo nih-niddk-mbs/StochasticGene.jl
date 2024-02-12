@@ -25,8 +25,8 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `datapath=""`: path to data file or folder or array of files or folders
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `interval=1.0`: frame interval of intensity traces
-- `nascent=[1,2]`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
+- `interval=[1.0, 1.]`: vector of frame interval of intensity traces and transient time
+- `nascent=[1,2,.7]`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
 - `traceinfo=tuple()`: tuple of trace information (transient::Float64,onfraction::Float64,background::tracetype)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
@@ -158,8 +158,10 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif datatype == "trace"
-        trace = read_tracefiles(datapath, datacond)
-        return TraceData(label, gene, interval, trace)
+        trace = read_tracefiles(datapath[1], datacond,round(Int,interval[2]/interval[1]))
+        background = read_tracefiles(datapath[2], datacond,round(Int,interval[2]/interval[1]))
+        weight = (1-nascent[3])/nascent[3] * length(trace)
+        return TraceData(label, gene, interval, trace, (background,weight))
     elseif datatype == "tracenascent"
         trace = read_tracefiles(datapath, datacond)
         return TraceNascentData(label, gene, interval, trace, nascent)
