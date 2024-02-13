@@ -26,7 +26,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `interval=[1.0, 1.]`: vector of frame interval of intensity traces and transient time
-- `nascent=[1,2,.7]`: vector of number of spots, total number of locations (e.g. number of cells times number of alleles/cell), and fraction of busting traces
+- `nascent=(1,2,.7)`: tuple of number of spots, total number of locations (e.g. number of cells times number of alleles/cell), and fraction of busting traces
 - `traceinfo=tuple()`: tuple of trace information (transient::Float64,onfraction::Float64,background::tracetype)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
@@ -67,7 +67,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1, 2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=(1, 2, 0.7), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, interval, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
@@ -157,18 +157,20 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, interval, 
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
-    elseif datatype == "trace"
+    elseif occursin("trace", datatype)
         trace = read_tracefiles(datapath[1], datacond, round(Int, interval[2] / interval[1]))
         background = read_tracefiles(datapath[2], datacond, round(Int, interval[2] / interval[1]))
         weight = (1 - nascent[3]) / nascent[3] * length(trace)
-        return TraceData(label, gene, interval, (trace, background, weight))
-    elseif datatype == "tracenascent"
-        trace = read_tracefiles(datapath, datacond, round(Int, interval[2] / interval[1]))
-        return TraceNascentData(label, gene, interval, trace, nascent)
-    elseif datatype == "tracerna"
-        len, h = read_rna(gene, datacond, datapath[1])
-        traces = read_tracefiles(datapath[2], datacond, round(Int, interval[2] / interval[1]))
-        return TraceRNAData(label, gene, interval, traces, len, h)
+        if datatype == "trace"
+            return TraceData(label, gene, interval[1], (trace, background, weight))
+        elseif datatype == "tracenascent"
+            # trace = read_tracefiles(datapath, datacond, round(Int, interval[2] / interval[1]))
+            return TraceNascentData(label, gene, interval[1], (trace, background, weight), nascent)
+        elseif datatype == "tracerna"
+            len, h = read_rna(gene, datacond, datapath[1])
+            # traces = read_tracefiles(datapath[2], datacond, round(Int, interval[2] / interval[1]))
+            return TraceRNAData(label, gene, interval[1], (trace, background, weight), len, h)
+        end
     else
         throw("$datatype not included")
     end
