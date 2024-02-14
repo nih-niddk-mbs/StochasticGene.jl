@@ -27,7 +27,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `traceinfo=(1.0, 1., .65)`: 3 tuple of frame interval of intensity traces, transient (burn) time, and fraction of active traces
 - `nascent=(1, 2)`: 2 tuple of number of spots, total number of locations (e.g. number of cells times number of alleles/cell)
-- `traceinfo=tuple()`: tuple of trace information (transient::Float64,onfraction::Float64,background::tracetype)
+- `traceinfo=tuple()`: tuple of trace information (frame interval, transient::Float64,onfraction::Float64)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
 - `label::String=""`: label of output files produced
