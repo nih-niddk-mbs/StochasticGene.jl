@@ -76,7 +76,8 @@ export
     make_array,
     folder_path,
     get_rates,
-    new_FISHfolder
+    new_FISHfolder,
+    ModelArgs
     
 
 ### Source files

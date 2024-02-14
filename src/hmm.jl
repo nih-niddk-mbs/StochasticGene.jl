@@ -80,7 +80,7 @@ Qtr is the transpose of the Markov process transition rate matrix Q
 """
 function make_ap(r, interval, elementsT, N)
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(sparse(Qtr'), interval)[:,2], normalized_nullspace(Qtr)
+    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
 end
 
 make_p0(r, elementsT, N) = normalized_nullspace(make_mat(elementsT, r, N))
@@ -188,7 +188,7 @@ returns initial condition and solution at time = interval
 function kolmogorov_forward(Q, interval)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
-    solve(prob, lsoda(), save_everystep=false)
+    solve(prob, lsoda(), save_everystep=false)[:,2]
 end
 """
     fkf!(du,u::Matrix, p, t)
