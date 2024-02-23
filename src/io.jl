@@ -493,20 +493,20 @@ ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 TBW
 """
 function statlabels(model::String, conds, fittedparams)
-    label = ["Mean", "SD", "Median", "MAD"]
+    label = ["_Mean", "_SD", "_Median", "_MAD", "_CI2.5", "_CI97.5"]
     Grates = rlabels(model, conds, fittedparams)
     rates = Matrix{String}(undef, 1, 0)
-    for i in 1:4
-        rates = [rates Grates .* (label[i])]
+    for l in label
+        rates = [rates Grates .* l]
     end
     return ["Gene" rates]
 end
 
 function statlabels(labels::Matrix)
-    l = ["Mean", "SD", "Median", "MAD"]
+    label = ["_Mean", "_SD", "_Median", "_MAD", "_CI2.5", "_CI97.5"]
     rates = Matrix{String}(undef, 1, 0)
-    for i in 1:4
-        rates = [rates labels .* (l[i])]
+    for l in label
+        rates = [rates labels .* l]
     end
     return ["Gene" rates]
 end
@@ -936,7 +936,9 @@ function readstats(statfile::String)
     sd = readrow_flip(statfile, 2)
     median = readrow_flip(statfile, 3)
     mad = readrow_flip(statfile, 4)
-    [mean sd median mad]
+    credl = readrow_flip(statfile,5)
+    credh = readrow_flip(statfile,7)
+    [mean sd median mad credl credh]
 end
 
 function readmedian(statfile::String)
