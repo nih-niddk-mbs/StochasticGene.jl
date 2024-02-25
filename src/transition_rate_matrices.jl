@@ -364,6 +364,89 @@ function set_elements_G!(elements, transitions, gamma=collect(1:length(transitio
     end
 end
 
+function set_elements_RS!(elementsTfirst, elementsT, elementsTlast, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    if R > 0
+        if splicetype == "offeject"
+            S = 0
+            base = 2
+        end
+        if S == 0
+            base = 2
+        else
+            base = 3
+        end
+        for w = 1:base^R, z = 1:base^R
+            zdigits = digit_vector(z, base, R)
+            wdigits = digit_vector(w, base, R)
+            z1 = zdigits[1]
+            w1 = wdigits[1]
+            zr = zdigits[R]
+            wr = wdigits[R]
+            zbar1 = zdigits[2:R]
+            wbar1 = wdigits[2:R]
+            zbarr = zdigits[1:R-1]
+            wbarr = wdigits[1:R-1]
+            sB = 0
+            for l in 1:base-1
+                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+            end
+            if S > 0
+                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+            end
+            for i = 1:1
+                # a = i + G * (z - 1)
+                # b = i + G * (w - 1)
+                a = state_index(G, i, z)
+                b = state_index(G, i, w)
+                if abs(sB) == 1
+                    push!(elementsTlast, Element(a, b, nu[R+1], sB))
+                end
+                if S > 0 && abs(sC) == 1
+                    push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
+                end
+                if splicetype == "offeject"
+                    s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+                    if abs(s) == 1
+                        push!(elementsT, Element(a, b, eta[R-insertstep+1], s))
+                    end
+                end
+                for j = 1:R-1
+                    zbarj = zdigits[[1:j-1; j+2:R]]
+                    wbarj = wdigits[[1:j-1; j+2:R]]
+                    zbark = zdigits[[1:j-1; j+1:R]]
+                    wbark = wdigits[[1:j-1; j+1:R]]
+                    zj = zdigits[j]
+                    zj1 = zdigits[j+1]
+                    wj = wdigits[j]
+                    wj1 = wdigits[j+1]
+                    s = 0
+                    for l in 1:base-1
+                        s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+                    end
+                    if abs(s) == 1
+                        push!(elementsT, Element(a, b, nu[j+1], s))
+                    end
+                    if S > 0 && j > insertstep - 1
+                        s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
+                        if abs(s) == 1
+                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
+                        end
+                    end
+                    if splicetype == "offeject" && j > insertstep - 1
+                        s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
+                        if abs(s) == 1
+                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
+                        end
+                    end
+                end
+            end
+            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
+            if abs(s) == 1
+                push!(elementsTfirst, Element(z, w, nu[1], s))
+            end
+        end
+    end
+end
 """
     set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
