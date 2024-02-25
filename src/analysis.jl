@@ -831,29 +831,18 @@ end
 #     normalize_histogram(h)
 # end
 
-function make_ONOFFhistograms(folder::String,bins=collect(1.:200.))
+function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
     files = get_resultfiles(folder)
-    df = DataFrame[]
     for f in files
-        if occursin("rates",f)
+        if occursin("rates", f)
             parts = fields(f)
             G, R, S, insertstep = decompose_model(parts.model)
-            r = readrates(joinpath(folder,f))
-            out = replace(f,"rates"=>"histograms")
-            if G == 2
-                transitions = ([1,2],[2,1])
-            else
-                if occursin("state",parts.names)
-                    
-                elseif occursin("KP",parts.names)
-
-                end
-
-            end
-            push!(df,make_ONOFFhistograms(r,transitions, G, R, S, insertstep, bins, outfile=out))
+            r = readrates(joinpath(folder, f))
+            out = joinpath(folder,replace(f, "rates" => "histograms"))
+            transitions = get_transitions(G, parts.label)
+            make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
         end
     end
-    df
 end
 
 """
@@ -861,7 +850,7 @@ end
 
 simulations and master equation solutions of dwell time histograms
 """
-function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="",simulate=false)
+function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="", simulate=false)
     onstates = on_states(G, R, S, insertstep)
     components = make_components_TAI(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
