@@ -89,6 +89,23 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, parse(Int,G), parse(Int,R), parse(Int,S), parse(Int,insertstep), root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 end
+
+function get_transition(G,Gfamily)
+    if occursin("KP", Gfamily)
+        transitions = ([1,2],[2,1],[2,3],[3,1])
+    elseif occursin("Refract",Gfamily)
+        transitions = ([1,2],[2,1],[3,1])
+    else
+        if G == "2"
+            transitions = ([1,2],[2,1])
+        elseif G == "3"
+            transitions = ([1,2],[2,1],[2,3],[3,2])
+        else
+            throw("transition type unknown")
+        end
+    end
+    return transitions
+end
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")

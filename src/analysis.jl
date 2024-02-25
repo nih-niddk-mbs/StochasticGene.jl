@@ -831,6 +831,30 @@ end
 #     normalize_histogram(h)
 # end
 
+function make_ONOFFhistograms(folder::String,bins=collect(1.:200.))
+    files = get_resultfiles(folder)
+    df = DataFrame[]
+    for f in files
+        if occursin("rates",f)
+            parts = fields(f)
+            G, R, S, insertstep = decompose_model(parts.model)
+            r = readrates(joinpath(folder,f))
+            out = replace(f,"rates"=>"histograms")
+            if G == 2
+                transitions = ([1,2],[2,1])
+            else
+                if occursin("state",parts.names)
+                    
+                elseif occursin("KP",parts.names)
+
+                end
+
+            end
+            push!(df,make_ONOFFhistograms(r,transitions, G, R, S, insertstep, bins, outfile=out))
+        end
+    end
+    df
+end
 
 """
     make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")

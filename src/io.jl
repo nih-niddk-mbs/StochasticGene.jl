@@ -34,6 +34,16 @@ struct BurstMeasures <: Results
     quantiles::Array
 end
 
+"""
+    decompose_model(model::String)
+
+return G, R, S, insertstep given model string
+"""
+function decompose_model(model::String)
+    m = parse(Int,model)
+    d = digits(m)
+    return d[4], d[3], d[2], d[1]
+end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
 # statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
