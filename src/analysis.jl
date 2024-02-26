@@ -833,14 +833,16 @@ end
 
 function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
     files = get_resultfiles(folder)
-    for f in files
-        if occursin("rates", f)
-            parts = fields(f)
-            G, R, S, insertstep = decompose_model(parts.model)
-            r = readrates(joinpath(folder, f))
-            out = joinpath(folder,replace(f, "rates" => "histograms"))
-            transitions = get_transitions(G, parts.label)
-            make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                parts = fields(f)
+                G, R, S, insertstep = decompose_model(parts.model)
+                r = readrates(joinpath(root, f))
+                out = joinpath(root, replace(f, "rates" => "ONOFF", ".txt" => ".csv"))
+                transitions = get_transitions(G, parts.label)
+                make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
+            end
         end
     end
 end

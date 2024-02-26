@@ -1021,6 +1021,11 @@ function write_residency_G(fileout::String, filein::String, G, header)
     close(f)
 end
 
+"""
+    change_suffix(old, new, folder)
+
+TBW
+"""
 function change_suffix(old, new, folder)
     for (root, dirs, files) in walkdir(folder)
         for file in files
@@ -1032,6 +1037,23 @@ function change_suffix(old, new, folder)
     end
 end
 
+"""
+    change_pattern(old, new, folder)
+
+TBW
+"""
+function change_pattern(old, new, folder)
+    for (root, dirs, files) in walkdir(folder)
+        for file in files
+            target = joinpath(root, file)
+            
+            if occursin(old, target)
+                mv(target, replace(target, old => new))
+                println(target)
+            end
+        end
+    end
+end
 # Functions for saving and loading data and models
 
 # """
