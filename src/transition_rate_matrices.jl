@@ -364,7 +364,7 @@ function set_elements_G!(elements, transitions, gamma=collect(1:length(transitio
     end
 end
 
-function set_elements_RS!(elementsTfirst, elementsT, elementsTlast, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+function set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         if splicetype == "offeject"
             S = 0
@@ -399,15 +399,15 @@ function set_elements_RS!(elementsTfirst, elementsT, elementsTlast, R, S, insert
                 a = state_index(G, i, z)
                 b = state_index(G, i, w)
                 if abs(sB) == 1
-                    push!(elementsTlast, Element(a, b, nu[R+1], sB))
+                    push!(elementsRB, Element(a, b, nu[R+1], sB))
                 end
                 if S > 0 && abs(sC) == 1
-                    push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
+                    push!(elementsR, Element(a, b, eta[R-insertstep+1], sC))
                 end
                 if splicetype == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                     if abs(s) == 1
-                        push!(elementsT, Element(a, b, eta[R-insertstep+1], s))
+                        push!(elementsR, Element(a, b, eta[R-insertstep+1], s))
                     end
                 end
                 for j = 1:R-1
@@ -429,20 +429,20 @@ function set_elements_RS!(elementsTfirst, elementsT, elementsTlast, R, S, insert
                     if S > 0 && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                         if abs(s) == 1
-                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
+                            push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
                     if splicetype == "offeject" && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                         if abs(s) == 1
-                            push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
+                            push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
                         end
                     end
                 end
             end
             s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
             if abs(s) == 1
-                push!(elementsTfirst, Element(z, w, nu[1], s))
+                push!(elementsRG, Element(z, w, nu[1], s))
             end
         end
     end
@@ -624,6 +624,21 @@ function set_elements_T(transitions, gamma::Vector)
     elementsT = Vector{Element}(undef, 0)
     set_elements_G!(elementsT, transitions, gamma)
     elementsT
+end
+function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    if R > 0
+        elementsG = Vector{Element}(undef, 0)
+        elementsR = Vector{Element}(undef, 0)
+        elementsRG = Vector{Element}(undef, 0)
+        elementsRB = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nT = G * base^R
+        set_elements_G!(elementsG, transitions, G, indices.gamma, length(transitions))
+        set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsRG, elementsR, elementsRB, nT
+    else
+        return set_elements_G(transitions, indices.gamma), G
+    end
 end
 """
     set_elements_B(G, ejectindex)
