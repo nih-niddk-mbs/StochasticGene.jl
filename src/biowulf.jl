@@ -173,7 +173,12 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond
     f = open(sfile, "w")
     for model in models
         label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.Gfamily)
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily model.fixedeffects])
+        if isempty(model.fixedeffects)
+            fixedeffects = "1"
+        else
+            fixedeffects = model.fixedeffects
+        end
+        writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
         # writedlm(f,["julia -p" nchains juliafile model.inlabel model.label model.transitions model.G model.R model.S model.insertstep model.Gfamily])
     end
     close(f)
