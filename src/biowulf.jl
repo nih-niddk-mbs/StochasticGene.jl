@@ -5,10 +5,40 @@
 
 
 """
-    makeswarm(genes::Vector; <keyword arguments> )
+struct ModelArgs
+
+For passing model information to fit function from swarmfile (limited to numbers and strings (i.e. no vectors or tuples))
+
+#Fields
+`inlabel::String`
+`label::String`
+`G::Int`
+`R::Int`
+`S::Int`
+`insertstep::Int`
+`Gfamily::String`: type of model, e.g. "nstate", "KP", "Refract"
+`fixedeffects::String`: two numbers separated by a hyphen, e.g. "3-4", indicating parameters 3 and 4 are fixed to each other
+
+"""
+
+struct ModelArgs
+    inlabel::String
+    label::String
+    G::Int
+    R::Int
+    S::Int
+    insertstep::Int
+    Gfamily::String
+    fixedeffects::String
+end
+
+
+"""
+    makeswarm(genes::Vector{String}; <keyword arguments> )
 
 
 write swarm and fit files used on biowulf
+creates a run for each gene
 
 #Arguments
 - `genes`: vector of genes
@@ -31,7 +61,7 @@ write swarm and fit files used on biowulf
 - `label::String=""`: label of output files produced
 - `inlabel::String=""`: label of files used for initial conditions
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+- `fixedeffects=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
      (only first parameter should be included in fixedeffects)
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G::Int=2`: number of gene states
@@ -65,8 +95,8 @@ write swarm and fit files used on biowulf
 - `src=""`: path to folder containing StochasticGene.jl/src
    
 """
-function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median",
+function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
@@ -88,24 +118,23 @@ function makeswarm(genes::Vector; nchains::Int=2, nthreads::Int=1, swarmfile::St
         decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
 end
 
-struct ModelArgs
-    inlabel::String
-    label::String
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    Gfamily::String
-end
+"""
+    makeswarm(models::Vector{ModelArgs}; <keyword arguments> )
 
+creates a run for each model
+
+#Arguments
+- `models::Vector{ModelArgs}`: Vector of ModelArgs structures
+- keyword arguments are same as above
+"""
 function makeswarm(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test",
-    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     juliafile = juliafile * "_" * gene * "_" * datacond * ".jl"
     sfile = swarmfile * "_" * gene * "_" * datacond * ".swarm"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, datatype, datacond, cell, models)
     write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder,
-        fittedparam, fixedeffects, root, maxtime, priormean, nalleles, priorcv, onstates,
+        fittedparam, root, maxtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype, propcv,
         samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
 end
@@ -135,12 +164,16 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector{Stri
     close(f)
 end
 
+"""
+    write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs})
 
+
+"""
 function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs})
     f = open(sfile, "w")
     for model in models
         label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.Gfamily)
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily])
+        writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily model.fixedeffects])
         # writedlm(f,["julia -p" nchains juliafile model.inlabel model.label model.transitions model.G model.R model.S model.insertstep model.Gfamily])
     end
     close(f)
@@ -171,7 +204,7 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, cell, datac
 end
 
 function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder,
-    fittedparam, fixedeffects, root, maxtime, priormean, nalleles, priorcv, onstates,
+    fittedparam, root, maxtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
     s = '"'
     f = open(fitfile, "w")
@@ -184,7 +217,7 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell,
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
 
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $nascent, $s$infolder$s, $s$resultfolder$s, ARGS[1], ARGS[2],$fittedparam, $fixedeffects, ARGS[3], ARGS[4], ARGS[5], ARGS[6], ARGS[7], $s$root$s, $maxtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $hierarchical, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $nascent, $s$infolder$s, $s$resultfolder$s, ARGS[1], ARGS[2],$fittedparam, ARGS[8], ARGS[3], ARGS[4], ARGS[5], ARGS[6], ARGS[7], $s$root$s, $maxtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noiseparams, $weightind, $hierarchical, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples)")
     close(f)
 end
 

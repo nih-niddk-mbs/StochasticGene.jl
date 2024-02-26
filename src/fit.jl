@@ -12,6 +12,27 @@ genelength_hbec() = Dict([("Sec16A", 42960); ("SLC2A1", 33802); ("ERRFI1", 14615
 MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("RHOA", 51109); ("KPNB1", 24000); ("MYH9", 71998); ("DNAJC5", 14857); ("CANX", 4861); ("Rab7a", 83257); ("RPAP3", 38610); ("SEC16A", 5220); ("RAB7A", 83257)])
 halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
 
+"""
+    get_transitions(G, Gfamily)
+
+Create transitions tuple
+"""
+function get_transitions(G, Gfamily)
+    typeof(G) <: AbstractString && (G = parse(Int, G))
+    if G == 2
+        return ([1, 2], [2, 1])
+    elseif G == 3
+        if occursin("KP", Gfamily)
+            return ([1, 2], [2, 1], [2, 3], [3, 1])
+        elseif occursin("Refract", Gfamily)
+            return ([1, 2], [2, 1], [3, 1])
+        else
+            return ([1, 2], [2, 1], [2, 3], [3, 2])
+        end
+    else
+        throw("transition type unknown")
+    end
+end
 
 """
     fit(; <keyword arguments> )
@@ -33,8 +54,8 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `label::String=""`: label of output files produced
 - `inlabel::String=""`: label of files used for initial conditions
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-     (only first parameter should be included in fixedeffects)
+- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
+     (only first parameter should be included in fittedparam)
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G::Int=2`: number of gene states
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
@@ -67,47 +88,23 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 """
 
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 
 end
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, G, R, S, insertstep, Gfamily, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
-    # if Gfamily == "KP"
-    #     transitions = ([1, 2], [2, 1], [2, 3], [3, 1])
-    # elseif occursin("Refract", Gfamily)
-    #     transitions = ([1, 2], [2, 1], [3, 1])
-    # else
-    #     if G == "2"
-    #         transitions = ([1, 2], [2, 1])
-    #     elseif G == "3"
-    #         transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
-    #     end
-    # end
     transitions = get_transitions(G, Gfamily)
+    typeof(fixedeffects) <: AbstractString && (fixedeffects = make_fixed(fixedeffects,G,R,S,insertstep))
     println(transitions)
+    println(fixedeffects)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, parse(Int, G), parse(Int, R), parse(Int, S), parse(Int, insertstep), root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noiseparams, weightind, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples)
 end
 
-function get_transitions(G, Gfamily)
-    typeof(G) <: AbstractString && (G = parse(Int, G))
-    if G == 2
-        return ([1, 2], [2, 1])
-    elseif G == 3
-        if occursin("KP", Gfamily)
-            return ([1, 2], [2, 1], [2, 3], [3, 1])
-        elseif occursin("Refract", Gfamily)
-            return ([1, 2], [2, 1], [3, 1])
-        else
-            return ([1, 2], [2, 1], [2, 3], [3, 2])
-        end
-    else
-        throw("transition type unknown")
-    end
-end
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
+
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     println(now())
     gene = check_genename(gene, "[")
     if S > 0 && S ≠ R
@@ -128,7 +125,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noiseparams, weightind, length(data.trace), hierarchical[1])
         end
     end
-    isempty(fittedparam) && (fittedparam = default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams))
+    isempty(fittedparam) && (fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams))
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     if isempty(r)
         r = priormean
@@ -282,9 +279,23 @@ function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalle
 end
 
 """
+    default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+
+create vector of fittedparams that includes all rates except the decay time
+"""
+function default_fitted(datatype::String, transitions, R, S, insertstep, noiseparams)
+    n = num_rates(transitions, R, S, insertstep)
+    fittedparam = collect(1:n-1)
+    if occursin("trace", datatype)
+        fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
+    end
+    fittedparam
+end
+
+"""
     make_fitted(fittedparams,N)
 
-
+make fittedparams vector for hierarchical model
 """
 function make_fitted(fittedpool, npool, fittedindividual, nrates, nindividuals)
     f = copy(fittedpool)
@@ -297,6 +308,11 @@ function make_fitted(fittedpool, npool, fittedindividual, nrates, nindividuals)
     f
 end
 
+"""
+    make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
+
+make fixed effects tuple for hierarchical model
+"""
 function make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
     fixed = Vector{Int}[]
     for f in fixedpool
@@ -306,6 +322,22 @@ function make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
         push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
     end
     tuple(fixed...)
+end
+
+"""
+    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
+
+make fixedeffects tuple and fittedparams vector from fixedeffects String
+"""
+function make_fixedfitted(datatype::String,fixedeffects::String,transitions,R,S,insertstep,noiseparams)
+    fixed = parse.(Int,split(fixedeffects,"-"))
+    n = num_rates(transitions, R, S, insertstep)
+    fittedparam = collect(1:n-1)
+    deleteat!(fittedparam,fixed[2:end])
+    if occursin("trace", datatype)
+        fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
+    end
+    return tuple(fixed...), fittedparam
 end
 
 """
@@ -359,19 +391,6 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
         append!(r, rm)
     end
     r
-end
-"""
-    default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams)
-
-create vector of fittedparams that includes all rates except the decay time
-"""
-function default_fittedparams(datatype, transitions, R, S, insertstep, noiseparams)
-    n = num_rates(transitions, R, S, insertstep)
-    fittedparam = collect(1:n-1)
-    if occursin("trace", datatype)
-        fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
-    end
-    fittedparam
 end
 
 """
