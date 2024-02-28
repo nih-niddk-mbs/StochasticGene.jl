@@ -57,6 +57,13 @@ This loads Julia for use.
 ```
 Starts Julia (with a single thread). Then continue as before
 
+Note: Sometimes Julia has problems crashing on Biowulf if an update is made to StochasticGene.  The best way to deal with this is to go to your
+home directory and delete the julia directory via:
+```
+[username@biowulf ~]$ rm -r --force .julia
+```
+Then start julia and add StochasticGene again.
+
 ### Creating folder structure to run StochasticGene
 
 StochasticGene requires a specific directory or folder structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command 
@@ -358,7 +365,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G`: number of gene states
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
+- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models) (when insertstep > 1, S is actually R - insertstep + 1)
 - `insertstep`: R step where reporter is first observed
 - `root`: root folder of data and Results folders
 - `maxtime`: float maximum time for entire run
