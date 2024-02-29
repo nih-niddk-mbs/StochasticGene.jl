@@ -201,9 +201,15 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif occursin("trace", datatype)
-        trace = read_tracefiles(datapath[1], datacond, round(Int, traceinfo[2] / traceinfo[1]))
-        background = read_tracefiles(datapath[2], datacond, round(Int, traceinfo[2] / traceinfo[1]))
-        weight = (1 - traceinfo[3]) / traceinfo[3] * length(trace)
+        if typeof(datapath) <: String
+            trace = read_tracefiles(datapath, datacond, round(Int, traceinfo[2] / traceinfo[1]))
+            background = []
+            weight = 0.
+        else
+            trace = read_tracefiles(datapath[1], datacond, round(Int, traceinfo[2] / traceinfo[1]))
+            background = read_tracefiles(datapath[2], datacond, round(Int, traceinfo[2] / traceinfo[1]))
+            weight = (1 - traceinfo[3]) / traceinfo[3] * length(trace)
+        end
         if datatype == "trace"
             return TraceData(label, gene, traceinfo[1], (trace, background, weight))
         elseif datatype == "tracenascent"
@@ -275,6 +281,7 @@ end
 """
 function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
     if isempty(hierarchical)
+        checklength(r,transitions,R,S,insertstep,reporter)
         if R == 0
             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
@@ -288,6 +295,16 @@ function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalle
         fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
         return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     end
+end
+
+function checklength(r,transitions,R,S,insertstep,reporter)
+    n = num_rates(transitions, R, S, insertstep)
+    if typeof(reporter) <: HMMReporter
+        (length(r) != n + reporter.n) && throw("r has wrong length")
+    else
+        (length(r) != n) && throw("r has wrong length")
+    end
+    nothing
 end
 
 """
@@ -491,7 +508,7 @@ function check_genename(gene, p1)
 end
 
 """
-print_ll(param,data,model,message="initial ll:")
+print_ll(param,data,model,message="initial max ll:")
 
 compute and print initial loglikelihood
 """
@@ -499,7 +516,7 @@ function print_ll(param, data, model, message)
     ll, _ = loglikelihood(param, data, model)
     println(message, ll)
 end
-function print_ll(data, model, message="initial ll: ")
+function print_ll(data, model, message="initial max ll: ")
     ll, _ = loglikelihood(get_param(model), data, model)
     println(message, ll)
 end
