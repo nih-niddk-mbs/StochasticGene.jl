@@ -57,6 +57,13 @@ This loads Julia for use.
 ```
 Starts Julia (with a single thread). Then continue as before
 
+Note: Sometimes Julia has problems crashing on Biowulf if an update is made to StochasticGene.  The best way to deal with this is to go to your
+home directory and delete the julia directory via:
+```
+[username@biowulf ~]$ rm -r --force .julia
+```
+Then start julia and add StochasticGene again.
+
 ### Creating folder structure to run StochasticGene
 
 StochasticGene requires a specific directory or folder structure where data are stored and results are saved.  At the top is the `root` folder (e.g. "scRNA" or "RNAfits") with subfolders `data` and `results`. Inside `data` are two more folders  `alleles` and `halflives`,  containing allele numbers and half lives, respectively.  The command 
@@ -334,118 +341,119 @@ StochasticGene assumes all rates have units of inverse minutes and the half live
 ### API:
 
 ```
-    fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", interval=1.0, nascent=[1,2], infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
-
+    fit(; <keyword arguments> )
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
-# Arguments
-- `nchains`: number of MCMC chains
-- `datatype`: choices "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `ddtype`: Vector of dwell time types, e.g. "ON", "OFF"
-- `datapath`: path to file or folder for data, string or array of strings
-- `gene`: gene name
-- `cell`: cell type
-- `datacond`: condition, if more than one condition use vector of strings e.g. ["DMSO","AUXIN"]
-- `interval`: frame interval for traces
-- `nascent`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
-- `infolder`: folder pointing to results used as initial conditions
-- `resultfolder`: folder for results
-- `inlabel`: name of input files (not including gene name but including condition)
-- `label`: = name of output files
-- `fittedparam`: vector of rate indices,  indices of parameters to be fit (input as string of ints separated by "-")
-- `fixedeffects`: (tuple of vectors of rate indices) string indicating which rate is fixed, e.g. "eject"
-- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `G`: number of gene states
-- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
-- `insertstep`: R step where reporter is first observed
-- `root`: root folder of data and Results folders
-- `maxtime`: float maximum time for entire run
-- `priormean`: Vector of prior rate means
-- `nalleles`: number of alleles, value in alleles folder will be used if it exists
-- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
-- `onstates`: vector of sojourn or on states
-- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `splicetype`: switch used for GRS models, choices include "", "offeject", "offdecay"
-- `probfn`: observation (noise) probability distribution for trace data
-- `noiseparams`: number of noise distribution parameters
-- `weightind`: noise parameter index of the first bias weight parameter for probfn mixture distributions (e.g. Gaussian Mixture)
-- `ratetype`: which rate for initial condition, choices are "ml", "mean", "median", or "last"
-- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `samplesteps`: int number of samples
-- `warmupsteps`: int number of warmup steps
-- `annealsteps`: in number of annealing steps
-- `temp`: MCMC temperature
-- `tempanneal`: starting temperature for annealing
-- `temprna`: temperature for scRNA distribution compared to dwell time distributions (reduces mRNA cell count by 1/temprna)
-- `burst`: if true then compute burst frequency
-- `optimize`: use optimizer to compute maximum likelihood value
-- `writesamples`: write out MH samples if true, default is false
+#Arguments
+- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
+- `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `dttype=String[]`
+- `datapath=""`: path to data file or folder or array of files or folders
+- `cell::String=""': cell type for halflives and allele numbers
+- `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
+- `traceinfo=(1.0, 1., .65)`: 3 tuple of frame interval of intensity traces, transient (burn) time, and fraction of active traces
+- `nascent=(1, 2)`: 2 tuple of number of spots, total number of locations (e.g. number of cells times number of alleles/cell)
+- `traceinfo=tuple()`: tuple of trace information (frame interval, transient::Float64,onfraction::Float64)
+- `infolder::String=""`: result folder used for initial parameters
+- `resultfolder::String=test`: folder for results of MCMC run
+- `label::String=""`: label of output files produced
+- `inlabel::String=""`: label of files used for initial conditions
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
+     (only first parameter should be included in fittedparam)
+- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G::Int=2`: number of gene states
+- `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, when insertstep > 1, S is actually R - insertstep + 1)
+- `insertstep::Int=1`: R step where reporter is inserted
+- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
+- `root="."`: name of root directory for project, e.g. "scRNA"
+- `priormean=Float64[]`: mean of prior rate distribution
+- 'priorcv=10.`: coefficient of variation for the rate prior distributions, default is 10.
+- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
+- `onstates=Int[]`: vector of on or sojourn states
+- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
+- `probfn=prob_GaussianMixture`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
+- `noiseparams=5`: number of parameters of probfn
+- `weightind=5`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
+- `hierarchical=tuple()`: tuple of hierchical model parameters
+- `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
+- `samplesteps::Int=1000000`: number of MCMC sampling steps
+- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
+- `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+- `temp=1.0`: MCMC temperature
+- `tempanneal=100.`: annealing temperature
+- `temprna=1.`: reduce rna counts by temprna compared to dwell times
+- `burst=false`: if true then compute burst frequency
+- `optimize=false`: use optimizer to compute maximum likelihood value
+- `writesamples=false`: write out MH samples if true, default is false
 
 ```
 
 ```
-    makeswarm(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", interval=1.0, nascent=[1,2], infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, src="")
-    fittedparam::Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1,2],[2,1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, root=".", nalleles=2, priormean=[],  priorcv::Float64=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false,src="")
+    makeswarm(genes::Vector{String}; <keyword arguments> )
 
 
-returns swarmfile used on biowulf
+write swarm and fit files used on biowulf
+creates a run for each gene
 
-Arguments
-- `nchains`: number of MCMC chains = number of processors called by Julia, default = 2
-- 'nthreads`: number of Julia threads per processesor, default = 1
-- `swarmfile`: name of swarmfile to be executed by swarm
-- `batchsize`: number of jobs per swarmfile, default = 1000
-- `juliafile`: name of file to be called by julia in swarmfile
-- `thresholdlow`: lower threshold for halflife for genes to be fit
-- `threhsoldhigh`: upper threshold
-- `datatype`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `dttype`
-- `datapath`: path to data file or folder or array of files or folders
-- `cell': cell type for halflives and allele numbers
-- `datacond`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `interval`: frame interval of intensity traces
-- `nascent`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
-- `infolder`: result folder used for initial parameters
-- `resultfolder`: folder for results of MCMC run
-- `label`: label of output files produced
-- `inlabel`: label of files used for initial conditions
-- `fittedparam`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects`: tuple of vectors of rates that are fixed between control and treatment where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-     (each vector in tuple is a fixed rate set)
-- `transitions`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `G`: number of gene states
-- `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S`: number of splice sites (set to 0 for classic telegraph models and R for GRS models)
-- `insertstep`: R step where reporter is inserted
-- `root`: name of root directory for project, e.g. "scRNA"
-- `priormean`: mean of prior rate distribution
-- 'priorcv`: coefficient of variation for the rate prior distributions, default is 10.
-- `nalleles`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates`: vector of on or sojourn states
-- `decayrate`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `splicetype`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
-- `noiseparams`: number of parameters of probfn
-- `weightind`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
-- `ratetype`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-- `propcv`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `maxtime`: maximum wall time for run, default = 60 min
-- `samplesteps`: number of MCMC sampling steps
-- `warmupsteps`: number of MCMC warmup steps to find proposal distribution covariance
-- `annealsteps`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-- `temp`: MCMC temperature
-- `tempanneal`: annealing temperature
-- `temprna`: reduce rna counts by temprna compared to dwell times
-- `burst`: if true then compute burst frequency
-- `optimize`: use optimizer to compute maximum likelihood value
-- `writesamples`: write out MH samples if true, default is false
-- `src`: path to folder containing StochasticGene.jl/src
-   
+#Arguments
+- `genes`: vector of genes
+- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
+- 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
+- `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
+- `batchsize=1000`: number of jobs per swarmfile, default = 1000
+- `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
+- `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
+- `threhsoldhigh::=Inf`: upper threshold
+- `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
+- `dttype=String[]`
+- `datapath=""`: path to data file or folder or array of files or folders
+- `cell::String=""': cell type for halflives and allele numbers
+- `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
+- `traceinfo=(1., 1., .65)`: vector of frame traceinfo of intensity traces and transient time
+- `nascent=(1,2,1.)`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
+- `infolder::String=""`: result folder used for initial parameters
+- `resultfolder::String=test`: folder for results of MCMC run
+- `label::String=""`: label of output files produced
+- `inlabel::String=""`: label of files used for initial conditions
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+- `fixedeffects=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
+     (only first parameter should be included in fixedeffects)
+- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
+- `G::Int=2`: number of gene states
+- `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, when insertstep > 1, S is R - insertstep + 1))
+- `insertstep::Int=1`: R step where reporter is inserted
+- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
+- `root="."`: name of root directory for project, e.g. "scRNA"
+- `priormean=Float64[]`: mean of prior rate distribution
+- 'priorcv=10.`: coefficient of variation for the rate prior distributions, default is 10.
+- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
+- `onstates=Int[]`: vector of on or sojourn states
+- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
+- `probfn=prob_GaussianMixture`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
+- `noiseparams=5`: number of parameters of probfn
+- `weightind=5`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
+- `hierarchical=tuple()`: tuple of hierchical model parameters
+- `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
+- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
+- `samplesteps::Int=1000000`: number of MCMC sampling steps
+- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
+- `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+- `temp=1.0`: MCMC temperature
+- `tempanneal=100.`: annealing temperature
+- `temprna=1.`: reduce rna counts by temprna compared to dwell times
+- `burst=false`: if true then compute burst frequency
+- `optimize=false`: use optimizer to compute maximum likelihood value
+- `writesamples=false`: write out MH samples if true, default is false
+- `src=""`: path to folder containing StochasticGene.jl/src
 ```
 
 
