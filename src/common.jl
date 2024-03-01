@@ -642,9 +642,9 @@ function num_rates(transitions, R, S, insertstep)
         if S == 0
             insertstep = 1
         else
-            S = R
+            S = R - insertstep + 1
         end
-        return length(transitions) + 1 + R + S + 1 - insertstep + 1
+        return length(transitions) + 1 + R + S + 1
     else
         return length(transitions) + 2
     end

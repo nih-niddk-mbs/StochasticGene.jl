@@ -45,7 +45,7 @@ function trace_model(r::Vector, transitions::Tuple, G, R, S, insertstep, fittedp
     d = trace_prior(priormean, priorcv, fittedparam, num_rates(transitions, R, S, insertstep)+weightind, priorprob)
     method = 1
     if S > 0
-        S = R
+        S = R - insertstep + 1
     end
     if genetrap
         #components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])

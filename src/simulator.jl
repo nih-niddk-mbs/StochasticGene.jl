@@ -85,7 +85,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         throw("insertstep>R")
     end
     if S > 0
-        S = R
+        S = R - insertstep + 1
     end
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
@@ -411,17 +411,15 @@ return structure of ranges for each type of transition
 """
 function set_reactionindices(Gtransitions, R, S, insertstep)
     if S > 0
-        S = R
-    else
-        insertstep = 1
+        S = R - insertstep + 1
     end
     nG = length(Gtransitions)
     g = 1:nG
-    i = nG+1:nG+Int(R > 0)
-    r = nG+2:nG+R
-    e = nG+R+1:nG+R+1
-    s = nG+1+R+1:nG+1+R+S-insertstep+1
-    d = nG + 1 + R + S + 1 - insertstep + 1
+    i = nG + 1 : nG + Int(R > 0)
+    r = nG + 2 : nG + R
+    e = nG + R + 1 : nG + R + 1
+    s = nG + 1 + R + 1 : nG + 1 + R + S
+    d = nG + 1 + R + S + 1
     ReactionIndices(g, i, r, e, s, d)
 end
 """

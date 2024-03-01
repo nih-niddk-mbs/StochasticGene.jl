@@ -59,7 +59,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G::Int=2`: number of gene states
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, when insertstep > 1, S is actually R - insertstep + 1)
+- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep::Int=1`: R step where reporter is inserted
 - `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -121,7 +121,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     gene = check_genename(gene, "[")
     if S > 0 && S ≠ R
         println("Setting S = R")
-        S = R
+        S = R - insertstep + 1
     end
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
@@ -402,7 +402,7 @@ end
 """
 function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noiseparams, weightind)
     if S > 0
-        S = R
+        S = R - insertstep + 1
     end
     ntransitions = length(transitions)
     nrates = num_rates(transitions, R, S, insertstep)
