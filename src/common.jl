@@ -580,7 +580,17 @@ function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
-
+function get_rates(fits,stats,model,ratetype)
+    if ratetype == "ml"
+        return get_rates(fits.parml,model)
+    elseif ratetype == "median"
+        return get_rates(stats.medparam,model,false)
+    elseif ratetype == "mean"
+        return get_rates(stats.meanparam,model,false)
+    else
+        println("ratetype unknown")
+    end
+end
 
 """
     fixed_rates(r, fixedeffects)

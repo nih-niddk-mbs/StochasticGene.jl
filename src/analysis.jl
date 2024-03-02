@@ -871,6 +871,23 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     return df
 end
 
+"""
+    plot_predictions(fits, stats, data, model,ratetype="median")
+
+TBW
+"""
+function plot_predictions(fits, stats, data, model,ratetype="median")
+    r = get_rates(fits,stats,model,ratetype)
+    plot_predictions(r,data,model)
+end
+
+function plot_predictions(r,data::TraceRNAData,model::AbstractGRSMmodel)
+    plt1=scatter(data.trace[1][1])
+    plt2=scatter(data.histRNA)
+    plt=plot(plt1,plt2,layout=(2,1),legend=false)
+    display(plt)
+
+end
 
 """
     plot_histogram(ratefile::String, datapath; root=".", row=2)
@@ -921,6 +938,7 @@ function plot_histogram(gene::String, cell::String, G::String, cond::String, lab
     m = plot_histogram(data, model)
     return m, data, model
 end
+
 
 function plot_histogram(data::AbstractRNAData{Array{Array,1}}, model)
     h = likelihoodarray(model.rates, data, model)

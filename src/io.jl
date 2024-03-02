@@ -40,7 +40,7 @@ end
 return G, R, S, insertstep given model string
 """
 function decompose_model(model::String)
-    m = parse(Int,model)
+    m = parse(Int, model)
     d = digits(m)
     return d[4], d[3], d[2], d[1]
 end
@@ -401,7 +401,7 @@ function rlabels_GRSM(model)
         push!(labels, "Rshift$i")
     end
     push!(labels, "Eject")
-    for i in 1:model.S-model.insertstep+1
+    for i in 1:model.S
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
@@ -414,7 +414,7 @@ function rlabels_GRSM(model)
             push!(labels, "bias$i")
         end
     end
-    reshape(labels, 1, length(labels))
+    reshape(labels, 1, :)
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
@@ -423,7 +423,7 @@ function rlabels(model::GRSMhierarchicalmodel)
     for i in 1:model.pool.nsets+model.pool.nindividuals
         append!(labels, l)
     end
-    reshape(labels, 1, length(labels))
+    reshape(labels, 1, :)
 end
 
 
@@ -448,7 +448,7 @@ function rlabels(model::AbstractGMmodel)
             push!(labels, "bias$i")
         end
     end
-    reshape(labels, 1, length(labels))
+    reshape(labels, 1, :)
 end
 
 function rlabels(model::String)
@@ -644,7 +644,8 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
     close(f)
 end
 """
-write_param_stats(stats,waic,data,model)
+    write_param_stats(file, stats::Stats, model)
+
 
 """
 function write_param_stats(file, stats::Stats, model)
@@ -820,15 +821,19 @@ read in trace files
 """
 function read_tracefiles(path::String, gene::String, start::Int, cond::String="", col=3)
     traces = Vector[]
-    for (root, dirs, files) in walkdir(path)
-        for file in files
-            target = joinpath(root, file)
-            t = readfile(target, col)
-            occursin_file(gene, cond, target) && push!(traces, t[start:end])
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            for file in files
+                target = joinpath(root, file)
+                t = readfile(target, col)
+                occursin_file(gene, cond, target) && push!(traces, t[start:end])
+            end
         end
+        set = sum.(traces)
+        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
-    set = sum.(traces)
-    traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
 end
 
 
@@ -946,8 +951,8 @@ function readstats(statfile::String)
     sd = readrow_flip(statfile, 2)
     median = readrow_flip(statfile, 3)
     mad = readrow_flip(statfile, 4)
-    credl = readrow_flip(statfile,5)
-    credh = readrow_flip(statfile,7)
+    credl = readrow_flip(statfile, 5)
+    credh = readrow_flip(statfile, 7)
     [mean sd median mad credl credh]
 end
 
@@ -1046,7 +1051,7 @@ function change_pattern(old, new, folder)
     for (root, dirs, files) in walkdir(folder)
         for file in files
             target = joinpath(root, file)
-            
+
             if occursin(old, target)
                 mv(target, replace(target, old => new))
                 println(target)
