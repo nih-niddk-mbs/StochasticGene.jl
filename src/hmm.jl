@@ -476,7 +476,7 @@ TBW
 """
 function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
     ts = Vector{Int}[]
-    for t in data.trace
+    for t in data.trace[1]
         push!(ts, predicted_states(t, data.interval, model))
     end
     ts

@@ -876,15 +876,28 @@ end
 
 TBW
 """
-function plot_predictions(fits, stats, data, model,ratetype="median")
-    r = get_rates(fits,stats,model,ratetype)
-    plot_predictions(r,data,model)
+function plot_predictions(fits, stats, data, model, ratetype="median")
+    r = get_rates(fits, stats, model, ratetype)
+    plot_predictions(r, data, model)
 end
 
-function plot_predictions(r,data::TraceRNAData,model::AbstractGRSMmodel)
-    plt1=scatter(data.trace[1][1])
-    plt2=scatter(data.histRNA)
-    plt=plot(plt1,plt2,layout=(2,1),legend=false)
+function plot_predictions(r, data::TraceRNAData, model::AbstractGRSMmodel)
+
+    tp, ts = predicted_trace(data,model)
+    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+ 
+
+    plt1 = scatter(data.trace[1][1])
+    plt1 = plot!(tp[1])
+    plt2 = scatter(data.trace[1][10])
+    plt2 = plot!(tp[10])
+    plt3 = scatter(data.trace[1][20])
+    plt3 = plot!(tp[20])
+    plt4 = scatter(data.histRNA/data.nRNA)
+    plt4 = plot!(hist)
+
+    plt = plot(plt1, plt2, plt3, plt4, layout=(2, 2), legend=false)
     display(plt)
 
 end
