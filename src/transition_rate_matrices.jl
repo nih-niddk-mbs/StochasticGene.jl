@@ -29,7 +29,6 @@ struct Element
     pm::Int
 end
 
-
 """
 	struct MComponents
 
@@ -62,9 +61,17 @@ struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
+struct T2Components <: AbstractTComponents
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsR::Vector
+    elementsRG::Vector
+    elementsRB::Vector
+end
 
 """
-	struct {elementType}
+struct TAIComponents{elementType} <: AbstractTComponents
 
 fields:
 nT, elementsT, elementsTA, elementsTI
@@ -77,7 +84,7 @@ struct TAIComponents{elementType} <: AbstractTComponents
     elementsTI::Vector{elementType}
 end
 """
-	struct TDComponents
+struct TDComponents <: AbstractTComponents
 
 fields:
 nT, elementsT, elementsTD:: Vector{Vector{Element}}
@@ -235,9 +242,6 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
     make_components_TAI(elementsT, nT, onstates)
 end
 
-
-
-
 """
     state_index(G::Int,i,z)
 
@@ -245,11 +249,11 @@ return state index for state (i,z)
 """
 state_index(G::Int, i, z) = i + G * (z - 1)
 
-function on_states(onstates,G,R,S,insertstep)
+function on_states(onstates, G, R, S, insertstep)
     if isempty(onstates)
         return on_states(G, R, S, insertstep)
     else
-        return on_states(onstates,G,R,S)
+        return on_states(onstates, G, R, S)
     end
 end
 
@@ -278,7 +282,7 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     end
 end
 
-function on_states(onstates::Vector,G,R,S)
+function on_states(onstates::Vector, G, R, S)
     base = S > 0 ? 3 : 2
     o = Int[]
     for i in 1:G, z in 1:base^R
@@ -350,12 +354,12 @@ set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1],
 -`elements`: Vector of Element structures
 -`transitions`: tupe of G state transitions
 """
-function set_elements_G!(elements, transitions, G, gamma, nT)
+function set_elements_G!(elements, transitions, G::Int, gamma, nT)
     for j = 0:G:nT-1
         set_elements_G!(elements, transitions, gamma, j)
     end
 end
-function set_elements_G!(elements, transitions, gamma=collect(1:length(transitions)), j=0)
+function set_elements_G!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
         push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
@@ -364,7 +368,7 @@ function set_elements_G!(elements, transitions, gamma=collect(1:length(transitio
     end
 end
 
-function set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+function set_elements_RS!(elementsRG, elementsR, elementsRM, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         if splicetype == "offeject"
             S = 0
@@ -396,10 +400,10 @@ function set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, n
             for i = 1:1
                 # a = i + G * (z - 1)
                 # b = i + G * (w - 1)
-                a = state_index(G, i, z)
-                b = state_index(G, i, w)
+                a = state_index(1, i, z)
+                b = state_index(1, i, w)
                 if abs(sB) == 1
-                    push!(elementsRB, Element(a, b, nu[R+1], sB))
+                    push!(elementsRM, Element(a, b, nu[R+1], sB))
                 end
                 if S > 0 && abs(sC) == 1
                     push!(elementsR, Element(a, b, eta[R-insertstep+1], sC))
@@ -424,7 +428,7 @@ function set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, n
                         s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
                     end
                     if abs(s) == 1
-                        push!(elementsT, Element(a, b, nu[j+1], s))
+                        push!(elementsR, Element(a, b, nu[j+1], s))
                     end
                     if S > 0 && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
@@ -625,21 +629,7 @@ function set_elements_T(transitions, gamma::Vector)
     set_elements_G!(elementsT, transitions, gamma)
     elementsT
 end
-function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    if R > 0
-        elementsG = Vector{Element}(undef, 0)
-        elementsR = Vector{Element}(undef, 0)
-        elementsRG = Vector{Element}(undef, 0)
-        elementsRB = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nT = G * base^R
-        set_elements_G!(elementsG, transitions, G, indices.gamma, length(transitions))
-        set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsRG, elementsR, elementsRB, nT
-    else
-        return set_elements_G(transitions, indices.gamma), G
-    end
-end
+
 """
     set_elements_B(G, ejectindex)
 
@@ -731,6 +721,13 @@ function make_mat_M(components::MComponents, rates::Vector)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
 
+function make_mat_M2(components::MComponents, rates::Vector)
+    mcomponents = make_components_M(transitions, G, R, nhist, decay, splicetype)
+    T = make_mat_T2(components.elementsT, rates, components.nT)
+    B = make_mat_B(components.elementsB, rates, components.nT)
+    make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
+end
+
 """
 make_T_mat
 
@@ -745,3 +742,62 @@ make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, 
 make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
 
 make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
+
+function make_mat_GR(components, rates)
+    nG = components.nG
+    nR = components.nR
+    G = make_mat(components.elementsG, rates, nG)
+    R = make_mat(components.elementsR, rates, nR)
+    RB = make_mat(components.elementsRB, rates, nR)
+    G,R,RB
+end
+
+function make_mat_T2(components, rates)
+    nG = components.nG
+    G = make_mat(components.elementsG, rates, nG)
+    nR = components.nR
+    GR = spzeros(nG, nG)
+    GR[nG, nG] = 1.0
+    R = make_mat(components.elementsR, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    RB = make_mat(components.elementsRB, rates, nR)
+    T = kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron((R + RB), sparse(I, nG, nG))
+    return T
+end
+
+function make_mat_B()
+    kron(RB,G)
+end
+
+
+function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    if R > 0
+        elementsG = Vector{Element}(undef, 0)
+        elementsR = Vector{Element}(undef, 0)
+        elementsRG = Vector{Element}(undef, 0)
+        elementsRB = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_G!(elementsG, transitions)
+        set_elements_RS!(elementsRG, elementsR, elementsRB, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsRG, elementsR, elementsRB, nR
+    else
+        return set_elements_G(transitions, indices.gamma), G
+    end
+end
+
+function make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRG, elementsR, elementsRB, nR = set_elements_T2(transitions, G, R, S, insertstep, indices, "")
+    T2Components(G, nR, elementsG, elementsR, elementsRG, elementsRB)
+end
+
+function test_mat(r, transitions, G, R, S, insertstep)
+    components = make_components_T(transitions, G, R, S, insertstep, "")
+    make_mat_T(components, r)
+end
+
+function test_mat_2(r, transitions, G, R, S, insertstep)
+    components = make_components_T2(transitions, G, R, S, insertstep, "")
+    make_mat_T2(components, r)
+end

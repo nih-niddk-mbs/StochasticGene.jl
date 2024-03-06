@@ -10,7 +10,8 @@ using Distributed
 using LinearAlgebra
 using Plots
 using SparseArrays
-using DifferentialEquations
+# using DifferentialEquations
+using OrdinaryDiffEq
 using LSODA
 using DataFrames
 using FFTW

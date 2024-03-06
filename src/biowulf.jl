@@ -120,12 +120,16 @@ end
 
 
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector{String})
+function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector{String},project="")
     f = open(sfile, "w")
     for gene in genes
         gene = check_genename(gene, "(")
         writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
-        # writedlm(f,["julia -p" nchains juliafile nchains gene cell cond G maxtime infolder resultfolder datapath fish inlabel label nsets runcycle transient fittedparam fixedeffects])
+        if isempty(project)
+            writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
+        else
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile gene])
+        end
     end
     close(f)
 end
@@ -135,7 +139,7 @@ end
 
 
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs})
+function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs},project="")
     f = open(sfile, "w")
     for model in models
         label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.Gfamily)
@@ -144,8 +148,11 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond
         else
             fixedeffects = model.fixedeffects
         end
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
-        # writedlm(f,["julia -p" nchains juliafile model.inlabel model.label model.transitions model.G model.R model.S model.insertstep model.Gfamily])
+        if isempty(project)
+            writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
+        else
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
+        end
     end
     close(f)
 end
