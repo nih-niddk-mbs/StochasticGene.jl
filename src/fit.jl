@@ -25,9 +25,17 @@ function get_transitions(G, Gfamily)
         if occursin("KP", Gfamily)
             return ([1, 2], [2, 1], [2, 3], [3, 1])
         elseif occursin("Refract", Gfamily)
-            return ([1, 2], [2, 1], [3, 1])
+            return ([1, 2], [2, 3], [3, 1])
         else
             return ([1, 2], [2, 1], [2, 3], [3, 2])
+        end
+    elseif G == 4
+        if occursin("KP", Gfamily)
+            return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 2])
+        elseif occursin("Refract", Gfamily)
+            return ([1, 2], [2, 3], [3, 4], [4, 1])
+        else
+            return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 3])
         end
     else
         throw("transition type unknown")
@@ -102,7 +110,7 @@ TBW
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond::String, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::String, G::String, R::String, S::String, insertstep::String, Gfamily, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false)
     transitions = get_transitions(G, Gfamily)
-    fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int,R), parse(Int,S), parse(Int,insertstep), noiseparams)
+    fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), noiseparams)
     println(transitions)
     println(fixedeffects)
     println(fittedparam)
@@ -204,7 +212,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         if typeof(datapath) <: String
             trace = read_tracefiles(datapath, datacond, round(Int, traceinfo[2] / traceinfo[1]))
             background = Vector[]
-            weight = 0.
+            weight = 0.0
         else
             trace = read_tracefiles(datapath[1], datacond, round(Int, traceinfo[2] / traceinfo[1]))
             background = read_tracefiles(datapath[2], datacond, round(Int, traceinfo[2] / traceinfo[1]))
@@ -283,7 +291,7 @@ end
 """
 function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
     if isempty(hierarchical)
-        checklength(r,transitions,R,S,insertstep,reporter)
+        checklength(r, transitions, R, S, insertstep, reporter)
         if R == 0
             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
@@ -299,7 +307,7 @@ function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalle
     end
 end
 
-function checklength(r,transitions,R,S,insertstep,reporter)
+function checklength(r, transitions, R, S, insertstep, reporter)
     n = num_rates(transitions, R, S, insertstep)
     if typeof(reporter) <: HMMReporter
         (length(r) != n + reporter.n) && throw("r has wrong length")

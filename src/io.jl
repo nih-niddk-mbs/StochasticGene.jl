@@ -819,7 +819,7 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, gene::String, start::Int, cond::String="", col=3)
+function read_tracefiles(path::String, cond1::String, start::Int, cond2::String="", col=3)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -828,7 +828,7 @@ function read_tracefiles(path::String, gene::String, start::Int, cond::String=""
             for file in files
                 target = joinpath(root, file)
                 t = readfile(target, col)
-                occursin_file(gene, cond, target) && push!(traces, t[start:end])
+                occursin_file(cond1, cond2, target) && push!(traces, t[start:end])
             end
         end
         set = sum.(traces)
@@ -836,6 +836,20 @@ function read_tracefiles(path::String, gene::String, start::Int, cond::String=""
     end
 end
 
+"""
+    fix_tracefiles(path::String)
+
+TBW
+"""
+function fix_tracefiles(path::String)
+    for (root, dirs, files) in walkdir(path)
+        for file in files
+            target = joinpath(root, file)
+            t = readdlm(target,header=true)
+            writedlm(target,[t[1] t[1][:,2]])
+        end
+    end
+end
 
 """
     readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
@@ -1051,7 +1065,6 @@ function change_pattern(old, new, folder)
     for (root, dirs, files) in walkdir(folder)
         for file in files
             target = joinpath(root, file)
-
             if occursin(old, target)
                 mv(target, replace(target, old => new))
                 println(target)
