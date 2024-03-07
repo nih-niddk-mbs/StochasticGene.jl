@@ -12,6 +12,7 @@ using Plots
 using SparseArrays
 # using DifferentialEquations
 using OrdinaryDiffEq
+# using DiffEqBase
 using LSODA
 using DataFrames
 using FFTW
