@@ -185,12 +185,10 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval)
+function kolmogorov_forward(Q, interval, method = Tsit5())
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
-    # solve(prob, Tsit5(), save_everystep=false)[:,2]
-    solve(prob, AutoTsit5(Rosenbrock23()), save_everystep=false)[:,2]
-    
+    solve(prob, method, save_everystep=false)[:,2]
 end
 """
     fkf!(du,u::Matrix, p, t)
