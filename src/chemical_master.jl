@@ -180,10 +180,10 @@ time_evolve_diff(t,M::Matrix,P0)
 
 Solve master equation problem using DifferentialEquations.jl
 """
-function time_evolve_diff(t, Q::SparseMatrixCSC, P0)
+function time_evolve_diff(t, Q::SparseMatrixCSC, P0, method=Tsit5())
     tspan = (t[1], t[end])
     prob = ODEProblem(fevolve!, P0, tspan, Q)
-    sol = solve(prob, lsoda(), saveat=t)
+    sol = solve(prob, method, saveat=t)
     return sol'
 end
 
