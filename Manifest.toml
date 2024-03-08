@@ -2,7 +2,7 @@
 
 julia_version = "1.9.3"
 manifest_format = "2.0"
-project_hash = "405d91f2098433f65d96567dd962890658bcf729"
+project_hash = "04c44c455c2434f7000e7627a067aa9dfa605245"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "41c37aa88889c171f1300ceac1313c06e891d245"
@@ -728,18 +728,6 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "d986ce2d884d49126836ea94ed5bfb0f12679713"
 uuid = "1d63c593-3942-5779-bab2-d838dc0a180e"
 version = "15.0.7+0"
-
-[[deps.LSODA]]
-deps = ["Compat", "DiffEqBase", "LSODA_jll", "LinearAlgebra", "Parameters", "Printf", "SciMLBase"]
-git-tree-sha1 = "49c00ced68a8033b30fb1009b8dea7871aa9e928"
-uuid = "7f56f5a3-f504-529b-bc02-0b1fe5e64312"
-version = "0.7.5"
-
-[[deps.LSODA_jll]]
-deps = ["Artifacts", "JLLWrappers", "Libdl"]
-git-tree-sha1 = "3c5277e990a9026f31a35ca6c4acddc8a706a38c"
-uuid = "aae0fff6-70f8-51e1-979a-8150c7cc74bd"
-version = "0.1.2+0"
 
 [[deps.LZO_jll]]
 deps = ["Artifacts", "JLLWrappers", "Libdl", "Pkg"]
