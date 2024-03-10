@@ -814,12 +814,18 @@ function read_dwelltimes(datapath)
     bins, DT
 end
 
+function read_tracefiles(path,cond1,traceinfo::Tuple,cond2="",col=3)
+    start = max(round(Int,traceinfo[2]/traceinfo[1]),1)
+    stop = traceinfo[3] < 0 ? -1 : max(round(Int,traceinfo[3]/traceinfo[1]),1)
+    read_tracefiles(path,cond1,start,stop,cond2,col)
+end
+
 """
-    read_tracefiles(path::String, gene::String, cond::String="", col=3)
+    read_tracefiles(path::String, cond1::String, start::Int, cond2::String="", col=3)
 
 read in trace files
 """
-function read_tracefiles(path::String, cond1::String, start::Int, cond2::String="", col=3)
+function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, cond2::String="", col=3)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -828,7 +834,11 @@ function read_tracefiles(path::String, cond1::String, start::Int, cond2::String=
             for file in files
                 target = joinpath(root, file)
                 t = readfile(target, col)
-                occursin_file(cond1, cond2, target) && push!(traces, t[start:end])
+                if stop < 0
+                    occursin_file(cond1, cond2, target) && push!(traces, t[start:end])
+                else
+                    occursin_file(cond1, cond2, target) && push!(traces, t[start:stop])
+                end
             end
         end
         set = sum.(traces)

@@ -872,33 +872,43 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
 end
 
 """
-    plot_predictions(fits, stats, data, model,ratetype="median")
+    plot_traces(fits, stats, data, model, ratetype="median")
 
-TBW
+
 """
-function plot_predictions(fits, stats, data, model, ratetype="median")
+function plot_traces(fits, stats, data, model, ratetype="median")
     r = get_rates(fits, stats, model, ratetype)
-    plot_predictions(r, data, model)
+    plot_traces(r, data, model)
 end
 
-function plot_predictions(r, data::TraceRNAData, model::AbstractGRSMmodel)
+function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
 
     tp, ts = predicted_trace(data,model)
     M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+
+    # plt = Plots.Plot[]
+    # for t in data.trace[1]
+    #     push!(plt, plot(collect(1:length(t)),t))
+    # end
+    # push!(plt, scatter(collect(1:length(data.nRNA),data.histRNA / data.nRNA))
+    # push!(plt, plot(hist))
+    # plt1 = scatter(data.trace[1][1])
+    # plt1 = plot!(tp[1])
+    # plt2 = scatter(data.trace[1][10])
+    # plt2 = plot!(tp[10])
+    # plt3 = scatter(data.trace[1][20])
+    # plt3 = plot!(tp[20])
+    # plt4 = scatter(data.histRNA/data.nRNA)
+    # plt4 = plot!(hist)
  
+    x = collect(1:length(tp[2]))
+    plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
+    display(plt2)
 
-    plt1 = scatter(data.trace[1][1])
-    plt1 = plot!(tp[1])
-    plt2 = scatter(data.trace[1][10])
-    plt2 = plot!(tp[10])
-    plt3 = scatter(data.trace[1][20])
-    plt3 = plot!(tp[20])
-    plt4 = scatter(data.histRNA/data.nRNA)
-    plt4 = plot!(hist)
+end
 
-    plt = plot(plt1, plt2, plt3, plt4, layout=(2, 2), legend=false)
-    display(plt)
+function write_traces(fits)
 
 end
 
