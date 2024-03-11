@@ -50,7 +50,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 #Arguments
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `dttype=String[]`
+- `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `datapath=""`: path to data file or folder or array of files or folders
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
@@ -73,7 +73,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `priormean=Float64[]`: mean of prior rate distribution
 - 'priorcv=10.`: coefficient of variation for the rate prior distributions, default is 10.
 - `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates=Int[]`: vector of on or sojourn states
+- `onstates=Int[]`: vector of on or sojourn states, e.g. [[2,3],[]], use empty vector for R states, do not use [] for R=0 models
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_GaussianMixture`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
