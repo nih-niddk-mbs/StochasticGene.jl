@@ -872,6 +872,42 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
 end
 
 """
+    make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
+
+
+"""
+function make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
+    data = load_data("trace", "", datapath, label, "", datacond, traceinfo, 1.0, 0)
+    model = load_model(data, r, r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
+    tp, ts = predicted_trace(data, model)
+    if ~isempty(outfile)
+        CSV.write(outfile, tp)
+    end
+    return tp, ts
+end
+
+"""
+    make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
+
+"""
+function make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
+    files = get_resultfiles(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                parts = fields(f)
+                G, R, S, insertstep = decompose_model(parts.model)
+                r = readrates(joinpath(root, f))
+                out = joinpath(root, replace(f, "rates" => "trace", ".txt" => ".csv"))
+                transitions = get_transitions(G, parts.label)
+                make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
+            end
+        end
+    end
+end
+
+
+"""
     plot_traces(fits, stats, data, model, ratetype="median")
 
 
@@ -883,7 +919,7 @@ end
 
 function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
 
-    tp, ts = predicted_trace(data,model)
+    tp, ts = predicted_trace(data, model)
     M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
 
@@ -901,14 +937,10 @@ function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
     # plt3 = plot!(tp[20])
     # plt4 = scatter(data.histRNA/data.nRNA)
     # plt4 = plot!(hist)
- 
+
     x = collect(1:length(tp[2]))
     plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
     display(plt2)
-
-end
-
-function write_traces(fits)
 
 end
 

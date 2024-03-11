@@ -187,7 +187,6 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     return fits, stats, measures, data, model, options
 end
 
-
 """
     load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
 
