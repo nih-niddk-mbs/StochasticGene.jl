@@ -877,12 +877,15 @@ end
 
 """
 function make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
-    data = load_data("trace", "", datapath, label, "", datacond, traceinfo, 1.0, 0)
-    model = load_model(data, r, r, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noiseparams, weightind, hierarchical)
+    data = load_data("trace", "", datapath, "", "", datacond, traceinfo, 1.0, 0)
+    model = load_model(data, r, r, [], tuple(), transitions, G, R, S, insertstep, 1, 1., [], 1., 1., splicetype, probfn, noiseparams, weightind, tuple())
     tp, ts = predicted_trace(data, model)
+    l = maximum(length.(tp))
     if ~isempty(outfile)
-        CSV.write(outfile, tp)
+        df = DataFrame(["trace$i"=>[tp[i]; fill(missing,l-length(tp[i]))] for i in eachindex(tp)])
+        CSV.write(outfile, df)
     end
+
     return tp, ts
 end
 
@@ -890,15 +893,17 @@ end
     make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
 
 """
-function make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
+function make_traces(folder,datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
+        println(files)
         for f in files
+            println(f)
             if occursin("rates", f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f))
-                out = joinpath(root, replace(f, "rates" => "trace", ".txt" => ".csv"))
+                out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
                 make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
             end
