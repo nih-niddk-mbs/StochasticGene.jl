@@ -214,7 +214,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         else
             trace = read_tracefiles(datapath[1], datacond, traceinfo)
             background = read_tracefiles(datapath[2], datacond, traceinfo)
-            weight = (1 - traceinfo[3]) / traceinfo[3] * length(trace)
+            weight = (1 - traceinfo[end]) / traceinfo[end] * length(trace)
         end
         if datatype == "trace"
             return TraceData(label, gene, traceinfo[1], (trace, background, weight))
