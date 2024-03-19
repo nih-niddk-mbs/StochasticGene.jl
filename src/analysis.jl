@@ -35,8 +35,18 @@ function make_dataframes(resultfolder::String, datapath::String, assemble=true, 
     return df
 end
 
+"""
+    statfile_from_ratefile(ratefile)
+
+TBW
+"""
 statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
+"""
+    make_dataframe(ratefile::String, datapath::String)
+
+TBW
+"""
 function make_dataframe(ratefile::String, datapath::String)
     df = read_dataframe(ratefile)
     df2 = read_dataframe(statfile_from_ratefile(ratefile))
@@ -54,12 +64,22 @@ function make_dataframe(ratefile::String, datapath::String)
     end
 end
 
+"""
+    parse_model(name::String)
+
+TBW
+"""
 function parse_model(name::String)
     d = parse(Int, name)
     d > 9 && (d = digits(d))
     d
 end
 
+"""
+    augment_dataframe(df, resultfolder)
+
+TBW
+"""
 function augment_dataframe(df, resultfolder)
     dfc = copy(df)
     G = dfc[1, :Model]
@@ -74,6 +94,11 @@ function augment_dataframe(df, resultfolder)
     dfc
 end
 
+"""
+    make_measure_df(resultfolder::String, G::String)
+
+TBW
+"""
 function make_measure_df(resultfolder::String, G::String)
     files = get_measuresummaryfiles(resultfolder)
     df = Vector{DataFrame}(undef, 0)
@@ -90,6 +115,11 @@ function make_measure_df(resultfolder::String, G::String)
     stack_dataframe(df)
 end
 
+"""
+    join_cols(d)
+
+TBW
+"""
 function join_cols(d)
     if ismissing(d.Condition[1])
         return [:Gene]
@@ -98,11 +128,21 @@ function join_cols(d)
     end
 end
 
+"""
+    add_measures(df, resultfolder::String, G)
+
+TBW
+"""
 function add_measures(df, resultfolder::String, G)
     dm = make_measure_df(resultfolder, G)
     leftjoin(df, dm, on=join_cols(df))
 end
 
+"""
+    add_mean!(df::DataFrame, datapath)
+
+TBW
+"""
 function add_mean!(df::DataFrame, datapath)
     # root = string(split(abspath(datapath),"data")[1])
     m = Vector{Float64}(undef, length(df.Gene))
@@ -114,6 +154,11 @@ function add_mean!(df::DataFrame, datapath)
     insertcols!(df, :Expression => m)
 end
 
+"""
+    add_moments!(df::DataFrame, datapath)
+
+TBW
+"""
 function add_moments!(df::DataFrame, datapath)
     m = Vector{Float64}(undef, length(df.Gene))
     v = similar(m)
@@ -129,6 +174,11 @@ function add_moments!(df::DataFrame, datapath)
     insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
 end
 
+"""
+    add_modelmoments!(df::DataFrame)
+
+TBW
+"""
 function add_modelmoments!(df::DataFrame)
     m = Vector{Float64}(undef, length(df.Gene))
     v = similar(m)
@@ -141,6 +191,11 @@ function add_modelmoments!(df::DataFrame)
     insertcols!(df, :Model_Expression => m, :Model_Variance => v)
 end
 
+"""
+    add_residenceprob!(df::DataFrame)
+
+TBW
+"""
 function add_residenceprob!(df::DataFrame)
     n = df.Model[1] - 1
     N = length(df.Gene)
@@ -160,8 +215,18 @@ function add_residenceprob!(df::DataFrame)
     end
 end
 
+"""
+    add_burstsize(df, resultfolder::String, cols::Vector{Symbol}=join_cols(df))
+
+TBW
+"""
 add_burstsize(df, resultfolder::String, cols::Vector{Symbol}=join_cols(df)) = add_burstsize(df, make_burst_df(resultfolder), cols)
 
+"""
+    add_burstsize(df, db, cols)
+
+TBW
+"""
 function add_burstsize(df, db, cols)
     if ismissing(df[1, :Condition])
         leftjoin(df, db[:, [:BurstMean, :BurstSD, :BurstMedian, :BurstMAD, :Gene]], on=cols)
@@ -170,6 +235,11 @@ function add_burstsize(df, db, cols)
     end
 end
 
+"""
+    make_burst_df(resultfolder::String)
+
+TBW
+"""
 function make_burst_df(resultfolder::String)
     files = get_burstsummaryfiles(resultfolder)
     df = Vector{DataFrame}(undef, 0)
@@ -187,6 +257,11 @@ end
 
 # add_time(csvfile::String,timestamp) = CSV.write(csvfile,add_time!(read_dataframe(csvfile),timestamp))
 
+"""
+    add_time!(df::DataFrame, timestamp)
+
+TBW
+"""
 add_time!(df::DataFrame, timestamp) = insertcols!(df, :Time => timestamp)
 
 """
@@ -204,6 +279,11 @@ function stack_dataframe(df2::Vector{DataFrame})
     return df
 end
 
+"""
+    separate_dataframe(df, G, cond)
+
+TBW
+"""
 function separate_dataframe(df, G, cond)
     conds = split(cond, "-")
     nsets = length(conds)
@@ -222,6 +302,11 @@ end
 #
 # end
 
+"""
+    make_Zscore_dataframe(df, conditions::Vector)
+
+TBW
+"""
 function make_Zscore_dataframe(df, conditions::Vector)
     dfc = Array{DataFrame}(undef, length(conditions))
     for i in eachindex(dfc)
@@ -233,12 +318,22 @@ function make_Zscore_dataframe(df, conditions::Vector)
     df[:, [:Gene, :Time, :ZRate01, :ZRate10, :ZEject, :dExpression, :dVariance, :dThirdMoment, :Winner]]
 end
 
+"""
+    add_MomentChange!(df)
+
+TBW
+"""
 function add_MomentChange!(df)
     insertcols!(df, :dExpression => df.Expression_1 .- df.Expression)
     insertcols!(df, :dVariance => df.Variance_1 .- df.Variance)
     insertcols!(df, :dThirdMoment => df.ThirdMoment_1 .- df.ThirdMoment)
 end
 
+"""
+    add_Zscore!(df)
+
+TBW
+"""
 function add_Zscore!(df)
     insertcols!(df, :ZRate01 => Difference_Zscore.(df.Rate01_1, df.Rate01, df.Rate01SD_1, df.Rate01SD))
     insertcols!(df, :ZRate10 => Difference_Zscore.(df.Rate10_1, df.Rate10, df.Rate10SD_1, df.Rate10SD))
@@ -262,10 +357,25 @@ function classify_Zscore(Z, threshold)
     end
 end
 
+"""
+    best_AIC(folder::String)
+
+TBW
+"""
 best_AIC(folder::String) = best_measure(folder, :AIC)
 
+"""
+    best_WAIC(folder::String)
+
+TBW
+"""
 best_WAIC(folder::String) = best_measure(folder, :WAIC)
 
+"""
+    best_measure(folder::String, measure::Symbol)
+
+TBW
+"""
 function best_measure(folder::String, measure::Symbol)
     files = get_measuresummaryfiles(folder)
     parts = fields.(files)
@@ -464,34 +574,65 @@ function compute_deviance(outfile, ratefile::String, cond, n, datapath, root)
     end
     close(f)
 end
+
+
 """
-deviance(logpredictions::Array,data::AbstractHistogramData)
-deviance(fits,data,model)
+    deviance(fits, data, model)
 
-returns Deviance
-
-use log of data histogram as loglikelihood of over fit model
+return deviance
 """
-deviance(logpredictions::Array, data::AbstractHistogramData) = deviance(logpredictions, datapdf(data))
+deviance(fits, data, model) = -1.0
 
-
-function deviance(fits::Fit, data::AbstractHistogramData, model)
+function deviance(fits, data::AbstractHistogramData, model)
     predictions = likelihoodfn(fits.parml, data, model)
     deviance(log.(max.(predictions, eps())), datapdf(data))
 end
 
+"""
+    deviance(fits, data::AbstractTraceData, model)
+
+return max ll normalized by number of trace frames
+"""
+deviance(fits, data::AbstractTraceData, model) = fits.llml/sum(sum(data.trace[1]))
+
+
+"""
+    deviance(data::AbstractHistogramData, model::AbstractGmodel)
+
+
+"""
 function deviance(data::AbstractHistogramData, model::AbstractGmodel)
     h = likelihoodfn(model.rates[model.fittedparam], data, model)
     println(h)
     deviance(h, datapdf(data))
 end
 
+"""
+    deviance(logpredictions::Array,data::AbstractHistogramData)
+
+return deviance
+
+use log of data histogram as loglikelihood of overfit model
+"""
+deviance(logpredictions::Array, data::AbstractHistogramData) = deviance(logpredictions, datapdf(data))
+
 deviance(logpredictions::Array, hist::Array) = 2 * hist' * (log.(max.(hist, eps())) - logpredictions)
 
-deviance(fits, data, model) = -1.0
 
+
+"""
+    frequency(ron, sd, rdecay)
+
+return on rate / decay rate, sd
+"""
 frequency(ron, sd, rdecay) = (ron / rdecay, sd / rdecay)
 
+
+"""
+    burstsize(reject::Float64, roff, covee, covoo, coveo::Float64)
+
+return eject rate / off rate, sd
+"""
 function burstsize(reject::Float64, roff, covee, covoo, coveo::Float64)
     v = var_ratio(reject, roff, covee, covoo, coveo)
     return reject / roff, sqrt(v)
@@ -878,12 +1019,12 @@ end
 """
 function make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
     data = load_data("trace", "", datapath, "", "", datacond, traceinfo, 1.0, 0)
-    model = load_model(data, r, r, [], tuple(), transitions, G, R, S, insertstep, 1, 1., [], 1., 1., splicetype, probfn, noiseparams, weightind, tuple())
+    model = load_model(data, r, r, [], tuple(), transitions, G, R, S, insertstep, 1, 1.0, [], 1.0, 1.0, splicetype, probfn, noiseparams, weightind, tuple())
     println(model.components)
     tp, ts = predicted_trace(data, model)
     l = maximum(length.(tp))
     if ~isempty(outfile)
-        df = DataFrame(["trace$i"=>[tp[i]; fill(missing,l-length(tp[i]))] for i in eachindex(tp)])
+        df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
         CSV.write(outfile, df)
     end
 
@@ -894,11 +1035,11 @@ end
     make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
 
 """
-function make_traces(folder,datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
+function make_traces(folder, datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin(datacond,f)
+            if occursin("rates", f) && occursin(datacond, f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f))
