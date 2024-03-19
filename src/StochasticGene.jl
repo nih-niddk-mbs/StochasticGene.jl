@@ -51,6 +51,7 @@ export
     write_histograms,
     make_ONOFFhistograms,
     plot_histogram,
+    make_traces,
     plot,
     plot!,
     simulator,
