@@ -18,8 +18,8 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     logpredictions = Array{Float64}(undef, 0)
     for i in eachindex(trace)
         T = length(trace[i])
-        loga, logp0 = make_logap(r[:,i], interval, elementsT, nT)
-        logb = set_logb(trace[i], nT, r[end-noiseparams+1:end,i], reporters_per_state, probfn)
+        loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
+        logb = set_logb(trace[i], nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -42,7 +42,7 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions, trace[3]/length(trace[2]) * logsumexp(l[:, T]))
+        push!(logpredictions, trace[3] / length(trace[2]) * logsumexp(l[:, T]))
     end
     -sum(logpredictions), -logpredictions
 end
@@ -58,8 +58,8 @@ end
 
 function ll_nascent(p0, reporters_per_state, nascent)
     pn = sum(p0[reporters_per_state.>0])
-    d = Binomial(nascent[2],pn)
-    -logpdf(d,nascent[1])
+    d = Binomial(nascent[2], pn)
+    -logpdf(d, nascent[1])
 end
 
 """
@@ -91,7 +91,7 @@ return log of a and p0
 """
 function make_logap(r, interval, elementsT, N)
     a, p0 = make_ap(r, interval, elementsT, N)
-    log.(max.(a, 0)), log.(max.(p0,0))
+    log.(max.(a, 0)), log.(max.(p0, 0))
 end
 
 """
@@ -185,10 +185,10 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, method = Tsit5())
+function kolmogorov_forward(Q, interval, method=Tsit5())
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
-    solve(prob, method, save_everystep=false)[:,2]
+    solve(prob, method, save_everystep=false)[:, 2]
 end
 """
     fkf!(du,u::Matrix, p, t)
@@ -432,10 +432,9 @@ end
 
 
 """
-viterbi(a, b, p0, N, T)
+    viterbi(loga, logb, logp0, N, T)
 
 returns maximum likelihood state path using Viterbi algorithm
-
 """
 function viterbi(loga, logb, logp0, N, T)
     ϕ = similar(logb)
@@ -460,7 +459,7 @@ end
 """
     viterbi_exp(a, b, p0, N, T)
 
-TBW
+returns maximum likelihood state path using Viterbi algorithm
 """
 function viterbi_exp(a, b, p0, N, T)
     loga = log.(a)
@@ -469,45 +468,92 @@ function viterbi_exp(a, b, p0, N, T)
     viterbi(loga, logb, logp0, N, T)
 end
 
-"""
-    predicted_states(r, data::AbstractTraceData, model)
-
-TBW
-"""
-function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
-    ts = Vector{Int}[]
-    for t in data.trace[1]
-        push!(ts, predicted_states(t, data.interval, model))
-    end
-    ts
-end
 
 """
-    predicted_states(r, trace::Vector, model)
+    predicted_statepath(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, T::Int, interval)
+    predicted_statepath(model::AbstractGmodel, T, interval)
+    predicted_statepath(r, tcomponents, reporter, T, interval)
 
-TBW
+return predicted state path using Viterbi algorithm
 """
-function predicted_states(trace::Vector, interval::Float64, model::AbstractGmodel)
-    tcomponents = tcomponent(model)
-    predicted_states(model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, interval, trace)
-end
-"""
-    predicted_states(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
-
-TBW
-"""
-function predicted_states(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, interval, trace)
+function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn)
     loga, logp0 = make_logap(r, interval, elementsT, N)
     logb = set_logb(trace, N, r[end-noiseparams+1:end], reporters_per_state, probfn)
     viterbi(loga, logb, logp0, N, length(trace))
 end
 
-"""
-    predicted_trace(ts::Vector, model)
+function predicted_statepath(trace, interval, model::AbstractGmodel)
+    tcomponents = tcomponent(model)
+    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
+end
 
-TBW
+function predicted_statepath(trace, interval, r, tcomponents, reporter)
+    predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
+end
+
+
 """
-function predicted_trace(ts::Vector, model)
+    predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+
+return vector of predicted state vectors
+"""
+function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+    ts = Vector{Int}[]
+    for t in data.trace[1]
+        push!(ts, predicted_statepath(t, interval, model))
+    end
+    ts
+end
+
+
+
+"""
+    predicted_trace(statepath, noise_dist)
+    predicted_trace(statepath, r, reporter, nstates)
+
+return predicted trace from state path
+"""
+function predicted_trace(statepath, noise_dist)
+    [mean(noise_dist[state]) for state in statepath]
+end
+
+function predicted_trace(statepath, r, reporter, nstates)
+    d = model.reporter.probfn(r[end-model.reporter.n+1:end], reporter.per_state, nstates)
+    predicted_trace(statepath, d)
+end
+
+"""
+    predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
+
+return predicted trace and state path
+"""
+function predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
+    t = predicted_statepath(trace, interval, r, tcomponents, reporter)
+    tp = predicted_trace(t, noise_dist)
+    return tp, t
+end
+
+function predicted_trace_state(trace, interval, model)
+    d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
+    predicted_trace_state(trace, interval, model.rates, model.tcomponents, model.reporter, d)
+end
+
+# function predicted_trace_state(trace, interval, model)
+#     t = predicted_statepath(trace, interval, model)
+#     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
+#     tp = [mean(d[state]) for state in t]
+#     return tp, t
+# end
+
+
+
+"""
+    predicted_traces(ts::Vector{Vector}, model)
+    predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
+
+return vector of predicted traces and vector of state paths
+"""
+function predicted_traces(ts::Vector, model)
     tp = Vector{Float64}[]
     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
     for t in ts
@@ -515,14 +561,13 @@ function predicted_trace(ts::Vector, model)
     end
     tp, ts
 end
-
-"""
-    predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
-
-return predicted traces of fits using Viterbi algorithm
-"""
-function predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
-    predicted_trace(predicted_states(data, model), model)
+function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
+    predicted_traces(predicted_states(data, model), model)
 end
 
-tcomponent(model) = typeof(model.components) == TComponents ?  model.components : model.components.tcomponents
+"""
+    tcomponent(model)
+
+return tcomponent of model
+"""
+tcomponent(model) = typeof(model.components) == TComponents ? model.components : model.components.tcomponents

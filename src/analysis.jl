@@ -1066,7 +1066,7 @@ end
 
 function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
 
-    tp, ts = predicted_trace(data, model)
+    tp, ts = predicted_traces(data, model)
     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     # hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
 
@@ -1088,6 +1088,12 @@ function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=
     # x = collect(1:length(tp[2]))
     # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
     display(plt1)
+end
+
+function plot_traces()
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+    components = make_components_T(transitions, G, R, S, insertstep, splicetype)
+
 
 end
 

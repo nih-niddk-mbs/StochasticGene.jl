@@ -184,9 +184,11 @@ function get_genes(folder, type, label, cond, model)
     return genes
 end
 
+get_files(folder,resultname) = 
+
 get_files(folder::String, resultname, label, cond, model) = get_files(get_resultfiles(folder), resultname, label, cond, model)
 
-file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& (getfield.(parts, :model) .== model)
+file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& occursin.(model,getfield.(parts, :model))
 
 function get_files(files::Vector, resultname, label, cond, model)
     parts = fields.(files)
@@ -332,7 +334,7 @@ end
 """
     assemble_measures(folder::String, files, label::String, cond::String, model::String)
 
-TBW
+write all measures into a single file
 """
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * model * ".csv")
@@ -349,6 +351,23 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
     end
     close(f)
 end
+
+
+function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
+    outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
+    header = ["Model" "Nalleles" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
+    files = get_files(get_resultfiles(folder), "measures", label, cond, "")
+    println(files)
+    f = open(outfile, "w")
+    writedlm(f, header, ',')
+    for file in files
+        nalleles = get_nalleles(file)
+        r = readmeasures(joinpath(folder, file))
+        writedlm(f, [get_model(file) nalleles r], ',')
+    end
+    close(f)
+end
+
 
 """
     assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
@@ -618,7 +637,7 @@ end
 """
     write_pool(file::String, fits::Fit, stats, model)
 
-
+write pool parameters into a file for hierarchichal models
 """
 function write_pool(file::String, fits::Fit, stats, model)
     f = open(file, "w")
@@ -631,7 +650,9 @@ function write_pool(file::String, fits::Fit, stats, model)
 end
 
 """
-write_measures(file,fits,waic,dev)
+    write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
+
+write_measures into a file
 """
 function write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
     f = open(file, "w")
@@ -643,10 +664,11 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
     writedlm(f, maximum(measures.rhat), ',')
     close(f)
 end
+
 """
     write_param_stats(file, stats::Stats, model)
 
-
+write parameter statistics into a file
 """
 function write_param_stats(file, stats::Stats, model)
     f = open(file, "w")
