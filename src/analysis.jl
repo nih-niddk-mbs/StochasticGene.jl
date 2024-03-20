@@ -593,7 +593,9 @@ end
 
 return max ll normalized by number of trace frames
 """
-deviance(fits, data::AbstractTraceData, model) = fits.llml/sum(sum(data.trace[1]))
+function deviance(fits, data::AbstractTraceData, model)
+    fits.llml/sum(sum.(data.trace[1]))
+end
 
 
 """
@@ -1062,11 +1064,11 @@ function plot_traces(fits, stats, data, model, ratetype="median")
     plot_traces(r, data, model)
 end
 
-function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
+function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
 
     tp, ts = predicted_trace(data, model)
-    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-    hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
 
     # plt = Plots.Plot[]
     # for t in data.trace[1]
@@ -1074,8 +1076,8 @@ function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
     # end
     # push!(plt, scatter(collect(1:length(data.nRNA),data.histRNA / data.nRNA))
     # push!(plt, plot(hist))
-    # plt1 = scatter(data.trace[1][1])
-    # plt1 = plot!(tp[1])
+    plt1 = scatter(data.trace[1][index])
+    plt1 = plot!(tp[index])
     # plt2 = scatter(data.trace[1][10])
     # plt2 = plot!(tp[10])
     # plt3 = scatter(data.trace[1][20])
@@ -1083,9 +1085,9 @@ function plot_traces(r, data::TraceRNAData, model::AbstractGRSMmodel)
     # plt4 = scatter(data.histRNA/data.nRNA)
     # plt4 = plot!(hist)
 
-    x = collect(1:length(tp[2]))
-    plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
-    display(plt2)
+    # x = collect(1:length(tp[2]))
+    # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
+    display(plt1)
 
 end
 
