@@ -500,7 +500,7 @@ return vector of predicted state vectors
 function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
     ts = Vector{Int}[]
     for t in data.trace[1]
-        push!(ts, predicted_statepath(t, interval, model))
+        push!(ts, predicted_statepath(t, data.interval, model))
     end
     ts
 end
