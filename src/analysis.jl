@@ -1059,9 +1059,9 @@ end
 
 
 """
-function plot_traces(fits, stats, data, model, ratetype="median")
+function plot_traces(fits, stats, data, model, index=1, ratetype="median")
     r = get_rates(fits, stats, model, ratetype)
-    plot_traces(r, data, model)
+    plot_traces(r, data, model,index)
 end
 
 function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
@@ -1088,6 +1088,7 @@ function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=
     # x = collect(1:length(tp[2]))
     # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
     display(plt1)
+    return tp, ts
 end
 
 function plot_traces()
