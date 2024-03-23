@@ -2,6 +2,9 @@
 using StochasticGene
 using Test
 
+function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
+    simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
+end
 
 function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=1000000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
@@ -21,8 +24,13 @@ function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates
     likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 end
 
-function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
-    simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
+function test_fit_simrna(; rtarget = [.33, .19, 20.5, 1.], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(),rinit=[.1,.1,.1,1.],totalsteps=100000)
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps,nalleles=nalleles)
+    data = RNAData("", "", nRNA, h)
+    model = load_model(data, rinit, Float64[], fittedparam, fixedeffects, transitions, G, 0, 0, 0, nalleles, 10.0, Int[], rinit[end], .02, "", prob_GaussianMixture, 5, 5, tuple())
+    options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options)
+    StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
 function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), rinit=[0.01, 0.1, 1.0, 0.01006327034802035], datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
@@ -71,6 +79,9 @@ end
 
     h1, h2 = test_compare()
     @test isapprox(h1, h2, rtol=0.2)
+
+    h1, h2 = test_fit_simrna()
+    @test isapprox(h1, h2, rtol=0.05)
 
     h1, h2 = test_fit_rna()
     @test isapprox(h1, h2, rtol=0.1)
