@@ -395,6 +395,8 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     if priorcv isa Number
         rcv = fill(priorcv, length(rm))
         rcv[num_rates(transitions, R, S, insertstep)] = 0.1
+    else
+        rcv = priorcv
     end
     if length(rcv) == length(rm)
         return distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
