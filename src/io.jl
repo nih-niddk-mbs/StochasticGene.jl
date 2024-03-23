@@ -733,7 +733,7 @@ get_ratetype() = invert_dict(get_row())
 
 determine if string a or string b occurs in file (case insensitive)
 """
-function occursin_file(a, b, file)
+function occursin_file(a, b, file::String)
     occursin(Regex("DS_Store", "i"), file) && return false
     if isempty(a)
         return occursin(Regex(b, "i"), file)
@@ -836,10 +836,10 @@ function read_dwelltimes(datapath)
     bins, DT
 end
 
-function read_tracefiles(path,cond1,traceinfo::Tuple,cond2="",col=3)
+function read_tracefiles(path,cond1,traceinfo::Tuple,col=3)
     start = max(round(Int,traceinfo[2]/traceinfo[1]),1)
     stop = traceinfo[3] < 0 ? -1 : max(round(Int,traceinfo[3]/traceinfo[1]),1)
-    read_tracefiles(path,cond1,start,stop,cond2,col)
+    read_tracefiles(path,cond1,start,stop,col)
 end
 
 """
@@ -847,7 +847,7 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, cond2::String="", col=3)
+function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, col=3)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -857,9 +857,9 @@ function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, con
                 target = joinpath(root, file)
                 t = readfile(target, col)
                 if stop < 0
-                    occursin_file(cond1, cond2, target) && push!(traces, t[start:end])
+                    occursin(cond1, file) && push!(traces, t[start:end])
                 else
-                    occursin_file(cond1, cond2, target) && push!(traces, t[start:stop])
+                    occursin(cond1, file) && push!(traces, t[start:stop])
                 end
             end
         end

@@ -279,7 +279,7 @@ Return array of frame times and intensities
 """
 function make_trace(tracelog, G, R, S, onstates::Vector{Int}, interval, par, insertstep, probfn, reporterfn=sum)
     n = length(tracelog)
-    trace = Matrix(undef, 0, 3)
+    trace = Matrix(undef, 0, 4)
     state = tracelog[1][2]
     frame = interval
     if isempty(onstates)
@@ -295,7 +295,7 @@ function make_trace(tracelog, G, R, S, onstates::Vector{Int}, interval, par, ins
             state = tracelog[i][2]
             i += 1
         end
-        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)]])
+        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)] state_index(state, G, R, S)])
         frame += interval
     end
     return trace

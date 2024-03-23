@@ -1064,7 +1064,7 @@ function plot_traces(fits, stats, data, model, index=1, ratetype="median")
     plot_traces(r, data, model,index)
 end
 
-function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
+function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
 
     tp, ts = predicted_traces(data, model)
     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
@@ -1091,9 +1091,19 @@ function plot_traces(r, data::AbstractTraceData, model::AbstractGRSMmodel,index=
     return tp, ts
 end
 
-function plot_traces()
+function rt(transitions,G,R,S,insertstep,probfn=prob_GaussianMixture,noiseparams=5,weightind=5,splicetype="")
     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-    components = make_components_T(transitions, G, R, S, insertstep, splicetype)
+    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
+    reporter, tcomponents
+
+
+end
+
+function plot_traces(trace,interval, r,transitions,G,R,S,insertstep,probfn=prob_GaussianMixture,noiseparams=5,weightind=5,splicetype="")
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
+    d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
+    tp, ts = predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
 
 
 end
