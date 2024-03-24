@@ -1099,13 +1099,15 @@ function rt(transitions,G,R,S,insertstep,probfn=prob_GaussianMixture,noiseparams
 
 end
 
-function plot_traces(trace,interval, r,transitions,G,R,S,insertstep,probfn=prob_GaussianMixture,noiseparams=5,weightind=5,splicetype="")
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
+function plot_traces(trace,interval, r,transitions,G,R,S,insertstep,probfn=prob_Gaussian,noiseparams=4,weightind=0,splicetype="")
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
     tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
     d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
     tp, ts = predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
-
-
+    plt=plot(trace)
+    plt=plot!(tp)
+    display(plt)
+    return tp, ts
 end
 
 """
