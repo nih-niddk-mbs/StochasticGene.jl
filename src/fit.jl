@@ -421,7 +421,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     rm[nrates] = decayrate
     if noiseparams > 0
         rm = [rm; fill(100.0, noiseparams)]
-        rm[nrates+weightind] = 0.9
+        weightind > 0 && (rm[nrates+weightind] = 0.9)
     end
     rm
 end
