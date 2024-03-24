@@ -425,13 +425,16 @@ function rlabels_GRSM(model)
     end
     push!(labels, "Decay")
     if typeof(model.reporter) == HMMReporter
-        for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
-            push!(labels, "noise_mean$i")
-            push!(labels, "noise_std$i")
+        for i in 1:model.reporter.n
+            push!(labels, "noiseparam$i")
         end
-        for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
-            push!(labels, "bias$i")
-        end
+        # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
+        #     push!(labels, "noise_mean$i")
+        #     push!(labels, "noise_std$i")
+        # end
+        # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
+        #     push!(labels, "bias$i")
+        # end
     end
     reshape(labels, 1, :)
 end
@@ -459,13 +462,16 @@ function rlabels(model::AbstractGMmodel)
     push!(labels, "Eject")
     push!(labels, "Decay")
     if typeof(model.reporter) == HMMReporter
-        for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
-            push!(labels, "noise_mean$i")
-            push!(labels, "noise_std$i")
+        for i in 1:model.reporter.n
+            push!(labels, "noiseparam$i")
         end
-        for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
-            push!(labels, "bias$i")
-        end
+        # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
+        #     push!(labels, "noise_mean$i")
+        #     push!(labels, "noise_std$i")
+        # end
+        # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
+        #     push!(labels, "bias$i")
+        # end
     end
     reshape(labels, 1, :)
 end
