@@ -471,7 +471,6 @@ end
 
 """
     predicted_statepath(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, T::Int, interval)
-    predicted_statepath(model::AbstractGmodel, T, interval)
     predicted_statepath(r, tcomponents, reporter, T, interval)
 
 return predicted state path using Viterbi algorithm
@@ -482,30 +481,9 @@ function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, nois
     viterbi(loga, logb, logp0, N, length(trace))
 end
 
-function predicted_statepath(trace, interval, model::AbstractGmodel)
-    tcomponents = tcomponent(model)
-    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
-end
-
 function predicted_statepath(trace, interval, r, tcomponents, reporter)
     predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
 end
-
-
-"""
-    predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
-
-return vector of predicted state vectors
-"""
-function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
-    ts = Vector{Int}[]
-    for t in data.trace[1]
-        push!(ts, predicted_statepath(t, data.interval, model))
-    end
-    ts
-end
-
-
 
 """
     predicted_trace(statepath, noise_dist)
@@ -545,6 +523,23 @@ end
 #     return tp, t
 # end
 
+function predicted_statepath(trace, interval, model::AbstractGmodel)
+    tcomponents = tcomponent(model)
+    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
+end
+
+"""
+    predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+
+return vector of predicted state vectors
+"""
+function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+    ts = Vector{Int}[]
+    for t in data.trace[1]
+        push!(ts, predicted_statepath(t, data.interval, model))
+    end
+    ts
+end
 
 
 """
@@ -565,9 +560,3 @@ function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramDa
     predicted_traces(predicted_states(data, model), model)
 end
 
-"""
-    tcomponent(model)
-
-return tcomponent of model
-"""
-tcomponent(model) = typeof(model.components) == TComponents ? model.components : model.components.tcomponents

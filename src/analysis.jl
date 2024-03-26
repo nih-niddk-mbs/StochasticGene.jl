@@ -594,7 +594,7 @@ end
 return max ll normalized by number of trace frames
 """
 function deviance(fits, data::AbstractTraceData, model)
-    fits.llml/sum(sum.(data.trace[1]))
+    fits.llml / sum(sum.(data.trace[1]))
 end
 
 
@@ -1015,56 +1015,104 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
 end
 
 """
-    make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
+    tcomponent(model)
 
+return tcomponent of model
+"""
+tcomponent(model) = typeof(model.components) == TComponents ? model.components : model.components.tcomponents
 
 """
-function make_traces(r, datapath, datacond::String, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5; outfile="")
-    data = load_data("trace", "", datapath, "", "", datacond, traceinfo, 1.0, 0)
-    model = load_model(data, r, r, [], tuple(), transitions, G, R, S, insertstep, 1, 1.0, [], 1.0, 1.0, splicetype, probfn, noiseparams, weightind, tuple())
-    println(model.components)
-    tp, ts = predicted_trace(data, model)
-    l = maximum(length.(tp))
-    if ~isempty(outfile)
-        df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
-        CSV.write(outfile, df)
-    end
-
-    return tp, ts
-end
+    make_traces(folder, datapath, datacond, ratetype="median", start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 
 """
-    make_traces(datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
-
-"""
-function make_traces(folder, datapath, datacond::String, traceinfo=(1.0, 1.0, -1, 1.0), splicetype="", probfn=prob_GaussianMixture, noiseparams=5, weightind=5, ratetype="median")
+function write_traces(folder, datapath, datacond, interval, ratetype="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin(datacond, f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
-                r = readrates(joinpath(root, f))
+                r = readrates(joinpath(root, f),get_row(ratetype))
                 out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
-                make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
+                # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
+                write_traces(out,datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
             end
         end
     end
 end
+"""
+    make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; outfile="")
 
+
+"""
+function write_traces(outfile,datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    df=make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+    CSV.write(outfile, df)
+end
+
+function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    tp, _, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+    l = maximum(length.(tp))
+    data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+    pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
+    DataFrame(permutedims([data pred],(2,1))[:])
+end
+
+"""
+    make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+
+
+"""
+function make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    tp = Vector{Float64}[]
+    ts = Vector{Int}[]
+    for t in traces
+        a, b = make_trace(t, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
+        push!(tp, a)
+        push!(ts, b)
+    end
+    return tp, ts, traces
+end
+
+"""
+    make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+
+"""
+function make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
+    d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
+    predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
+end
+
+function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    tp, ts 
+
+end
 
 """
     plot_traces(fits, stats, data, model, ratetype="median")
 
 
 """
-function plot_traces(fits, stats, data, model, index=1, ratetype="median")
-    r = get_rates(fits, stats, model, ratetype)
-    plot_traces(r, data, model,index)
+function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    tp, ts = make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
+    plt = plot(trace)
+    plt = plot!(tp)
+    display(plt)
+    return tp, ts
 end
 
-function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
+
+function plot_traces(fits, stats, data, model, index=1, ratetype="median")
+    r = get_rates(fits, stats, model, ratetype)
+    plot_traces(r, data, model, index)
+end
+
+function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel, index=1)
 
     tp, ts = predicted_traces(data, model)
     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
@@ -1091,24 +1139,6 @@ function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel,index=1)
     return tp, ts
 end
 
-function rt(transitions,G,R,S,insertstep,probfn=prob_GaussianMixture,noiseparams=5,weightind=5,splicetype="")
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, num_rates(transitions, R, S, insertstep) + weightind)
-    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
-    reporter, tcomponents
-
-
-end
-
-function plot_traces(trace,interval, r,transitions,G,R,S,insertstep,probfn=prob_Gaussian,noiseparams=4,weightind=0,splicetype="")
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
-    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
-    d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
-    tp, ts = predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
-    plt=plot(trace)
-    plt=plot!(tp)
-    display(plt)
-    return tp, ts
-end
 
 """
     plot_histogram(ratefile::String, datapath; root=".", row=2)
