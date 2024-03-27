@@ -1025,7 +1025,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
     make_traces(folder, datapath, datacond, ratetype="median", start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 
 """
-function write_traces(folder, datapath, datacond, interval, ratetype="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
@@ -1046,7 +1046,7 @@ end
 
 
 """
-function write_traces(outfile,datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+function write_traces(outfile,datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     df=make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
     CSV.write(outfile, df)
 end
@@ -1065,7 +1065,7 @@ end
 
 
 """
-function make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+function make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     traces = read_tracefiles(datapath, datacond, start, stop)
     tp = Vector{Float64}[]
     ts = Vector{Int}[]
@@ -1081,7 +1081,7 @@ end
     make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 
 """
-function make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+function make_trace(trace, interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
     tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
     d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)

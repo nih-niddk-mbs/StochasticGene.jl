@@ -184,11 +184,10 @@ function get_genes(folder, type, label, cond, model)
     return genes
 end
 
-get_files(folder,resultname) = 
+get_files(folder, resultname) =
+    get_files(folder::String, resultname, label, cond, model) = get_files(get_resultfiles(folder), resultname, label, cond, model)
 
-get_files(folder::String, resultname, label, cond, model) = get_files(get_resultfiles(folder), resultname, label, cond, model)
-
-file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& occursin.(model,getfield.(parts, :model))
+file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& occursin.(model, getfield.(parts, :model))
 
 function get_files(files::Vector, resultname, label, cond, model)
     parts = fields.(files)
@@ -842,10 +841,10 @@ function read_dwelltimes(datapath)
     bins, DT
 end
 
-function read_tracefiles(path,cond1,traceinfo::Tuple,col=3)
-    start = max(round(Int,traceinfo[2]/traceinfo[1]),1)
-    stop = traceinfo[3] < 0 ? -1 : max(round(Int,traceinfo[3]/traceinfo[1]),1)
-    read_tracefiles(path,cond1,start,stop,col)
+function read_tracefiles(path, cond1, traceinfo::Tuple, col=3)
+    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
+    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    read_tracefiles(path, cond1, start, stop, col)
 end
 
 """
@@ -860,15 +859,17 @@ function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, col
     else
         for (root, dirs, files) in walkdir(path)
             for file in files
-                target = joinpath(root, file)
-                t = readfile(target, col)
-                if stop < 0
-                    occursin(cond1, file) && push!(traces, t[start:end])
-                else
-                    occursin(cond1, file) && push!(traces, t[start:stop])
+                if occursin(cond1, file)
+                    t = readfile(joinpath(root, file), col)
+                    if stop < 0
+                        (start <= length(t)) && push!(traces, t[start:end])
+                    else
+                        (stop <= length(t)) && push!(traces, t[start:stop])
+                    end
                 end
             end
         end
+        traces = traces[.!isempty.(traces)]
         set = sum.(traces)
         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
@@ -883,8 +884,8 @@ function fix_tracefiles(path::String)
     for (root, dirs, files) in walkdir(path)
         for file in files
             target = joinpath(root, file)
-            t = readdlm(target,header=true)
-            writedlm(target,[t[1] t[1][:,2]])
+            t = readdlm(target, header=true)
+            writedlm(target, [t[1] t[1][:, 2]])
         end
     end
 end
