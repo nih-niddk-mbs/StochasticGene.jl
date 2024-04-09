@@ -117,17 +117,17 @@ function set_logb(trace, N, params, reporters, probfn=prob_Gaussian)
     return logb
 end
 
-function set_logb_discrete(trace, N, onstates)
-    logb = Matrix{Float64}(undef, N, length(trace))
-    t = 1
-    for obs in trace
-        if (obs > 0.5 && state ∈ onstates) || (obs < 0.5 && state ∉ onstates)
-            logb[j, t] = 0.0
-        else
-            logb[j, t] = -Inf
-        end
-    end
-end
+# function set_logb_discrete(trace, N, onstates)
+#     logb = Matrix{Float64}(undef, N, length(trace))
+#     t = 1
+#     for obs in trace
+#         if (obs > 0.5 && state ∈ onstates) || (obs < 0.5 && state ∉ onstates)
+#             logb[j, t] = 0.0
+#         else
+#             logb[j, t] = -Inf
+#         end
+#     end
+# end
 
 """
     prob_Gaussian(par, reporters, N)
@@ -185,10 +185,10 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, method=Tsit5())
+function kolmogorov_forward(Q, interval, save=false, method=Tsit5())
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
-    solve(prob, method, save_everystep=false)[:, 2]
+    solve(prob, method, save_everystep=save)[:, 2]
 end
 """
     fkf!(du,u::Matrix, p, t)

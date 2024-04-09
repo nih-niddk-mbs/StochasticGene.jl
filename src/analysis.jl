@@ -1032,11 +1032,11 @@ function write_traces(folder, datapath, datacond, interval, ratetype::String="me
             if occursin("rates", f) && occursin(datacond, f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
-                r = readrates(joinpath(root, f),get_row(ratetype))
+                r = readrates(joinpath(root, f), get_row(ratetype))
                 out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
                 # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                write_traces(out,datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
             end
         end
     end
@@ -1046,8 +1046,8 @@ end
 
 
 """
-function write_traces(outfile,datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    df=make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    df = make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
     CSV.write(outfile, df)
 end
 
@@ -1057,7 +1057,7 @@ function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, 
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
     # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
-    DataFrame(permutedims([data pred],(2,1))[:])
+    DataFrame(permutedims([data pred], (2, 1))[:])
 end
 
 """
@@ -1088,8 +1088,17 @@ function make_trace(trace, interval, r::Vector, transitions, G, R, S, insertstep
     predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
 end
 
+function make_correlation(interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
+
+    Qtr = make_mat(tcomponents.elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(sparse(Qtr'), interval, true)
+
+end
+
 function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tp, ts 
+    tp, ts
 
 end
 
