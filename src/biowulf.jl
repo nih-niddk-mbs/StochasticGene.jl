@@ -16,7 +16,7 @@ For passing model information to fit function from swarmfile (limited to numbers
 `R::Int`
 `S::Int`
 `insertstep::Int`
-`Gfamily::String`: type of model, e.g. "nstate", "KP", "Refract"
+`Gfamily::String`: type of model, e.g. "nstate", "KP", "cyclic"
 `fixedeffects::String`: two numbers separated by a hyphen, e.g. "3-4", indicating parameters 3 and 4 are fixed to each other
 
 """

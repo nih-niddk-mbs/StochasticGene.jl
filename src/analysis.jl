@@ -1025,8 +1025,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
     make_traces(folder, datapath, datacond, ratetype="median", start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 
 """
-function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    files = get_resultfiles(folder)
+function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin(datacond, f)
@@ -1036,28 +1035,55 @@ function write_traces(folder, datapath, datacond, interval, ratetype::String="me
                 out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
                 # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+                write_traces(out,datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
             end
         end
     end
 end
+
+function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    datafolders = readdir(datafolder)
+    for d in datafolders
+        if ~occursin(".DS_Store", d)
+            for (root, dirs, files) in walkdir(folder)
+                println(d)
+                if occursin(d, root)
+                    for f in files
+                        if occursin("rates", f) && occursin(datacond, f)
+                            parts = fields(f)
+                            G, R, S, insertstep = decompose_model(parts.model)
+                            r = readrates(joinpath(root, f), get_row(ratetype))
+                            out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
+                            transitions = get_transitions(G, parts.label)
+                            datapath = joinpath(datafolder,)
+                            # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
+                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
 """
     make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; outfile="")
 
 
 """
-function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    df = make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+function write_traces(outfile,datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    df=make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
     CSV.write(outfile, df)
 end
 
-function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tp, _, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=false)
+    tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
     l = maximum(length.(tp))
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+    v = state ? [data pred ["state$i" => [mod.(ts[i].-1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
     # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
-    DataFrame(permutedims([data pred], (2, 1))[:])
+    DataFrame(permutedims([data pred],(2,1))[:])
 end
 
 """
