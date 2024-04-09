@@ -1083,7 +1083,7 @@ function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, 
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
     v = state ? [data pred ["state$i" => [mod.(ts[i].-1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
     # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
-    DataFrame(permutedims([data pred],(2,1))[:])
+    DataFrame(permutedims(v,(2,1))[:])
 end
 
 """
