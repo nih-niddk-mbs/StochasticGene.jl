@@ -1032,7 +1032,6 @@ function write_traces_folder(folder, datafolder, datacond, interval, ratetype::S
     for d in datafolders
         if ~occursin(".DS_Store", d)
             for (root, dirs, files) in walkdir(folder)
-                println(d)
                 if occursin(d, root)
                     for f in files
                         if occursin("rates", f) && occursin(datacond, f)
