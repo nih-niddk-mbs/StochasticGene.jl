@@ -1027,7 +1027,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
 
 TBW
 """
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1043,7 +1043,7 @@ function write_traces_folder(folder, datafolder, datacond, interval, ratetype::S
                             transitions = get_transitions(G, parts.label)
                             datapath = joinpath(datafolder,)
                             # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state)
                         end
                     end
                 end
@@ -1066,7 +1066,7 @@ function write_traces(folder, datapath, datacond, interval, ratetype::String="me
                 out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
                 # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype,state=state)
+                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state)
             end
         end
     end
