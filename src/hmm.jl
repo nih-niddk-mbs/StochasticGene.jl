@@ -62,6 +62,11 @@ function ll_nascent(p0, reporters_per_state, nascent)
     -logpdf(d, nascent[1])
 end
 
+function ll_background(p0, reporters_per_state, bg)
+    pn = sum(p0[reporters_per_state.>0])
+    -bg * log(pn)
+end
+
 """
 make_ap(r, interval, elementsT, nT )
 

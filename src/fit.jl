@@ -55,7 +55,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
 - `traceinfo=(1.0, 1., 240., .65)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
-- `nascent=(1, 2)`: 2-tuple of number of spots, total number of locations (e.g. number of cells times number of alleles/cell)
+- `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
 - `label::String=""`: label of output files produced
