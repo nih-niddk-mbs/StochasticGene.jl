@@ -1129,8 +1129,17 @@ function make_correlation(interval, r::Vector, transitions, G, R, S, insertstep,
 
 end
 
+function make_trace_histogram(datapath,datacond,start=1,stop=-1)
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    ft = reduce(vcat, traces)
+    h = histogram(ft,normalize=true)
+    display(h)
+    return ft, h
+end
+
 function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tp, ts
+    tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+
 
 end
 
