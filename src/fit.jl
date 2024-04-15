@@ -250,7 +250,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         println("Setting S to ", S)
     end
     noiseparams = length(noisepriors)
-    weightind = occursin("Mixture","$(probfn)") ? num_rates(transitions, R, S, insertstep) + weightind : 0
+    weightind = occursin("Mixture","$(probfn)") ? num_rates(transitions, R, S, insertstep) + noiseparams : 0
     if typeof(data) <: AbstractRNAData
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)

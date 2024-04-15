@@ -1133,7 +1133,6 @@ function make_trace_histogram(datapath,datacond,start=1,stop=-1)
     traces = read_tracefiles(datapath, datacond, start, stop)
     ft = reduce(vcat, traces)
     h = histogram(ft,normalize=true)
-    display(h)
     return ft, h
 end
 
