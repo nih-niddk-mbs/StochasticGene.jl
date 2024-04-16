@@ -9,10 +9,11 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
-"""
-    ll_hmm(r, nT, reporters, elementsT, interval, trace)
 
-return total loglikelihood of traces with reporter noise and loglikelihood of each trace
+"""
+    ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+
+TBW
 """
 function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
@@ -25,6 +26,23 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     end
     -sum(logpredictions), -logpredictions
 end
+
+function ll_hmm_hierarchical_ratefixed(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
+    for i in eachindex(trace)
+        T = length(trace[i])
+        logb = set_logb(trace[i], nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
+"""
+    ll_hmm(r, nT, reporters, elementsT, interval, trace)
+
+return total loglikelihood of traces with reporter noise and loglikelihood of each trace
+"""
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     loga, logp0 = make_logap(r, interval, elementsT, nT)
     ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, loga, logp0)

@@ -78,7 +78,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
 - `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
-- `hierarchical=tuple()`: tuple of hierchical model parameters
+- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (npools::Int,fittedparams::Vector,fixedparams::Vector)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min

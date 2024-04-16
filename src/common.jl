@@ -107,6 +107,17 @@ end
 
 # Model structures
 
+"""
+Pool
+
+structure for hierarchical model
+
+- `nsets::Int`
+- `nparams::Int`
+- `nrates`::Int`
+- `nindividualparams::Int`
+- `nindividuals::Int`
+"""
 struct Pool
     nsets::Int
     nparams::Int
@@ -158,8 +169,8 @@ fields:
 - `fixedeffects`: indices of rates that are fixed to each other, in the form of a 2 tuple of vectors
     with index 1 the tied index vector and 2 the corresponding fitted index vector
 - `fixedeffects`: tuple of vectors of rates that are locked together
-- `method`: numerical method for solving Master equation
-- `components`: rate marix components
+- `method`: method option, for nonhierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition, 
+            for hierarchical models, 2-tuple, where 1st component is same as above and 2nd is Bool where true means rates are fixed for all individuals
 -` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 
 """
