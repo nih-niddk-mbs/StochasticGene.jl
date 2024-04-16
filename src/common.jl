@@ -337,7 +337,8 @@ end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, pm, psig = prepare_params(param, model)
-    llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     d = distribution_array(pm, psig)
     lhp = Float64[]
     for pc in eachcol(p)
