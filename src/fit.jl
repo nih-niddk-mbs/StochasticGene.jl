@@ -78,7 +78,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
 - `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
-- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (npools::Int,fittedparams::Vector,fixedparams::Vector)
+- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (npools::Int,individualparams::Vector,sharedparams::Vector)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -285,9 +285,9 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     if isempty(hierarchical)
         priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
     else
-        nsets = hierarchical[1]
+        npools = hierarchical[1]
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        priord = prior_distribution(rm[1:nsets*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nsets, [], nrates, 0), decayrate, priorcv, noisepriors)
+        priord = prior_distribution(rm[1:npools*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, npools, [], nrates, 0), decayrate, priorcv, noisepriors)
     end
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
@@ -584,44 +584,6 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     end
     writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
 end
-
-
-
-# """
-# getr(gene,G,nalleles,decayrate,ejectrate,inlabel,infolder,nsets::Int,root,verbose)
-
-# """
-# function getr(gene, G, nalleles, decayrate, ejectrate, inlabel, infolder, nsets::Int, root, verbose)
-#     r = getr(gene, G, nalleles, inlabel, infolder, root, verbose)
-#     if ~isnothing(r)
-#         if length(r) == 2 * G * nsets + 1
-#             for n in nsets
-#                 r[2*G*n-1] *= clamp(r[2*G*nsets+1], eps(Float64), 1 - eps(Float64))
-#             end
-#             return r[1:2*G*nsets]
-#         end
-#         if length(r) == 2 * G * nsets
-#             if verbose
-#                 println("init rates: ", r)
-#             end
-#             return r
-#         end
-#     end
-#     println("No r")
-#     setr(G, nsets, decayrate, ejectrate)
-# end
-
-# function getr(gene, G, nalleles, inlabel, infolder, root, verbose)
-#     ratefile = path_Gmodel("rates", gene, G, nalleles, inlabel, infolder, root)
-#     if verbose
-#         println("rate file: ", ratefile)
-#     end
-#     if isfile(ratefile)
-#         return readrates(ratefile, 3)
-#     else
-#         return nothing
-#     end
-# end
 
 function getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root, verbose=true)
     paramfile = path_Gmodel("param-stats", gene, G, nalleles, inlabel, infolder, root)

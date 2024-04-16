@@ -441,7 +441,7 @@ end
 function rlabels(model::GRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
-    for i in 1:model.pool.nsets+model.pool.nindividuals
+    for i in 1:model.pool.npools+model.pool.nindividuals
         append!(labels, l)
     end
     reshape(labels, 1, :)

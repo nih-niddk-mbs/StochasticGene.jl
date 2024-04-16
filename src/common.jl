@@ -112,14 +112,14 @@ Pool
 
 structure for hierarchical model
 
-- `nsets::Int`
+- `npools::Int`
 - `nparams::Int`
 - `nrates`::Int`
 - `nindividualparams::Int`
 - `nindividuals::Int`
 """
 struct Pool
-    nsets::Int
+    npools::Int
     nparams::Int
     nrates::Int
     nindividualparams::Int
@@ -352,15 +352,15 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function prepare_params(param, model)
-    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nsets + model.pool.nindividuals)
+    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.npools + model.pool.nindividuals)
     pm = param[1:model.pool.nparams]
-    if model.pool.nsets == 2
+    if model.pool.npools == 2
         psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
     else
-        throw("pool.nsets < 2")
+        throw("pool.npools < 2")
     end
-    p = reshape(param[model.pool.nsets*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
-    return r[:, model.pool.nsets+1:end], p, pm, psig
+    p = reshape(param[model.pool.npools*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
+    return r[:, model.pool.npools+1:end], p, pm, psig
 end
 
 # Likelihood functions
