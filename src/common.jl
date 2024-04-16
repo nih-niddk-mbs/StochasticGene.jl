@@ -337,8 +337,7 @@ end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, pm, psig = prepare_params(param, model)
-    llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     d = distribution_array(pm, psig)
     lhp = Float64[]
     for pc in eachcol(p)
@@ -375,6 +374,13 @@ function likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
     M = make_mat_M(model.components, r)
     steady_state(M, model.G, model.nalleles, data.nRNA)
 end
+
+function likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
+    r = get_rates(param, model)
+    M = make_mat_M(components.mcomponents, r)
+    steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
+end
+
 """
     likelihoodfn(param,data::AbstractHistogramArrayData,model::AbstractGmodel)
 
