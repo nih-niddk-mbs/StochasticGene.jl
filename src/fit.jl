@@ -60,9 +60,9 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `resultfolder::String=test`: folder for results of MCMC run
 - `label::String=""`: label of output files produced
 - `inlabel::String=""`: label of files used for initial conditions
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-     (only first parameter should be included in fittedparam)
+     (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G::Int=2`: number of gene states
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
@@ -78,7 +78,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
 - `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
-- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (npools::Int,individualparams::Vector,sharedparams::Vector)
+- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,fitted individual params::Vector,fixed individual params::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -285,9 +285,9 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     if isempty(hierarchical)
         priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
     else
-        npools = hierarchical[1]
+        nhyper = hierarchical[1]
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        priord = prior_distribution(rm[1:npools*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, npools, [], nrates, 0), decayrate, priorcv, noisepriors)
+        priord = prior_distribution(rm[1:nhyper*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nhyper, [], nrates, 0), decayrate, priorcv, noisepriors)
     end
     if propcv < 0
         propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
@@ -346,13 +346,13 @@ end
 
 make fittedparams vector for hierarchical model
 """
-function make_fitted(fittedpool, npools, fittedindividual, nrates, nindividuals)
+function make_fitted(fittedpool, nhyper, fittedindividual, nrates, nindividuals)
     f = copy(fittedpool)
-    for i in 1:npools-1
+    for i in 1:nhyper-1
         append!(f, fittedpool .+ i * nrates)
     end
     for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + npools - 1) * nrates)
+        append!(f, fittedindividual .+ (i + nhyper - 1) * nrates)
     end
     f
 end
@@ -436,10 +436,10 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     [rm; noisepriors]
 end
 
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, npools, cv=1.0)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)
     rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
     r = copy(rm)
-    if npools == 2
+    if nhyper == 2
         append!(r, cv .* rm)
     end
     for i in 1:nindividuals

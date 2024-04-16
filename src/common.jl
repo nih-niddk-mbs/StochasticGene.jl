@@ -112,14 +112,14 @@ Pool
 
 structure for hierarchical model
 
-- `npools::Int`
-- `nparams::Int`
-- `nrates`::Int`
-- `nindividualparams::Int`
-- `nindividuals::Int`
+- `nhyper::Int`: number of hyper parameter sets
+- `nparams::Int`: number of fitted hyper params per set = length(fittedparam)
+- `nrates`::Int`: number of rates (all params) for each individual
+- `nindividualparams::Int`: number of fitted params per individual
+- `nindividuals::Int`: number of individuals (traces)
 """
 struct Pool
-    npools::Int
+    nhyper::Int
     nparams::Int
     nrates::Int
     nindividualparams::Int
@@ -351,15 +351,13 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function prepare_params(param, model)
-    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.npools + model.pool.nindividuals)
+    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nhyper + model.pool.nindividuals)
     pm = param[1:model.pool.nparams]
-    if model.pool.npools == 2
+    if model.pool.nhyper == 2
         psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
-    else
-        throw("pool.npools < 2")
     end
-    p = reshape(param[model.pool.npools*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
-    return r[:, model.pool.npools+1:end], p, pm, psig
+    p = reshape(param[model.pool.nhyper*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
+    return r[:, model.pool.nhyper+1:end], p, pm, psig
 end
 
 # Likelihood functions
