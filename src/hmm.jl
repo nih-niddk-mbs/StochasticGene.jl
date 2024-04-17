@@ -10,34 +10,7 @@
 ###
 
 
-"""
-    ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
 
-TBW
-"""
-function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    for i in eachindex(trace)
-        T = length(trace[i])
-        loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
-        logb = set_logb(trace[i], nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
-        l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions, logsumexp(l[:, T]))
-    end
-    -sum(logpredictions), -logpredictions
-end
-
-function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
-    for i in eachindex(trace)
-        T = length(trace[i])
-        logb = set_logb(trace[i], nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
-        l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions, logsumexp(l[:, T]))
-    end
-    -sum(logpredictions), -logpredictions
-end
 """
     ll_hmm(r, nT, reporters, elementsT, interval, trace)
 
@@ -83,6 +56,34 @@ end
 function ll_background(p0, reporters_per_state, bg)
     pn = sum(p0[reporters_per_state.>0])
     -bg * log(pn)
+end
+"""
+    ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
+function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    for (i,t) in enumerate(trace[1])
+        T = length(t)
+        loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
+
+function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
+    for (i,t) in enumerate(trace[1])
+        T = length(t)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
 end
 
 """

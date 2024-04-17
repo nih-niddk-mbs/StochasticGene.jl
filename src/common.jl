@@ -123,8 +123,8 @@ struct Pool
     nrates::Int
     nparams::Int
     nindividuals::Int
-    nratestart::Int
-    nparamstart::Int
+    ratestart::Int
+    paramstart::Int
     hyperindices::Vector{Vector}
 end
 
@@ -344,7 +344,7 @@ TBW
 """
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_params(param, model)
-    llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = model.method[2] ? ll_hmm_hierarchical_rateshared(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     # d = distribution_array(pm, psig)
     d = hyper_distribution(hyper)
     lhp = Float64[]
