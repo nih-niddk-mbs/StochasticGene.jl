@@ -120,10 +120,11 @@ structure for hierarchical model
 """
 struct Pool
     nhyper::Int
-    nparams::Int
     nrates::Int
-    nindividualparams::Int
+    nparams::Int
     nindividuals::Int
+    nratestart::Int
+    nparamstart::Int
     hyperindices::Vector{Vector}
 end
 
@@ -336,6 +337,11 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
+"""
+    loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+
+TBW
+"""
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_params(param, model)
     llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -352,6 +358,11 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
+"""
+    hyper_distribution(p)
+
+TBW
+"""
 function hyper_distribution(p) 
     distribution_array(p[1],sigmalognormal(p[2]))
 end
@@ -369,7 +380,7 @@ function prepare_params(param, model::GRSMhierarchicalmodel)
         push!(h,i)
     end
     r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end],model.pool.nindividualparams,model.pool.nindividuals)
+    p = reshape(param[model.pool.paramstart:end],model.pool.nparams,model.pool.nindividuals)
     return r, p, h
 end
 # function prepare_params(param, model::GRSMhierarchicalmodel)

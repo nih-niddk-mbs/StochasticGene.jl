@@ -307,12 +307,18 @@ function load_model(data, r, transitions, G::Int, R, S, insertstep, nalleles, pr
     nhyper = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
     nindividuals = length(data.trace)
+    nparams = length(hierarchical[2])
     rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, priorcv)
     priord = prior_distribution(rm[1:nhyper*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nhyper, [], nrates, 0), decayrate, priorcv, noisepriors)
+    nparamstart = length(fittedparam) + nhyper * length(hierarchical[2]) + 1
     fittedparam, fittedhyper = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals)
-    pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals, fittedhyper)
+
+    nratestart = nhyper * nrates + 1
+
+    # pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals)
+    # pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals, fittedhyper)
+    pool = Pool(nhyper, nrates, nparams, nindividuals, nratestart, nparamstart, fittedhyper)
     return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 
 end
