@@ -27,7 +27,7 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     -sum(logpredictions), -logpredictions
 end
 
-function ll_hmm_hierarchical_ratefixed(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
     for i in eachindex(trace)

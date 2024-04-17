@@ -78,7 +78,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
 - `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
-- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,fitted individual params::Vector,fixed individual params::Tuple)
+- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -283,38 +283,38 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         end
     end
     if isempty(hierarchical)
-        priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
-    else
-        nhyper = hierarchical[1]
-        nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        priord = prior_distribution(rm[1:nhyper*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nhyper, [], nrates, 0), decayrate, priorcv, noisepriors)
-    end
-    if propcv < 0
-        propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
-    end
-    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, 1, components, reporter, hierarchical)
-end
-
-"""
-    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
-
-"""
-function load_model(data, r, transitions::Tuple, G::Int, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
-    if isempty(hierarchical)
         checklength(r, transitions, R, S, insertstep, reporter)
+        priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
+        if propcv < 0
+            propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
+        end
         if R == 0
             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     else
-        nrates = num_rates(transitions, R, S, insertstep) + reporter.n
-        nindividuals = length(data.trace)
-        pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals)
-        fittedparam = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-        fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-        return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        load_model(data, r, transitions, G, R, S, insertstep, nalleles, priorcv, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
     end
+end
+
+"""
+    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+
+"""
+function load_model(data, r, transitions, G::Int, R, S, insertstep, nalleles, priorcv, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+
+    nhyper = hierarchical[1]
+    nrates = num_rates(transitions, R, S, insertstep) + reporter.n
+    nindividuals = length(data.trace)
+    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, priorcv)
+    priord = prior_distribution(rm[1:nhyper*nrates], transitions, R, S, insertstep, make_fitted(fittedparam, nhyper, [], nrates, 0), decayrate, priorcv, noisepriors)
+    fittedparam, fittedhyper = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
+    pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals)
+    pool = Pool(hierarchical[1], length(fittedparam), nrates, length(hierarchical[2]), nindividuals, fittedhyper)
+    return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+
 end
 
 function checklength(r, transitions, R, S, insertstep, reporter)
@@ -340,47 +340,13 @@ function default_fitted(datatype::String, transitions, R, S, insertstep, noisepa
     end
     fittedparam
 end
-
-"""
-    make_fitted(fittedparams,N)
-
-make fittedparams vector for hierarchical model
-"""
-function make_fitted(fittedpool, nhyper, fittedindividual, nrates, nindividuals)
-    f = copy(fittedpool)
-    for i in 1:nhyper-1
-        append!(f, fittedpool .+ i * nrates)
-    end
-    for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhyper - 1) * nrates)
-    end
-    f
-end
-
-"""
-    make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
-
-make fixed effects tuple for hierarchical model
-"""
-function make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
-    fixed = Vector{Int}[]
-    for f in fixedpool
-        push!(fixed, f)
-    end
-    for h in fixedindividual
-        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
-    end
-    tuple(fixed...)
-end
-
 """
     make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
 
-make fixedeffects tuple and fittedparams vector from fixedeffects String
+make default fixedeffects tuple and fittedparams vector from fixedeffects String
 """
 function make_fixedfitted(datatype::String, fixedeffects::String, transitions, R, S, insertstep, noiseparams)
-    n = num_rates(transitions, R, S, insertstep)
-    fittedparam = collect(1:n-1)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
     fixed = split(fixedeffects, "-")
     if length(fixed) > 1
         fixed = parse.(Int, fixed)
@@ -389,12 +355,76 @@ function make_fixedfitted(datatype::String, fixedeffects::String, transitions, R
     else
         fixed = tuple()
     end
-    if occursin("trace", datatype)
-        fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
-    end
     return fixed, fittedparam
 end
+"""
+    make_fitted(fittedparams,N)
 
+make fittedparams vector for hierarchical model
+"""
+function make_fitted(fittedshared, nhyper, fittedindividual, nrates, nindividuals)
+    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+    fhyper = [fittedindividual]
+    for i in 1:nhyper-1
+        append!(f, fittedindividual .+ i * nrates)
+        push!(fhyper, fittedindividual .+ i * nrates)
+    end
+    for i in 1:nindividuals
+        append!(f, fittedindividual .+ (i + nhyper - 1) * nrates)
+    end
+    f, fhyper
+end
+
+"""
+    make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
+
+make fixed effects tuple for hierarchical model
+"""
+function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
+    fixed = Vector{Int}[]
+    for f in fixedshared
+        push!(fixed, f)
+    end
+    for h in fixedindividual
+        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
+    end
+    tuple(fixed...)
+end
+
+
+"""
+    prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+
+default priors for rates (includes all parameters, fitted or not)
+"""
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+    if S > 0
+        S = R - insertstep + 1
+    end
+    ntransitions = length(transitions)
+    nrates = num_rates(transitions, R, S, insertstep)
+    rm = fill(0.1, nrates)
+    rm[collect(1:ntransitions)] .= 0.01
+    rm[nrates] = decayrate
+    [rm; noisepriors]
+end
+
+"""
+    prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)
+
+default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
+"""
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)
+    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+    r = copy(rm)
+    if i in 2:nhyper
+        append!(r, cv .* rm)
+    end
+    for i in 1:nindividuals
+        append!(r, rm)
+    end
+    r
+end
 """
     prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv, noiseparams, weightind)
 
@@ -417,35 +447,6 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     else
         throw("priorcv not the same length as prior mean")
     end
-end
-
-"""
-    prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
-
-
-"""
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
-    if S > 0
-        S = R - insertstep + 1
-    end
-    ntransitions = length(transitions)
-    nrates = num_rates(transitions, R, S, insertstep)
-    rm = fill(0.1, nrates)
-    rm[collect(1:ntransitions)] .= 0.01
-    rm[nrates] = decayrate
-    [rm; noisepriors]
-end
-
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)
-    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
-    r = copy(rm)
-    if nhyper == 2
-        append!(r, cv .* rm)
-    end
-    for i in 1:nindividuals
-        append!(r, rm)
-    end
-    r
 end
 
 """

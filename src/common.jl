@@ -124,6 +124,7 @@ struct Pool
     nrates::Int
     nindividualparams::Int
     nindividuals::Int
+    hyperindices::Vector{Vector}
 end
 
 """
@@ -336,9 +337,10 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    r, p, pm, psig = prepare_params(param, model)
+    r, p, hyper = prepare_params(param, model)
     llg, llgp = model.method[2] ? ll_hmm_hierarchical_ratefixed(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    d = distribution_array(pm, psig)
+    # d = distribution_array(pm, psig)
+    d = hyper_distribution(hyper)
     lhp = Float64[]
     for pc in eachcol(p)
         lhpc = 0
@@ -350,15 +352,43 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-function prepare_params(param, model)
-    r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nhyper + model.pool.nindividuals)
-    pm = param[1:model.pool.nparams]
-    if model.pool.nhyper == 2
-        psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
-    end
-    p = reshape(param[model.pool.nhyper*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
-    return r[:, model.pool.nhyper+1:end], p, pm, psig
+function hyper_distribution(p) 
+    distribution_array(p[1],sigmalognormal(p[2]))
 end
+
+"""
+    prepare_params(param, model)
+
+extract and reassemble parameters for use in likelihood
+"""
+function prepare_params(param, model::GRSMhierarchicalmodel)
+    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    h = Vector{Int}[]
+    for i in model.pool.hyperindices
+        push!(h,i)
+    end
+    r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
+    p = reshape(param[model.pool.paramstart:end],model.pool.nindividualparams,model.pool.nindividuals)
+    return r, p, h
+end
+# function prepare_params(param, model::GRSMhierarchicalmodel)
+#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+#     r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nhyper + model.pool.nindividuals)
+#     param = Vector{Int}[]
+#     for i in model.pool.hyperindices
+#         push!(param[i])
+#     end
+
+#     pm = param[1:model.pool.nparams]
+    
+#     if model.pool.nhyper == 2
+#         psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
+#     end
+#     p = reshape(param[model.pool.nhyper*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
+#     return r[:, model.pool.nhyper+1:end], p, pm, psig
+# end
 
 # Likelihood functions
 
