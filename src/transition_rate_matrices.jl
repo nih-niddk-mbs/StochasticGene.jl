@@ -257,14 +257,45 @@ function on_states(onstates, G, R, S, insertstep)
     end
 end
 
-function inverse_state(i,G,R,S)
+function inverse_state(i::Int, G, R, S)
     base = S > 0 ? 3 : 2
-    z = div(i,G)
-    g = mod(i-1,G) + 1
+    z = div(i, G)
+    g = mod(i - 1, G) + 1
     zdigits = digit_vector(z, base, R)
-    return g, z, zdigits
+    r = sum(zdigits .> 0)
+    return g, z, zdigits, r
 end
 
+function inverse_state(i::Vector{Int}, G, R, S)
+    base = S > 0 ? 3 : 2
+    z = Int[]
+    g = Int[]
+    zdigits = Vector[]
+    r = Int[]
+    for i in i
+        gi, zi, zdi, ri = inverse_state(i, G, R, S)
+        push!(z, zi)
+        push!(g, gi)
+        push!(zdigits, zdi)
+        push!(r, ri)
+    end
+    return g, z, zdigits, r
+end
+
+function inverse_state(i::Vector{Vector{Int}}, G, R, S)
+    z = Vector{Int}[]
+    g = Vector{Int}[]
+    zdigits = Vector{Vector}[]
+    r = Vector{Int}[]
+    for i in i
+        gi, zi, zdi, ri = inverse_state(i, G, R, S)
+        push!(z, zi)
+        push!(g, gi)
+        push!(zdigits, zdi)
+        push!(r, ri)
+    end
+    return g, z, zdigits, r
+end
 """
     on_states(G, R, S, insertstep)
 
@@ -758,7 +789,7 @@ function make_mat_GR(components, rates)
     G = make_mat(components.elementsG, rates, nG)
     R = make_mat(components.elementsR, rates, nR)
     RB = make_mat(components.elementsRB, rates, nR)
-    G,R,RB
+    G, R, RB
 end
 
 function make_mat_T2(components, rates)
@@ -775,7 +806,7 @@ function make_mat_T2(components, rates)
 end
 
 function make_mat_B()
-    kron(RB,G)
+    kron(RB, G)
 end
 
 

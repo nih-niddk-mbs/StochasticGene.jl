@@ -147,7 +147,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
         if isempty(hierarchical)
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
         else
-            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, length(data.trace), hierarchical[1])
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, length(data.trace[1]), hierarchical[1])
         end
     end
     isempty(fittedparam) && (fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams))
@@ -296,15 +296,15 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         end
     else
         ~isa(method, Tuple) && throw("method not a Tuple")
-        load_model(data, r, transitions, G, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
+        load_model(data, r, rm, transitions, G, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
     end
 end
 
 """
-    load_model(data, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter, hierarchical)
+    load_model(data, r, rm, transitions, G::Int, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
 
 """
-function load_model(data, r, transitions, G::Int, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
+function load_model(data, r, rm, transitions, G::Int, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
 
     nhyper = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
@@ -313,13 +313,8 @@ function load_model(data, r, transitions, G::Int, R, S, insertstep, nalleles, pr
     ratestart = nhyper * nrates + 1
     paramstart = length(fittedparam) + nhyper * nparams + 1
 
-
     fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-
-
-
-    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, priorcv)
 
     rprior = rm[1:nhyper*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, decayrate, fill(priorcv, length(rprior)), noisepriors, 1)
@@ -544,7 +539,7 @@ function check_genename(gene, p1)
 end
 
 """
-print_ll(param,data,model,message="initial max ll:")
+    print_ll(param, data, model, message)
 
 compute and print initial loglikelihood
 """
@@ -552,7 +547,7 @@ function print_ll(param, data, model, message)
     ll, _ = loglikelihood(param, data, model)
     println(message, ll)
 end
-function print_ll(data, model, message="initial max ll: ")
+function print_ll(data, model, message="initial ll: ")
     ll, _ = loglikelihood(get_param(model), data, model)
     println(message, ll)
 end
