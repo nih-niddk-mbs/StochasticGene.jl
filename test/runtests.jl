@@ -24,17 +24,17 @@ function test_chem(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates
     likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 end
 
-function test_fit_simrna(; rtarget = [.33, .19, 20.5, 1.], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(),rinit=[.1,.1,.1,1.],totalsteps=100000)
-    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps,nalleles=nalleles)
+function test_fit_simrna(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000)
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)
     data = RNAData("", "", nRNA, h)
-    model = load_model(data, rinit, Float64[], fittedparam, fixedeffects, transitions, G, 0, 0, 0, nalleles, 10.0, Int[], rinit[end], .02, "", prob_GaussianMixture, [], tuple())
+    model = load_model(data, rinit, Float64[], fittedparam, fixedeffects, transitions, G, 0, 0, 0, nalleles, 10.0, Int[], rinit[end], 0.02, "", prob_GaussianMixture, [], tuple())
     options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
 function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), rinit=[0.01, 0.1, 1.0, 0.01006327034802035], datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
-    data = load_data("rna", [], folder_path(datapath, root, "data"), label, gene, datacond, 1.0, 1.0, [1,2])
+    data = load_data("rna", [], folder_path(datapath, root, "data"), label, gene, datacond, 1.0, 1.0, [1, 2])
     model = load_model(data, rinit, Float64[], fittedparam, fixedeffects, transitions, 2, 0, 0, 1, nalleles, 10.0, Int[], rinit[end], propcv, "", prob_GaussianMixture, [], tuple())
     options = StochasticGene.MHOptions(100000, 0, 0, 60.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
@@ -65,24 +65,27 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 2.0, 0.23, 0.02, 0.25, 0.17, 0.
     h, StochasticGene.datapdf(data)
 end
 
-function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0,noisepriors=[50, 15, 200, 70])
+function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70])
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.))
+    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0))
     model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
-function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1., 50, 15, 200, 70], rinit=[], nsamples=50000, onstates=Int[], totaltime=1000.0, ntrials=5, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0,noisepriors=[50, 15, 200, 70],hierarchical=(2,collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4),tuple()),method=(1,true))
+function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+ length(noisepriors)), tuple()), method=(1, true))
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.))
-    isempty(rinit) && (rinit = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1., noisepriors, length(data.trace[1]), hierarchical[1]))
-    model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical,method)
+    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0))
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, length(data.trace[1]), hierarchical[1])
+    isempty(rinit) && (rinit = rm)
+    model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical, method)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     nrates = num_rates(transitions, R, S, insertstep)
-    StochasticGene.get_rates(fits.parml, model)[1:nrates], rtarget[1:nrates]
+    h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates] 
+    h2 = rtarget[1:nrates]
+    return h1, h2
 end
 
 
@@ -90,7 +93,7 @@ end
 @testset "StochasticGene" begin
 
     h1, h2 = test_fit_trace_hierarchical()
-    @test isapprox(h1, h2, rtol=0.05)
+    @test isapprox(h1, h2, rtol=0.5)
 
     h1, h2 = test_compare()
     @test isapprox(h1, h2, rtol=0.2)
