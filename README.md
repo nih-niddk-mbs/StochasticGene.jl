@@ -1,15 +1,15 @@
 # StochasticGene.jl
 
-Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, and S splice sites (usually same as R). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather thabn usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors).
+Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data acceptable include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, S splice sites (up to R), and reporter insertion step (insertstep). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps at and after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. The alleles were also coupled; coupling between alleles and between genes is under construction. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather thabn usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors).
 
-The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data (i.e. compute Bayesian posterior distributions), and explicitly simulate models.
+The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data (i.e. compute Bayesian posterior distributions), explicitly simulate models, and analyze the results. Unfortunately, not all capabilities are documented so just send me a message if you have any questions.
 
 StochasticGene can run on small data sets on a laptop or large data sets on a multiprocessor cluster such as NIH Biowulf. There are functions that generate swarm files to be submitted and process and analyze the results.
 
 
 ### Installing StochasticGene
 
-The following assumes that Julia has already been installed. If not go to https://julialang.org/downloads/. Julia has already been installed on the NIH Biowulf system but StochasticGene must be installed by each individual user.
+The following assumes that Julia has already been installed. If not go to https://julialang.org/downloads/. Julia has already been installed on the NIH Biowulf system but StochasticGene must be installed by each individual user. 
 
 To install StochasticGene on a local computer, open a terminal and type
 
@@ -57,12 +57,15 @@ This loads Julia for use.
 ```
 Starts Julia (with a single thread). Then continue as before
 
+
 Note: Sometimes Julia has problems crashing on Biowulf if an update is made to StochasticGene.  The best way to deal with this is to go to your
 home directory and delete the julia directory via:
 ```
 [username@biowulf ~]$ rm -r --force .julia
 ```
-Then start julia and add StochasticGene again.
+Then start julia and add StochasticGene again. 
+
+Also, Julia is periodically updated on Biowulf and StochasticGene will not carry forward to the latest version.  You can still call previous versions when you allocated CPUs or reinstall StochasticGene in the new version.
 
 ### Creating folder structure to run StochasticGene
 
@@ -199,6 +202,8 @@ In this run, `rhat` is close to 3 indicating that the number of samples was insu
 
 ### Batch fitting on Biowulf using `swarm`.
 
+(You made need to run a few times on Biowulf after installing or updating StochasticGene before it works as it sometimes takes too long to precompile on the first use)
+
 The data can also be fit in batch mode using swarm files.  To do so, you create swarm files.
 
 For example, you can fit all the scRNA histogram of all the genes in folder called "data/HCT_testdata" (which should exist if you ran `setup`) on NIH Biowulf by running a swarmfile.
@@ -240,7 +245,10 @@ To run the swarm file, type at the command line:
 ```
 [username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_2.swarm --time 12:00:00 -t 8  -g 24 --merge-output --module julialang
 ```
-(choose a time longer than maxtime (remember to convert seconds to hours))
+`-t` flag is for time
+`-g` flag is for memory
+
+(choose a time longer than maxtime (remember to convert seconds to hours), and make sure to allocate enough memory)
 
 This will submit a job into the Biowulf queue.  To check the status of your job type:
 
@@ -348,99 +356,35 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 #Arguments
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `dttype=String[]`
-- `datapath=""`: path to data file or folder or array of files or folders
-- `cell::String=""': cell type for halflives and allele numbers
-- `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `traceinfo=(1.0, 1., .65)`: 3 tuple of frame interval of intensity traces, transient (burn) time, and fraction of active traces
-- `nascent=(1, 2)`: 2 tuple of number of spots, total number of locations (e.g. number of cells times number of alleles/cell)
-- `traceinfo=tuple()`: tuple of trace information (frame interval, transient::Float64,onfraction::Float64)
-- `infolder::String=""`: result folder used for initial parameters
-- `resultfolder::String=test`: folder for results of MCMC run
-- `label::String=""`: label of output files produced
-- `inlabel::String=""`: label of files used for initial conditions
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-     (only first parameter should be included in fittedparam)
-- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `G::Int=2`: number of gene states
-- `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, when insertstep > 1, S is actually R - insertstep + 1)
-- `insertstep::Int=1`: R step where reporter is inserted
-- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
-- `root="."`: name of root directory for project, e.g. "scRNA"
-- `priormean=Float64[]`: mean of prior rate distribution
-- 'priorcv=10.`: coefficient of variation for the rate prior distributions, default is 10.
-- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates=Int[]`: vector of on or sojourn states
-- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn=prob_GaussianMixture`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
-- `noiseparams=5`: number of parameters of probfn
-- `weightind=5`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
-- `hierarchical=tuple()`: tuple of hierchical model parameters
-- `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
-- `samplesteps::Int=1000000`: number of MCMC sampling steps
-- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
-- `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-- `temp=1.0`: MCMC temperature
-- `tempanneal=100.`: annealing temperature
-- `temprna=1.`: reduce rna counts by temprna compared to dwell times
-- `burst=false`: if true then compute burst frequency
-- `optimize=false`: use optimizer to compute maximum likelihood value
-- `writesamples=false`: write out MH samples if true, default is false
-
-```
-
-```
-    makeswarm(genes::Vector{String}; <keyword arguments> )
-
-
-write swarm and fit files used on biowulf
-creates a run for each gene
-
-#Arguments
-- `genes`: vector of genes
-- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
-- 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
-- `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
-- `batchsize=1000`: number of jobs per swarmfile, default = 1000
-- `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
-- `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
-- `threhsoldhigh::=Inf`: upper threshold
-- `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
 - `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `datapath=""`: path to data file or folder or array of files or folders
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `traceinfo=(1., 1., .65)`: vector of frame traceinfo of intensity traces and transient time
-- `nascent=(1,2,1.)`: vector of number of spots, and total number of locations (e.g. number of cells times number of alleles/cell)
+- `traceinfo=(1.0, 1., 240., .65)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
+- `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
 - `label::String=""`: label of output files produced
 - `inlabel::String=""`: label of files used for initial conditions
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]
-- `fixedeffects=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means  index 8 is fixed to index 3
-     (only first parameter should be included in fixedeffects)
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
+- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
+     (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G::Int=2`: number of gene states
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R for GRS models, when insertstep > 1, S is R - insertstep + 1))
+- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep::Int=1`: R step where reporter is inserted
-- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "Refractory"
+- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "cyclicory"
 - `root="."`: name of root directory for project, e.g. "scRNA"
-- `priormean=Float64[]`: mean of prior rate distribution
-- 'priorcv=10.`: coefficient of variation for the rate prior distributions, default is 10.
+- `priormean=Float64[]`: mean rates of prior distribution
+- 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
 - `onstates=Int[]`: vector of on or sojourn states, e.g. [[2,3],[]], use empty vector for R states, do not use [] for R=0 models
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn=prob_GaussianMixture`: probability function for hmm observation probability (e.g. prob_GaussianMixture)
-- `noiseparams=5`: number of parameters of probfn
-- `weightind=5`: parameter index of bias probability of mixtures, e.g. noiseparams=5, weightind=5 means last noise parameter is for mixture bias
-- `hierarchical=tuple()`: tuple of hierchical model parameters
+- `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
+- `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
+- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -453,11 +397,83 @@ creates a run for each gene
 - `burst=false`: if true then compute burst frequency
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `writesamples=false`: write out MH samples if true, default is false
-- `src=""`: path to folder containing StochasticGene.jl/src
+- `method=1`: optional method variable, for hierarchical models it is a tuple(Int,Bool) = (numerical method, true if transition rates are shared)
+
+Example:
+
+If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
+
+$julia -p 4
+
+julia> fits, stats, measures, data, model, options = fit(nchains = 4)
+
+
 ```
 
 
+```
 
+    makeswarm(;<keyword arguments>)
+
+write swarm and fit files used on biowulf
+
+
+#Arguments
+
+- 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
+- `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
+- `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
+- `src=""`: path to folder containing StochasticGene.jl/src (only necessary if StochasticGene not installed)
+
+and all keyword arguments of function fit(; <keyword arguments> )
+
+see fit
+
+```
+
+```
+    makeswarm_genes(genes::Vector{String}; <keyword arguments> )
+
+write a swarmfile and fit files to run all each gene in vector genes
+
+# Arguments
+- `genes`: vector of genes
+- `batchsize=1000`: number of jobs per swarmfile, default = 1000
+
+and all arguments in makeswarm(;<keyword arguments>)
+
+
+    Examples
+
+julia> genes = ["MYC","SOX9"]
+
+julia> makeswarm(genes,cell="HBEC")
+
+```
+
+```
+    makeswarm_genes(;<keyword arguments> )
+
+@JuliaRegistrator register()
+ 
+#Arguments
+    - `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
+    - `threhsoldhigh::=Inf`: upper threshold
+
+    and all keyword arguments in makeswarm(;<keyword arguments>)
+```
+
+```
+    makeswarm(models::Vector{ModelArgs}; <keyword arguments> )
+
+creates a run for each model
+
+#Arguments
+- `models::Vector{ModelArgs}`: Vector of ModelArgs structures
+
+and all keyword arguments in makeswarm(;<keyword arguments>)
+
+```
 
 ```
 run_mh(data,model,options)

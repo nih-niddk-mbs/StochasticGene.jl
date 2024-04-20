@@ -34,7 +34,7 @@ end
 
 
 """
-    makeswarm(<keyword arguments>)
+    makeswarm(;<keyword arguments>)
 
 write swarm and fit files used on biowulf
 
@@ -44,7 +44,7 @@ write swarm and fit files used on biowulf
 - 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
 - `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
 - `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
-- `src=""`: path to folder containing StochasticGene.jl/src
+- `src=""`: path to folder containing StochasticGene.jl/src (only necessary if StochasticGene not installed)
 
 and all keyword arguments of function fit(; <keyword arguments> )
 
@@ -78,7 +78,7 @@ write a swarmfile and fit files to run all each gene in vector genes
 - `genes`: vector of genes
 - `batchsize=1000`: number of jobs per swarmfile, default = 1000
 
-and all arguments in makeswarm();
+and all arguments in makeswarm(;<keyword arguments>)
 
 
     Examples
@@ -110,10 +110,15 @@ function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads::Int=1, swarm
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 end
 """
-    makeswarm_folder(<keyword arguments> )
+    makeswarm_genes(;<keyword arguments> )
+
+@JuliaRegistrator register()
  
+#Arguments
     - `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
     - `threhsoldhigh::=Inf`: upper threshold
+
+    and all keyword arguments in makeswarm(;<keyword arguments>)
 """
 function makeswarm_genes(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", traceinfo=(1.0, 1.0, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
@@ -131,7 +136,8 @@ creates a run for each model
 
 #Arguments
 - `models::Vector{ModelArgs}`: Vector of ModelArgs structures
-- keyword arguments are same as top
+
+and all keyword arguments in makeswarm(;<keyword arguments>)
 """
 function makeswarm(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test",
     root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
@@ -147,7 +153,6 @@ end
 """
     write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
 
-TBW
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
     f = open(sfile, "w")
@@ -162,7 +167,7 @@ end
 """
     write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
 
-
+write swarmfile for vector of genes
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
     f = open(sfile, "w")
@@ -180,7 +185,7 @@ end
 """
     write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs})
 
-
+write swarmfile for vector of models
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
     f = open(sfile, "w")
@@ -205,7 +210,7 @@ end
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
-TBW
+
 """
 function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
@@ -224,7 +229,7 @@ end
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, src)
 
-
+write fitfile for genes
 """
 function write_fitfile(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
@@ -244,6 +249,13 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, cell, datac
     close(f)
 end
 
+"""
+    write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder,
+    root, maxtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
+
+write fitfile for models
+"""
 function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder,
     root, maxtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
@@ -264,7 +276,7 @@ end
 """
     write_prolog(f,src)
 
-TBW
+if src is empty assume StochasticGene is installed as a Julia package
 """
 function write_prolog(f, src)
     s = '"'
