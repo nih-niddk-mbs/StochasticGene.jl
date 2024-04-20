@@ -120,7 +120,7 @@ The two state telegraph model has 4 transition rates, which are stored in a sing
 In this particular run, only one chain was used so the measures are not very informative. To use more chains, specify more processors with
 
 ```
-$ julia -p 4
+bash> julia -p 4
 
 julia> @everywhere using StochasticGene
 

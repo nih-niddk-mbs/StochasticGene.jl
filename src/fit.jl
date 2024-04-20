@@ -98,7 +98,7 @@ Example:
 
 If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
 
-$julia -p 4
+bash> julia -p 4
 
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 
