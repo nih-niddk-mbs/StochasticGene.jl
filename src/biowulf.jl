@@ -43,7 +43,6 @@ write swarm and fit files used on biowulf
 
 - 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
 - `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
-- `batchsize=1000`: number of jobs per swarmfile, default = 1000
 - `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
 - `src=""`: path to folder containing StochasticGene.jl/src
 
@@ -54,12 +53,13 @@ see fit
 
 
 """
-function makeswarm(;gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
+function makeswarm(; gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
+    sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile)
     write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
@@ -76,9 +76,9 @@ write a swarmfile and fit files to run all each gene in vector genes
 
 # Arguments
 - `genes`: vector of genes
+- `batchsize=1000`: number of jobs per swarmfile, default = 1000
 
 and all arguments in makeswarm();
-
 
 
     Examples
@@ -131,10 +131,10 @@ creates a run for each model
 
 #Arguments
 - `models::Vector{ModelArgs}`: Vector of ModelArgs structures
-- keyword arguments are same as above
+- keyword arguments are same as top
 """
 function makeswarm(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 0.65), nascent=(1, 2), infolder::String="", resultfolder::String="test",
-    fittedparam::Vector=Int[], root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
     juliafile = juliafile * "_" * gene * "_" * datacond * ".jl"
     sfile = swarmfile * "_" * gene * "_" * datacond * ".swarm"
@@ -144,18 +144,17 @@ function makeswarm(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads:
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 end
 
+"""
+    write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
 
-
+TBW
+"""
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
     f = open(sfile, "w")
-    for gene in genes
-        gene = check_genename(gene, "(")
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
-        if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains juliafile])
-        else
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile])
-        end
+    if isempty(project)
+        writedlm(f, ["julia -t $nthreads -p" nchains juliafile])
+    else
+        writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile])
     end
     close(f)
 end
@@ -165,11 +164,10 @@ end
 
 
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector{String}, project="")
+function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
     f = open(sfile, "w")
     for gene in genes
         gene = check_genename(gene, "(")
-        writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
         if isempty(project)
             writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
         else
@@ -214,7 +212,7 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
     s = '"'
     f = open(fitfile, "w")
-    write_prolog(f,src)
+    write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
     write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method)")
@@ -268,7 +266,7 @@ end
 
 TBW
 """
-function write_prolog(f,src)
+function write_prolog(f, src)
     s = '"'
     if isempty(src)
         write(f, "@everywhere using StochasticGene\n")
