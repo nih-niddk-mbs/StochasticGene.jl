@@ -61,7 +61,7 @@ function makeswarm(;gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile:
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile)
-    write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
+    write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 end
@@ -202,6 +202,24 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond
     close(f)
 end
 
+"""
+    write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
+
+TBW
+"""
+function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
+    s = '"'
+    f = open(fitfile, "w")
+    write_prolog(f,src)
+    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
+    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $nascent, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $s$root$s, $maxtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method)")
+    close(f)
+end
 
 """
     write_fitfile(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label,
@@ -245,7 +263,21 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell,
     write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $nascent, $s$infolder$s, $s$resultfolder$s, ARGS[1], ARGS[2], ARGS[8], ARGS[3], ARGS[4], ARGS[5], ARGS[6], ARGS[7], $s$root$s, $maxtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s,$propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method)")
     close(f)
 end
+"""
+    write_prolog(f,src)
 
+TBW
+"""
+function write_prolog(f,src)
+    s = '"'
+    if isempty(src)
+        write(f, "@everywhere using StochasticGene\n")
+    else
+        write(f, "@everywhere include($s$src$s)\n")
+        write(f, "@everywhere using .StochasticGene\n")
+    end
+
+end
 """
     create_label(label,inlabel,datacond,cell,Gfamily)
 
