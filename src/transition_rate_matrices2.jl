@@ -728,10 +728,6 @@ function make_mat_M2(components::MComponents, rates::Vector)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
 
-function make_mat_B()
-
-
-end
 
 """
 make_T_mat
