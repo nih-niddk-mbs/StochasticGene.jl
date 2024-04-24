@@ -709,10 +709,24 @@ struct T2Components <: AbstractTComponents
     elementsRG::Vector
 end
 
+struct M2Components
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRG::Vector
+    elementsR::Vector
+    elementsB::Vector{Element}
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+end
+
 struct MT2Components
-    mcomponents::MComponents
+    mcomponents::M2Components
     tcomponents::T2Components
 end
+
+
 
 function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
@@ -794,8 +808,9 @@ end
 
 function set_elements_B2(G, R, ejectindex, base=2)
     if R > 0
+        nR = base^R
         elementsB = Vector{Element}(undef, 0)
-        for b = 1:base^R, a = 1:base^R
+        for b = 1:nR, a = 1:nR
             zdigits = digits(a - 1, base=base, pad=R)
             wdigits = digits(b - 1, base=base, pad=R)
             zr = zdigits[R]
@@ -828,24 +843,23 @@ function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, spl
     end
 end
 
-
 function make_components_T2(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, S, insertstep, indices, "")
+    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
     T2Components(G, nR, elementsG, elementsR, elementsRG)
 end
 
-function make_components_M2(transitions, G, R, nhist, decay, splicetype)
+function make_components_M2(transitions, G, R, nhist, decay)
     indices = set_indices(length(transitions), R)
-    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, splicetype)
+    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
     elementsB = set_elements_B2(G, R, indices.nu[R+1])
     U, Um, Up = make_mat_U(nhist, decay)
-    mcomponents = MComponents(elementsT, elementsB, nT, U, Um, Up)
+    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay, splicetype), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
 
-function make_mats(components, rates)
+function make_mat_T2(components, rates)
     nG = components.nG
     nR = components.nR
     GR = spzeros(nG, nG)
@@ -853,39 +867,35 @@ function make_mats(components, rates)
     G = make_mat(components.elementsG, rates, nG)
     R = make_mat(components.elementsR, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    return G, GR, R, RG, nG, nR
-end
-
-function make_mat_T2(components, rates)
-    G, GR, R, RG, nG, nR = make_mats(components, rates)
     make_mat_T2(G, GR, R, RG, nG, nR)
 end
+
 function make_mat_T2(G, GR, R, RG, nG, nR)
     kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(R, sparse(I, nG, nG))
 end
 
-function make_mat_B2(RB, nG)
-    kron(RB, sparse(I,nG,nG))
+function make_mat_B2(components, rates)
+    RB = make_mat(components.elementsB, rates, components.nR)
+    nG = components.nG
+    kron(RB, sparse(I, nG, nG))
 end
 
-function make_mat_BT2(components, rates)
-    G, GR, R, RG, nG, nR = make_mats(components.tcomponents, rates)
-    RB = make_mat(components.mcomponents.elementsB, rates, nR)
-    T = make_mat_T2(G, GR, R, RG, nG, nR)
-    B = make_mat_B2(RB, nG)
-    return T, B
+function make_mat_M2(components::M2Components, rates::Vector)
+    T = make_mat_T2(components, rates)
+    B = make_mat_B2(components, rates)
+    make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
+end
+
+function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
+    components = make_components_MT2(transitions, G, R, S, insertstep, nhist, 1.01, "")
+    T = make_mat_T2(components.tcomponents, r)
+    M = make_mat_M2(components.mcomponents, r)
+    return T, M
 end
 
 function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     components = make_components_MT(transitions, G, R, S, insertstep, nhist, 1.01, "")
     T = make_mat_T(components.tcomponents, r)
-    B = make_mat(components.mcomponents.elementsB, r, components.tcomponents.nT)
-    T, make_mat_M(T, B, components.mcomponents.U, components.mcomponents.Uminus, components.mcomponents.Uplus), B
-end
-
-function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
-    components = make_components_MT2(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T, B = make_mat_BT2(components, r)
-    M = make_mat_M(T, B, components.mcomponents.U, components.mcomponents.Uminus, components.mcomponents.Uplus)
-    return T, M, B
+    M = make_mat_M(components.mcomponents, r)
+    T, M
 end
