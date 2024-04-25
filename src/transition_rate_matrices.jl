@@ -249,23 +249,23 @@ function on_states(onstates, G, R, S, insertstep)
     end
 end
 
-function inverse_state(i::Int, G, R, S)
+function inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
     base = S > 0 ? 3 : 2
     z = div(i, G)
     g = mod(i - 1, G) + 1
     zdigits = digit_vector(z, base, R)
-    r = sum(zdigits .> 0)
+    r = num_reporters_per_index(z, R, insertstep, base, f)
     return g, z, zdigits, r
 end
 
-function inverse_state(i::Vector{Int}, G, R, S)
+function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
     base = S > 0 ? 3 : 2
     z = Int[]
     g = Int[]
     zdigits = Vector[]
     r = Int[]
     for i in i
-        gi, zi, zdi, ri = inverse_state(i, G, R, S)
+        gi, zi, zdi, ri = inverse_state(i, G, R, S, insertstep)
         push!(z, zi)
         push!(g, gi)
         push!(zdigits, zdi)
@@ -274,13 +274,13 @@ function inverse_state(i::Vector{Int}, G, R, S)
     return g, z, zdigits, r
 end
 
-function inverse_state(i::Vector{Vector{Int}}, G, R, S)
+function inverse_state(i::Vector{Vector{Int}}, G, R, S, insertstep)
     z = Vector{Int}[]
     g = Vector{Int}[]
     zdigits = Vector{Vector}[]
     r = Vector{Int}[]
     for i in i
-        gi, zi, zdi, ri = inverse_state(i, G, R, S)
+        gi, zi, zdi, ri = inverse_state(i, G, R, S, insertstep)
         push!(z, zi)
         push!(g, gi)
         push!(zdigits, zdi)
@@ -343,7 +343,8 @@ function num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     base = S > 0 ? 3 : 2
     reporters = Vector{Int}(undef, G * base^R)
     for i in 1:G, z in 1:base^R
-        reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+        # reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+        reporters[state_index(G, i, z)] = num_reporters_per_index(z, R, insertstep, base, f)
         # push!(reporters, f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1))
     end
     reporters
@@ -355,6 +356,8 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     end
     reporters
 end
+
+num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
 """
 	set_indices(ntransitions, R, S, insertstep)
 	set_indices(ntransitions,R)

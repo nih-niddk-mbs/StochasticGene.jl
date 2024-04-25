@@ -476,11 +476,11 @@ end
 # end
 
 """
-    likelihoodarray(rin,data::RNADwellTimeData,model::AbstractGRSMmodel)
+    likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
 
 likelihood of an array of dwell time histograms
 """
-function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGRSMmodel)
+function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
     # likelihoodarray(r,model.G,model.components,data.bins,model.reporter,data.DTtypes,model.nalleles,data.nRNA)
     G = model.G
     tcomponents = model.components.tcomponents

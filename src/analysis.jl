@@ -1088,7 +1088,7 @@ function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, 
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
     if state
-        g, _, _, r = inverse_state(ts,G,R,S)
+        g, _, _, r = inverse_state(ts,G,R,S,insertstep)
         gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         zs = ["Rtotal$i" => [r[i]; fill(missing, l - length(r[i]))] for i in eachindex(r)]
         v = [data pred gs zs]
