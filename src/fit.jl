@@ -73,7 +73,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `priormean=Float64[]`: mean rates of prior distribution
 - 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates=Int[]`: vector of on or sojourn states, e.g. [[2,3],[]], use empty vector for R states, do not use [] for R=0 models
+- `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
