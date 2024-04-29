@@ -809,6 +809,19 @@ function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{I
     end
 end
 
+function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        if x
+        push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
+        push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        i += 1
+        end
+    end
+end
+
+
+
 function set_elements_B2(G, R, ejectindex, base=2)
     if R > 0
         nR = base^R
