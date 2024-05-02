@@ -171,6 +171,14 @@ function prob_Gaussian(par, reporters, N)
     end
     d
 end
+
+function prob_Gaussian_off(par, reporters, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = reporters[i] > 0 ? Dirac(0) : Normal(par[1], par[2])
+    end
+    d
+end
 """
     prob_GaussianMixture(par,reporters,N)
 
