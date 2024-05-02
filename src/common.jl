@@ -105,6 +105,13 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     histRNA::hType
 end
 
+struct TraceCoupledData{traceType} <: AbstractTraceData
+    label::String
+    gene::String
+    interval::Float64
+    trace::traceType
+end
+
 # Model structures
 
 """
@@ -152,6 +159,7 @@ abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
+abstract type AbstractGhierarchicalmodel <: AbstractGmodel end
 
 """
     Model structures
@@ -208,7 +216,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGhierarchicalmodel
     rates::RateType
     pool::Pool
     Gtransitions::Tuple
@@ -227,9 +235,26 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel
+struct GRSMcoupledallelemodel
+    rates::RateType
+    Gtransitions::Tuple
+    G::Int
+    R::Int
+    S::Int
+    insertstep::Int
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+end
 
-
+struct GRSMenhgenemodel
+    rates::RateType
 end
 
 """
@@ -386,23 +411,6 @@ function prepare_params(param, model::GRSMhierarchicalmodel)
     p = reshape(param[model.pool.paramstart:end],model.pool.nparams,model.pool.nindividuals)
     return r, p, h
 end
-# function prepare_params(param, model::GRSMhierarchicalmodel)
-#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-#     r = reshape(get_rates(param, model), model.pool.nrates, model.pool.nhyper + model.pool.nindividuals)
-#     param = Vector{Int}[]
-#     for i in model.pool.hyperindices
-#         push!(param[i])
-#     end
-
-#     pm = param[1:model.pool.nparams]
-    
-#     if model.pool.nhyper == 2
-#         psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
-#     end
-#     p = reshape(param[model.pool.nhyper*model.pool.nparams+1:end],model.pool.nindividualparams,model.pool.nindividuals)
-#     return r[:, model.pool.nhyper+1:end], p, pm, psig
-# end
 
 # Likelihood functions
 
