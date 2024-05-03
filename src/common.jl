@@ -227,28 +227,6 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledallelemodel
-    rates::RateType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-struct GRSMenhgenemodel
-    rates::RateType
-end
-
 """
     print_model(model::AbstractModel)
 
