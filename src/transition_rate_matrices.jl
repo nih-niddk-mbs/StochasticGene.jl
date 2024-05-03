@@ -239,7 +239,7 @@ end
 
 return state index for state (i,z)
 """
-state_index(G::Int, i, z) = i + G * (z - 1)
+state_index(G::Int, g, z) = g + G * (z - 1)
 
 function on_states(onstates, G, R, S, insertstep)
     if isempty(onstates)
@@ -251,8 +251,8 @@ end
 
 function inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
     base = S > 0 ? 3 : 2
-    z = div(i, G)
     g = mod(i - 1, G) + 1
+    z = div(i-g, G) + 1
     zdigits = digit_vector(z, base, R)
     r = num_reporters_per_index(z, R, insertstep, base, f)
     return g, z, zdigits, r
