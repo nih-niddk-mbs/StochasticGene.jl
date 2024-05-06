@@ -41,7 +41,7 @@ end
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
     a, p0 = make_ap(r, interval, elementsT, nT)
     lln = ll_nascent(p0, reporters_per_state, nascent)
-    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(p0))
+    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(max.(p0,0)))
     push!(logpredictions, lln)
     ll += lln
     ll, logpredictions
@@ -53,9 +53,10 @@ function ll_nascent(p0, reporters_per_state, nascent)
     -logpdf(d, nascent[1])
 end
 
-function ll_background(p0, reporters_per_state, bg)
-    pn = sum(p0[reporters_per_state.>0])
-    -bg * log(pn)
+function ll_background(params, a, p0, offstates,f)
+    l = sum(p0[offstaates,offstates]' * a[offstates,offstates])
+    l += .5 * log(2*pi*(params[2]^2))
+    - f*l
 end
 """
     ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
@@ -77,6 +78,22 @@ end
 function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
+    for (i,t) in enumerate(trace[1])
+        T = length(t)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
+
+function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
+    a, p0 = make_ap(r, interval, elementsT, nT)
+    lb = ll_background(r,a,p0,offstates,f)
+    loga=log.(max.(a, 0))
+    logp0=log.(max.(p0, 0))
     for (i,t) in enumerate(trace[1])
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)

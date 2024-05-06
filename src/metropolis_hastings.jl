@@ -521,6 +521,25 @@ function compute_stats(paramin::Array{Float64,2}, model)
     end
     Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
 end
+
+function compute_stats(paramin::Array{Float64,2}, model::GRSMhierarchicalmodel)
+    param = inverse_transform_rates(paramin, model)
+    meanparam = mean(param, dims=2)
+    stdparam = std(param, dims=2)
+    corparam = cor(param')
+    covparam = cov(param')
+    # covlogparam = cov(log.(param'))
+    covlogparam = cov(paramin')
+    medparam = median(param, dims=2)
+    np = size(param, 1)
+    madparam = Array{Float64,1}(undef, np)
+    qparam = Matrix{Float64}(undef, 3, 0)
+    for i in 1:np
+        madparam[i] = mad(param[i, :], normalize=false)
+        qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
+    end
+    Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
+end
 """
 compute_rhat(chain::Array{Tuple,1})
 compute_rhat(fits::Array{Fit,1})
