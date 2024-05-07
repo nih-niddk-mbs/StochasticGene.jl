@@ -222,27 +222,27 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif occursin("trace", datatype)
+        weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
         if typeof(datapath) <: String
             trace = read_tracefiles(datapath, datacond, traceinfo)
             background = Vector[]
-            weight = 0.0
         else
             trace = read_tracefiles(datapath[1], datacond, traceinfo)
             background = read_tracefiles(datapath[2], datacond, traceinfo)
-            weight = (1 - traceinfo[end]) / traceinfo[end] * length(trace)
         end
         (length(trace) == 0) && throw("No traces")
         println(length(trace))
         println(datapath)
         println(datacond)
         println(traceinfo)
+        nf = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] +  traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
         if datatype == "trace"
-            return TraceData(label, gene, traceinfo[1], (trace, background, weight))
+            return TraceData(label, gene, traceinfo[1], (trace, background, weight, nf))
         elseif datatype == "tracenascent"
-            return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight), nascent)
+            return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nf), nascent)
         elseif datatype == "tracerna"
             len, h = read_rna(gene, datacond, datapath[3])
-            return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight), len, h)
+            return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nf), len, h)
         end
     else
         throw("$datatype not included")
@@ -265,10 +265,10 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
-        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G::Int, R, S, insertstep))
         components = make_components_T(transitions, G, R, S, insertstep, splicetype)
     elseif typeof(data) <: AbstractTraceHistogramData
-        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G::Int, R, S, insertstep))
         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
         if isempty(onstates)

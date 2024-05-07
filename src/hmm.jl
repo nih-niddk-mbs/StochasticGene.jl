@@ -16,14 +16,18 @@
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
-    loga, logp0 = make_logap(r, interval, elementsT, nT)
-    ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, loga, logp0)
+function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, elementsT, nT)
+    lb = ll_background(r[end-noiseparams+1:end], a, p0, offstates, trace[3], trace[4])
+    loga = log.(max.(a, 0))
+    logp0 = log.(max.(p0, 0))
+    ll, lp = ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace[1], loga, logp0)
+    return ll + lb, lp
 end
 
-function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
+function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
+    for t in traces
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
@@ -38,10 +42,10 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
     -sum(logpredictions), -logpredictions
 end
 
-function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
+function ll_hmm_nascent(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
     a, p0 = make_ap(r, interval, elementsT, nT)
     lln = ll_nascent(p0, reporters_per_state, nascent)
-    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(max.(p0,0)))
+    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(max.(p0, 0)))
     push!(logpredictions, lln)
     ll += lln
     ll, logpredictions
@@ -53,10 +57,10 @@ function ll_nascent(p0, reporters_per_state, nascent)
     -logpdf(d, nascent[1])
 end
 
-function ll_background(params, a, p0, offstates,f)
-    l = sum(p0[offstaates,offstates]' * a[offstates,offstates])
-    l += .5 * log(2*pi*(params[2]^2))
-    - f*l
+function ll_background(params, a, p0, offstates, weight, n)
+    l = -log(sum(p0[offstates]' * a[offstates, offstates]^n))
+    # l += 0.5 * log(2 * pi * (params[2]^2))
+    weight * l
 end
 """
     ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
@@ -65,7 +69,7 @@ TBW
 """
 function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
-    for (i,t) in enumerate(trace[1])
+    for (i, t) in enumerate(trace[1])
         T = length(t)
         loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
         logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
@@ -78,7 +82,7 @@ end
 function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
-    for (i,t) in enumerate(trace[1])
+    for (i, t) in enumerate(trace[1])
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
@@ -87,20 +91,20 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noisep
     -sum(logpredictions), -logpredictions
 end
 
-function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
     a, p0 = make_ap(r, interval, elementsT, nT)
-    lb = ll_background(r,a,p0,offstates,f)
-    loga=log.(max.(a, 0))
-    logp0=log.(max.(p0, 0))
-    for (i,t) in enumerate(trace[1])
+    lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
+    loga = log.(max.(a, 0))
+    logp0 = log.(max.(p0, 0))
+    for (i, t) in enumerate(trace[1])
         T = length(t)
         logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
-    -sum(logpredictions), -logpredictions
+    -sum(logpredictions) + lb, -logpredictions
 end
 
 """

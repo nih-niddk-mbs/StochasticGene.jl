@@ -143,6 +143,7 @@ struct HMMReporter
     per_state::Vector{Int}
     probfn::Function
     weightind::Int
+    offstates::Vector{Int}
 end
 
 """
@@ -311,7 +312,7 @@ end
 negative loglikelihood of combined time series traces and each trace
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
@@ -329,7 +330,7 @@ negative loglikelihood of time series traces and mRNA FISH steady state histogra
 """
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
@@ -342,7 +343,7 @@ TBW
 """
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_params(param, model)
-    llg, llgp = model.method[2] ? ll_hmm_hierarchical_rateshared(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = model.method[2] ? ll_hmm_hierarchical_rateshared(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     # d = distribution_array(pm, psig)
     d = hyper_distribution(hyper)
     lhp = Float64[]
