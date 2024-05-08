@@ -177,7 +177,7 @@ function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 
     model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
-    StochasticGene.get_rates(fits.parml, model), rtarget
+    StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures,model,data
 end
 
 

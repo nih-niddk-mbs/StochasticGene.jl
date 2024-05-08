@@ -77,7 +77,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
-- `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
+- `noisepriors = []`: priors of observation noise (use empty set if not fitting traces), superceded if priormean is set
 - `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
@@ -163,7 +163,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
     if isempty(r)
         r = priormean
-        println("No prior")
+        println("No rate file")
     end
     if isempty(hierarchical)
         println(r)
@@ -422,7 +422,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     end
     ntransitions = length(transitions)
     nrates = num_rates(transitions, R, S, insertstep)
-    rm = fill(0.1, nrates)
+    rm = fill(.1*max(R,1), nrates)
     rm[collect(1:ntransitions)] .= 0.01
     rm[nrates] = decayrate
     [rm; noisepriors]
