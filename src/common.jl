@@ -339,11 +339,15 @@ end
 """
     loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
 
-TBW
+
 """
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_params(param, model)
-    llg, llgp = model.method[2] ? ll_hmm_hierarchical_rateshared(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace) : ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
     # d = distribution_array(pm, psig)
     d = hyper_distribution(hyper)
     lhp = Float64[]
@@ -352,7 +356,7 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
         for i in eachindex(pc)
             lhpc -= logpdf(d[i], pc[i])
         end
-        push!(lhp,lhpc)
+        push!(lhp, lhpc)
     end
     return llg + sum(lhp), vcat(llgp, lhp)
 end
@@ -360,10 +364,10 @@ end
 """
     hyper_distribution(p)
 
-TBW
+for hierarchical model
 """
-function hyper_distribution(p) 
-    distribution_array(p[1],sigmalognormal(p[2]))
+function hyper_distribution(p)
+    distribution_array(p[1], sigmalognormal(p[2]))
 end
 
 """
@@ -376,10 +380,10 @@ function prepare_params(param, model::GRSMhierarchicalmodel)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     h = Vector{Int}[]
     for i in model.pool.hyperindices
-        push!(h,i)
+        push!(h, i)
     end
     r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end],model.pool.nparams,model.pool.nindividuals)
+    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
     return r, p, h
 end
 # function prepare_params(param, model::GRSMhierarchicalmodel)
@@ -392,7 +396,7 @@ end
 #     end
 
 #     pm = param[1:model.pool.nparams]
-    
+
 #     if model.pool.nhyper == 2
 #         psig = sigmalognormal(param[model.pool.nrates+1:model.pool.nrates+model.pool.nparams])
 #     end
@@ -571,7 +575,7 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
         if typeof(v) <: Vector
             return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
         else
-            return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end,:]))
+            return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end, :]))
         end
     else
         return f1(v)
@@ -636,13 +640,13 @@ function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
-function get_rates(fits,stats,model,ratetype)
+function get_rates(fits, stats, model, ratetype)
     if ratetype == "ml"
-        return get_rates(fits.parml,model)
+        return get_rates(fits.parml, model)
     elseif ratetype == "median"
-        return get_rates(stats.medparam,model,false)
+        return get_rates(stats.medparam, model, false)
     elseif ratetype == "mean"
-        return get_rates(stats.meanparam,model,false)
+        return get_rates(stats.meanparam, model, false)
     else
         println("ratetype unknown")
     end

@@ -18,10 +18,8 @@ return total loglikelihood of traces with reporter noise and loglikelihood of ea
 """
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, elementsT, nT)
-    lb = ll_background(r[end-noiseparams+1:end], a, p0, offstates, trace[3], trace[4])
-    loga = log.(max.(a, 0))
-    logp0 = log.(max.(p0, 0))
-    ll, lp = ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace[1], loga, logp0)
+    lb = trace[3] > 0. ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    ll, lp = ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end
 
@@ -57,9 +55,8 @@ function ll_nascent(p0, reporters_per_state, nascent)
     -logpdf(d, nascent[1])
 end
 
-function ll_background(params, a, p0, offstates, weight, n)
+function ll_background(a, p0, offstates, weight, n)
     l = -log(sum(p0[offstates]' * a[offstates, offstates]^n))
-    # l += 0.5 * log(2 * pi * (params[2]^2))
     weight * l
 end
 """
@@ -94,8 +91,9 @@ end
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
-    a, p0 = make_ap(r, interval, elementsT, nT)
-    lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
+    a, p0 = make_ap(r[:,1], interval, elementsT, nT)
+    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    # lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
     loga = log.(max.(a, 0))
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])

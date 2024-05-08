@@ -91,7 +91,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `burst=false`: if true then compute burst frequency
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `writesamples=false`: write out MH samples if true, default is false
-- `method=1`: optional method variable, for hierarchical models it is a tuple(Int,Bool) = (numerical method, true if transition rates are shared)
+- `method=1`: optional method variable, for hierarchical models method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
 
 
 Example:
