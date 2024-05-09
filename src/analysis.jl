@@ -1117,7 +1117,7 @@ function make_traces(datapath, datacond, interval, rin::Vector, transitions, G, 
     tp = Vector{Float64}[]
     ts = Vector{Int}[]
     tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
+    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
     for (i, t) in enumerate(traces)
         r = hierarchical ? rin[:, i] : rin
         a, b = make_trace(t, interval, r, tcomponents, reporter)

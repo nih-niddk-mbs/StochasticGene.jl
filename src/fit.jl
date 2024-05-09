@@ -78,7 +78,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
 - `noisepriors = []`: priors of observation noise (use empty set if not fitting traces), superceded if priormean is set
-- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -154,7 +154,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
         if isempty(hierarchical)
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
         else
-            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, length(data.trace[1]), hierarchical[1])
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1])
         end
     end
     isempty(fittedparam) && (fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams))
@@ -258,10 +258,10 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         reporter = onstates
         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractTraceData
-        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G::Int, R, S, insertstep))
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
         components = make_components_T(transitions, G, R, S, insertstep, splicetype)
     elseif typeof(data) <: AbstractTraceHistogramData
-        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G::Int, R, S, insertstep))
+        reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     elseif typeof(data) <: AbstractHistogramData
         if isempty(onstates)
@@ -316,7 +316,7 @@ function load_model(data, r, rm, transitions, G::Int, R, S, insertstep, nalleles
     fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhyper*nrates]
-    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, decayrate, priorcv, noisepriors, 1)
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, decayrate, priorcv, noisepriors)
     pool = Pool(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
@@ -446,13 +446,14 @@ end
 """
 function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, decayrate, priorcv, noisepriors, factor=10)
     if isempty(rm)
-        rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+        throw("No prior mean")
+        # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
     end
     if priorcv isa Number
         n = num_rates(transitions, R, S, insertstep)
-        rcv = fill(priorcv, n)
+        rcv = fill(priorcv, length(rm))
         rcv[n] = 0.1
-        rcv = [rcv; fill(div(priorcv, factor), length(noisepriors))]
+        rcv[n+1:n+length(noisepriors)] /= factor
     else
         rcv = priorcv
     end
