@@ -383,8 +383,8 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
 - `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
-- `noisepriors = []`: priors of probfn (use empty set if not fitting traces)
-- `hierarchical=tuple()`: 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
+- `noisepriors = []`: priors of observation noise (use empty set if not fitting traces), superceded if priormean is set
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
 - `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
@@ -397,7 +397,8 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `burst=false`: if true then compute burst frequency
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `writesamples=false`: write out MH samples if true, default is false
-- `method=1`: optional method variable, for hierarchical models it is a tuple(Int,Bool) = (numerical method, true if transition rates are shared)
+- `method=1`: optional method variable, for hierarchical models method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
+
 
 Example:
 
