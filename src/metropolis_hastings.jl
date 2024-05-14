@@ -185,18 +185,18 @@ runs MCMC for options.warmupstep number of samples and does not collect results
 
 """
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
-    parout = Array{Float64,2}(undef, length(param), samplesteps)
+    # parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
-    accepttotal = 0
+    # accepttotal = 0
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
         if ll < llml
             llml, parml = ll, param
         end
-        parout[:, step] = param
-        accepttotal += accept
+        # parout[:, step] = param
+        # accepttotal += accept
     end
     # covparam = cov(parout[:,1:step]')*(2.4)^2 / length(param)
     # if isposdef(covparam) && step > 1000 && accepttotal/step > .25
