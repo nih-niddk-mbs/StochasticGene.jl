@@ -219,19 +219,19 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int
     end
 end
 
-function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=50000, onstates=Int[], totaltime=100.0, ntrials=1, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+ length(noisepriors)), tuple()), method=(1, true))
+function test_fit_trace_hierarchical(; G=2, R=3, S=3, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, .2,.2,.2,.2,.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=1000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+ length(noisepriors)), tuple()), method=(1, true))
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0))
-    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, length(data.trace[1]), hierarchical[1])
-    isempty(rinit) && (rinit = rm)
+    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, hierarchical[1])
+    isempty(rinit) && (rinit = StochasticGene.set_rates(rm, transitions, R, S, insertstep, noisepriors, length(data.trace[1])))
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical, method)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
-
     fits, stats, measures = run_mh(data, model, options)
     nrates = num_rates(transitions, R, S, insertstep)
-    StochasticGene.get_rates(fits.parml, model)[1:nrates], rtarget[1:nrates]
+    h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates] 
+    h2 = rtarget[1:nrates]
+    return h1, h2
 end
-
 
 # """
 # 0.006249532442813658

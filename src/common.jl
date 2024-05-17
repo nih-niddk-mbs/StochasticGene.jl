@@ -344,7 +344,11 @@ end
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_params(param, model)
     if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+        # llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+        base = model.S > 0 ? 3 : 2
+        nT = model.G * base^model.R
+        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+
     else
         llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end

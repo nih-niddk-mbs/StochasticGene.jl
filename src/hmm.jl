@@ -105,6 +105,24 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
     -sum(logpredictions) + lb, -logpredictions
 end
 
+function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    logpredictions = Array{Float64}(undef, 0)
+    # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
+    # a, p0 = make_ap(r[:,1], interval, elementsT, nT)
+    a, p0 = make_ap(r[:,1], interval, components)
+    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    # lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
+    loga = log.(max.(a, 0))
+    logp0 = log.(max.(p0, 0))
+    for (i, t) in enumerate(trace[1])
+        T = length(t)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions) + lb, -logpredictions
+end
+
 """
 make_ap(r, interval, elementsT, nT )
 
@@ -122,7 +140,14 @@ Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
 function make_ap(r, interval, elementsT, N)
+    # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+end
+
+function make_ap(r, interval, components)
+    # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+    Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
 end
 
