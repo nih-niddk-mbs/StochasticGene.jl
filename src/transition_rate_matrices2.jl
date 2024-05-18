@@ -734,6 +734,18 @@ struct T2Components <: AbstractTComponents
     elementsRG::Vector
 end
 
+struct TCComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsGgC::Vector
+    elementsGgCbar::Vector
+    elementsGeC::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+end
+
 struct M2Components
     nG::Int
     nR::Int
@@ -764,7 +776,8 @@ function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{I
         else
             base = 3
         end
-        for b = 1:base^R, a = 1:base^R
+        nR = base^R
+        for b = 1:nR, a = 1:nR
             zdigits = digit_vector(a, base, R)
             wdigits = digit_vector(b, base, R)
             z1 = zdigits[1]
@@ -837,11 +850,9 @@ function set_elements_Gg(transitions, G, R, S, insertstep, indices::Indices)
         elementsGgCbar = Vector{Element}(undef, 0)
         elementsG = Vector{Element}(undef, 0)
         elementsGeC = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nT = G * base^R
         set_elements_Gg!(G, elementsGgC, elementsGgCbar, transitions, indices.gamma)
         set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
-        return elementsGgC,elementsGgCbbar,elementsG,elementsGeC
+        return elementsGgC, elementsGgCbbar, elementsG, elementsGeC
     else
         return set_elements_T(transitions, indices.gamma), G
     end
@@ -923,6 +934,32 @@ function make_components_T2(transitions, G, R, S, insertstep, splicetype)
     T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
 end
 
+function set_elements_TC(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    if R > 0
+        elementsG = Vector{Element}(undef, 0)
+        elementsGgC = Vector{Element}(undef, 0)
+        elementsGgCbar = Vector{Element}(undef, 0)
+        elementsGeC = Vector{Element}(undef, 0)
+        elementsRG = Vector{Element}(undef, 0)
+        elementsRGbar = Vector{Element}(undef, 0)
+        set_elements_Gg!(G, elementsGgC, elementsGgCbar, transitions, indices.gamma)
+        set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_G!(elementsG, transitions)
+        set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
+    else
+        return set_elements_G(transitions, indices.gamma), G
+    end
+end
+
+function make_components_TC(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TC(transitions, G, R, S, insertstep, indices, splicetype)
+    TCComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRGbar, elementsRG)
+end
+
 function make_components_M2(transitions, G, R, nhist, decay)
     indices = set_indices(length(transitions), R)
     elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
@@ -942,6 +979,34 @@ function make_mat_T2(components, rates)
     R = make_mat(components.elementsR, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     make_mat_T2(G, GR, R, RG, nG, nR)
+end
+
+function make_mat_TCe(components, rates)
+    nG = components.nG
+    nR = components.nR
+    GR = spzeros(nG, nG)
+    GR[nG, nG] = 1.0
+    G = make_mat(components.elementsG, rates, nG)
+    GeC = make_mat(components.elementsGeC, rates, nG)
+    GgC = make_mat(components.elementsGgC, rates, nG)
+    GgCbar = make_mat(components.elementsGgCbar, rates, nG)
+    R = make_mat(components.elementsR, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    G, GeC, R, RG
+end
+
+function make_mat_TCg(components, rates)
+    nG = components.nG
+    nR = components.nR
+    GR = spzeros(nG, nG)
+    GR[nG, nG] = 1.0
+    G = make_mat(components.elementsG, rates, nG)
+    GeC = make_mat(components.elementsGeC, rates, nG)
+    GgC = make_mat(components.elementsGgC, rates, nG)
+    GgCbar = make_mat(components.elementsGgCbar, rates, nG)
+    R = make_mat(components.elementsR, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    GgC, GgCbar, R, RG
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
