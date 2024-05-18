@@ -14,7 +14,7 @@
 """
 	struct Element
 
-structure for transition matrix elements
+structure for T transition matrix elements
 fields: 
 - `a`: row, 
 - `b`: column
@@ -843,11 +843,14 @@ end
 function set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
-        if t[1] + j < G
+        if t[2] + j == G
             push!(elementsGC, Element(t[1] + j, t[1] + j, gamma[i], -1))
             push!(elementsGC, Element(t[2] + j, t[1] + j, gamma[i], 1))
-            i += 1
+        else
+            push!(elementsGCbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elementsGCbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
         end
+        i += 1
     end
 end
 
@@ -858,9 +861,8 @@ function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=c
         push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
         i += 1
     end
-    push!(elementsGC, Element(G, G, gammac, 1))
+    push!(elementsGC, Element(G, G, gamma[end], 1))
 end
-
 
 function set_elements_B2(G, R, ejectindex, base=2)
     if R > 0
