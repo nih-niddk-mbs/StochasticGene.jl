@@ -831,6 +831,22 @@ function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{I
     end
 end
 
+function set_elements_Gg(transitions, G, R, S, insertstep, indices::Indices)
+    if R > 0
+        elementsGgC = Vector{Element}(undef, 0)
+        elementsGgCbar = Vector{Element}(undef, 0)
+        elementsG = Vector{Element}(undef, 0)
+        elementsGeC = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nT = G * base^R
+        set_elements_Gg!(G, elementsGgC, elementsGgCbar, transitions, indices.gamma)
+        set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
+        return elementsGgC,elementsGgCbbar,elementsG,elementsGeC
+    else
+        return set_elements_T(transitions, indices.gamma), G
+    end
+end
+
 function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions

@@ -78,7 +78,13 @@ julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),co
 
 """
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
-    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
+    simulator(repeat(r,1,nalleles), transitions, G, R, S, insertstep; nalleles, nhist, onstates, bins, traceinterval, probfn, noiseparams, totalsteps, totaltime, tol, reporterfn, splicetype, verbose)
+end
+
+
+
+function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    if length(r[:, 1]) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
         throw("r has too few elements")
     end
     if insertstep > R > 0
@@ -117,7 +123,7 @@ function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         end
     end
     if traceinterval > 0
-        par = r[end-noiseparams+1:end]
+        par = r[end-noiseparams+1:end, 1]
         tracelog = [(t, state[:, 1])]
     end
     if verbose
@@ -231,11 +237,11 @@ simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltim
 return initial proposed next reaction times and states
 
 """
-function initialize(r::Vector, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+function initialize(r::Matrix, G, R, nreactions, nalleles, initstate=1, initreaction=1)
     tau = fill(Inf, nreactions, nalleles)
     states = zeros(Int, G + R, nalleles)
     for n in 1:nalleles
-        tau[initreaction, n] = -log(rand()) / r[1]
+        tau[initreaction, n] = -log(rand()) / r[1, n]
         states[initstate, n] = 1
     end
     return tau, states
@@ -413,10 +419,10 @@ function set_reactionindices(Gtransitions, R, S, insertstep)
     end
     nG = length(Gtransitions)
     g = 1:nG
-    i = nG + 1 : nG + Int(R > 0)
-    r = nG + 2 : nG + R
-    e = nG + R + 1 : nG + R + 1
-    s = nG + 1 + R + 1 : nG + 1 + R + S
+    i = nG+1:nG+Int(R > 0)
+    r = nG+2:nG+R
+    e = nG+R+1:nG+R+1
+    s = nG+1+R+1:nG+1+R+S
     d = nG + 1 + R + S + 1
     ReactionIndices(g, i, r, e, s, d)
 end
@@ -552,7 +558,7 @@ update tau and state for G transition
 """
 function transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     for e in enabled
-        tau[e, allele] = -log(rand()) / r[e] + t
+        tau[e, allele] = -log(rand()) / r[e, allele] + t
     end
     for d in disabled
         tau[d, allele] = Inf
@@ -585,12 +591,12 @@ end
 """
 function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if final + 1 > G + R || state[final+1, allele] == 0
-        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
+        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1], allele]) + t
     end
     if insertstep == 1
         state[final, allele] = 2
         if S > 0
-            tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
+            tau[enabled[2], allele] = -log(rand()) / (r[enabled[2], allele]) + t
         end
     else
         state[final, allele] = 1
@@ -604,17 +610,17 @@ end
 """
 function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if state[initial-1, allele] > 0
-        tau[enabled[1], allele] = -log(rand()) / r[enabled[1]] + t
+        tau[enabled[1], allele] = -log(rand()) / r[enabled[1], allele] + t
     end
     if final + 1 > G + R || state[final+1, allele] == 0
-        tau[enabled[2], allele] = -log(rand()) / r[enabled[2]] + t
+        tau[enabled[2], allele] = -log(rand()) / r[enabled[2], allele] + t
     end
     if S > 0 && final >= G + insertstep
-        # tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # tau[enabled[3], allele] = -log(rand()) / r[enabled[3],allele] + t
         if final == insertstep + G
-            tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+            tau[enabled[3], allele] = -log(rand()) / r[enabled[3], allele] + t
         elseif state[initial, allele] > 1
-            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
+            tau[enabled[3], allele] = r[enabled[3]-1, allele] / r[enabled[3], allele] * (tau[enabled[3]-1, allele] - t) + t
         end
     end
     for d in disabled
@@ -634,7 +640,7 @@ end
 """
 function eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
     if state[initial-1, allele] > 0
-        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
+        tau[enabled[1], allele] = -log(rand()) / (r[enabled[1], allele]) + t
     end
     for d in disabled
         tau[d, allele] = Inf
@@ -661,7 +667,7 @@ function decay!(tau, index, t, m, r)
     if m == 0
         tau[index, 1] = Inf
     else
-        tau[index, 1] = -log(rand()) / (m * r[index]) + t
+        tau[index, 1] = -log(rand()) / (m * r[index, allele]) + t
     end
     m
 end
@@ -675,7 +681,7 @@ update tau matrix for decay rate
 function set_decay!(tau, index, t, m, r)
     m += 1
     if m == 1
-        tau[index, 1] = -log(rand()) / r[index] + t
+        tau[index, 1] = -log(rand()) / r[index, 1] + t
     else
         tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
     end
