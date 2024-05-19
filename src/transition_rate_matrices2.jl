@@ -734,16 +734,29 @@ struct T2Components <: AbstractTComponents
     elementsRG::Vector
 end
 
-struct TCComponents <: AbstractTComponents
+struct TGeneComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
     elementsG::Vector
-    elementsGgC::Vector
-    elementsGgCbar::Vector
-    elementsGeC::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
+    elementsGC::Vector
+    elementsGCbar::Vector
+    elementsRKbar::Vector
+    elementsRK::Vector
+end
+struct TEnhancerComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsGC::Vector
+    elementsRKbar::Vector
+    elementsRK::Vector
+end
+
+struct TEGComponents <: AbstractTComponents
+    Ecomponents::TEnhancerComponents
+    Gcomponents::TGeneComponents
 end
 
 struct M2Components
@@ -982,31 +995,26 @@ function make_mat_T2(components, rates)
 end
 
 function make_mat_TCe(components, rates)
-    nG = components.nG
-    nR = components.nR
-    GR = spzeros(nG, nG)
-    GR[nG, nG] = 1.0
+    neG = components.nG
+    neR = components.nR
+    ngG
+    ngR
     G = make_mat(components.elementsG, rates, nG)
     GeC = make_mat(components.elementsGeC, rates, nG)
-    GgC = make_mat(components.elementsGgC, rates, nG)
-    GgCbar = make_mat(components.elementsGgCbar, rates, nG)
     R = make_mat(components.elementsR, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     G, GeC, R, RG
+    kron(G, sparse(I, nT, nT)) + kron(sparse(I, nG, nG), G) + kron(sparse(I,))
 end
 
 function make_mat_TCg(components, rates)
     nG = components.nG
     nR = components.nR
-    GR = spzeros(nG, nG)
-    GR[nG, nG] = 1.0
-    G = make_mat(components.elementsG, rates, nG)
-    GeC = make_mat(components.elementsGeC, rates, nG)
     GgC = make_mat(components.elementsGgC, rates, nG)
     GgCbar = make_mat(components.elementsGgCbar, rates, nG)
-    R = make_mat(components.elementsR, rates, nR)
+    RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    GgC, GgCbar, R, RG
+    GgC, GgCbar, RGbar, RG
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
