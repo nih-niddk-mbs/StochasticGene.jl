@@ -720,9 +720,6 @@ function make_mat_GR(components, rates)
     G, R, RB
 end
 
-
-
-
 ##### Coupling Under development
 
 struct T2Components <: AbstractTComponents
@@ -890,40 +887,6 @@ function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(
 end
 
 """
-    set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-
-TBW
-"""
-function set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        if t[2] + j == G
-            push!(elementsGC, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elementsGC, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        else
-            push!(elementsGCbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elementsGCbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        end
-        i += 1
-    end
-end
-
-"""
-    set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-
-TBW
-"""
-function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        push!(elementsG, Element(t[1] + j, t[1] + j, gamma[i], -1))
-        push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        i += 1
-    end
-    push!(elementsGC, Element(G, G, gamma[end], 1))
-end
-
-"""
     set_elements_B2(G, R, ejectindex, base=2)
 
 TBW
@@ -970,15 +933,61 @@ function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, spl
     end
 end
 
+
 """
-    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
 
 TBW
 """
-function make_components_T2(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
+function set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        if t[2] + j == G
+            push!(elementsGC, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elementsGC, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        else
+            push!(elementsGCbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elementsGCbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        end
+        i += 1
+    end
+end
+
+"""
+    set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
+function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        push!(elementsG, Element(t[1] + j, t[1] + j, gamma[i], -1))
+        push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        i += 1
+    end
+    push!(elementsGC, Element(G, G, gamma[end], 1))
+end
+
+
+"""
+    set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
+function set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsG = Vector{Element}(undef, 0)
+    elementsGeC = Vector{Element}(undef, 0)
+    set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
+    if R > 0
+         elementsRG = Vector{Element}(undef, 0)
+        elementsRGbar = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsGeC, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
+    else
+        return elementsG, elementsGeC, Element[], Element[], 0, G
+    end
 end
 
 """
@@ -1000,30 +1009,10 @@ function set_elements_TGene(transitions, G, R, S, insertstep, indices::Indices, 
         set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
         return elementsG, elementsGgC, elementsGgCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
-        return elementsG, elementsGgC, elementsGgCbar, [], [], 0, G
+        return elementsG, elementsGgC, elementsGgCbar, Element[], Element[], 0, G
     end
 end
 
-"""
-    set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-
-TBW
-"""
-function set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsG = Vector{Element}(undef, 0)
-    elementsGeC = Vector{Element}(undef, 0)
-    set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
-    if R > 0
-         elementsRG = Vector{Element}(undef, 0)
-        elementsRGbar = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nR = base^R
-        set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsGeC, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
-    else
-        return elementsG, elementsGeC, []], []], 0, G
-    end
-end
 
 """
     make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype)
@@ -1032,7 +1021,7 @@ TBW
 """
 function make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TEnhancer(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsG, elementsGeC, elementsRG, elementsRGbar, nR, nT = set_elements_TEnhancer(transitions, G, R, S, insertstep, indices, splicetype)
     TEnhancerComponents(nT, G, nR, elementsG, elementsGeC, elementsRG, elementsRGbar)
 end
 
@@ -1042,11 +1031,68 @@ function make_components_TGene(transitions, G, R, S, insertstep, splicetype)
     TGeneComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsRG, elementsRGbar)
 end
 
-function make_components_TC(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TC(transitions, G, R, S, insertstep, indices, splicetype)
-    TCComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRGbar, elementsRG)
+function make_components_TEGC(transitions, G, R, S, insertstep, splicetype)
+    TEGComponents(make_components_TEnhancer(transitions,G,R,S,insertstep,splicetype),make_components_TEnhancer(transitions,G,R,S,insertstep,splicetype))
 end
+
+
+function make_mat_TE(components, rates)
+    nT = components.nT
+    nG = components.nG
+    nR = components.nR
+    GK = spzeros(nG, nG)
+    GK[nG, nG] = 1.0
+    G = make_mat(components.elementsG, rates, nG)
+    GC = make_mat(components.elementsGeC, rates, nG)
+    RK = make_mat(components.elementsRG, rates, nR)
+    RKbar = make_mat(components.elementsR, rates, nR)
+    Te = kron(RK, GK) + kron(sparse(I, nR, nR), G) + kron(RKbar, sparse(I, nG, nG))
+    return Te, sparse(I,nT,nT), G, GC
+end
+
+function make_mat_TG(components, rates)
+    nT = components.nT
+    nR = components.nR
+    GK = spzeros(nG, nG)
+    GK[nG, nG] = 1.0
+    G = make_mat(components.elementsG, rates, nG)
+    GC = make_mat(components.elementsGgC, rates, nG)
+    GCbar = make_mat(components.elementsGgCbar, rates, nG)
+    RK = make_mat(components.elementsRG, rates, nR)
+    RKbar = make_mat(components.elementsR, rates, nR)
+    Tg = kron(RK, GK) + kron(sparse(I, nR, nR), GCbar) + kron(RKbar, sparse(I, nG, nG))
+    return Tg, sparse(I,nT,nT), GCbar, GC
+end
+
+function make_mat_TCe(components, rates)
+
+    Te, Ie, Ge, GeC = make_mat_TE(components.TEnhancerComponents,rates)
+    Tg, Ig, GgC = make_mat_TG(components.TGeneComponents,rates)
+    return kron(Te,IgG) + kron(Ie,GgCbar) + kronIeR,kron(GeC,GgC), kron(IeG,Tg) + kron(Ge,Ig) + kron(GeC,kron(IgR<GgC))
+
+end
+
+function make_mat_TCg(components, rates)
+    nG = components.nG
+    nR = components.nR
+    GgC = make_mat(components.elementsGgC, rates, nG)
+    GgCbar = make_mat(components.elementsGgCbar, rates, nG)
+    RGbar = make_mat(components.elementsRGbar, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    GgC, GgCbar, RGbar, RG
+end
+
+"""
+    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+
+TBW
+"""
+function make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
+    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
+end
+
 
 function make_components_M2(transitions, G, R, nhist, decay)
     indices = set_indices(length(transitions), R)
@@ -1055,6 +1101,7 @@ function make_components_M2(transitions, G, R, nhist, decay)
     U, Um, Up = make_mat_U(nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
+
 
 make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
 
@@ -1067,28 +1114,6 @@ function make_mat_T2(components, rates)
     R = make_mat(components.elementsR, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     make_mat_T2(G, GR, R, RG, nG, nR)
-end
-
-function make_mat_TCe(components, rates)
-    neG = components.Ecomponents.nG
-    neR = components.Ecomponents.nR
-    ngG = components.Gcomponents.nG
-    G = make_mat(components.elementsG, rates, nG)
-    GeC = make_mat(components.elementsGeC, rates, nG)
-    R = make_mat(components.elementsR, rates, nR)
-    RG = make_mat(components.elementsRG, rates, nR)
-    G, GeC, R, RG
-    kron(G, sparse(I, nT, nT)) + kron(sparse(I, nG, nG), G) + kron(sparse(I,))
-end
-
-function make_mat_TCg(components, rates)
-    nG = components.nG
-    nR = components.nR
-    GgC = make_mat(components.elementsGgC, rates, nG)
-    GgCbar = make_mat(components.elementsGgCbar, rates, nG)
-    RGbar = make_mat(components.elementsRGbar, rates, nR)
-    RG = make_mat(components.elementsRG, rates, nR)
-    GgC, GgCbar, RGbar, RG
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
