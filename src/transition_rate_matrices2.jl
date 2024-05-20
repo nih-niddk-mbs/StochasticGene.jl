@@ -733,7 +733,15 @@ struct T2Components <: AbstractTComponents
     elementsR::Vector
     elementsRG::Vector
 end
-
+struct TEnhancerComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsGC::Vector
+    elementsRK::Vector
+    elementsRKbar::Vector
+end
 struct TGeneComponents <: AbstractTComponents
     nT::Int
     nG::Int
@@ -741,24 +749,13 @@ struct TGeneComponents <: AbstractTComponents
     elementsG::Vector
     elementsGC::Vector
     elementsGCbar::Vector
-    elementsRKbar::Vector
     elementsRK::Vector
-end
-struct TEnhancerComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsGC::Vector
     elementsRKbar::Vector
-    elementsRK::Vector
 end
-
 struct TEGComponents <: AbstractTComponents
     Ecomponents::TEnhancerComponents
     Gcomponents::TGeneComponents
 end
-
 struct M2Components
     nG::Int
     nR::Int
@@ -770,14 +767,16 @@ struct M2Components
     Uminus::SparseMatrixCSC
     Uplus::SparseMatrixCSC
 end
-
 struct MT2Components
     mcomponents::M2Components
     tcomponents::T2Components
 end
 
+"""
+    set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
-
+TBW
+"""
 function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         if splicetype == "offeject"
@@ -857,6 +856,11 @@ function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{I
     end
 end
 
+"""
+    set_elements_Gg(transitions, G, R, S, insertstep, indices::Indices)
+
+TBW
+"""
 function set_elements_Gg(transitions, G, R, S, insertstep, indices::Indices)
     if R > 0
         elementsGgC = Vector{Element}(undef, 0)
@@ -871,6 +875,11 @@ function set_elements_Gg(transitions, G, R, S, insertstep, indices::Indices)
     end
 end
 
+"""
+    set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
 function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
@@ -880,6 +889,11 @@ function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(
     end
 end
 
+"""
+    set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
 function set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
@@ -894,6 +908,11 @@ function set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, gamma::Vect
     end
 end
 
+"""
+    set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
 function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
@@ -904,6 +923,11 @@ function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=c
     push!(elementsGC, Element(G, G, gamma[end], 1))
 end
 
+"""
+    set_elements_B2(G, R, ejectindex, base=2)
+
+TBW
+"""
 function set_elements_B2(G, R, ejectindex, base=2)
     if R > 0
         nR = base^R
@@ -926,6 +950,11 @@ function set_elements_B2(G, R, ejectindex, base=2)
     end
 end
 
+"""
+    set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
 function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
         elementsG = Vector{Element}(undef, 0)
@@ -941,30 +970,45 @@ function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, spl
     end
 end
 
+"""
+    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+
+TBW
+"""
 function make_components_T2(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
     T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
 end
 
+"""
+    set_elements_TGene(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
 function set_elements_TGene(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG = Vector{Element}(undef, 0)
     elementsGgC = Vector{Element}(undef, 0)
     elementsGgCbar = Vector{Element}(undef, 0)
     set_elements_Gg!(G, elementsGgC, elementsGgCbar, transitions, indices.gamma)
     if R > 0
-        elementsRG = Vector{Element}(undef, 0)
-        elementsRGbar = Vector{Element}(undef, 0)
+        elementsRK = Vector{Element}(undef, 0)
+        elementsRKbar = Vector{Element}(undef, 0)
         base = S > 0 ? 3 : 2
         nR = base^R
         set_elements_G!(elementsG, transitions)
         set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsGgC, elementsGgCbar, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
+        return elementsG, elementsGgC, elementsGgCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
-        return set_elements_G(transitions, indices.gamma), G
+        return elementsG, elementsGgC, elementsGgCbar, [], [], 0, G
     end
 end
 
+"""
+    set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
 function set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG = Vector{Element}(undef, 0)
     elementsGeC = Vector{Element}(undef, 0)
@@ -977,31 +1021,30 @@ function set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indic
         set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, indices.nu, indices.eta, splicetype)
         return elementsG, elementsGeC, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
     else
-        return set_elements_G(transitions, indices.gamma), G
+        return elementsG, elementsGeC, []], []], 0, G
     end
 end
 
-function make_components_TEnhancer()
+"""
+    make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype)
+
+TBW
+"""
+function make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TEnhancer(transitions, G, R, S, insertstep, indices, splicetype)
-    TEnhancerComponents(nT, G, nR, elementsG, elementsGeC, elementsRGbar, elementsRG)
-
-
+    TEnhancerComponents(nT, G, nR, elementsG, elementsGeC, elementsRG, elementsRGbar)
 end
 
-function make_components_TGene()
+function make_components_TGene(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TC(transitions, G, R, S, insertstep, indices, splicetype)
-    TGeneComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsRGbar, elementsRG)
-
-
+    elementsG, elementsGgC, elementsGgCbar, elementsRG, elementsRGbar, nR, nT = set_elements_TGene(transitions, G, R, S, insertstep, indices, splicetype)
+    TGeneComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsRG, elementsRGbar)
 end
 
 function make_components_TC(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRG, elementsR, nR, nT = set_elements_TC(transitions, G, R, S, insertstep, indices, splicetype)
-    TEnhancerComponents()
-    TGeneComponents()
     TCComponents(nT, G, nR, elementsG, elementsGgC, elementsGgCbar, elementsGeC, elementsRGbar, elementsRG)
 end
 
