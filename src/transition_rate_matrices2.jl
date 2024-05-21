@@ -958,16 +958,15 @@ end
 
 TBW
 """
-function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+function set_elements_Ge!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), coupling::Int,j=0)
     i = 1
     for t in transitions
         push!(elementsG, Element(t[1] + j, t[1] + j, gamma[i], -1))
         push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
         i += 1
     end
-    push!(elementsGC, Element(G, G, gamma[end], 1))
+    push!(elementsGC, Element(G, G, coupling, 1))
 end
-
 
 """
     set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
@@ -977,9 +976,9 @@ TBW
 function set_elements_TEnhancer(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG = Vector{Element}(undef, 0)
     elementsGeC = Vector{Element}(undef, 0)
-    set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma)
+    set_elements_Ge!(G, elementsG, elementsGeC, transitions, indices.gamma, indices.coupling)
     if R > 0
-         elementsRG = Vector{Element}(undef, 0)
+        elementsRG = Vector{Element}(undef, 0)
         elementsRGbar = Vector{Element}(undef, 0)
         base = S > 0 ? 3 : 2
         nR = base^R
@@ -1032,7 +1031,7 @@ function make_components_TGene(transitions, G, R, S, insertstep, splicetype)
 end
 
 function make_components_TEGC(transitions, G, R, S, insertstep, splicetype)
-    TEGComponents(make_components_TEnhancer(transitions,G,R,S,insertstep,splicetype),make_components_TEnhancer(transitions,G,R,S,insertstep,splicetype))
+    TEGComponents(make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype), make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype))
 end
 
 
@@ -1047,7 +1046,7 @@ function make_mat_TE(components, rates)
     RK = make_mat(components.elementsRG, rates, nR)
     RKbar = make_mat(components.elementsR, rates, nR)
     Te = kron(RK, GK) + kron(sparse(I, nR, nR), G) + kron(RKbar, sparse(I, nG, nG))
-    return Te, sparse(I,nT,nT), G, GC
+    return Te, sparse(I, nT, nT), G, GC
 end
 
 function make_mat_TG(components, rates)
@@ -1061,14 +1060,14 @@ function make_mat_TG(components, rates)
     RK = make_mat(components.elementsRG, rates, nR)
     RKbar = make_mat(components.elementsR, rates, nR)
     Tg = kron(RK, GK) + kron(sparse(I, nR, nR), GCbar) + kron(RKbar, sparse(I, nG, nG))
-    return Tg, sparse(I,nT,nT), GCbar, GC
+    return Tg, sparse(I, nT, nT), GCbar, GC
 end
 
 function make_mat_TCe(components, rates)
 
-    Te, Ie, Ge, GeC = make_mat_TE(components.TEnhancerComponents,rates)
-    Tg, Ig, GgC = make_mat_TG(components.TGeneComponents,rates)
-    return kron(Te,IgG) + kron(Ie,GgCbar) + kronIeR,kron(GeC,GgC), kron(IeG,Tg) + kron(Ge,Ig) + kron(GeC,kron(IgR<GgC))
+    Te, Ie, Ge, GeC = make_mat_TE(components.TEnhancerComponents, rates)
+    Tg, Ig, GgC = make_mat_TG(components.TGeneComponents, rates)
+    return kron(Te, IgG) + kron(Ie, GgCbar) + kronIeR, kron(GeC, GgC), kron(IeG, Tg) + kron(Ge, Ig) + kron(GeC, kron(IgR, GgC))
 
 end
 
