@@ -215,27 +215,31 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif occursin("trace", datatype)
-        if typeof(datapath) <: String
-            trace = read_tracefiles(datapath, datacond, traceinfo)
-            background = Vector[]
+        if typeof(datatype) == "tracejoint"
+            return load_data_tracejoint(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
         else
-            trace = read_tracefiles(datapath[1], datacond, traceinfo)
-            background = read_tracefiles(datapath[2], datacond, traceinfo)
-        end
-        (length(trace) == 0) && throw("No traces")
-        println(length(trace))
-        println(datapath)
-        println(datacond)
-        println(traceinfo)
-        weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
-        nf = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] +  traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-        if datatype == "trace"
-            return TraceData(label, gene, traceinfo[1], (trace, background, weight, nf))
-        elseif datatype == "tracenascent"
-            return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nf), nascent)
-        elseif datatype == "tracerna"
-            len, h = read_rna(gene, datacond, datapath[3])
-            return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nf), len, h)
+            if typeof(datapath) <: String
+                trace = read_tracefiles(datapath, datacond, traceinfo)
+                background = Vector[]
+            else
+                trace = read_tracefiles(datapath[1], datacond, traceinfo)
+                background = read_tracefiles(datapath[2], datacond, traceinfo)
+            end
+            (length(trace) == 0) && throw("No traces")
+            println(length(trace))
+            println(datapath)
+            println(datacond)
+            println(traceinfo)
+            weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
+            nf = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+            if datatype == "trace"
+                return TraceData(label, gene, traceinfo[1], (trace, background, weight, nf))
+            elseif datatype == "tracenascent"
+                return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nf), nascent)
+            elseif datatype == "tracerna"
+                len, h = read_rna(gene, datacond, datapath[3])
+                return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nf), len, h)
+            end
         end
     else
         throw("$datatype not included")
@@ -409,7 +413,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     end
     ntransitions = length(transitions)
     nrates = num_rates(transitions, R, S, insertstep)
-    rm = fill(.1*max(R,1), nrates)
+    rm = fill(0.1 * max(R, 1), nrates)
     rm[collect(1:ntransitions)] .= 0.01
     rm[nrates] = decayrate
     [rm; noisepriors]

@@ -860,18 +860,63 @@ function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, col
         for (root, dirs, files) in walkdir(path)
             for file in files
                 if occursin(cond1, file)
-                    t = readfile(joinpath(root, file), col)
-                    if stop < 0
-                        (start <= length(t)) && push!(traces, t[start:end])
-                    else
-                        (stop <= length(t)) && push!(traces, t[start:stop])
-                    end
+                    t = read_tracefile(joinpath(root, file), start, stop, col)
+                    ~isempty(t) && push!(traces, t)
+                    # t = readfile(joinpath(root, file), col)
+                    # if stop < 0
+                    #     (start <= length(t)) && push!(traces, t[start:end])
+                    # else
+                    #     (stop <= length(t)) && push!(traces, t[start:stop])
+                    # end
                 end
             end
         end
-        traces = traces[.!isempty.(traces)]
+        # traces = traces[.!isempty.(traces)]
         set = sum.(traces)
         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+    end
+end
+"""
+    read_tracefiles(path::String, cond1::String, key::String, start::Int, stop::Int, col=3)
+
+read in trace files
+"""
+function read_tracefiles(path::String, cond1::String, cond2::String, start::Int, stop::Int, col=3)
+    traces = Vector[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            tset = Vector{Vector}(undef, 2)
+            files = sort(readdir(path))
+            for file in files
+                println(file)
+                if occursin(cond1, file)
+                    tset[1] = read_tracefile(joinpath(root, file), start, stop, col)
+                elseif occursin(cond2, file)
+                    tset[2] = read_tracefile(joinpath(root, file), start, stop, col)
+                end
+                if (isassigned(tset, 1) && isassigned(tset, 2)) 
+                    push!(traces, tset)
+                    tset = Vector{Vector}(undef, 2)
+                end
+            end
+        end
+        return traces
+    end
+end
+
+"""
+    read_tracefile!(traces,path::String,start::Int,stop::Int,col=3)
+
+TBW
+"""
+function read_tracefile(path::String, start::Int, stop::Int, col=3)
+    t = readfile(path, col)
+    if stop < 0
+        (start <= length(t)) && return t[start:end]
+    else
+        (stop <= length(t)) && return t[start:stop]
     end
 end
 

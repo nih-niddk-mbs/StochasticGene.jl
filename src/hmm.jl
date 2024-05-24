@@ -23,6 +23,13 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
+function ll_hmm_coupled(r, nT, components::TEGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    lb = trace[3] > 0. ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    ll, lp = ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
+    return ll + lb, lp
+end
+
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
     for t in traces
@@ -90,10 +97,8 @@ end
 
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
-    # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
     a, p0 = make_ap(r[:,1], interval, elementsT, nT)
     lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
-    # lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
     loga = log.(max.(a, 0))
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
@@ -107,11 +112,8 @@ end
 
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
-    # loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
-    # a, p0 = make_ap(r[:,1], interval, elementsT, nT)
     a, p0 = make_ap(r[:,1], interval, components)
     lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
-    # lb = ll_background(r[end-noiseparams+1:end, i], a, p0, offstates, trace[3], trace[4])
     loga = log.(max.(a, 0))
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])

@@ -228,6 +228,13 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
+struct GRSMCoupledmodel
+
+
+
+end
+
+
 """
     print_model(model::AbstractModel)
 
