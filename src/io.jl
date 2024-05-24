@@ -881,7 +881,7 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, cond1::String, cond2::String, start::Int, stop::Int, col=3)
+function read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::Int, col=3)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -890,13 +890,14 @@ function read_tracefiles(path::String, cond1::String, cond2::String, start::Int,
             tset = Vector{Vector}(undef, 2)
             files = sort(readdir(path))
             for file in files
-                println(file)
-                if occursin(cond1, file)
-                    tset[1] = read_tracefile(joinpath(root, file), start, stop, col)
-                elseif occursin(cond2, file)
-                    tset[2] = read_tracefile(joinpath(root, file), start, stop, col)
+                complete = true
+                for i in eachindex(cond)
+                    if occursin(cond[i], file)
+                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+                    end
+                    complete &= isassigned(tset,i)
                 end
-                if (isassigned(tset, 1) && isassigned(tset, 2)) 
+                if complete
                     push!(traces, tset)
                     tset = Vector{Vector}(undef, 2)
                 end
