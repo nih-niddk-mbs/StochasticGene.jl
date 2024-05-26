@@ -228,15 +228,15 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     coupling::CouplingType
-    pool::Pool
+    pool::PoolType
     Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
+    G::Vector
+    R::Vector
+    S::Vector
+    insertstep::Vector
     nalleles::Int
     splicetype::String
     rateprior::PriorType
