@@ -228,10 +228,24 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMCoupledmodel
-
-
-
+struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
+    coupling::CouplingType
+    pool::Pool
+    Gtransitions::Tuple
+    G::Int
+    R::Int
+    S::Int
+    insertstep::Int
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
 end
 
 
@@ -321,6 +335,11 @@ negative loglikelihood of combined time series traces and each trace
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMcoupledmodel)
+    ll_hmm_coupled(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+end
+
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
 
@@ -349,6 +368,30 @@ end
 
 """
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+    r, p, hyper = prepare_params(param, model)
+    if model.method[2]
+        # llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+        base = model.S > 0 ? 3 : 2
+        nT = model.G * base^model.R
+        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+
+    else
+        llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    # d = distribution_array(pm, psig)
+    d = hyper_distribution(hyper)
+    lhp = Float64[]
+    for pc in eachcol(p)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalcoupledmodel)
     r, p, hyper = prepare_params(param, model)
     if model.method[2]
         # llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)

@@ -55,6 +55,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
+    for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7])
 - `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
@@ -91,7 +92,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `burst=false`: if true then compute burst frequency
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `writesamples=false`: write out MH samples if true, default is false
-- `method=1`: optional method variable, for hierarchical models method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
+- `method=1`: method variable, for hierarchical models: method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
 
 
 Example:
@@ -216,7 +217,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif occursin("trace", datatype)
         if typeof(datatype) == "tracejoint"
-            return load_data_tracejoint(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
+            load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
         else
             if typeof(datapath) <: String
                 trace = read_tracefiles(datapath, datacond, traceinfo)
@@ -231,19 +232,29 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
             println(datacond)
             println(traceinfo)
             weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
-            nf = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+            nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
             if datatype == "trace"
-                return TraceData(label, gene, traceinfo[1], (trace, background, weight, nf))
+                return TraceData(label, gene, traceinfo[1], (trace, background, weight, nframes))
             elseif datatype == "tracenascent"
-                return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nf), nascent)
+                return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nframes), nascent)
             elseif datatype == "tracerna"
                 len, h = read_rna(gene, datacond, datapath[3])
-                return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nf), len, h)
+                return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
             end
         end
     else
         throw("$datatype not included")
     end
+end
+
+function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+    trace = read_tracefiles(datapath, datacond, traceinfo)
+    weight = Float64[]
+    for f in traceinfo[4]
+        push!(weight, (1 - f) / f * length(trace))
+    end
+    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    return TraceJointData(label,gene, traceinfo[1], (trace, Vector[], weight, nframes))
 end
 
 """
