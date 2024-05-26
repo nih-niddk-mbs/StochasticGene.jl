@@ -384,6 +384,7 @@ make fittedparams vector for hierarchical model
 """
 function make_fitted(fittedshared, nhyper, fittedindividual, nrates, nindividuals)
     f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+    f = sort(f)
     fhyper = [fittedindividual]
     for i in 1:nhyper-1
         append!(f, fittedindividual .+ i * nrates)
