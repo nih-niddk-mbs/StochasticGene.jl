@@ -16,7 +16,7 @@ For passing model information to fit function from swarmfile (limited to numbers
 `R::Int`
 `S::Int`
 `insertstep::Int`
-`Gfamily::String`: type of model, e.g. "nstate", "KP", "cyclic"
+`ModelType::String`: type of model, e.g. "nstate", "KP", "cyclic"
 `fixedeffects::String`: two numbers separated by a hyphen, e.g. "3-4", indicating parameters 3 and 4 are fixed to each other
 
 """
@@ -28,7 +28,7 @@ struct ModelArgs
     R::Int
     S::Int
     insertstep::Int
-    Gfamily::String
+    ModelType::String
     fixedeffects::String
 end
 
@@ -54,10 +54,10 @@ see fit
 
 """
 function makeswarm(; gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, ModelType="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
     modelstring = create_modelstring(G, R, S, insertstep)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, ModelType)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
     sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile)
@@ -88,10 +88,10 @@ julia> genes = ["MYC","SOX9"]
 julia> makeswarm(genes,cell="HBEC")
 """
 function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, ModelType="", root=".", priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
     modelstring = create_modelstring(G, R, S, insertstep)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, Gfamily)
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, ModelType)
     ngenes = length(genes)
     println("number of genes: ", ngenes)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
@@ -121,11 +121,11 @@ end
     and all keyword arguments in makeswarm(;<keyword arguments>)
 """
 function makeswarm_genes(; nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), nascent=(1, 2), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, Gfamily="", root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, ModelType="", root=".", priormean=Float64[], priorcv::Float64=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
 
     makeswarm(checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datapath=datapath, cell=cell, datacond=datacond, traceinfo=traceinfo, nascent=nascent, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
-        fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, Gfamily=Gfamily, root=root, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noisepriors=noisepriors, hierarchical=hierarchical, ratetype=ratetype,
+        fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, ModelType=ModelType, root=root, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noisepriors=noisepriors, hierarchical=hierarchical, ratetype=ratetype,
         propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, method=method, src=src)
 end
 
@@ -190,16 +190,16 @@ write swarmfile for vector of models
 function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
     f = open(sfile, "w")
     for model in models
-        label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.Gfamily)
+        label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.ModelType)
         if isempty(model.fixedeffects)
             fixedeffects = "1"
         else
             fixedeffects = model.fixedeffects
         end
         if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
+            writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.ModelType fixedeffects])
         else
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.Gfamily fixedeffects])
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.ModelType fixedeffects])
         end
     end
     close(f)
@@ -289,13 +289,13 @@ function write_prolog(f, src)
 
 end
 """
-    create_label(label,inlabel,datacond,cell,Gfamily)
+    create_label(label,inlabel,datacond,cell,ModelType)
 
 """
-function create_label(label, inlabel, datatype, datacond, cell, Gfamily)
+function create_label(label, inlabel, datatype, datacond, cell, ModelType)
     if isempty(label)
         label = datatype * "-" * cell
-        ~isempty(Gfamily) && (label = label * "-" * Gfamily)
+        ~isempty(ModelType) && (label = label * "-" * ModelType)
         typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
     end
     isempty(inlabel) && (inlabel = label)

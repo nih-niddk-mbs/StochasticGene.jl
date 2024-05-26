@@ -374,7 +374,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep::Int=1`: R step where reporter is inserted
-- `Gfamily=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "cyclicory"
+- `ModelType=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "cyclicory"
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `priormean=Float64[]`: mean rates of prior distribution
 - 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
