@@ -789,3 +789,9 @@ function num_rates(model::String)
         return 2 * (m[4] - 1) + m[3] + m[2] - m[1] + 2
     end
 end
+
+function num_rates(Model::AbstractGmodel)
+
+    num_rates(model.Gtransitions,model.R,model.S,model.insertstep)
+
+end
