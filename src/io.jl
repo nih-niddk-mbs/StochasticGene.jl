@@ -886,12 +886,12 @@ end
 read in trace files
 """
 function read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::Int, col=3)
-    traces = Vector[]
+    traces = Matrix{Float64}(undef,length(cond),0)
     if isempty(path)
         return traces
     else
         for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, 2)
+            tset = Vector{Vector}(undef, length(cond))
             files = sort(readdir(path))
             for file in files
                 complete = true
@@ -902,7 +902,7 @@ function read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::I
                     complete &= isassigned(tset,i)
                 end
                 if complete
-                    push!(traces, tset)
+                    traces = hcat(traces,tset)
                     tset = Vector{Vector}(undef, 2)
                 end
             end
