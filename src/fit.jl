@@ -68,6 +68,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `G::Int=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors
 - `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
+- `coupling`: ([1],[2]) or ([1,2,3,4,5],) tuple of traces corresponding to a given model
 - `insertstep::Int=1`: R step where reporter is inserted
 - `ModelType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -453,17 +454,18 @@ end
 
 default priors for rates (includes all parameters, fitted or not)
 """
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors,ttime=6.)
     if S > 0
         S = R - insertstep + 1
     end
-    ntransitions = length(transitions)
-    nrates = num_rates(transitions, R, S, insertstep)
-    rm = fill(0.1 * max(R, 1), nrates)
-    rm[collect(1:ntransitions)] .= 0.01
-    rm[nrates] = decayrate
-    [rm; noisepriors]
-end
+    # ntransitions = length(transitions)
+    # nrates = num_rates(transitions, R, S, insertstep)
+    # rm = fill(0.1 * max(R, 1), nrates)
+    # rm[collect(1:ntransitions)] .= 0.01
+    # rm[nrates] = decayrate
+    # [rm; noisepriors]
+    [fill(0.01, length(transitions)); decayrate; fill(R / ttime, R); fill(.2, max(0, S - insertstep + 1)); 1.0; noisepriors]
+ nd
 
 """
     prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)
@@ -473,7 +475,9 @@ default priors for hierarchical models, arranged into a single vector, shared an
 function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, cv=1.0)
     rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
     r = copy(rm)
-    for i in 2:nhyper
+    priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R-1); 5.; fill(5.0, max(0, S - insertstep + 1)); 1.0; [.5, .5, .5, .5]]
+    append!(r,priorcv)
+    for i in 3:nhyper
         append!(r, cv .* rm)
     end
     # for i in 1:nindividuals

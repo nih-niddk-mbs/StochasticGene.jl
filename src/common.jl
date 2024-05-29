@@ -153,6 +153,7 @@ abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
+abstract type AbstractHierarchicalModel{RateType,ReporterType}  <: AbstractGRSMmodel{RateType,ReporterType}  end
 
 """
     Model structures
@@ -229,6 +230,25 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
 end
 
 struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
+    coupling::CouplingType
+    Gtransitions::Tuple
+    G::Vector
+    R::Vector
+    S::Vector
+    insertstep::Vector
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+end
+
+struct GRSMhierarchicalcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
     rates::RateType
     coupling::CouplingType
     pool::PoolType
@@ -391,7 +411,7 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalcoupledmodel)
 #     r, p, hyper = prepare_params(param, model)
 #     if model.method[2]
 #         # llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
@@ -790,8 +810,7 @@ function num_rates(model::String)
     end
 end
 
-function num_rates(Model::AbstractGmodel)
-
-    num_rates(model.Gtransitions,model.R,model.S,model.insertstep)
-
+function num_rates(model::AbstractGmodel)
+    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
+    num_rates(model.Gtransitions,model.R,model.S,model.insertstep) + n
 end
