@@ -747,10 +747,7 @@ struct TGeneComponents <: AbstractTComponents
     elementsRK::Vector
     elementsRKbar::Vector
 end
-struct TEGComponents <: AbstractTComponents
-    EComponents::TEnhancerComponents
-    GComponents::TGeneComponents
-end
+
 struct M2Components
     nG::Int
     nR::Int

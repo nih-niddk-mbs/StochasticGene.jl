@@ -24,14 +24,11 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
 end
 
 function ll_hmm_coupled(r, components::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    for i in eachindex(trace[1][1])
-        a[i], p0[i] = make_ap(r, interval, components.EComponents)
-    end
-    for i in eachindex(t)
+    for i in 1:size(t,1)
+        a[i], p0[i] = make_ap(r[i], interval, components[i])
         lb[i] = trace[3] > 0. ? ll_background(a[i], p0[i], offstates[i], trace[3], trace[4]) : 0.
         ll[i], lp[i] = ll_hmm(r[i], nT, noiseparams[i], reporters_per_state, probfn, trace[1], log.(max.(a[i], 0)), log.(max.(p0[i], 0)))
     end
-
     return ll + lb, lp
 end
 
