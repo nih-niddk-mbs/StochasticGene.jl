@@ -730,7 +730,7 @@ struct T2Components <: AbstractTComponents
     elementsR::Vector
     elementsRG::Vector
 end
-struct TEnhancerComponents <: AbstractTComponents
+struct TCSourceComponents <: AbstractTComponents
     nG::Int
     nR::Int
     elementsG::Vector
@@ -738,7 +738,18 @@ struct TEnhancerComponents <: AbstractTComponents
     elementsRK::Vector
     elementsRKbar::Vector
 end
-struct TGeneComponents <: AbstractTComponents
+struct TTargetComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsGC::Vector
+    elementsGCbar::Vector
+    elementsRK::Vector
+    elementsRKbar::Vector
+end
+
+struct TCouplingComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
