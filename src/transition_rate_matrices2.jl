@@ -742,19 +742,19 @@ struct TTargetComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
-    elementsG::Vector
     elementsGC::Vector
     elementsGCbar::Vector
     elementsRK::Vector
     elementsRKbar::Vector
 end
 
-struct TCouplingComponents <: AbstractTComponents
+struct TMultCouplingComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
-    elementsGC::Vector
-    elementsGCbar::Vector
+    elementsGsource::Vector
+    elementsGtarget::Vector
+    elementsGtargetbar::Vector
     elementsRK::Vector
     elementsRKbar::Vector
 end
@@ -1031,6 +1031,12 @@ function make_components_TGene(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_TGene(transitions, G, R, S, insertstep, indices, splicetype)
     TGeneComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
+end
+
+function make_components_TMultiplicativeCoupling(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_TGene(transitions, G, R, S, insertstep, indices, splicetype)
+    TCouplingComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
 end
 
 function make_components_TEGC(transitions, G, R, S, insertstep, splicetype)
