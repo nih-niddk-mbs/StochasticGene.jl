@@ -976,13 +976,32 @@ function set_elements_Gsource!(G, elementsG, elementsGC, transitions, gamma::Vec
 end
 
 """
+    set_elements_Gmututal!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
+function set_elements_Gmututal!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        if t[2] + j == G
+            push!(elementsGtarget, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elementsGtarget, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        else
+            push!(elementsGtargetbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elementsGtargetbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        end
+        i += 1
+    end
+    push!(elementsGsource, Element(G, G, gamma[end], 1))
+end
+"""
     set_elements_Tsource(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
 
 TBW
 """
 function set_elements_Tsource(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG = Vector{Element}(undef, 0)
-    elementsGC = Vector{Element}(undef, 0)
+    elementsGsource = Vector{Element}(undef, 0)
     set_elements_Gsource!(G, elementsG, elementsGC, transitions, indices.gamma)
     if R > 0
         elementsRK = Vector{Element}(undef, 0)
@@ -990,7 +1009,7 @@ function set_elements_Tsource(transitions, G, R, S, insertstep, indices::Indices
         base = S > 0 ? 3 : 2
         nR = base^R
         set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsGC, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
+        return elementsG, elementsGsource, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
         return elementsG, elementsGC, Element[], Element[], 0, G
     end
@@ -1002,26 +1021,26 @@ end
 TBW
 """
 function set_elements_Ttarget(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsGC = Vector{Element}(undef, 0)
-    elementsGCbar = Vector{Element}(undef, 0)
-    set_elements_Gtarget!(G, elementsGC, elementsGCbar, transitions, indices.gamma)
+    elementsGtarget = Vector{Element}(undef, 0)
+    elementsGtargetbar = Vector{Element}(undef, 0)
+    set_elements_Gtarget!(G, elementsGtarget, elementsGtargetbar, transitions, indices.gamma)
     if R > 0
         elementsRK = Vector{Element}(undef, 0)
         elementsRKbar = Vector{Element}(undef, 0)
         base = S > 0 ? 3 : 2
         nR = base^R
         set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
+        return elementsGC, elementsGtargetbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
-        return elementsGC, elementsGCbar, Element[], Element[], 0, G
+        return elementsGtarget, elementsGtargetbar, Element[], Element[], 0, G
     end
 end
 
-function set_elements_TCoupling(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+function set_elements_Tmutual(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsGsource = Vector{Element}(undef, 0)
-    elementsGtarget
+    elementsGtarget = Vector{Element}(undef, 0)
     elementsGtargetbar = Vector{Element}(undef, 0)
-    set_elements_Gtarget!(G, elementsGC, elementsGCbar, transitions, indices.gamma)
+    set_elements_Gmutual!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, indices.gamma)
     if R > 0
         elementsRK = Vector{Element}(undef, 0)
         elementsRKbar = Vector{Element}(undef, 0)
@@ -1030,7 +1049,7 @@ function set_elements_TCoupling(transitions, G, R, S, insertstep, indices::Indic
         set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
         return elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
-        return elementsGC, elementsGCbar, Element[], Element[], 0, G
+        return elementsGsource, elementsGtarget, elementsGtargetbar, Element[], Element[], 0, G
     end
 end
 """
@@ -1044,13 +1063,13 @@ function make_components_Tsource(transitions, G, R, S, insertstep, splicetype)
     TsourceComponents(G, nR, elementsG, elementsGsourceC, elementsRG, elementsRGbar)
 end
 
-function make_components_TGsourcene(transitions, G, R, S, insertstep, splicetype)
+function make_components_Ttarget(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
     TtargetComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
 end
 
-function make_components_TMultiplicativeCoupling(transitions, G, R, S, insertstep, splicetype)
+function make_components_Tmutual(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
     TCouplingComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
@@ -1061,7 +1080,7 @@ function make_components_TEGC(transitions, G, R, S, insertstep, splicetype)
 end
 
 
-function make_mat_TE(components, rates)
+function make_mat_Tsource(components, rates)
     nG = components.nG
     nR = components.nR
     GK = spzeros(nG, nG)
@@ -1074,7 +1093,7 @@ function make_mat_TE(components, rates)
     return Te, sparse(I, nG, nG), G, GC
 end
 
-function make_mat_TG(components, rates)
+function make_mat_Ttarget(components, rates)
     nT = components.nT
     nR = components.nR
     nG = components.nG
@@ -1088,7 +1107,7 @@ function make_mat_TG(components, rates)
     return Tg, sparse(I, nT, nT), sparse(I, nR, nR), GCbar, GC
 end
 
-function make_mat_TCEG(components, rates)
+function make_mat_Tsourcetarget(components, rates)
     Te, IeG, Gsource, GsourceC = make_mat_TE(components.EComponents, rates)
     Tg, Ig, IgR, GtargetC = make_mat_TG(components.GComponents, rates)
     return Te, kron(IeG, Tg) + kron(Gsource, Ig) + kron(GsourceC, kron(IgR, GtargetC))
