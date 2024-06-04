@@ -1016,6 +1016,23 @@ function set_elements_TGene(transitions, G, R, S, insertstep, indices::Indices, 
         return elementsGC, elementsGCbar, Element[], Element[], 0, G
     end
 end
+
+function set_elements_TCoupling(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsGsource = Vector{Element}(undef, 0)
+    elementsGtarget
+    elementsGtargetbar = Vector{Element}(undef, 0)
+    set_elements_Gg!(G, elementsGC, elementsGCbar, transitions, indices.gamma)
+    if R > 0
+        elementsRK = Vector{Element}(undef, 0)
+        elementsRKbar = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
+    else
+        return elementsGC, elementsGCbar, Element[], Element[], 0, G
+    end
+end
 """
     make_components_TEnhancer(transitions, G, R, S, insertstep, splicetype)
 
