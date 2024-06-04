@@ -465,7 +465,7 @@ function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrat
     # rm[nrates] = decayrate
     # [rm; noisepriors]
     [fill(0.01, length(transitions)); decayrate; fill(R / ttime, R); fill(.2, max(0, S - insertstep + 1)); 1.0; noisepriors]
- nd
+end
 
 """
     prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nindividuals, nhyper, cv=1.0)

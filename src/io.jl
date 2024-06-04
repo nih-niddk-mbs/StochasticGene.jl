@@ -218,6 +218,13 @@ get_nalleles(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :nalleles)
 get_resultfiles(folder::String) = get_resultfiles(readdir(folder))
 get_resultfiles(files::Vector) = files[occursin.(".txt", files).&occursin.("_", files)]
 
+function get_resultfiles(folder::String, name) 
+    files = get_resultfiles(readdir(folder))
+    files[occursin.("measures", files)]
+end
+
+get_measurefiles(folder::String) = get_resultfiles(folder,"measures")
+
 get_summaryfiles(folder::String) = get_summaryfiles(readdir(folder))
 get_summaryfiles(files::Vector) = files[occursin.(".csv", files).&occursin.("_", files)]
 get_summaryfiles(files::Vector, name) = files[occursin.(".csv", files).&occursin.(name, files)]
@@ -367,6 +374,24 @@ function assemble_measures_model(folder::String, label::String, cond::String, ge
     close(f)
 end
 
+remove_string(str,st1) = replace(str,st1=>"")
+remove_string(str,str1,str2) = replace(remove_string(str,str1),str2=>"")
+
+function assemble_measures_model(folder::String, cond::String,gene::String)
+    outfile = joinpath(folder, "measures_" * cond * "_" * gene * ".csv")
+    header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
+    files = get_measurefiles(folder)
+    files = files[occursin.(cond,files)]
+    println(files)
+    f = open(outfile, "w")
+    writedlm(f, header, ',')
+    for file in files
+        nalleles = get_nalleles(file)
+        r = readmeasures(joinpath(folder, file))
+        writedlm(f, [remove_string(file,"measures_trace-HBEC-","_$nalleles.txt") r], ',')
+    end
+    close(f)
+end
 
 """
     assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
