@@ -229,43 +229,47 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    coupling::CouplingType
-    Gtransitions::Tuple
-    G::Vector
-    R::Vector
-    S::Vector
-    insertstep::Vector
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
+# struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     rates::RateType
+#     coupling::CouplingType
+#     Gtransitions::Tuple
+#     G::Vector
+#     R::Vector
+#     S::Vector
+#     insertstep::Vector
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
 
-struct GRSMhierarchicalcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
-    rates::RateType
-    coupling::CouplingType
-    pool::PoolType
-    Gtransitions::Tuple
-    G::Vector
-    R::Vector
-    S::Vector
-    insertstep::Vector
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
+# struct GRSMhierarchicalcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
+#     rates::RateType
+#     coupling::CouplingType
+#     pool::PoolType
+#     Gtransitions::Tuple
+#     G::Vector
+#     R::Vector
+#     S::Vector
+#     insertstep::Vector
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+struct GRSMcoupledmodel
+    model::Vector{AbstractGRSMmodel}
 end
 
 
