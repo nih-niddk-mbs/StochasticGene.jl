@@ -13,26 +13,26 @@ MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("R
 halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
 
 """
-    get_transitions(G, ModelType)
+    get_transitions(G, TransitionType)
 
 Create transitions tuple
 """
-function get_transitions(G, ModelType)
+function get_transitions(G, TransitionType)
     typeof(G) <: AbstractString && (G = parse(Int, G))
     if G == 2
         return ([1, 2], [2, 1])
     elseif G == 3
-        if occursin("KP", ModelType)
+        if occursin("KP", TransitionType)
             return ([1, 2], [2, 1], [2, 3], [3, 1])
-        elseif occursin("cyclic", ModelType)
+        elseif occursin("cyclic", TransitionType)
             return ([1, 2], [2, 3], [3, 1])
         else
             return ([1, 2], [2, 1], [2, 3], [3, 2])
         end
     elseif G == 4
-        if occursin("KP", ModelType)
+        if occursin("KP", TransitionType)
             return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 2])
-        elseif occursin("cyclic", ModelType)
+        elseif occursin("cyclic", TransitionType)
             return ([1, 2], [2, 3], [3, 4], [4, 1])
         else
             return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 3])
@@ -69,7 +69,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep=1`: R step where reporter is inserted
-- `ModelType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
+- `TransitionType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `coupling`= tuple(): two tuple for coupled models if nonempty. First entry is a string corresponding to coupled model types, choices are 1. "SourceTarget", and 2. "Mutual", the 
         second entry is a tuple of data indices corresponding to a given model in order. e.g. ([1,2,3],[4,5]) means that data traces 1,2, and 3 will be fit to first model (i.e. same rates) and traces 4 and 5 will be fit to the second model.
 - `root="."`: name of root directory for project, e.g. "scRNA"
@@ -106,8 +106,8 @@ bash> julia -p 4
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 
 """
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, ModelType="", coupling=tuple(), root=".", priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, ModelType)
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, TransitionType="", coupling=tuple(), root=".", priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if typeof(fixedeffects) <: AbstractString
         fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors))
         println(transitions)
@@ -120,11 +120,11 @@ function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, coupling=tuple(), ModelType, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, coupling=tuple(), TransitionType, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, coupling=tuple(), ModelType, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
-    transitions = get_transitions(G, ModelType)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, coupling=tuple(), TransitionType, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+    transitions = get_transitions(G, TransitionType)
     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors))
     println(transitions)
     println(fixedeffects)
