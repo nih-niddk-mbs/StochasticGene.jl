@@ -248,7 +248,7 @@ end
 #     reporter::ReporterType
 # end
 
-# struct GRSMhierarchicalcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
+# struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
 #     rates::RateType
 #     coupling::CouplingType
 #     pool::PoolType
