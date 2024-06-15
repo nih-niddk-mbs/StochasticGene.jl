@@ -485,7 +485,7 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     return r
 end
 
-function prepare_rates(param, model::GRSMhierarchicalcoupledmodel)
+function prepare_rates(param, model::GRSMcoupledmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     h = Vector{Int}[]
