@@ -983,7 +983,8 @@ TBW
 function set_elements_Gmututal!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
-        if t[2] + j == G
+        # if t[2] + j == G
+        if x
             push!(elementsGtarget, Element(t[1] + j, t[1] + j, gamma[i], -1))
             push!(elementsGtarget, Element(t[2] + j, t[1] + j, gamma[i], 1))
         else
