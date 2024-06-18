@@ -460,8 +460,8 @@ end
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, cv=1.0)
-    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, ttime,cv=1.0)
+    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors,ttime)
     r = copy(rm)
     priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R - 1); 5.0; fill(5.0, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.5, 0.5]]
     append!(r, priorcv)

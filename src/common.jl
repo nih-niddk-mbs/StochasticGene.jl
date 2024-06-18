@@ -485,17 +485,17 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     return r
 end
 
-function prepare_rates(param, model::GRSMcoupledmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    h = Vector{Int}[]
-    for i in model.pool.hyperindices
-        push!(h, i)
-    end
-    r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
-    return r, p, h
-end
+# function prepare_rates(param, model::GRSMcoupledmodel)
+#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+#     h = Vector{Int}[]
+#     for i in model.pool.hyperindices
+#         push!(h, i)
+#     end
+#     r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
+#     p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
+#     return r, p, h
+# end
 # Likelihood functions
 
 """
