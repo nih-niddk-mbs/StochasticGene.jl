@@ -70,10 +70,9 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep=1`: R step where reporter is inserted
 - `TransitionType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
-- `coupling`= tuple(): tuple of tuples for coupled models if nonempty, each tuple corresponds 
-First entry is a tuple of coupling indices corresponding to a given model
-- `coupling`= tuple(): tuple for coupled models if nonempty. First entry is a string corresponding to coupled model types, choices are 1. "SourceTarget", and 2. "Mutual", the 
-        second entry is a tuple of data indices corresponding to a given model in order. e.g. ([1,2,3],[4,5]) means that data from transcription elements 1,2, and 3 will be fit to first model (i.e. same rates) and traces 4 and 5 will be fit to the second model.
+- `coupling`= tuple(): if nonempty, a 2 tuple (Tuple{Tuple,Tuple}) for coupled models, where element 1  = tuple of source traces to given trace listed in order,
+        element 2 = tuple of vectors of data indices corresponding to given model,  e.g. (([2,3],[3],[]),([1,2],[3])) means there are 3 data traces fit by 2 models, trace 1 is affected by traces 2 and 3, trace 2 is affected by trace 3, and trace 3 is not affected by any trace, 
+        traces 1 and 2 are fit with one model, while trace 3 is fit with another type.
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
