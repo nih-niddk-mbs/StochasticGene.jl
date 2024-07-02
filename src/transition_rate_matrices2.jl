@@ -748,13 +748,13 @@ struct TTargetComponents <: AbstractTComponents
     elementsRKbar::Vector
 end
 
-struct TMutualComponents <: AbstractTComponents
+struct TCouplingComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
     elementsGsource::Vector
     elementsGtarget::Vector
-    elementsGtargetbar::Vector
+    elementsG::Vector
     elementsRK::Vector
     elementsRKbar::Vector
 end
@@ -1073,6 +1073,13 @@ end
 function make_components_Tmutual(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
+    TCouplingComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
+end
+
+function make_components_coupling(transitions, G, R, S, insertstep, coupling, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep,coupling)
+    elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
+    elements, nR, nT = set_elements_coupling(transitions, G, R, S, insertstep, indices, coupling, splicetype)
     TCouplingComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
 end
 
