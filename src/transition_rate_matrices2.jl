@@ -921,156 +921,45 @@ function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, spl
     end
 end
 
-"""
-    set_elements_Gtarget(transitions, G, R, S, insertstep, indices::Indices)
 
-TBW
-"""
-function set_elements_Gtarget(transitions, G, R, S, insertstep, indices::Indices)
+
+function set_elements_Tcoupled(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsGsource = Vector{Element}(undef, 0)
+    elementsGtarget = Vector{Element}(undef, 0)
+    set_elements_Gcoupled!(G, elementsGsource, elementsGtarget, transitions, indices.gamma)
     if R > 0
-        elementsGtargetC = Vector{Element}(undef, 0)
-        elementsGtargetCbar = Vector{Element}(undef, 0)
-        elementsGsource = Vector{Element}(undef, 0)
-        elementsGsourceC = Vector{Element}(undef, 0)
-        set_elements_Gtarget!(G, elementsGtargetC, elementsGtargetCbar, transitions, indices.gamma)
-        set_elements_Gsource!(G, elementsGsource, elementsGsourceC, transitions, indices.gamma)
-        return elementsGtargetC, elementsGtargetCbbar, elementsGsource, elementsGsourceC
+        elementsRK = Vector{Element}(undef, 0)
+        elementsRKbar = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsGsource, elementsGtarget, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
     else
-        return set_elements_T(transitions, indices.gamma), G
+        return elementsG, elementsGsource, elementsGtarget, Element[], Element[], 0, G
     end
 end
-
-"""
-    set_elements_Gtarget!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-
-TBW
-"""
-function set_elements_Gtarget!(G, elementsGC, elementsGCbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        if t[2] + j == G
-            push!(elementsGC, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elementsGC, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        else
-            push!(elementsGCbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elementsGCbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        end
-        i += 1
-    end
-end
-
-"""
-    set_elements_Gsource!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-
-TBW
-"""
-function set_elements_Gsource!(G, elementsG, elementsGC, transitions, gamma::Vector=collect(1:length(transitions)),j=0)
-    i = 1
-    for t in transitions
-        push!(elementsG, Element(t[1] + j, t[1] + j, gamma[i], -1))
-        push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        i += 1
-    end
-    coupling = 10
-    push!(elementsGC, Element(G, G, coupling, 1))
-end
-
 """
     set_elements_Gmututal!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
 
 TBW
 """
-function set_elements_Gmututal!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+function set_elements_Gcoupled!(sourceindex, elementsG, elementsGsource, elementsGtarget, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
         # if t[2] + j == G
-        if x
+        push!(elementsG, Element(t[1] + j, t[1] + j, gamma[i], -1))
+        push!(elementsG, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        if i == k
             push!(elementsGtarget, Element(t[1] + j, t[1] + j, gamma[i], -1))
             push!(elementsGtarget, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        else
-            push!(elementsGtargetbar, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elementsGtargetbar, Element(t[2] + j, t[1] + j, gamma[i], 1))
         end
         i += 1
     end
-    push!(elementsGsource, Element(G, G, gamma[end], 1))
-end
-"""
-    set_elements_Tsource(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-
-TBW
-"""
-function set_elements_Tsource(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsG = Vector{Element}(undef, 0)
-    elementsGsource = Vector{Element}(undef, 0)
-    set_elements_Gsource!(G, elementsG, elementsGC, transitions, indices.gamma)
-    if R > 0
-        elementsRK = Vector{Element}(undef, 0)
-        elementsRKbar = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nR = base^R
-        set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsGsource, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
-    else
-        return elementsG, elementsGC, Element[], Element[], 0, G
-    end
+    push!(elementsGsource, Element(l, l, gamma[end], 1))
 end
 
-"""
-    set_elements_Ttarget(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
 
-TBW
-"""
-function set_elements_Ttarget(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsGtarget = Vector{Element}(undef, 0)
-    elementsGtargetbar = Vector{Element}(undef, 0)
-    set_elements_Gtarget!(G, elementsGtarget, elementsGtargetbar, transitions, indices.gamma)
-    if R > 0
-        elementsRK = Vector{Element}(undef, 0)
-        elementsRKbar = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nR = base^R
-        set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsGC, elementsGtargetbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
-    else
-        return elementsGtarget, elementsGtargetbar, Element[], Element[], 0, G
-    end
-end
-
-function set_elements_Tmutual(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsGsource = Vector{Element}(undef, 0)
-    elementsGtarget = Vector{Element}(undef, 0)
-    elementsGtargetbar = Vector{Element}(undef, 0)
-    set_elements_Gmutual!(G, elementsGsource, elementsGtarget, elementsGtargetbar, transitions, indices.gamma)
-    if R > 0
-        elementsRK = Vector{Element}(undef, 0)
-        elementsRKbar = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nR = base^R
-        set_elements_RS2!(elementsRK, elementsRKbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, T_dimension(G, R, S)
-    else
-        return elementsGsource, elementsGtarget, elementsGtargetbar, Element[], Element[], 0, G
-    end
-end
-"""
-    make_components_Tsource(transitions, G, R, S, insertstep, splicetype)
-
-TBW
-"""
-function make_components_Tsource(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGsourceC, elementsRG, elementsRGbar, nR, nT = set_elements_Tsource(transitions, G, R, S, insertstep, indices, splicetype)
-    TsourceComponents(G, nR, elementsG, elementsGsourceC, elementsRG, elementsRGbar)
-end
-
-function make_components_Ttarget(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
-    TtargetComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
-end
-
-function make_components_Tmutual(transitions, G, R, S, insertstep, splicetype)
+function make_components_Tcoupled(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsGC, elementsGCbar, elementsRK, elementsRKbar, nR, nT = set_elements_Ttarget(transitions, G, R, S, insertstep, indices, splicetype)
     TCouplingComponents(nT, G, nR, elementsGC, elementsGCbar, elementsRK, elementsRKbar)
