@@ -270,6 +270,7 @@ end
 
 struct GRSMcoupledmodel
     model::Vector{AbstractGRSMmodel}
+    coupling::Vector
 end
 
 
