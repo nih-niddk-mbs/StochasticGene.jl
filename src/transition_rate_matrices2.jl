@@ -938,7 +938,7 @@ end
 function set_elements_Tcoupled(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG = Vector{Element}(undef, 0)
     elementsGt = Vector{Element}(undef, 0)
-    set_elements_G!(elementsG, transitions)
+    set_elements_G2!(elementsG, transitions)
     set_elements_Gt!(elementsGt, transitions)
     if R > 0
         elementsRGbar = Vector{Element}(undef, 0)
@@ -979,11 +979,11 @@ function make_components_M2(transitions, G, R, nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-function make_mat_GC(G, n)
+function make_mat_GC(G, n, coupling=1.0)
     GR = spzeros(G, G)
-    GR[n, n] = 1.0
+    GR[n, n] = coupling
+    return GR
 end
-
 
 make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
 
@@ -998,19 +998,20 @@ function make_mat_T2(components, rates)
 end
 
 function make_mat_Tcoupled(components, rates)
+    nT = components.nT
     nG = components.nG
     nR = components.nR
     nS = nG
     GR = make_mat_GC(nG, nG)
     G = make_mat(components.elementsG, rates, nG)
     Gt = make_mat(components.elementsGtarget, rates, nG)
-    Gs = make_mat_GC(nS, nS)
+    Gs = make_mat_GC(nS, nS, rates[end])
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    T2 = make_mat_T2(G, GR, RGbar, RG, nG, nR)
-    I2 = sparse(I, T_dimension(nG, nR, 0), T_dimension(nG, nR, 0))
+    I2 = sparse(I, nT, nT)
     IR = sparse(I, nR, nR)
-    kron(I2, T2) + kron(T2, I2) + kron(kron(IR, Gs), kron(IR, Gt))
+    T2 = make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    return T2, kron(I2, T2) + kron(T2, I2) + kron(kron(IR, Gs), kron(IR, Gt))
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
