@@ -756,8 +756,8 @@ struct TcoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
-    elementsGtarget::Vector
     elementsG::Vector
+    elementsGt::Vector
     elementsRG::Vector
     elementsRGbar::Vector
 end
@@ -1004,7 +1004,7 @@ function make_mat_Tcoupled(components, rates)
     nS = nG
     GR = make_mat_GC(nG, nG)
     G = make_mat(components.elementsG, rates, nG)
-    Gt = make_mat(components.elementsGtarget, rates, nG)
+    Gt = make_mat(components.elementsGt, rates, nG)
     Gs = make_mat_GC(nS, nS, rates[end])
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
