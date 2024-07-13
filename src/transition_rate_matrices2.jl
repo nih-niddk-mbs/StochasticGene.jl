@@ -997,7 +997,7 @@ function make_mat_T2(components, rates)
     make_mat_T2(G, GR, R, RG, nG, nR)
 end
 
-function make_mat_Tcoupled(components, rates)
+function make_mat_Tcoupled1(components, rates)
     nT = components.nT
     nG = components.nG
     nR = components.nR
@@ -1012,6 +1012,31 @@ function make_mat_Tcoupled(components, rates)
     IR = sparse(I, nR, nR)
     T2 = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     return T2, kron(I2, T2) + kron(T2, I2) + kron(kron(IR, Gs), kron(IR, Gt))
+end
+
+function make_mat_Tcoupled(components, rates)
+    nT = components.nT
+    nG = components.nG
+    nR = components.nR
+    nS = nG
+    GR = make_mat_GC(nG, nG)
+    G = make_mat(components.elementsG, rates, nG)
+    RGbar = make_mat(components.elementsRGbar, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    Gr = make_mat(components.elementsGt, rates, nG)
+    Gs = make_mat_GC(nS, nS, rates[end])
+    IR = sparse(I, nR, nR)
+    return T, kron(IR,Gr), kron(IR,Gs), nT
+end
+
+function make_mat_Tc()
+    n = cumprod(n)
+    T = spzeros(n,n)
+    for α in transcribers
+        T += kron(kron(sparse(I,n),T),sparse(I,m))
+    end
+
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
