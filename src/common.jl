@@ -362,13 +362,7 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
-    if isempty(pool)
-        ll_hmm_coupled(get_rates(param, model), model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-        ll_hmm_coupled(r, components::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    else
-        ll_hmm_hierarchical_coupled()
-    end
-end
+
 
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)

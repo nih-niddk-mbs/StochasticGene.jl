@@ -23,6 +23,14 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
+function ll_hmm_coupled(models)
+    matrices = coupledmatrices[]
+    for m in models
+        push!(matrices)
+
+    end
+end
+
 function ll_hmm_coupled(r, components::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     for i in 1:size(t,1)
         a[i], p0[i] = make_ap(r[i], interval, components[i])
