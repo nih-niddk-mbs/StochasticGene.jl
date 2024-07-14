@@ -1030,13 +1030,21 @@ function make_mat_Tcoupled(components, rates)
     return T, kron(IR,Gr), kron(IR,Gs), nT
 end
 
-function make_mat_Tc()
-    n = cumprod(n)
-    T = spzeros(n,n)
-    for α in transcribers
-        T += kron(kron(sparse(I,n),T),sparse(I,m))
+function make_mat_Tc(ns,Tmats,gamma)
+    n = prod(ns)
+    Tc = spzeros(n,n)
+    for i in eachindex(transcribers)
+        n = prod(ns[1:i-1])
+        m = prod(ns[i+1:end])
+        Tc += kron(kron(sparse(I,n,n),[α[i]]),sparse(I,m,m))
     end
-
+    for β in eachindex(transcribers)
+        for α in 1:β-1
+            Tc += gamma[α,β]*kron(kron(kron(kron(I1,S[α]),I2),R[β]),I3)
+            Tc += gamma[β,α]*kron(kron(kron(kron(I1,R[α]),I2),S[β]),I3)
+        end
+    end
+    return Tc
 end
 
 function make_mat_T2(G, GR, R, RG, nG, nR)
