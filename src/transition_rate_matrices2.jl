@@ -1032,13 +1032,11 @@ end
 
 function make_mat_Tc(model, ns, R, S, T, gamma)
     n = prod(ns)
-    Tc = spzeros(n, n)
-    for α in eachindex(transcribers)
-        n = prod(ns[1:α-1])
-        m = prod(ns[α+1:end])
-        Tc += kron(kron(sparse(I, n, n), T[model[α]]), sparse(I, m, m))
+    Tc = T[1]
+    for α in 2:ntranscribers
+        Tc = kron(Tc, T[model[α]])
     end
-    for β in eachindex(transcribers)
+    for β in 2:ntranscribers
         for α in 1:β-1
             n = prod(ns[1:α-1])
             I1 = sparse(I, n, n)
