@@ -1027,25 +1027,21 @@ function make_mat_Tcoupled(components, rates)
     Gr = make_mat(components.elementsGt, rates, nG)
     Gs = make_mat_GC(nS, nS, rates[end])
     IR = sparse(I, nR, nR)
-    return T, kron(IR, Gr), kron(IR, Gs), nT
+    return T, kron(IR,Gr), kron(IR,Gs), nT
 end
 
-function make_mat_Tc(model, ns, R, S, T, gamma)
+function make_mat_Tc(ns,Tmats,gamma)
     n = prod(ns)
-    Tc = T[1]
-    for α in 2:ntranscribers
-        Tc = kron(Tc, T[model[α]])
+    Tc = spzeros(n,n)
+    for i in eachindex(transcribers)
+        n = prod(ns[1:i-1])
+        m = prod(ns[i+1:end])
+        Tc += kron(kron(sparse(I,n,n),[α[i]]),sparse(I,m,m))
     end
-    for β in 2:ntranscribers
+    for β in eachindex(transcribers)
         for α in 1:β-1
-            n = prod(ns[1:α-1])
-            I1 = sparse(I, n, n)
-            n = prod(ns[α+1:β-1])
-            I2 = sparse(I, n, n)
-            n = prod(ns[β+1:end])
-            I3 = sparse(I, n, n)
-            Tc += gamma[α, β] * kron(kron(kron(kron(I1, S[model[α]]), I2), R[model[β]]), I3)
-            Tc += gamma[β, α] * kron(kron(kron(kron(I1, R[model[α]]), I2), S[model[β]]), I3)
+            Tc += gamma[α,β]*kron(kron(kron(kron(I1,S[α]),I2),R[β]),I3)
+            Tc += gamma[β,α]*kron(kron(kron(kron(I1,R[α]),I2),S[β]),I3)
         end
     end
     return Tc
