@@ -64,6 +64,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
      (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
+- `fixedeffects::String`: if "fixed" is included after a hypen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
