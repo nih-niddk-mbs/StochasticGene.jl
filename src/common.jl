@@ -363,6 +363,8 @@ end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
 
+end
+
 
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
@@ -370,7 +372,6 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
 negative loglikelihood of trace data with nascent RNA FISH active fraction (stored in data.histRNA field)
 """
 function loglikelihood(param, data::TraceNascentData, model::AbstractGmodel)
-    r = get_rates(param,model)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace, data.nascent)
 end
 
@@ -399,7 +400,6 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
         base = model.S > 0 ? 3 : 2
         nT = model.G * base^model.R
         llg, llgp = ll_hmm_hierarchical_rateshared_background(r, nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-
     else
         llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end
