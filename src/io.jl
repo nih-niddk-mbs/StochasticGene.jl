@@ -881,14 +881,14 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, col=3)
+function read_tracefiles(path::String, cond::String, start::Int, stop::Int, col=3)
     traces = Vector[]
     if isempty(path)
         return traces
     else
         for (root, dirs, files) in walkdir(path)
             for file in files
-                if occursin(cond1, file)
+                if occursin(cond, file)
                     t = read_tracefile(joinpath(root, file), start, stop, col)
                     ~isempty(t) && push!(traces, t)
                     # t = readfile(joinpath(root, file), col)
@@ -906,7 +906,7 @@ function read_tracefiles(path::String, cond1::String, start::Int, stop::Int, col
     end
 end
 """
-    read_tracefiles(path::String, cond1::String, key::String, start::Int, stop::Int, col=3)
+    read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::Int, col=3)
 
 read in trace files
 """
