@@ -881,47 +881,40 @@ end
 
 read in trace files
 """
-function read_tracefiles(path::String, cond::String, start::Int, stop::Int, col=3)
+function read_tracefiles(path::String, label::String, start::Int, stop::Int, col=3)
     traces = Vector[]
     if isempty(path)
         return traces
     else
         for (root, dirs, files) in walkdir(path)
             for file in files
-                if occursin(cond, file)
+                if occursin(label, file)
                     t = read_tracefile(joinpath(root, file), start, stop, col)
                     ~isempty(t) && push!(traces, t)
-                    # t = readfile(joinpath(root, file), col)
-                    # if stop < 0
-                    #     (start <= length(t)) && push!(traces, t[start:end])
-                    # else
-                    #     (stop <= length(t)) && push!(traces, t[start:stop])
-                    # end
                 end
             end
         end
-        # traces = traces[.!isempty.(traces)]
         set = sum.(traces)
         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
 end
 """
-    read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::Int, col=3)
+    read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
 
-read in trace files
+read in joint trace files
 """
-function read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::Int, col=3)
-    traces = Matrix{Float64}(undef,length(cond),0)
+function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    traces = Matrix{Float64}(undef,length(label),0)
     if isempty(path)
         return traces
     else
         for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, length(cond))
+            tset = Vector{Vector}(undef, length(label))
             files = sort(readdir(path))
             for file in files
                 complete = true
-                for i in eachindex(cond)
-                    if occursin(cond[i], file)
+                for i in eachindex(label)
+                    if occursin(label[i], file)
                         tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
                     end
                     complete &= isassigned(tset,i)
@@ -937,9 +930,9 @@ function read_tracefiles(path::String, cond::Vector{String}, start::Int, stop::I
 end
 
 """
-    read_tracefile!(traces,path::String,start::Int,stop::Int,col=3)
+    read_tracefile(path::String, start::Int, stop::Int, col=3)
 
-TBW
+Read intensity of a trace file into a vector
 """
 function read_tracefile(path::String, start::Int, stop::Int, col=3)
     t = readfile(path, col)
@@ -953,7 +946,7 @@ end
 """
     fix_tracefiles(path::String)
 
-TBW
+reorder trace files into standard form
 """
 function fix_tracefiles(path::String)
     for (root, dirs, files) in walkdir(path)

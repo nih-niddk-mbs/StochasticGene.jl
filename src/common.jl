@@ -153,7 +153,7 @@ abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
-abstract type AbstractHierarchicalModel{RateType,ReporterType}  <: AbstractGRSMmodel{RateType,ReporterType}  end
+abstract type AbstractHierarchicalModel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
 
 """
     Model structures
@@ -229,50 +229,24 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-# struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-#     rates::RateType
-#     coupling::CouplingType
-#     Gtransitions::Tuple
-#     G::Vector
-#     R::Vector
-#     S::Vector
-#     insertstep::Vector
-#     nalleles::Int
-#     splicetype::String
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     fixedeffects::Tuple
-#     method::MethodType
-#     components::ComponentType
-#     reporter::ReporterType
-# end
-
-# struct GRSMcoupledmodel{RateType,CouplingType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractHierarchicalModel{RateType,ReporterType}
-#     rates::RateType
-#     coupling::CouplingType
-#     pool::PoolType
-#     Gtransitions::Tuple
-#     G::Vector
-#     R::Vector
-#     S::Vector
-#     insertstep::Vector
-#     nalleles::Int
-#     splicetype::String
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     fixedeffects::Tuple
-#     method::MethodType
-#     components::ComponentType
-#     reporter::ReporterType
-# end
-
-struct GRSMcoupledmodel
-    model::Vector{AbstractGRSMmodel}
-    coupling::Vector
+struct GRSMcoupledmodel{RateType,ConnectionType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
+    connections::ConnectionType
+    Gtransitions::Tuple
+    G::Tuple
+    R::Tuple
+    S::Tuple
+    insertstep::Tuple
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
 end
-
 
 """
     print_model(model::AbstractModel)
@@ -471,11 +445,11 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     h = Vector{Int}[]
     coupling = model.coupling.n
-    r = get_rates(param,model)
+    r = get_rates(param, model)
     for i in 1:coupling.n
-        push!(rates,r[(i-1)*nrates+1:i*nrates])
+        push!(rates, r[(i-1)*nrates+1:i*nrates])
     end
-    append!(rates[coupling.index],r[end])
+    append!(rates[coupling.index], r[end])
     r = reshape(get_rates(param, model)[1:end-coupling.n], model.nrates, coupling.n)
     return r
 end
@@ -678,6 +652,17 @@ transform_rates(r, model::AbstractGmodel) = log.(r)
 
 transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
+function transform_rates!(p, model::GRSMcoupledmodel)
+
+end
+
+function transform_rates(pin, model::GRSMcoupledmodel)
+    p = copy(pin)
+    for f in model.transformations
+        p[i] = f(p[i])
+    end
+    return p
+end
 
 """
     inverse_transform_rates(x,model::AbstractGmodel)
@@ -699,6 +684,8 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
+get_params(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam])
+
 
 """
     get_rates(param,model)
@@ -707,22 +694,22 @@ replace fitted rates with new values and return
 """
 function get_rates(param, model::AbstractGmodel, inverse=true)
     r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
+end
+
+function get_rates!(r, param, model, inverse)
     if inverse
         r[model.fittedparam] = inverse_transform_rates(param, model)
     else
         r[model.fittedparam] = param
     end
-    fixed_rates(r, model.fixedeffects)
 end
 
 function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
     rv = copy_r(model)
     for r in rv
-        if inverse
-            r[model.fittedparam] = inverse_transform_rates(param, model)
-        else
-            r[model.fittedparam] = param
-        end
+        get_rates!(r, param, model, inverse)
     end
     fixed_rates(r, model.fixedeffects)
 end
@@ -738,6 +725,16 @@ function get_rates(fits, stats, model, ratetype)
         println("ratetype unknown")
     end
 end
+
+function get_rates(param, model::GRSMcoupledmodel, inverse=true)
+    r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
+end
+
+
+
+num_rates(model::GRSMcoupledmodel)
 
 """
     fixed_rates(r, fixedeffects)
@@ -825,5 +822,5 @@ end
 
 function num_rates(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
-    num_rates(model.Gtransitions,model.R,model.S,model.insertstep) + n
+    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
