@@ -173,8 +173,15 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
 end
 
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath::Vector, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
-  
-
+    if isempty(priormean)
+        priormean = prior_ratemean()
+    end
+    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
+    isempty(fittedparam) && ()
+    r = readrates()
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
+    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
 """

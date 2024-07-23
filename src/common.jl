@@ -824,3 +824,11 @@ function num_rates(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
+
+function num_rates(transitions,R::Tuple, S::Tuple, insertstep::Tuple)
+    n = 0
+    for i in eachindex(R)
+        n +=num_rates(transitions[i],R[i],S[i],insertstep[i])
+    end
+    n
+end
