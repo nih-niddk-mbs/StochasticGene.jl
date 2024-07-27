@@ -734,29 +734,19 @@ struct T2Components <: AbstractTComponents
     elementsR::Vector
     elementsRG::Vector
 end
-struct TCSourceComponents <: AbstractTComponents
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsGC::Vector
-    elementsRK::Vector
-    elementsRKbar::Vector
-end
-struct TTargetComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsGC::Vector
-    elementsGCbar::Vector
-    elementsRK::Vector
-    elementsRKbar::Vector
+
+struct TCComponents
+    sources::Vector
+    models::Vector
+    comp::Vector{CoupledComponents}
 end
 
-struct TcoupledComponents <: AbstractTComponents
+struct CoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
     elementsG::Vector
+    elementsGs::Vector
     elementsGt::Vector
     elementsRG::Vector
     elementsRGbar::Vector
@@ -967,7 +957,6 @@ function make_components_Tcoupled(transitions, G, R, S, insertstep, splicetype="
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGt, elementsRG, elementsRGbar, nR, nT = set_elements_Tcoupled(transitions, G, R, S, insertstep, indices, splicetype)
     TcoupledComponents(nT, G, nR, elementsG, elementsGt, elementsRGbar, elementsRG)
-
 end
 
 
@@ -1014,7 +1003,7 @@ function make_mat_Tcoupled1(components, rates)
     return T2, kron(I2, T2) + kron(T2, I2) + kron(kron(IR, Gs), kron(IR, Gt))
 end
 
-function make_mat_Tcoupled(components, rates)
+function make_mat_C(components, rates)
     nT = components.nT
     nG = components.nG
     nR = components.nR
@@ -1024,14 +1013,34 @@ function make_mat_Tcoupled(components, rates)
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
-    Gr = make_mat(components.elementsGt, rates, nG)
+    Gt = make_mat(components.elementsGt, rates, nG)
     Gs = make_mat_GC(nS, nS, rates[end])
     IR = sparse(I, nR, nR)
-    return T, kron(IR,Gr), kron(IR,Gs), nT
+    return T, G, kron(IR,Gt), Gs, sparse(I,nG,nG),sparse(I,nT,nT)
 end
 
-function make_mat_Tc(matrix_dims,models,T,gamma)
-    n = prod(matrix_dims)
+function make_mat_Tc(components,rates)
+    n = components.ntranscribers
+    m = compnents.models
+    T = Vector{SparseMatrixCSC}(undef,n)
+    G = Vector{SparseMatrixCSC}(undef,n)
+    V = Vector{SparseMatrixCSC}(undef,n)
+    Gs = Vector{SparseMatrixCSC}(undef,n)
+    IG = Vector{SparseMatrixCSC}(undef,n)
+    IT = Vector{SparseMatrixCSC}(undef,n)
+    for i in 1:n
+        T[i],G[i],V[i],Gs[i],IG[i],IT[i] = make_mat_Tc(components.comp[m[i]],rates[m[i]])
+    end
+
+    for i in 1:n
+        TC[i] =
+        for j in sigmalt
+            Tc[i] = kronIG[j]
+        end
+        for j in sigmagt
+            Tc[i] = kron(Tc,IG[j])
+    end
+
     Tc = spzeros(n,n)
     for i in eachindex(matrix_dims)
         n = prod(ns[1:i-1])

@@ -354,21 +354,19 @@ end
 """
     load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Vector, R::Vector, S::Vector, insertstep::Vector, coupling::Tuple, nalleles::Vector, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=1)
 
-Coupled model
+Coupled model for trace data
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Vector, R::Vector, S::Vector, insertstep::Vector, coupling::Tuple, nalleles::Vector, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=1)
-    components = []
-    if isempty(hierarchical)
-        for i in 1:eachindex(G)
-            components[i] = make_components_TCoupling(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype)
-
-        end
-
-
-    else
-
+function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, connections, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1,1])
+    components = TcoupledComponents[]
+    reporter = HMMReporter[]
+    for i in 1:eachindex(G)
+        components[i] = make_components_TCoupling(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype[i])
+        noiseparams = length(noisepriors[i])
+        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
+        reporter[i] = HMMReporter(noiseparams, num_reporters_per_state(G[i], R[i], insertstep[i]), probfn[i], weightind, off_states(G[i], R[i], S[i], insertstep[i]))
+        priord[i] = prior_distribution(rm, transitions[i], R[i], S[i], insertstep[i], fittedparam[i], decayrate[i], priorcv[i], noisepriors[i]) 
     end
-
+    GRSMCoupledmodel{typeof(r),typeof(indices),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, indices, connections, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 function checklength(r, transitions, R, S, insertstep, reporter)
@@ -471,8 +469,8 @@ end
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, ttime,cv=1.0)
-    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors,ttime)
+function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, ttime, cv=1.0)
+    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, ttime)
     r = copy(rm)
     priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R - 1); 5.0; fill(5.0, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.5, 0.5]]
     append!(r, priorcv)
