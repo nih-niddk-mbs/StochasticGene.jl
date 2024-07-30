@@ -71,8 +71,8 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `insertstep=1`: R step where reporter is inserted
 - `TransitionType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
-- `coupling`= tuple(): if nonempty, a 5 tuple tuple(Int, Int, Tuple, Tuple, Vector{Float64}), where elements are 1. number of coupled transcribers (e.g. same as number of traces), 2. number of models, 3. tuple of model indices corresponding to each transcriber,
-        4. tuple of tuples indicating connections, e.g. ((1,2),(2,1)) means transcriber 1 influences 2 and vice versa, 5. vector of priors for coupling constants in same order as 4.
+- `coupling`= tuple(): if nonempty, a 2 tuple tuple(Vector{Int}, Vector{Tuple}), where elements are 1. vector of model indices corresponding to each transcriber,
+        2. tuple of vectors indicating inconnections to each unit ([2,3], [1], []) means unit 1 receives input from units 2 and 3, unit 2 receives input from unit 1 and unit 3 does not receive any input.
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.

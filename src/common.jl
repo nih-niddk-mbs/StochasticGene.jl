@@ -231,8 +231,6 @@ end
 
 struct GRSMcoupledmodel{RateType,IndType,ConnectionType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    indices::IndType
-    connections::ConnectionType
     Gtransitions::Tuple
     G::Tuple
     R::Tuple
@@ -711,8 +709,6 @@ end
 
 
 
-num_rates(model::GRSMcoupledmodel)
-
 """
     fixed_rates(r, fixedeffects)
 
@@ -797,7 +793,7 @@ function num_rates(model::String)
     end
 end
 
-function num_rates(model::AbstractGmodel)
+function total_rates(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
