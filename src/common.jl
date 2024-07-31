@@ -418,6 +418,12 @@ end
 function prepare_rates(param, model::GRSMcoupledmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    rates = get_rates(param, model)
+    n = 0
+    for i in eachindex(model.G)
+        n = num_rates(model.Gtransitions[i],model.R[i],model.S[i],model.insertstep[i]) + model.reporter.n
+        push!(r,rates[1:n])
+    end
     h = Vector{Int}[]
     coupling = model.coupling.n
     r = get_rates(param, model)
