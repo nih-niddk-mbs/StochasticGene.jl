@@ -47,6 +47,9 @@ end
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
+For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
+then G = (2,3). 
+
 #Arguments
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
@@ -55,7 +58,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `cell::String=""': cell type for halflives and allele numbers
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
-    for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7])
+    for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
 - `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
 - `infolder::String=""`: result folder used for initial parameters
 - `resultfolder::String=test`: folder for results of MCMC run
@@ -72,7 +75,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 - `insertstep=1`: R step where reporter is inserted
 - `TransitionType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `coupling`= tuple(): if nonempty, a 2 tuple tuple(Vector{Int}, Vector{Tuple}), where elements are 1. vector of model indices corresponding to each transcriber,
-        2. tuple of vectors indicating inconnections to each unit ([2,3], [1], []) means unit 1 receives input from units 2 and 3, unit 2 receives input from unit 1 and unit 3 does not receive any input.
+        2. tuple of vectors indicating inconnections to each unit ([2,3], [1], []) means unit 1 is influenced by units 2 and 3, unit 2 is infuenced by unit 1 and unit 3 is uninfluenced.
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
@@ -167,7 +170,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
         println("No rate file")
     end
     println(r)
-    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -356,7 +359,7 @@ end
 
 Coupled model for trace data
 """
-function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, connections, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1,1])
+function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1,1])
     components = TcoupledComponents[]
     reporter = HMMReporter[]
     for i in 1:eachindex(G)

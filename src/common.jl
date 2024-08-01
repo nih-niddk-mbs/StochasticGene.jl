@@ -335,9 +335,9 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
-
+    r, coupling = prepare_rates(param,model)
+    ll_hmm_coupled(r, coupling, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
-
 
 """
     loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
@@ -389,6 +389,8 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
+
+
 """
     hyper_distribution(p)
 
@@ -415,37 +417,34 @@ function prepare_rates(param, model::GRSMhierarchicalmodel)
     return r, p, h
 end
 
+"""
+    prepare_rates(param, model::GRSMcoupledmodel)
+
+convert MCMC params into form to compute likelihood for coupled model
+"""
 function prepare_rates(param, model::GRSMcoupledmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    r = Float64[]
+    coupling = Float64[]
     rates = get_rates(param, model)
-    n = 0
+    j = 1
     for i in eachindex(model.G)
         n = num_rates(model.Gtransitions[i],model.R[i],model.S[i],model.insertstep[i]) + model.reporter.n
-        push!(r,rates[1:n])
+        push!(r,rates[j:j+n-1])
+        j += n
     end
-    h = Vector{Int}[]
-    coupling = model.coupling.n
-    r = get_rates(param, model)
-    for i in 1:coupling.n
-        push!(rates, r[(i-1)*nrates+1:i*nrates])
+    for i in model.G
+        if length(rates) <= j
+            push!(coupling,rates[j])
+        else
+            push!(coupling,0.)
+        end
+        j += 1
     end
-    append!(rates[coupling.index], r[end])
-    r = reshape(get_rates(param, model)[1:end-coupling.n], model.nrates, coupling.n)
-    return r
+
+    return r, coupling
 end
 
-# function prepare_rates(param, model::GRSMcoupledmodel)
-#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-#     h = Vector{Int}[]
-#     for i in model.pool.hyperindices
-#         push!(h, i)
-#     end
-#     r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-#     p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
-#     return r, p, h
-# end
+
 # Likelihood functions
 
 """

@@ -23,13 +23,17 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
-function ll_hmm_coupled(r, components::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    for i in 1:size(t,1)
-        a[i], p0[i] = make_ap_coupled(r, interval, components)
-        lb[i] = trace[3] > 0. ? ll_background(a[i], p0[i], offstates[i], trace[3], trace[4]) : 0.
-        ll[i], lp[i] = ll_hmm(r[i], nT, noiseparams[i], reporters_per_state[i], probfn[i], trace[1], log.(max.(a[i], 0)), log.(max.(p0[i], 0)))
+function ll_hmm_coupled(r, coupled, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap_coupled(r, coupled, interval, components)
+    lp = Float64[]
+    ll = 0.
+    for i in eachindex(r)
+        ll += trace[3] > 0. ? ll_background(a[i], p0[i], offstates[i], trace[i][3], trace[i][4]) : 0.
+        lla, lpa = ll_hmm(r[i], nT, noiseparams[i], reporters_per_state[i], probfn[i], trace[1], log.(max.(a[i], 0)), log.(max.(p0[i], 0)))
+        ll += lla
+        lp = vcat(lp,lpa)
     end
-    return ll + lb, lp
+    return ll, lp
 end
 
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
@@ -157,6 +161,17 @@ function make_ap(r, interval, components)
     # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+end
+
+function make_ap_coupled(r, coupling, interval, components)
+    a = SparseMatrixCSC[]
+    p0 = Vector[]
+    Qtr = make_mat_TC(components, r, coupling)
+    for Q in Qtr
+        push!(a,kolmogorov_forward(sparse(Q'),interval))
+        push!(p0,normalized_nullspace(Q))
+    end
+    return a, p0
 end
 
 make_p0(r, elementsT, N) = normalized_nullspace(make_mat(elementsT, r, N))
