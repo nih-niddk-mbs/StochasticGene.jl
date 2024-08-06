@@ -175,27 +175,94 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
-
-
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G, R, S, insertstep, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
 
 TBW
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
     println(now())
     gene = check_genename(gene, "[")
-    if S > 0 && S != R - insertstep + 1
-        S = R - insertstep + 1
-        println("Setting S to ", S)
-    end
+    S = reset_S(S, R, insertstep)
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
     noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
-    decayrate < 0 && (decayrate = get_decay(gene, cell, root))
+    decayrate = set_decayrate(decayrate, gene, cell, root)
+    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+    r = set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype, hierarchical)
+    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
+    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
+end
+
+function set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype, hierarchical)
+    r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
+    if isempty(r)
+        r = isempty(hierarchical) ? priormean : set_rates(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+        println("No rate file")
+    end
+    println(r)
+    return r
+end
+
+
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+    if isempty(fittedparam)
+        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+    else
+        return fittedparam
+    end
+end
+
+function set_fittedparam(fittedparam::Vector, datatype, transitions, R, S, insertstep, noiseparams)
+    for i in eachindex(fittedparam)
+        fittedparam[i] = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+    end
+    return fittedparam
+end
+
+
+function set_decayrate(decayrate::Float64, gene, cell, root)
+    if decayrate < 0
+        return get_decay(gene, cell, root)
+    else
+        return decayrate
+    end
+end
+
+function set_decayrate(decayrate::Vector, gene, cell, root)
+    for i in eachindex(decayrate)
+        if typeof(gene) < Vector
+            decayrate[i] = set_decayrate(decayrate[i], gene[i], cell, root)
+        else
+            decayrate[i] = set_decayrate(decayrate[i], gene, cell, root)
+        end
+    end
+    return decayrate
+end
+
+function reset_S(S::Int, R, insertstep)
+    if S > 0 && S != R - insertstep + 1
+        S = R - insertstep + 1
+        println("Setting S to ", S)
+    end
+    return S
+end
+
+function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
+    for i in eachindex(S)
+        if S[i] > 0 && S[i] != R - insertstep + 1
+            S[i] - insertstep[i] + 1
+            println("Setting S$i to ", S[i])
+        end
+    end
+end
+
+function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
     if isempty(priormean)
         if isempty(hierarchical)
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
@@ -203,17 +270,18 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1])
         end
     end
-    isempty(fittedparam) && (fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams))
-    r = readrates(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype)
-    if isempty(r)
-        r = isempty(hierarchical) ? priormean : set_rates(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
-        println("No rate file")
-    end
-    println(r)
-    model = load_model(data, r, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
-    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
-    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
+    return priormean
 end
+
+function set_priormean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
+    priormean = Vector{Float64}[]
+    for i in eachindex(R)
+        push!(priormean, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate[i], noisepriors[i], hierarchical[i][1]))
+    end
+    return priormean
+end
+
+
 """
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 
@@ -386,7 +454,7 @@ end
 
 Coupled model for trace data
 """
-function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1,1])
+function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1, 1])
     components = TcoupledComponents[]
     reporter = HMMReporter[]
     for i in 1:eachindex(G)
@@ -394,7 +462,7 @@ function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tup
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
         reporter[i] = HMMReporter(noiseparams, num_reporters_per_state(G[i], R[i], insertstep[i]), probfn[i], weightind, off_states(G[i], R[i], S[i], insertstep[i]))
-        priord[i] = prior_distribution(rm, transitions[i], R[i], S[i], insertstep[i], fittedparam[i], decayrate[i], priorcv[i], noisepriors[i]) 
+        priord[i] = prior_distribution(rm, transitions[i], R[i], S[i], insertstep[i], fittedparam[i], decayrate[i], priorcv[i], noisepriors[i])
     end
     GRSMCoupledmodel{typeof(r),typeof(indices),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, indices, connections, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
@@ -612,7 +680,7 @@ if p1 = "[" change to "("
 (since swarm cannot parse "(")
 
 """
-function check_genename(gene, p1)
+function check_genename(gene::String, p1)
     if occursin(p1, gene)
         if p1 == "["
             gene = replace(gene, "[" => "(")
@@ -621,6 +689,18 @@ function check_genename(gene, p1)
             gene = replace(gene, "(" => "]")
             gene = replace(gene, ")" => "]")
         end
+    end
+    return gene
+end
+
+"""
+    check_genename(gene::Vector, p1)
+
+
+"""
+function check_genename(gene::Vector, p1)
+    for i in eachindex(gene)
+        gene[i] = check_genename(gene[i], p1)
     end
     return gene
 end
@@ -647,19 +727,29 @@ print out run information
 function printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
     println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
     println("data: ", datapath)
+    # println("in: ", infolder, " out: ", resultfolder)
+    # println("maxtime: ", maxtime)
+end
+
+function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
+    if R == 0
+        printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
+    else
+        println("Gene: ", gene, "Label: ", datacond, " G R S insertstep: ", G, R, S, insertstep)
+    end
     println("in: ", infolder, " out: ", resultfolder)
     println("maxtime: ", maxtime)
 end
 
-function printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
-    if R == 0
-        printinfo(gene, G, datacond, datapath, infolder, resultfolder, maxtime)
-    else
-        println("Gene: ", gene, " G R S insertstep: ", G, R, S, insertstep)
-        println("in: ", infolder, " out: ", resultfolder)
-        println("maxtime: ", maxtime)
+function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
+    for i in eachindex(G)
+        println("Gene: ", gene[i], "Label: ", datacond[i], " G R S insertstep: ", G[i], R[i], S[i], insertstep[i])
     end
+    println("in: ", infolder, " out: ", resultfolder)
+    println("maxtime: ", maxtime)
 end
+
+
 
 """
     finalize(data,model,fits,stats,measures,temp,resultfolder,optimized,burst,writesamples,root)
