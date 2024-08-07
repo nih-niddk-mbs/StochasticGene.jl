@@ -218,12 +218,12 @@ get_nalleles(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :nalleles)
 get_resultfiles(folder::String) = get_resultfiles(readdir(folder))
 get_resultfiles(files::Vector) = files[occursin.(".txt", files).&occursin.("_", files)]
 
-function get_resultfiles(folder::String, name) 
+function get_resultfiles(folder::String, name)
     files = get_resultfiles(readdir(folder))
     files[occursin.("measures", files)]
 end
 
-get_measurefiles(folder::String) = get_resultfiles(folder,"measures")
+get_measurefiles(folder::String) = get_resultfiles(folder, "measures")
 
 get_summaryfiles(folder::String) = get_summaryfiles(readdir(folder))
 get_summaryfiles(files::Vector) = files[occursin.(".csv", files).&occursin.("_", files)]
@@ -374,21 +374,21 @@ function assemble_measures_model(folder::String, label::String, cond::String, ge
     close(f)
 end
 
-remove_string(str,st1) = replace(str,st1=>"")
-remove_string(str,str1,str2) = replace(remove_string(str,str1),str2=>"")
+remove_string(str, st1) = replace(str, st1 => "")
+remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
-function assemble_measures_model(folder::String, cond::String,gene::String)
+function assemble_measures_model(folder::String, cond::String, gene::String)
     outfile = joinpath(folder, "measures_" * cond * "_" * gene * ".csv")
     header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
     files = get_measurefiles(folder)
-    files = files[occursin.(cond,files)]
+    files = files[occursin.(cond, files)]
     println(files)
     f = open(outfile, "w")
     writedlm(f, header, ',')
     for file in files
         nalleles = get_nalleles(file)
         r = readmeasures(joinpath(folder, file))
-        writedlm(f, [remove_string(file,"measures_trace-HBEC-","_$nalleles.txt") r], ',')
+        writedlm(f, [remove_string(file, "measures_trace-HBEC-", "_$nalleles.txt") r], ',')
     end
     close(f)
 end
@@ -434,33 +434,56 @@ function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
-function rlabels_GRSM(model)
+function rlabels_GRSM(transitions, R, S, reporter, unit="")
     labels = String[]
-    for t in model.Gtransitions
+    for t in transitions
         push!(labels, "Rate$(t[1])$(t[2])")
     end
     push!(labels, "Initiate")
-    for i in 1:model.R-1
+    for i in 1:R-1
         push!(labels, "Rshift$i")
     end
     push!(labels, "Eject")
-    for i in 1:model.S
+    for i in 1:S
         push!(labels, "Splice$i")
     end
     push!(labels, "Decay")
-    if typeof(model.reporter) == HMMReporter
-        for i in 1:model.reporter.n
+    if typeof(reporter) == HMMReporter
+        for i in 1:reporter.n
             push!(labels, "noiseparam$i")
         end
-        # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
-        #     push!(labels, "noise_mean$i")
-        #     push!(labels, "noise_std$i")
-        # end
-        # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
-        #     push!(labels, "bias$i")
-        # end
     end
     reshape(labels, 1, :)
+end
+
+function rlabels_GRSM(model)
+    rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
+    # labels = String[]
+    # for t in model.Gtransitions
+    #     push!(labels, "Rate$(t[1])$(t[2])")
+    # end
+    # push!(labels, "Initiate")
+    # for i in 1:model.R-1
+    #     push!(labels, "Rshift$i")
+    # end
+    # push!(labels, "Eject")
+    # for i in 1:model.S
+    #     push!(labels, "Splice$i")
+    # end
+    # push!(labels, "Decay")
+    # if typeof(model.reporter) == HMMReporter
+    #     for i in 1:model.reporter.n
+    #         push!(labels, "noiseparam$i")
+    #     end
+    #     # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
+    #     #     push!(labels, "noise_mean$i")
+    #     #     push!(labels, "noise_std$i")
+    #     # end
+    #     # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
+    #     #     push!(labels, "bias$i")
+    #     # end
+    # end
+    # reshape(labels, 1, :)
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
@@ -472,7 +495,7 @@ function rlabels(model::GRSMhierarchicalmodel)
     for i in 1:model.pool.nindividuals
         append!(labels, l)
     end
- 
+
     reshape(labels, 1, :)
 end
 
@@ -904,7 +927,7 @@ end
 read in joint trace files
 """
 function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    traces = Matrix{Float64}(undef,length(label),0)
+    traces = Matrix{Float64}(undef, length(label), 0)
     if isempty(path)
         return traces
     else
@@ -917,10 +940,10 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
                     if occursin(label[i], file)
                         tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
                     end
-                    complete &= isassigned(tset,i)
+                    complete &= isassigned(tset, i)
                 end
                 if complete
-                    traces = hcat(traces,tset)
+                    traces = hcat(traces, tset)
                     tset = Vector{Vector}(undef, 2)
                 end
             end
