@@ -437,20 +437,20 @@ end
 function rlabels_GRSM(transitions, R, S, reporter,unit=:"")
     labels = String[]
     for t in transitions
-        push!(labels,"Rate$unit_$(t[1])$(t[2])")
+        push!(labels,"Rate$(unit)_$(t[1])$(t[2])")
     end
     push!(labels, "Initiate$unit")
     for i in 1:R-1
-        push!(labels, "Rshift$unit_$i")
+        push!(labels, "Rshift$(unit)_$i")
     end
     push!(labels, "Eject$unit")
     for i in 1:S
-        push!(labels, "Splice$unit_$i")
+        push!(labels, "Splice$(unit)_$i")
     end
     push!(labels, "Decay$unit")
     if typeof(reporter) == HMMReporter
         for i in 1:reporter.n
-            push!(labels, "noiseparam$unit_$i")
+            push!(labels, "noiseparam$(unit)_$i")
         end
     end
     reshape(labels, 1, :)
@@ -491,6 +491,7 @@ function rlabels(model::GRSMcoupledmodel)
     for i in eachindex(model.G)
         rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i],i))
     end
+    hcat(rlabels,["Coupling"])
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
@@ -632,6 +633,17 @@ filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
+
+"""
+    filename(data, model::GRSMcoupledmodel)
+"""
+function filename(data, model::GRSMcoupledmodel)
+    m = ""
+    for i in eachindex(model.G)
+        m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
+    end
+    return filename(data.label,data.gene,m,model.nalleles)
+end
 
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
