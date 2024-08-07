@@ -434,23 +434,23 @@ function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
-function rlabels_GRSM(transitions, R, S, reporter, unit="")
+function rlabels_GRSM(transitions, R, S, reporter,unit=:"")
     labels = String[]
     for t in transitions
-        push!(labels, "Rate$(t[1])$(t[2])")
+        push!(labels,"Rate$unit_$(t[1])$(t[2])")
     end
-    push!(labels, "Initiate")
+    push!(labels, "Initiate$unit")
     for i in 1:R-1
-        push!(labels, "Rshift$i")
+        push!(labels, "Rshift$unit_$i")
     end
-    push!(labels, "Eject")
+    push!(labels, "Eject$unit")
     for i in 1:S
-        push!(labels, "Splice$i")
+        push!(labels, "Splice$unit_$i")
     end
-    push!(labels, "Decay")
+    push!(labels, "Decay$unit")
     if typeof(reporter) == HMMReporter
         for i in 1:reporter.n
-            push!(labels, "noiseparam$i")
+            push!(labels, "noiseparam$unit_$i")
         end
     end
     reshape(labels, 1, :)
@@ -484,6 +484,13 @@ function rlabels_GRSM(model)
     #     # end
     # end
     # reshape(labels, 1, :)
+end
+
+function rlabels(model::GRSMcoupledmodel)
+    rlabels = Array{String}(undef, 0)
+    for i in eachindex(model.G)
+        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i],i))
+    end
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
