@@ -434,10 +434,10 @@ function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
-function rlabels_GRSM(transitions, R, S, reporter,unit=:"")
+function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     labels = String[]
     for t in transitions
-        push!(labels,"Rate$(unit)_$(t[1])$(t[2])")
+        push!(labels, "Rate$(unit)_$(t[1])$(t[2])")
     end
     push!(labels, "Initiate$unit")
     for i in 1:R-1
@@ -489,9 +489,9 @@ end
 function rlabels(model::GRSMcoupledmodel)
     rlabels = Array{String}(undef, 0)
     for i in eachindex(model.G)
-        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i],i))
+        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
     end
-    hcat(rlabels,["Coupling"])
+    hcat(rlabels, ["Coupling"])
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
@@ -642,7 +642,7 @@ function filename(data, model::GRSMcoupledmodel)
     for i in eachindex(model.G)
         m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
     end
-    return filename(data.label,data.gene,m,model.nalleles)
+    return filename(data.label, data.gene, m, model.nalleles)
 end
 
 """
@@ -710,6 +710,14 @@ function write_rates(file::String, fits::Fit, stats, model)
     close(f)
 
 end
+
+function remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
+    n = num_rates(transitions, R, S, insertstep) + nreporters
+    removeset = n*(setnumber-1)+1:n*setnumber
+    setdiff(1:size(r, 2), removeset)
+end
+
+
 """
     write_pool(file::String, fits::Fit, stats, model)
 
