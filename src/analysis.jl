@@ -1056,10 +1056,11 @@ end
     write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
 
 """
-function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; label = "", exclude_label = false, state=false, hierarchical=false)
+function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=false, hierarchical=false)
+    exclude_label = ~hierarchical
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin(datacond, f) && ((!exclude_label && occursin(label, f)) || exclude_label && !occursin(label, f))
+            if occursin("rates", f) && occursin(datacond, f) && ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(label, f))
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f), get_row(ratetype))
