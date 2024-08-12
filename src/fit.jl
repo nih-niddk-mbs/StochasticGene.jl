@@ -250,9 +250,9 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, nascent)
     noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
+    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
@@ -275,13 +275,6 @@ function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, n
     end
 end
 
-function set_fittedparam(fittedparam::Tuple, datatype, transitions, R, S, insertstep, noiseparams)
-    for i in eachindex(fittedparam)
-        fittedparam[i] = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
-    end
-    return fittedparam
-end
-
 function set_decayrate(decayrate::Float64, gene, cell, root)
     if decayrate < 0
         return get_decay(gene, cell, root)
@@ -290,7 +283,7 @@ function set_decayrate(decayrate::Float64, gene, cell, root)
     end
 end
 
-function set_decayrate(decayrate::Vector, gene, cell, root)
+function set_decayrate(decayrate::Tuple, gene, cell, root)
     for i in eachindex(decayrate)
         if typeof(gene) < Tuple
             decayrate[i] = set_decayrate(decayrate[i], gene[i], cell, root)
@@ -301,7 +294,7 @@ function set_decayrate(decayrate::Vector, gene, cell, root)
     return decayrate
 end
 
-function reset_S(S::Int, R, insertstep)
+function reset_S(S::Int, R::Int, insertstep::Int)
     if S > 0 && S != R - insertstep + 1
         S = R - insertstep + 1
         println("Setting S to ", S)
@@ -318,10 +311,10 @@ function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
     end
 end
 
-function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
+function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
     if isempty(priormean)
         if isempty(hierarchical)
-            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, coupling)
         else
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1])
         end
@@ -329,7 +322,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     return priormean
 end
 
-function set_priormean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical)
+function set_priormean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
     priormean = Vector{Float64}[]
     for i in eachindex(R)
         push!(priormean, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate[i], noisepriors[i], hierarchical[i][1]))
