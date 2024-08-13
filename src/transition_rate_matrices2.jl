@@ -967,15 +967,13 @@ function make_components_ModelCoupled(transitions, G, R, S, insertstep, splicety
     ModelCoupledComponents(nT, G, nR, elementsG, elementsGt, elementsRG, elementsRGbar)
 end
 
-function make_components_Tcoupled(inconnections, models, transitions, G::Vector, R::Vector, S::Vector, insertstep::Vector, splicetype="")
+function make_components_Tcoupled(inconnections, models, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype="")
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
         push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents(inconnections, models, comp)
 end
-
-
 
 function make_mat_GC(G, n, coupling=1.0)
     GR = spzeros(G, G)

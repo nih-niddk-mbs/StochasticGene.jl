@@ -229,7 +229,7 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,IndType,ConnectionType,PoolType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Tuple
@@ -335,7 +335,7 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
-    r, coupling = prepare_rates(param,model)
+    r, coupling = prepare_rates(param, model)
     ll_hmm_coupled(r, coupling, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
@@ -428,15 +428,15 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     rates = get_rates(param, model)
     j = 1
     for i in eachindex(model.G)
-        n = num_rates(model.Gtransitions[i],model.R[i],model.S[i],model.insertstep[i]) + model.reporter.n
-        push!(r,rates[j:j+n-1])
+        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter.n
+        push!(r, rates[j:j+n-1])
         j += n
     end
     for i in model.G
         if length(rates) <= j
-            push!(coupling,rates[j])
+            push!(coupling, rates[j])
         else
-            push!(coupling,0.)
+            push!(coupling, 0.0)
         end
         j += 1
     end
@@ -803,10 +803,10 @@ function total_rates(model::AbstractGmodel)
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
 
-function num_rates(transitions,R::Tuple, S::Tuple, insertstep::Tuple)
+function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
     n = 0
     for i in eachindex(R)
-        n +=num_rates(transitions[i],R[i],S[i],insertstep[i])
+        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
     end
     n
 end

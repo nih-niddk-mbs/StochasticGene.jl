@@ -505,15 +505,56 @@ Coupled model for trace data
 function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1, 1])
     components = TcoupledComponents[]
     reporter = HMMReporter[]
+    components = make_components_Tcoupled(inconnections, models, transitions, G, R, S, insertstep, splicetype)
     for i in 1:eachindex(G)
-        components[i] = make_components_TCoupling(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype[i])
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
         reporter[i] = HMMReporter(noiseparams, num_reporters_per_state(G[i], R[i], insertstep[i]), probfn[i], weightind, off_states(G[i], R[i], S[i], insertstep[i]))
         priord[i] = prior_distribution(rm, transitions[i], R[i], S[i], insertstep[i], fittedparam[i], decayrate[i], priorcv[i], noisepriors[i])
     end
-    GRSMCoupledmodel{typeof(r),typeof(indices),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, indices, connections, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    GRSMCoupledmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
+struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
+    Gtransitions::Tuple
+    G::Tuple
+    R::Tuple
+    S::Tuple
+    insertstep::Tuple
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+end
+
+function make_components_Tcoupled(inconnections, models, transitions, G::Vector, R::Vector, S::Vector, insertstep::Vector, splicetype="")
+    comp = ModelCoupledComponents[]
+    for i in eachindex(G)
+        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+    end
+    TCoupledComponents(inconnections, models, comp)
+end
+struct ModelCoupledComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsGt::Vector
+    elementsRG::Vector
+    elementsRGbar::Vector
+end
+
+struct TCoupledComponents
+    inconnections::Vector
+    models::Vector
+    modelcomponents::Vector{ModelCoupledComponents}
+end
+
 
 function checklength(r, transitions, R, S, insertstep, reporter)
     n = num_rates(transitions, R, S, insertstep)
@@ -652,6 +693,30 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rcv = fill(priorcv, length(rm))
         rcv[n] = 0.1
         rcv[n+1:n+length(noisepriors)] /= factor
+    else
+        rcv = priorcv
+    end
+    if length(rcv) == length(rm)
+        return distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+    else
+        throw("priorcv not the same length as prior mean")
+    end
+end
+
+function prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, decayrate, priorcv, noisepriors, factor=10)
+    if isempty(rm)
+        throw("No prior mean")
+        # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
+    end
+    if priorcv isa Number
+        rcv = fill(priorcv, length(rm))
+        s = 0
+        for i in eachindex(R)
+            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+            rcv[s+n] = 0.1
+            rcv[s+n+1:s+n+length(noisepriors)] /= factor
+            s += n + length(noisepriors)
+        end
     else
         rcv = priorcv
     end
