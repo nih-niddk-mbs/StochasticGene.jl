@@ -56,7 +56,7 @@ then G = (2,3).
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
     1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
-    2. tuple of tuples indicating inconnections between units, i.e. source units for each unit, e.g. ((2,3), (1), tuple()) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
+    2. tuple of tuples indicating inconnections between units, i.e. influencing units for each unit, e.g. ((2,3), (1), tuple()) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
     3. influencing states, e.g. (3,nothing) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. affected transitions, e.g. (nothing, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
@@ -232,14 +232,14 @@ end
 
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
-    fit(set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype, hierarchical), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method)
+    fit(set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype, hierarchical), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method)
 end
 
 """
     fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, nascent, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), root=".", maxtime::Float64=60.0, priormean=Float64[], priorcv=10.0, nalleles=2, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
     println(now())
     gene = check_genename(gene, "[")
     S = reset_S(S, R, insertstep)
@@ -267,9 +267,9 @@ function set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype,
     return r
 end
 
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
     if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
     else
         return fittedparam
     end
@@ -322,7 +322,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     return priormean
 end
 
-function set_priormean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
+function prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
     priormean = Vector{Float64}[]
     for i in eachindex(R)
         push!(priormean, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate[i], noisepriors[i], hierarchical[i][1]))
@@ -422,7 +422,7 @@ end
 
 return model structure
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=1)
+function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G::Int, R::Int, S::Int, insertstep::Int, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=1)
     if S > 0 && S != R - insertstep + 1
         S = R - insertstep + 1
         println("Setting S to ", S)
@@ -482,7 +482,7 @@ end
     load_model(data, r, rm, transitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
 
 """
-function load_model(data, r, rm, transitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
+function load_model(data, r, rm, transitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical::Tuple)
     nhyper = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
     nindividuals = length(data.trace[1])
@@ -502,10 +502,11 @@ end
 
 Coupled model for trace data
 """
-function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=[1, 1])
+
+function load_model(data, r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=[1, 1])
     components = TcoupledComponents[]
     reporter = HMMReporter[]
-    components = make_components_Tcoupled(inconnections, models, transitions, G, R, S, insertstep, splicetype)
+    components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, splicetype)
     for i in 1:eachindex(G)
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
@@ -514,47 +515,6 @@ function load_model(r, rm, fittedparam, fixedeffects, transitions::Tuple, G::Tup
     end
     GRSMCoupledmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
-struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    Gtransitions::Tuple
-    G::Tuple
-    R::Tuple
-    S::Tuple
-    insertstep::Tuple
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-function make_components_Tcoupled(inconnections, models, transitions, G::Vector, R::Vector, S::Vector, insertstep::Vector, splicetype="")
-    comp = ModelCoupledComponents[]
-    for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
-    end
-    TCoupledComponents(inconnections, models, comp)
-end
-struct ModelCoupledComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsGt::Vector
-    elementsRG::Vector
-    elementsRGbar::Vector
-end
-
-struct TCoupledComponents
-    inconnections::Vector
-    models::Vector
-    modelcomponents::Vector{ModelCoupledComponents}
-end
-
 
 function checklength(r, transitions, R, S, insertstep, reporter)
     n = num_rates(transitions, R, S, insertstep)
@@ -638,7 +598,7 @@ end
 
 default priors for rates (includes all parameters, fitted or not)
 """
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, ttime=6.0)
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, ttime=6.0)
     if S > 0
         S = R - insertstep + 1
     end
@@ -656,8 +616,8 @@ end
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
-function prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, ttime, cv=1.0)
-    rm = prior_ratemean(transitions::Tuple, R::Int, S::Int, insertstep, decayrate, noisepriors, ttime)
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper, ttime, cv=1.0)
+    rm = prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, ttime)
     r = copy(rm)
     priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R - 1); 5.0; fill(5.0, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.5, 0.5]]
     append!(r, priorcv)
