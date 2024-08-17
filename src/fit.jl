@@ -50,7 +50,7 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
 then G = (2,3). 
 
-#Argum
+#Arguments
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
@@ -100,58 +100,6 @@ then G = (2,3).
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
 
-
-#Arguments
-- `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
-- `burst=false`: if true then compute burst frequency
-- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
-- `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
-- `datapath=""`: path to data file or folder or array of files or folders
-- `cell::String=""': cell type for halflives and allele numbers
-- `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
-- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
-    for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
-- `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
-- `infolder::String=""`: result folder used for initial parameters
-- `resultfolder::String=test`: folder for results of MCMC run
-- `label::String=""`: label of output files produced
-- `inlabel::String=""`: label of files used for initial conditions
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
-- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-     (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
-- `fixedeffects::String`: if "fixed" is included after a hypen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
-- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
-- `insertstep=1`: R step where reporter is inserted
-- `TransitionType=""`: String describing model such as G transition family, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
-- `coupling`= tuple(): if nonempty, a 2 tuple tuple(Vector{Int}, Vector{Tuple}), where elements are 1. vector of model indices corresponding to each transcriber,
-        2. tuple of vectors indicating inconnections to each unit ([2,3], [1], []) means unit 1 is influenced by units 2 and 3, unit 2 is infuenced by unit 1 and unit 3 is uninfluenced.
-- `root="."`: name of root directory for project, e.g. "scRNA"
-- `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
-- 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
-- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
-- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
-- `noisepriors = []`: priors of observation noise (use empty set if not fitting traces), superceded if priormean is set
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
-- `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
-- `samplesteps::Int=1000000`: number of MCMC sampling steps
-- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
-- `temp=1.0`: MCMC temperature
-- `tempanneal=100.`: annealing temperature
-- `temprna=1.`: reduce rna counts by temprna compared to dwell times
-- `optimize=false`: use optimizer to compute maximum likelihood value
-- `writesamples=false`: write out MH samples if true, default is false
-- `method=1`: method variable, for hierarchical models: method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
-
-
 Example:
 
 If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
@@ -169,7 +117,7 @@ function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath
         println(fixedeffects)
         println(fittedparam)
     end
-    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
+    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, nascent, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method)
 
 end
