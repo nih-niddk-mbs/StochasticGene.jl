@@ -394,7 +394,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
             weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
             nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
             if datatype == "trace"
-                return TraceData(label, gene, traceinfo[1], (trace, background, weight, nframes))
+                return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
             elseif datatype == "tracenascent"
                 return TraceNascentData(label, gene, traceinfo[1], (trace, background, weight, nframes), nascent)
             elseif datatype == "tracerna"
@@ -414,7 +414,7 @@ function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
         push!(weight, (1 - f) / f * length(trace))
     end
     nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    return TraceJointData(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
+    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
 end
 
 """

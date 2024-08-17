@@ -954,7 +954,7 @@ end
 read in joint trace files
 """
 function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    traces = Matrix{Float64}(undef, length(label), 0)
+    traces = Vector{Vector}[]
     if isempty(path)
         return traces
     else
@@ -970,8 +970,8 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
                     complete &= isassigned(tset, i)
                 end
                 if complete
-                    traces = hcat(traces, tset)
-                    tset = Vector{Vector}(undef, 2)
+                    push!(traces, tset)
+                    tset = Vector{Vector}(undef, length(label))
                 end
             end
         end

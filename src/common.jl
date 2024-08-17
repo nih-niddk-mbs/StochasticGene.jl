@@ -83,12 +83,13 @@ struct RNADwellTimeData <: AbstractHistogramData
     DwellTimes::Vector{Vector}
     DTtypes::Vector
 end
-struct TraceData{traceType} <: AbstractTraceData
-    label::String
-    gene::String
+struct TraceData{labelType,geneType,traceType} <: AbstractTraceData
+    label::labelType
+    gene::geneType
     interval::Float64
     trace::traceType
 end
+
 struct TraceNascentData{traceType} <: AbstractTraceData
     label::String
     gene::String
@@ -334,7 +335,7 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
+function loglikelihood(param, data::TraceData{Vector,Vector,Tuple}, model::GRSMcoupledmodel)
     r, coupling = prepare_rates(param, model)
     ll_hmm_coupled(r, coupling, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
@@ -428,7 +429,7 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     rates = get_rates(param, model)
     j = 1
     for i in eachindex(model.G)
-        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter.n
+        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter[i].n
         push!(r, rates[j:j+n-1])
         j += n
     end
