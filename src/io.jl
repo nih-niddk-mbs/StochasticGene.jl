@@ -938,7 +938,7 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
     else
         for (root, dirs, files) in walkdir(path)
             for file in files
-                if occursin(label, file)
+                if occursin(label, file) && ~occursin(".DS_Store", file)
                     t = read_tracefile(joinpath(root, file), start, stop, col)
                     ~isempty(t) && push!(traces, t)
                 end
