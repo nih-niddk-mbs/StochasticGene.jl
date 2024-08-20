@@ -246,6 +246,7 @@ struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Com
     method::MethodType
     components::ComponentType
     reporter::ReporterType
+    coupling::CouplingType
 end
 
 """
@@ -433,8 +434,8 @@ function prepare_rates(param, model::GRSMcoupledmodel)
         push!(r, rates[j:j+n-1])
         j += n
     end
-    for i in model.G
-        if length(rates) <= j
+    for i in eachindex(model.G)
+        if model.source[i]
             push!(coupling, rates[j])
         else
             push!(coupling, 0.0)

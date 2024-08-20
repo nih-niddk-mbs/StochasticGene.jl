@@ -59,6 +59,7 @@ then G = (2,3).
     2. tuple of tuples indicating inconnections between units, i.e. influencing units for each unit, e.g. ((2,3), (1), tuple()) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
     3. influencing states, e.g. (3,nothing) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. affected transitions, e.g. (nothing, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
+    5. Int indicating number of coupling parameters
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders
@@ -109,7 +110,7 @@ bash> julia -p 4
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 
 """
-function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, TransitionType="", coupling=tuple(), root=".", priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
+function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), nascent=(1, 2), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, TransitionType="", coupling=tuple(), root=".", priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if typeof(fixedeffects) <: AbstractString
         fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors))
@@ -424,6 +425,9 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         ~isa(method, Tuple) && throw("method not a Tuple")
         load_model(data, r, rm, transitions, G, R, S, insertstep, nalleles, priorcv, decayrate, splicetype, propcv, fittedparam, fixedeffects, method, components, reporter, noisepriors, hierarchical)
     end
+    if !isempty(coupling)
+        load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method)
+    end
 end
 
 """
@@ -451,16 +455,17 @@ end
 Coupled model for trace data
 """
 
-function load_model(data, r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=[1, 1])
+function load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=1)
     components = TcoupledComponents[]
     reporter = HMMReporter[]
-    components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, splicetype)
     for i in 1:eachindex(G)
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
         reporter[i] = HMMReporter(noiseparams, num_reporters_per_state(G[i], R[i], insertstep[i]), probfn[i], weightind, off_states(G[i], R[i], S[i], insertstep[i]))
-        priord[i] = prior_distribution(rm, transitions[i], R[i], S[i], insertstep[i], fittedparam[i], decayrate[i], priorcv[i], noisepriors[i])
+        nrates[i] = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams
     end
+    priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
+    components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, nrates, splicetype)
     GRSMCoupledmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 

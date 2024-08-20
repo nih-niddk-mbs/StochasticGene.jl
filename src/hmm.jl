@@ -23,8 +23,8 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
-function ll_hmm_coupled(r, coupled, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    a, p0 = make_ap_coupled(r, coupled, interval, components)
+function ll_hmm_coupled(r, coupling, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap_coupled(r, coupling, interval, components)
     lp = Float64[]
     ll = 0.
     for i in eachindex(trace)
