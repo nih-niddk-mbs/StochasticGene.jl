@@ -772,6 +772,8 @@ struct ModelCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
+    sourceState::Int
+    targetTransition::Int
     elementsG::Vector
     elementsGt::Vector
     elementsGs::Vector
@@ -780,8 +782,8 @@ struct ModelCoupledComponents <: AbstractTComponents
 end
 
 struct TCoupledComponents
-    inconnections::Vector
-    models::Vector
+    sources::Vector
+    model::Vector
     modelcomponents::Vector{ModelCoupledComponents}
 end
 
@@ -985,18 +987,18 @@ function make_components_M2(transitions, G, R, nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-function make_components_ModelCoupled(transitions, G, R, S, insertstep, offset, splicetype="")
+function make_components_ModelCoupled(transitions, G, R, S, insertstep, source, target, offset, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep, offset)
     elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, nS, affected, splicetype)
-    ModelCoupledComponents(nT, G, nR, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+    ModelCoupledComponents(nT, G, nR, source, target, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
 end
 
-function make_components_Tcoupled(inconnections, models, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, nrates, splicetype="")
+function make_components_Tcoupled(sources, model, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, nrates, splicetype="")
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], nrates[i], splicetype))
+        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], source[i], target[i], nrates[i], splicetype))
     end
-    TCoupledComponents(inconnections, models, comp)
+    TCoupledComponents(sources, model, comp)
 end
 
 function make_mat_GC(G, n, coupling=0.0)
@@ -1044,14 +1046,14 @@ function make_mat_C(components, rates, coupling)
 end
 
 function make_matvec_C(components, rates, coupling)
-    n = length(components.models)
+    n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
     G = Vector{SparseMatrixCSC}(undef, n)
     V = Vector{SparseMatrixCSC}(undef, n)
     Gs = Vector{SparseMatrixCSC}(undef, n)
     IG = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
-    for i in eachindex(components.models)
+    for i in eachindex(components.model)
         T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], coupling[i])
     end
     return T, G, V, Gs, IG, IT
@@ -1059,46 +1061,46 @@ end
 
 function make_mat_TC(components, rates, coupling)
     T, G, V, Gs, IG, IT = make_matvec_C(components, rates, coupling)
-    make_mat_TC(T, G, V, Gs, IG, IT, components.inconnections, components.models)
+    make_mat_TC(T, G, V, Gs, IG, IT, components.sources, components.model)
 end
 
-function make_mat_TC(T, G, V, Gs, IG, IT, connections, models)
-    n = length(models)
+function make_mat_TC(T, G, V, Gs, IG, IT, sources, model::Vector)
+    n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
-        Tα = T[models[α]]
+        Tα = T[model[α]]
         for j in α-1:-1:1
-            if j ∈ connections[α]
-                Tα = kron(IG[models[j]], Tα)
+            if j ∈ sources[α]
+                Tα = kron(IG[model[j]], Tα)
             end
         end
         for j in α+1:n
-            if j ∈ connections[α]
-                Tα = kron(Tα, IG[models[j]])
+            if j ∈ sources[α]
+                Tα = kron(Tα, IG[model[j]])
             end
         end
         for β in 1:α-1
-            if β ∈ connections[α]
-                Gβ = IT[models[α]]
-                Vβ = V[models[α]]
+            if β ∈ sources[α]
+                Gβ = IT[model[α]]
+                Vβ = V[model[α]]
                 for j in α+1:n
-                    if j ∈ connections[α]
-                        Gβ = kron(Gβ, IG[models[j]])
-                        Vβ = kron(Vβ, IG[models[j]])
+                    if j ∈ sources[α]
+                        Gβ = kron(Gβ, IG[model[j]])
+                        Vβ = kron(Vβ, IG[model[j]])
                     end
                 end
                 for j in α-1:-1:β+1
-                    if j ∈ connections[α]
-                        Gβ = kron(IG[models[j]], Gβ)
-                        Vβ = kron(IG[models[j]], Vβ)
+                    if j ∈ sources[α]
+                        Gβ = kron(IG[model[j]], Gβ)
+                        Vβ = kron(IG[model[j]], Vβ)
                     end
                 end
-                Gβ = kron(G[models[β]], Gβ)
-                Vβ = kron(Gs[models[β]], Vβ)
+                Gβ = kron(G[model[β]], Gβ)
+                Vβ = kron(Gs[model[β]], Vβ)
                 for j in β-1:-1:1
-                    if j ∈ connections[α]
-                        Gβ = kron(G[models[j]], Gβ)
-                        Vβ = kron(G[models[j]], Vβ)
+                    if j ∈ sources[α]
+                        Gβ = kron(G[model[j]], Gβ)
+                        Vβ = kron(G[model[j]], Vβ)
                     end
                 end
                 Tα .+= Gβ
@@ -1106,27 +1108,27 @@ function make_mat_TC(T, G, V, Gs, IG, IT, connections, models)
             end
         end
         for β in α+1:n
-            if β ∈ connections[α]
-                Gβ = IT[models[α]]
-                Vβ = V[models[α]]
+            if β ∈ sources[α]
+                Gβ = IT[model[α]]
+                Vβ = V[model[α]]
                 for j in β-1:-1:1
-                    if j ∈ connections[α]
-                        Gβ = kron(G[models[β]], Gβ)
-                        Vβ = kron(G[models[β]], Vβ)
+                    if j ∈ sources[α]
+                        Gβ = kron(G[model[β]], Gβ)
+                        Vβ = kron(G[model[β]], Vβ)
                     end
                 end
                 for j in α+1:β-1
-                    if j ∈ connections[α]
-                        Gβ = kron(Gβ, IG[models[j]])
-                        Vβ = kron(Vβ, IG[models[j]])
+                    if j ∈ sources[α]
+                        Gβ = kron(Gβ, IG[model[j]])
+                        Vβ = kron(Vβ, IG[model[j]])
                     end
                 end
-                Gβ = kron(Gβ, G[models[β]])
-                Vβ = kron(Vβ, Gs[models[β]])
+                Gβ = kron(Gβ, G[model[β]])
+                Vβ = kron(Vβ, Gs[model[β]])
                 for j in β+1:n
-                    if j ∈ connections[α]
-                        Gβ = kron(Gβ, IG[models[j]])
-                        Vβ = kron(Vβ, IG[models[j]])
+                    if j ∈ sources[α]
+                        Gβ = kron(Gβ, IG[model[j]])
+                        Vβ = kron(Vβ, IG[model[j]])
                     end
                 end
                 Tα .+= Gβ
@@ -1166,7 +1168,7 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcoupled(r, coupling, transitions, G, R, S, insertstep, inconnections, models)
-    components = make_components_Tcoupled(inconnections, models, transitions, G, R, S, insertstep)
+function test_mat_Tcoupled(r, coupling, transitions, G, R, S, insertstep, sources, model)
+    components = make_components_Tcoupled(sources, model, transitions, G, R, S, insertstep)
     make_mat_TC(components, r, coupling)
 end

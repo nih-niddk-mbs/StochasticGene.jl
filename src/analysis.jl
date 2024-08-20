@@ -1027,7 +1027,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
 
 TBW
 """
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
+function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true)
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1056,11 +1056,12 @@ end
     write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
 
 """
-function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=false, hierarchical=false)
-    exclude_label = ~hierarchical
+function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=true)
+    # exclude_label = ~hierarchical
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin(datacond, f) && ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(label, f))
+            if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+                occursin(hlabel,f) ? hierarchical = true : hierarchical = false
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f), get_row(ratetype))
@@ -1078,12 +1079,12 @@ end
 
 
 """
-function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false, hierarchical=false)
+function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true, hierarchical=false)
     df = make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state, hierarchical)
     CSV.write(outfile, df)
 end
 
-function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=false, hierarchical=false)
+function make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false)
     tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, hierarchical)
     l = maximum(length.(tp))
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]

@@ -28,8 +28,9 @@ function ll_hmm_coupled(r, coupling, components, noiseparams, reporters_per_stat
     lp = Float64[]
     ll = 0.
     for i in eachindex(trace)
-        ll += trace[3] > 0. ? ll_background(a[model[i]], p0[model[i]], offstates[model[i]], trace[i][3], trace[i][4]) : 0.
-        lla, lpa = ll_hmm(r[i], nT, noiseparams[i], reporters_per_state[i], probfn[i], trace[i][1], log.(max.(a[i], 0)), log.(max.(p0[i], 0)))
+        m = components.model[i]
+        ll += trace[3] > 0. ? ll_background(a[m], p0[m], offstates[m], trace[i][3], trace[i][4]) : 0.
+        lla, lpa = ll_hmm(r[m], nT, noiseparams[m], reporters_per_state[m], probfn[m], trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
         lp = vcat(lp,lpa)
     end

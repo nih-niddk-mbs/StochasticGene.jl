@@ -230,7 +230,7 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,CouplingType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Tuple
