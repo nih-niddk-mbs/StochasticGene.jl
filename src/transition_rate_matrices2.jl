@@ -782,8 +782,8 @@ struct ModelCoupledComponents <: AbstractTComponents
 end
 
 struct TCoupledComponents
-    sources::Vector
     model::Vector
+    sources::Vector
     modelcomponents::Vector{ModelCoupledComponents}
 end
 
@@ -905,7 +905,7 @@ function set_elements_Gt(transitions, affected_transition, gamma)
 end
 
 function set_elements_Gs(nS, index)
-        [Element(nS, nS, index, 1)]
+    [Element(nS, nS, index, 1)]
 end
 
 
@@ -987,23 +987,25 @@ function make_components_M2(transitions, G, R, nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-function make_components_ModelCoupled(transitions, G, R, S, insertstep, source, target, offset, splicetype="")
+function make_components_ModelCoupled(transitions, G, R, S, insertstep, sourceState, targetTransition, offset, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep, offset)
     elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, nS, affected, splicetype)
-    ModelCoupledComponents(nT, G, nR, source, target, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+    ModelCoupledComponents(nT, G, nR, sourceState, targetTransition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
 end
 
-function make_components_Tcoupled(sources, model, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, nrates, splicetype="")
+make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, nrates, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, nrates, splicetype)
+
+function make_components_Tcoupled(model, sources, sourceState, targetTransition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, nrates, splicetype)
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], source[i], target[i], nrates[i], splicetype))
+        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], sourceState[i], targetTransition[i], nrates[i], splicetype))
     end
-    TCoupledComponents(sources, model, comp)
+    TCoupledComponents(model, sources, comp)
 end
 
-function make_mat_GC(G, n, coupling=0.0)
+function make_mat_GC(G, n, couplingStrength=0.0)
     GR = spzeros(G, G)
-    GR[n, n] = coupling
+    GR[n, n] = couplingStrength
     return GR
 end
 
@@ -1024,28 +1026,28 @@ function make_mat_T2(components, rates)
     make_mat_T2(G, GR, R, RG, nG, nR)
 end
 
-function make_mat_C(components, rates, coupling)
+function make_mat_C(components, rates, couplingStrength)
     nT = components.nT
     nG = components.nG
     nR = components.nR
     nS = nG
-    GR = make_mat_GC(nG, nS, coupling)
+    GR = make_mat_GC(nG, nS, couplingStrength)
     G = make_mat(components.elementsG, rates, nG)
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if iszero(coupling)
+    if iszero(couplingStrength)
         Gs = 0
     else
-        # Gs = make_mat_GC(nS, nS, coupling)
+        # Gs = make_mat_GC(nS, nS, couplingStrength)
         Gs = make_mat_GC(components.elementsGs, rates)
     end
     IR = sparse(I, nR, nR)
     return T, G, kron(IR, Gt), Gs, sparse(I, nG, nG), sparse(I, nT, nT)
 end
 
-function make_matvec_C(components, rates, coupling)
+function make_matvec_C(components, rates, couplingStrength)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
     G = Vector{SparseMatrixCSC}(undef, n)
@@ -1054,13 +1056,13 @@ function make_matvec_C(components, rates, coupling)
     IG = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
     for i in eachindex(components.model)
-        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], coupling[i])
+        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], couplingStrength[i])
     end
     return T, G, V, Gs, IG, IT
 end
 
-function make_mat_TC(components, rates, coupling)
-    T, G, V, Gs, IG, IT = make_matvec_C(components, rates, coupling)
+function make_mat_TC(components, rates, couplingStrength)
+    T, G, V, Gs, IG, IT = make_matvec_C(components, rates, couplingStrength)
     make_mat_TC(T, G, V, Gs, IG, IT, components.sources, components.model)
 end
 
@@ -1168,7 +1170,7 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcoupled(r, coupling, transitions, G, R, S, insertstep, sources, model)
-    components = make_components_Tcoupled(sources, model, transitions, G, R, S, insertstep)
-    make_mat_TC(components, r, coupling)
+function test_mat_Tcoupled(r, couplingStrength, transitions, G, R, S, insertstep, model, sources, sourceState, targetTransition)
+    components = make_components_Tcoupled(model, sources, sourceState, targetTransition, transitions, G, R, S, insertstep,  nrates, "")
+    make_mat_TC(components, r, couplingStrength)
 end

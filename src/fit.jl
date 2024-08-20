@@ -465,7 +465,8 @@ function load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::
         nrates[i] = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams
     end
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
-    components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, nrates, splicetype)
+    # components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, nrates, splicetype)
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, nrates)
     GRSMCoupledmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 

@@ -23,8 +23,8 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
-function ll_hmm_coupled(r, coupling, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    a, p0 = make_ap_coupled(r, coupling, interval, components)
+function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
     for i in eachindex(trace)
@@ -164,10 +164,10 @@ function make_ap(r, interval, components)
     kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
 end
 
-function make_ap_coupled(r, coupling, interval, components)
+function make_ap_coupled(r, couplingStrength, interval, components)
     a = SparseMatrixCSC[]
     p0 = Vector[]
-    Qtr = make_mat_TC(components, r, coupling)
+    Qtr = make_mat_TC(components, r, couplingStrength)
     for Q in Qtr
         push!(a,kolmogorov_forward(sparse(Q'),interval))
         push!(p0,normalized_nullspace(Q))

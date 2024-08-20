@@ -230,7 +230,7 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,CouplingType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Tuple
@@ -246,7 +246,6 @@ struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,Com
     method::MethodType
     components::ComponentType
     reporter::ReporterType
-    coupling::CouplingType
 end
 
 """
@@ -337,8 +336,8 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 function loglikelihood(param, data::TraceData{Vector,Vector,Tuple}, model::GRSMcoupledmodel)
-    r, coupling = prepare_rates(param, model)
-    ll_hmm_coupled(r, coupling, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    r, couplingStrength = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
 """
@@ -426,7 +425,7 @@ convert MCMC params into form to compute likelihood for coupled model
 """
 function prepare_rates(param, model::GRSMcoupledmodel)
     r = Float64[]
-    coupling = Float64[]
+    couplingStrength = Float64[]
     rates = get_rates(param, model)
     j = 1
     for i in eachindex(model.G)
@@ -436,14 +435,14 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     end
     for i in eachindex(model.G)
         if model.source[i]
-            push!(coupling, rates[j])
+            push!(couplingStrength, rates[j])
         else
-            push!(coupling, 0.0)
+            push!(couplingStrength, 0.0)
         end
         j += 1
     end
 
-    return r, coupling
+    return r, couplingStrength
 end
 
 
