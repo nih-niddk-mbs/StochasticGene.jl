@@ -43,6 +43,20 @@ struct MComponents
     Uplus::SparseMatrixCSC
 end
 
+struct M2Components
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRG::Vector
+    elementsR::Vector
+    elementsB::Vector{Element}
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+end
+
+
+
 """
 	AbstractTComponents
 
@@ -61,6 +75,18 @@ struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
+
+
+struct T2Components <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsR::Vector
+    elementsRG::Vector
+end
+
+
 
 """
 struct TAIComponents{elementType} <: AbstractTComponents
@@ -103,8 +129,15 @@ struct MTComponents
     mcomponents::MComponents
     tcomponents::TComponents
 end
+
+struct MT2Components
+    mcomponents::M2Components
+    tcomponents::T2Components
+end
+
+
 """
- 	MTComponents
+ 	MTAIComponents
 
  structure for M and TAI components
 
@@ -446,6 +479,20 @@ function set_elements_G!(elements, transitions, gamma::Vector=collect(1:length(t
 end
 
 """
+    set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
+function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
+        push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        i += 1
+    end
+end
+
+"""
     set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
 inplace update matrix elements in elementsT for GRS state transition matrix, do nothing if R == 0
@@ -537,6 +584,91 @@ function set_elements_RS!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::
 end
 
 """
+    set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+
+TBW
+"""
+function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    if R > 0
+        if splicetype == "offeject"
+            S = 0
+            base = 2
+        end
+        if S == 0
+            base = 2
+        else
+            base = 3
+        end
+        nR = base^R
+        for b = 1:nR, a = 1:nR
+            zdigits = digit_vector(a, base, R)
+            wdigits = digit_vector(b, base, R)
+            z1 = zdigits[1]
+            w1 = wdigits[1]
+            zr = zdigits[R]
+            wr = wdigits[R]
+            zbar1 = zdigits[2:R]
+            wbar1 = wdigits[2:R]
+            zbarr = zdigits[1:R-1]
+            wbarr = wdigits[1:R-1]
+            sB = 0
+            for l in 1:base-1
+                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+            end
+            if S > 0
+                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+            end
+            if abs(sB) == 1
+                push!(elementsR, Element(a, b, nu[R+1], sB))
+            end
+            if S > 0 && abs(sC) == 1
+                push!(elementsR, Element(a, b, eta[R-insertstep+1], sC))
+            end
+            if splicetype == "offeject"
+                s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+                if abs(s) == 1
+                    push!(elementsR, Element(a, b, eta[R-insertstep+1], s))
+                end
+            end
+            for j = 1:R-1
+                zbarj = zdigits[[1:j-1; j+2:R]]
+                wbarj = wdigits[[1:j-1; j+2:R]]
+                zbark = zdigits[[1:j-1; j+1:R]]
+                wbark = wdigits[[1:j-1; j+1:R]]
+                zj = zdigits[j]
+                zj1 = zdigits[j+1]
+                wj = wdigits[j]
+                wj1 = wdigits[j+1]
+                s = 0
+                for l in 1:base-1
+                    s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+                end
+                if abs(s) == 1
+                    push!(elementsR, Element(a, b, nu[j+1], s))
+                end
+                if S > 0 && j > insertstep - 1
+                    s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
+                    if abs(s) == 1
+                        push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+                if splicetype == "offeject" && j > insertstep - 1
+                    s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
+                    if abs(s) == 1
+                        push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+            end
+            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
+            if abs(s) == 1
+                push!(elementsRG, Element(a, b, nu[1], s))
+            end
+        end
+    end
+end
+
+
+"""
     set_elements_TA(elementsT,onstates)
 
 set onstate elements
@@ -625,6 +757,28 @@ function set_elements_T(transitions, gamma::Vector)
 end
 
 """
+    set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
+function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    if R > 0
+        elementsG = Vector{Element}(undef, 0)
+        elementsRGbar = Vector{Element}(undef, 0)
+        elementsRG = Vector{Element}(undef, 0)
+        base = S > 0 ? 3 : 2
+        nR = base^R
+        set_elements_G2!(elementsG, transitions)
+        set_elements_RS2!(elementsRG, elementsRGbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
+        return elementsG, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
+    else
+        return set_elements_G(transitions, indices.gamma), G
+    end
+end
+
+
+
+"""
     set_elements_B(G, ejectindex)
 
 return B matrix elements
@@ -653,6 +807,34 @@ function set_elements_B(G, R, ejectindex, base=2)
         set_elements_B(G, ejectindex)
     end
 end
+
+"""
+    set_elements_B2(G, R, ejectindex, base=2)
+
+TBW
+"""
+function set_elements_B2(G, R, ejectindex, base=2)
+    if R > 0
+        nR = base^R
+        elementsB = Vector{Element}(undef, 0)
+        for b = 1:nR, a = 1:nR
+            zdigits = digits(a - 1, base=base, pad=R)
+            wdigits = digits(b - 1, base=base, pad=R)
+            zr = zdigits[R]
+            wr = wdigits[R]
+            zbarr = zdigits[1:R-1]
+            wbarr = wdigits[1:R-1]
+            s = (zbarr == wbarr) * (zr == 0) * (wr == 1)
+            if abs(s) == 1
+                push!(elementsB, Element(a, b, ejectindex, s))
+            end
+        end
+        return elementsB
+    else
+        set_elements_B(G, ejectindex)
+    end
+end
+
 """
 make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 
@@ -742,32 +924,6 @@ end
 
 ##### Coupling Under development
 
-struct T2Components <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsR::Vector
-    elementsRG::Vector
-end
-
-
-struct M2Components
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRG::Vector
-    elementsR::Vector
-    elementsB::Vector{Element}
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
-end
-struct MT2Components
-    mcomponents::M2Components
-    tcomponents::T2Components
-end
-
 struct ModelCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
@@ -782,109 +938,9 @@ struct ModelCoupledComponents <: AbstractTComponents
 end
 
 struct TCoupledComponents
-    model::Vector
-    sources::Vector
+    model::Tuple
+    sources::Tuple
     modelcomponents::Vector{ModelCoupledComponents}
-end
-
-
-"""
-    set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
-
-TBW
-"""
-function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
-    if R > 0
-        if splicetype == "offeject"
-            S = 0
-            base = 2
-        end
-        if S == 0
-            base = 2
-        else
-            base = 3
-        end
-        nR = base^R
-        for b = 1:nR, a = 1:nR
-            zdigits = digit_vector(a, base, R)
-            wdigits = digit_vector(b, base, R)
-            z1 = zdigits[1]
-            w1 = wdigits[1]
-            zr = zdigits[R]
-            wr = wdigits[R]
-            zbar1 = zdigits[2:R]
-            wbar1 = wdigits[2:R]
-            zbarr = zdigits[1:R-1]
-            wbarr = wdigits[1:R-1]
-            sB = 0
-            for l in 1:base-1
-                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
-            end
-            if S > 0
-                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
-            end
-            if abs(sB) == 1
-                push!(elementsR, Element(a, b, nu[R+1], sB))
-            end
-            if S > 0 && abs(sC) == 1
-                push!(elementsR, Element(a, b, eta[R-insertstep+1], sC))
-            end
-            if splicetype == "offeject"
-                s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
-                if abs(s) == 1
-                    push!(elementsR, Element(a, b, eta[R-insertstep+1], s))
-                end
-            end
-            for j = 1:R-1
-                zbarj = zdigits[[1:j-1; j+2:R]]
-                wbarj = wdigits[[1:j-1; j+2:R]]
-                zbark = zdigits[[1:j-1; j+1:R]]
-                wbark = wdigits[[1:j-1; j+1:R]]
-                zj = zdigits[j]
-                zj1 = zdigits[j+1]
-                wj = wdigits[j]
-                wj1 = wdigits[j+1]
-                s = 0
-                for l in 1:base-1
-                    s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
-                end
-                if abs(s) == 1
-                    push!(elementsR, Element(a, b, nu[j+1], s))
-                end
-                if S > 0 && j > insertstep - 1
-                    s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-                    if abs(s) == 1
-                        push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
-                    end
-                end
-                if splicetype == "offeject" && j > insertstep - 1
-                    s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
-                    if abs(s) == 1
-                        push!(elementsR, Element(a, b, eta[j-insertstep+1], s))
-                    end
-                end
-            end
-            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
-            if abs(s) == 1
-                push!(elementsRG, Element(a, b, nu[1], s))
-            end
-        end
-    end
-end
-
-
-"""
-    set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-
-TBW
-"""
-function set_elements_G2!(elements, transitions, gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
-        push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        i += 1
-    end
 end
 
 function set_elements_Gt!(elements, transitions, affected_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
@@ -904,64 +960,15 @@ function set_elements_Gt(transitions, affected_transition, gamma)
     return elementsGt
 end
 
-function set_elements_Gs(nS, index)
-    [Element(nS, nS, index, 1)]
+function set_elements_Gs(nS)
+    [Element(nS, nS, 0, 1)]
 end
 
-
-"""
-    set_elements_B2(G, R, ejectindex, base=2)
-
-TBW
-"""
-function set_elements_B2(G, R, ejectindex, base=2)
-    if R > 0
-        nR = base^R
-        elementsB = Vector{Element}(undef, 0)
-        for b = 1:nR, a = 1:nR
-            zdigits = digits(a - 1, base=base, pad=R)
-            wdigits = digits(b - 1, base=base, pad=R)
-            zr = zdigits[R]
-            wr = wdigits[R]
-            zbarr = zdigits[1:R-1]
-            wbarr = wdigits[1:R-1]
-            s = (zbarr == wbarr) * (zr == 0) * (wr == 1)
-            if abs(s) == 1
-                push!(elementsB, Element(a, b, ejectindex, s))
-            end
-        end
-        return elementsB
-    else
-        set_elements_B(G, ejectindex)
-    end
-end
-
-"""
-    set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-
-TBW
-"""
-function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    if R > 0
-        elementsG = Vector{Element}(undef, 0)
-        elementsRGbar = Vector{Element}(undef, 0)
-        elementsRG = Vector{Element}(undef, 0)
-        base = S > 0 ? 3 : 2
-        nR = base^R
-        set_elements_G2!(elementsG, transitions)
-        set_elements_RS2!(elementsRG, elementsRGbar, R, S, insertstep, indices.nu, indices.eta, splicetype)
-        return elementsG, elementsRG, elementsRGbar, nR, T_dimension(G, R, S)
-    else
-        return set_elements_G(transitions, indices.gamma), G
-    end
-end
-
-
-function set_elements_Coupled(transitions, G, R, S, insertstep, indices::Indices, nS, affected_transition, splicetype::String)
+function set_elements_Coupled(transitions, G, R, S, insertstep, indices::Indices, source_state, affected_transition, splicetype::String)
     if R > 0
         elementsG, elementsRG, elementsRGbar, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
         elementsGt = set_elements_Gt(transitions, affected_transition, indices.gamma)
-        elementsGs = set_elementsGs(nS, indices.coupling)
+        elementsGs = set_elements_Gs(source_state)
         return elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT
     else
         return elementsG, elementsGt, G
@@ -987,26 +994,20 @@ function make_components_M2(transitions, G, R, nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-function make_components_ModelCoupled(transitions, G, R, S, insertstep, sourceState, targetTransition, offset, splicetype="")
+function make_components_ModelCoupled(transitions, G, R, S, insertstep, source_state, target_transition, offset, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep, offset)
-    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, nS, affected, splicetype)
-    ModelCoupledComponents(nT, G, nR, sourceState, targetTransition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, source_state, target_transition, splicetype)
+    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
 end
 
-make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, nrates, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, nrates, splicetype)
+make_components_Tcoupled(coupling::Tuple, nrates, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], nrates, transitions, G, R, S, insertstep, splicetype)
 
-function make_components_Tcoupled(model, sources, sourceState, targetTransition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, nrates, splicetype)
+function make_components_Tcoupled(model, sources, source_state, target_transition, nrates, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], sourceState[i], targetTransition[i], nrates[i], splicetype))
+        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], source_state[i], target_transition[i], nrates[i], splicetype))
     end
     TCoupledComponents(model, sources, comp)
-end
-
-function make_mat_GC(G, n, couplingStrength=0.0)
-    GR = spzeros(G, G)
-    GR[n, n] = couplingStrength
-    return GR
 end
 
 make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
@@ -1014,7 +1015,6 @@ make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="
 function make_mat_T2(G, GR, R, RG, nG, nR)
     kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(R, sparse(I, nG, nG))
 end
-
 
 function make_mat_T2(components, rates)
     nG = components.nG
@@ -1026,28 +1026,41 @@ function make_mat_T2(components, rates)
     make_mat_T2(G, GR, R, RG, nG, nR)
 end
 
-function make_mat_C(components, rates, couplingStrength)
+function make_mat_C(components, rates, coupling_strength)
     nT = components.nT
     nG = components.nG
     nR = components.nR
-    nS = nG
-    GR = make_mat_GC(nG, nS, couplingStrength)
+    GR = make_mat_GR(nG)
     G = make_mat(components.elementsG, rates, nG)
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if iszero(couplingStrength)
+    if isnothing(components.sources)
         Gs = 0
     else
         # Gs = make_mat_GC(nS, nS, couplingStrength)
-        Gs = make_mat_GC(components.elementsGs, rates)
+        Gs = make_mat_Gs(components.elementsGs, nG)
     end
     IR = sparse(I, nR, nR)
     return T, G, kron(IR, Gt), Gs, sparse(I, nG, nG), sparse(I, nT, nT)
 end
 
-function make_matvec_C(components, rates, couplingStrength)
+function make_mat_GR(G)
+    GR = spzeros(G, G)
+    GR[G, G] = 1
+    return GR
+end
+
+function make_mat_Gs(elements, nG)
+    G = spzeros(nG, nG)
+    for e in elements
+        G[e.a, e.b] += 1.0
+    end
+    return G
+end
+
+function make_matvec_C(components, rates, coupling_strength)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
     G = Vector{SparseMatrixCSC}(undef, n)
@@ -1056,17 +1069,17 @@ function make_matvec_C(components, rates, couplingStrength)
     IG = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
     for i in eachindex(components.model)
-        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], couplingStrength[i])
+        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], coupling_strength[i])
     end
     return T, G, V, Gs, IG, IT
 end
 
-function make_mat_TC(components, rates, couplingStrength)
-    T, G, V, Gs, IG, IT = make_matvec_C(components, rates, couplingStrength)
-    make_mat_TC(T, G, V, Gs, IG, IT, components.sources, components.model)
+function make_mat_TC(components, rates, coupling_strength)
+    T, G, V, Gs, IG, IT = make_matvec_C(components, rates, coupling_strength)
+    make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, components.sources, components.model)
 end
 
-function make_mat_TC(T, G, V, Gs, IG, IT, sources, model::Vector)
+function make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, sources, model::Vector)
     n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
@@ -1106,7 +1119,7 @@ function make_mat_TC(T, G, V, Gs, IG, IT, sources, model::Vector)
                     end
                 end
                 Tα .+= Gβ
-                Tα .+= Vβ
+                Tα .+= coupling_strength[model[α]] * Vβ
             end
         end
         for β in α+1:n
@@ -1134,15 +1147,13 @@ function make_mat_TC(T, G, V, Gs, IG, IT, sources, model::Vector)
                     end
                 end
                 Tα .+= Gβ
-                Tα .+= Vβ
+                Tα .+= coupling_strength[model[α]] * Vβ
             end
         end
         push!(Tc, Tα)
     end
     return Tc
 end
-
-
 
 function make_mat_B2(components, rates)
     RB = make_mat(components.elementsB, rates, components.nR)
@@ -1170,7 +1181,11 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcoupled(r, couplingStrength, transitions, G, R, S, insertstep, model, sources, sourceState, targetTransition)
-    components = make_components_Tcoupled(model, sources, sourceState, targetTransition, transitions, G, R, S, insertstep,  nrates, "")
-    make_mat_TC(components, r, couplingStrength)
+function test_mat_Tcoupled(model, sources, source_state, target_transition, r, coupling_strength, transitions, G, R, S, insertstep)
+    components = make_components_Tcoupled(model, sources, source_state, target_transition, length.(r), transitions, G, R, S, insertstep, "")
+    make_mat_TC(components, r, coupling_strength)
+end
+
+function test_mat_Tcoupled(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+    test_mat_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], r, coupling_strength, transitions, G, R, S, insertstep)
 end
