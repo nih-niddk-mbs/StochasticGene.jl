@@ -964,10 +964,10 @@ function set_elements_Gs(nS)
     [Element(nS, nS, 0, 1)]
 end
 
-function set_elements_Coupled(transitions, G, R, S, insertstep, indices::Indices, source_state, affected_transition, splicetype::String)
+function set_elements_Coupled(transitions, G, R, S, insertstep, indices::Indices, source_state, target_transition, splicetype::String)
     if R > 0
         elementsG, elementsRG, elementsRGbar, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-        elementsGt = set_elements_Gt(transitions, affected_transition, indices.gamma)
+        elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
         elementsGs = set_elements_Gs(source_state)
         return elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT
     else
@@ -994,18 +994,18 @@ function make_components_M2(transitions, G, R, nhist, decay)
     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 end
 
-function make_components_ModelCoupled(transitions, G, R, S, insertstep, source_state, target_transition, offset, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep, offset)
+function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, source_state, target_transition, splicetype)
     ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
 end
 
-make_components_Tcoupled(coupling::Tuple, nrates, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], nrates, transitions, G, R, S, insertstep, splicetype)
+make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
-function make_components_Tcoupled(model, sources, source_state, target_transition, nrates, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+function make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(transitions[i], G[i], R[i], S[i], insertstep[i], source_state[i], target_transition[i], nrates[i], splicetype))
+        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents(model, sources, comp)
 end
@@ -1036,8 +1036,8 @@ function make_mat_C(components, rates, coupling_strength)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if isnothing(components.sources)
-        Gs = 0
+    if iszero(coupling_strength)
+        Gs = spzeros(0)
     else
         # Gs = make_mat_GC(nS, nS, couplingStrength)
         Gs = make_mat_Gs(components.elementsGs, nG)
@@ -1079,7 +1079,7 @@ function make_mat_TC(components, rates, coupling_strength)
     make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, components.sources, components.model)
 end
 
-function make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, sources, model::Vector)
+function make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
@@ -1181,11 +1181,8 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcoupled(model, sources, source_state, target_transition, r, coupling_strength, transitions, G, R, S, insertstep)
-    components = make_components_Tcoupled(model, sources, source_state, target_transition, length.(r), transitions, G, R, S, insertstep, "")
+function test_mat_Tcoupled(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     make_mat_TC(components, r, coupling_strength)
 end
 
-function test_mat_Tcoupled(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
-    test_mat_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], r, coupling_strength, transitions, G, R, S, insertstep)
-end

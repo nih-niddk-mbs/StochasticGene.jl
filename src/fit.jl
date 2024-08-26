@@ -56,7 +56,7 @@ then G = (2,3).
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
     1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
-    2. tuple of tuples indicating source units for each unit, e.g. ((2,3), (1), tuple()) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
+    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
     3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
     5. Int indicating number of coupling parameters
@@ -200,7 +200,7 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, coupling)
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -216,9 +216,9 @@ function set_r(infolder, inlabel, gene, G, R, S, insertstep, nalleles, ratetype,
     return r
 end
 
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
     if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
+        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
     else
         return fittedparam
     end
@@ -371,7 +371,7 @@ end
 
 return model structure
 """
-function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G::Int, R::Int, S::Int, insertstep::Int, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, method=1)
+function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G::Int, R::Int, S::Int, insertstep::Int, coupling, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, coupling, method=1)
     if S > 0 && S != R - insertstep + 1
         S = R - insertstep + 1
         println("Setting S to ", S)
@@ -456,17 +456,16 @@ Coupled model for trace data
 """
 
 function load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple, nalleles::Tuple, priorcv, decayrate, propcv, splicetype, probfn, noisepriors, method=1)
-    components = TcoupledComponents[]
     reporter = HMMReporter[]
+    !(probfn isa Tuple) && (probfn = repeat(probfn,length(coulplin[1])))
     for i in 1:eachindex(G)
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
         reporter[i] = HMMReporter(noiseparams, num_reporters_per_state(G[i], R[i], insertstep[i]), probfn[i], weightind, off_states(G[i], R[i], S[i], insertstep[i]))
-        nrates[i] = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams
     end
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, decayrate, priorcv, noisepriors)
     # components = make_components_Tcoupled(coupling[2], coupling[1], transitions, G, R, S, insertstep, nrates, splicetype)
-    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, nrates)
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     GRSMCoupledmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -485,7 +484,15 @@ end
 
 create vector of fittedparams that includes all rates except the decay time
 """
-function default_fitted(datatype::String, transitions, R, S, insertstep, noiseparams)
+function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple)
+        fittedparam = Int[]
+        for i in eachindex(R)
+            fittedparam = vcat(fittedparam, default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i]))
+        end
+    fittedparam
+end
+
+function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams)
     n = num_rates(transitions, R, S, insertstep)
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)
@@ -498,8 +505,8 @@ end
 
 make default fixedeffects tuple and fittedparams vector from fixedeffects String
 """
-function make_fixedfitted(datatype::String, fixedeffects::String, transitions, R, S, insertstep, noiseparams)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+function make_fixedfitted(datatype::String, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
     fixed = split(fixedeffects, "-")
     if length(fixed) > 1
         fixed = parse.(Int, fixed)
