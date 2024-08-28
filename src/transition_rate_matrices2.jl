@@ -1026,7 +1026,7 @@ function make_mat_T2(components, rates)
     make_mat_T2(G, GR, R, RG, nG, nR)
 end
 
-function make_mat_C(components, rates, coupling_strength)
+function make_mat_C(components, rates)
     nT = components.nT
     nG = components.nG
     nR = components.nR
@@ -1036,7 +1036,7 @@ function make_mat_C(components, rates, coupling_strength)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if iszero(coupling_strength)
+    if components.elementsGs[1].a <1 || components.elementsGs[1].b < 1
         Gs = spzeros(0)
     else
         # Gs = make_mat_GC(nS, nS, couplingStrength)
@@ -1060,7 +1060,7 @@ function make_mat_Gs(elements, nG)
     return G
 end
 
-function make_matvec_C(components, rates, coupling_strength)
+function make_matvec_C(components, rates)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
     G = Vector{SparseMatrixCSC}(undef, n)
@@ -1069,13 +1069,13 @@ function make_matvec_C(components, rates, coupling_strength)
     IG = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
     for i in eachindex(components.model)
-        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i], coupling_strength[i])
+        T[i], G[i], V[i], Gs[i], IG[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
     end
     return T, G, V, Gs, IG, IT
 end
 
 function make_mat_TC(components, rates, coupling_strength)
-    T, G, V, Gs, IG, IT = make_matvec_C(components, rates, coupling_strength)
+    T, G, V, Gs, IG, IT = make_matvec_C(components, rates)
     make_mat_TC(coupling_strength, T, G, V, Gs, IG, IT, components.sources, components.model)
 end
 

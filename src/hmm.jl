@@ -28,11 +28,11 @@ function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, tr
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
-    for i in eachindex(trace)
+    for i in eachindex(trace[1])
         m = components.model[i]
         rep = reporters[m]
-        ll += trace[3] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3], trace[i][4]) : 0.
-        lla, lpa = ll_hmm(r[m], nT, rep.noiseparams, rep.reporters_per_state, rep.probfn, trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+        ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
+        lla, lpa = ll_hmm(r[m], components.modelcomponents[i].nT, rep.noiseparams, rep.reporters_per_state, rep.probfn, trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
         lp = vcat(lp,lpa)
     end
