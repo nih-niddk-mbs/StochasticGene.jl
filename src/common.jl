@@ -335,9 +335,9 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceData{Vector,Vector,Tuple}, model::GRSMcoupledmodel)
+function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    ll_hmm_coupled(r, couplingStrength, model.components, model.reporter, data.interval, data.trace)
 end
 
 """
@@ -424,7 +424,7 @@ end
 convert MCMC params into form to compute likelihood for coupled model
 """
 function prepare_rates(param, model::GRSMcoupledmodel)
-    r = Float64[]
+    r = Vector{Float64}[]
     couplingStrength = Float64[]
     rates = get_rates(param, model)
     j = 1
@@ -434,12 +434,12 @@ function prepare_rates(param, model::GRSMcoupledmodel)
         j += n
     end
     for i in eachindex(model.G)
-        if model.source[i]
+        if !isempty(model.components.sources[i])
             push!(couplingStrength, rates[j])
+            j += 1
         else
             push!(couplingStrength, 0.0)
         end
-        j += 1
     end
 
     return r, couplingStrength
@@ -633,17 +633,17 @@ transform_rates(r, model::AbstractGmodel) = log.(r)
 
 transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
-function transform_rates!(p, model::GRSMcoupledmodel)
+# function transform_rates!(p, model::GRSMcoupledmodel)
 
-end
+# end
 
-function transform_rates(pin, model::GRSMcoupledmodel)
-    p = copy(pin)
-    for f in model.transformations
-        p[i] = f(p[i])
-    end
-    return p
-end
+# function transform_rates(pin, model::GRSMcoupledmodel)
+#     p = copy(pin)
+#     for f in model.transformations
+#         p[i] = f(p[i])
+#     end
+#     return p
+# end
 
 """
     inverse_transform_rates(x,model::AbstractGmodel)
@@ -665,7 +665,7 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_params(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam])
+# get_params(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam])
 
 
 """

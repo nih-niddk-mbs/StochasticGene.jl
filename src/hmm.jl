@@ -23,6 +23,22 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     return ll + lb, lp
 end
 
+
+function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, trace)
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    lp = Float64[]
+    ll = 0.
+    for i in eachindex(trace)
+        m = components.model[i]
+        rep = reporters[m]
+        ll += trace[3] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3], trace[i][4]) : 0.
+        lla, lpa = ll_hmm(r[m], nT, rep.noiseparams, rep.reporters_per_state, rep.probfn, trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+        ll += lla
+        lp = vcat(lp,lpa)
+    end
+    return ll, lp
+end
+
 function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
