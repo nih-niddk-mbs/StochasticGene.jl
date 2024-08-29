@@ -26,7 +26,6 @@ export
     RNAOnOffData,
     RNADwellTimeData,
     TraceData,
-    TraceNascentData,
     TraceRNAData,
     GMmodel,
     GMfixedeffectsmodel,

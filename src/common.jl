@@ -89,14 +89,6 @@ struct TraceData{labelType,geneType,traceType} <: AbstractTraceData
     interval::Float64
     trace::traceType
 end
-
-struct TraceNascentData{traceType} <: AbstractTraceData
-    label::String
-    gene::String
-    interval::Float64
-    trace::traceType
-    nascent::Vector{Int}
-end
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
     gene::String
@@ -338,15 +330,6 @@ end
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, model.components, model.reporter, data.interval, data.trace)
-end
-
-"""
-    loglikelihood(param, data::TraceRNAData{Float64}, model::AbstractGmodel)
-
-negative loglikelihood of trace data with nascent RNA FISH active fraction (stored in data.histRNA field)
-"""
-function loglikelihood(param, data::TraceNascentData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace, data.nascent)
 end
 
 """

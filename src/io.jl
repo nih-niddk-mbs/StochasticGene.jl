@@ -954,12 +954,13 @@ end
 read in joint trace files
 """
 function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    traces = Vector{Vector}[]
+    l = length(label)
+    traces = Vector{Vector}(undef, l)
     if isempty(path)
         return traces
     else
         for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, length(label))
+            tset = Vector{Vector}(undef, l)
             files = sort(readdir(path))
             for file in files
                 complete = true
@@ -970,7 +971,9 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
                     complete &= isassigned(tset, i)
                 end
                 if complete
-                    push!(traces, tset)
+                    for i in eachindex(label)
+                        push!(traces[i], tset[i])
+                    end
                     tset = Vector{Vector}(undef, length(label))
                 end
             end

@@ -22,17 +22,34 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end
+function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in traces
+        T = length(t)
+        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    # for t in trace[2]
+    #     T = length(t)
+    #     logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+    #     l = forward_log(loga, logb, logp0, nT, T)
+    #     push!(logpredictions, trace[3] / length(trace[2]) * logsumexp(l[:, T]))
+    # end
+    -sum(logpredictions), -logpredictions
+end
 
 
 function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, trace)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
+    println(trace)
     for i in eachindex(trace[1])
         m = components.model[i]
         rep = reporters[m]
         ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
-        lla, lpa = ll_hmm(r[m], components.modelcomponents[i].nT, rep.noiseparams, rep.reporters_per_state, rep.probfn, trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+        lla, lpa = ll_hmm(r[m], components.modelcomponents[i].nT, rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
         lp = vcat(lp,lpa)
     end
@@ -51,38 +68,6 @@ function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_
         lp = vcat(lp,lpa)
     end
     return ll, lp
-end
-
-function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
-    logpredictions = Array{Float64}(undef, 0)
-    for t in traces
-        T = length(t)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
-        l = forward_log(loga, logb, logp0, nT, T)
-        push!(logpredictions, logsumexp(l[:, T]))
-    end
-    # for t in trace[2]
-    #     T = length(t)
-    #     logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
-    #     l = forward_log(loga, logb, logp0, nT, T)
-    #     push!(logpredictions, trace[3] / length(trace[2]) * logsumexp(l[:, T]))
-    # end
-    -sum(logpredictions), -logpredictions
-end
-
-function ll_hmm_nascent(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace, nascent)
-    a, p0 = make_ap(r, interval, elementsT, nT)
-    lln = ll_nascent(p0, reporters_per_state, nascent)
-    ll, logpredictions = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace, log.(max.(a, 0)), log.(max.(p0, 0)))
-    push!(logpredictions, lln)
-    ll += lln
-    ll, logpredictions
-end
-
-function ll_nascent(p0, reporters_per_state, nascent)
-    pn = sum(p0[reporters_per_state.>0])
-    d = Binomial(nascent[2], pn)
-    -logpdf(d, nascent[1])
 end
 
 function ll_background(a, p0, offstates, weight, n)
