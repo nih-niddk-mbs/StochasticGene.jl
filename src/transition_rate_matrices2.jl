@@ -282,6 +282,11 @@ return state index for state (i,z)
 """
 state_index(G::Int, g, z) = g + G * (z - 1)
 
+"""
+    inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
+
+
+"""
 function inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
     base = S > 0 ? 3 : 2
     g = mod(i - 1, G) + 1
@@ -418,6 +423,15 @@ function num_reporters_per_state(G::Int, onstates::Vector)
         push!(reporters, i ∈ onstates ? 1 : 0)
     end
     reporters
+end
+
+function num_reporters_per_state(G::Vector,R::Vector,S::Vector,insertstep::Vector,f=sum)
+    for i in eachindex(R)
+        nstates[i] = T_dimension(G[i], R[i], S[i])
+        state = num_reporters_per_state(G[i],R[i],S[i],insertstep[i],f)
+
+
+    end
 end
 
 num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)

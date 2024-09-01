@@ -955,7 +955,7 @@ read in joint trace files
 """
 function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
     l = length(label)
-    traces = Vector{Vector}(undef, l)
+    traces = [Vector[] for _ in 1:l]
     if isempty(path)
         return traces
     else

@@ -9,8 +9,6 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
-
-
 """
     ll_hmm(r, nT, reporters, elementsT, interval, trace)
 
@@ -44,7 +42,6 @@ function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, tr
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
-    println(trace)
     for i in eachindex(trace[1])
         m = components.model[i]
         rep = reporters[m]
