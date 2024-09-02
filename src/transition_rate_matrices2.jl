@@ -425,10 +425,10 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     reporters
 end
 
-function num_reporters_per_state(G::Vector,R::Vector,S::Vector,insertstep::Vector,f=sum)
+function num_reporters_per_state(G::Vector, R::Vector, S::Vector, insertstep::Vector, f=sum)
     for i in eachindex(R)
         nstates[i] = T_dimension(G[i], R[i], S[i])
-        state = num_reporters_per_state(G[i],R[i],S[i],insertstep[i],f)
+        state = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
 
 
     end
@@ -957,10 +957,10 @@ struct TCoupledComponents
     modelcomponents::Vector{ModelCoupledComponents}
 end
 
-function set_elements_Gt!(elements, transitions, affected_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
     for t in transitions
-        if i == affected_transition
+        if i == target_transition
             push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
             push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
         end
@@ -968,9 +968,9 @@ function set_elements_Gt!(elements, transitions, affected_transition=length(tran
     end
 end
 
-function set_elements_Gt(transitions, affected_transition, gamma)
+function set_elements_Gt(transitions, target_transition, gamma)
     elementsGt = Vector{Element}(undef, 0)
-    set_elements_Gt!(elementsGt, transitions, affected_transition, gamma)
+    set_elements_Gt!(elementsGt, transitions, target_transition, gamma)
     return elementsGt
 end
 
@@ -978,7 +978,7 @@ function set_elements_Gs(nS)
     [Element(nS, nS, 0, 1)]
 end
 
-function set_elements_Coupled(transitions, G, R, S, insertstep, indices::Indices, source_state, target_transition, splicetype::String)
+function set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
         elementsG, elementsRG, elementsRGbar, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
         elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
@@ -1010,7 +1010,7 @@ end
 
 function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(transitions, G, R, S, insertstep, indices, source_state, target_transition, splicetype)
+    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
     ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
 end
 
@@ -1050,7 +1050,7 @@ function make_mat_C(components, rates)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if components.elementsGs[1].a <1 || components.elementsGs[1].b < 1
+    if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
         Gs = spzeros(0)
     else
         # Gs = make_mat_GC(nS, nS, couplingStrength)
