@@ -222,8 +222,9 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
-struct GRSMcoupledmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
+    coupling::CouplingType
     Gtransitions::Tuple
     G::Tuple
     R::Tuple
@@ -417,14 +418,13 @@ function prepare_rates(param, model::GRSMcoupledmodel)
         j += n
     end
     for i in eachindex(model.G)
-        if !isempty(model.components.sources[i])
+        if model.components.modelcomponents[i].sourceState > 0
             push!(couplingStrength, rates[j])
             j += 1
         else
             push!(couplingStrength, 0.0)
         end
     end
-
     return r, couplingStrength
 end
 
@@ -602,7 +602,7 @@ apply function f1 to array v at indices up to index and f2 after index accountin
 function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
-        return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end, :]))
+        return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
     else
         return f1(v)
     end
@@ -611,7 +611,7 @@ end
 function transform_array(v::Vector, index::Int, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
-        return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
+        return vcat(f1(v[1:n-1]), f2(v[n:end]))
     else
         return f1(v)
     end
@@ -646,7 +646,7 @@ inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
 inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
-inverse_transform_rates(p, model::AbstractGRSMcoupledmodel) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlog_shift1)
+inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
 
 

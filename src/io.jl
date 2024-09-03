@@ -641,7 +641,7 @@ function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
     for i in eachindex(G)
         m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
     end
-    "_" * label * gene * m * ".txt"
+    filename(label,gene,m,nalleles)
 end
 
 """
