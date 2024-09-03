@@ -597,6 +597,13 @@ function deviance(fits, data::AbstractTraceData, model)
     fits.llml / sum(sum.(data.trace[1]))
 end
 
+function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)
+    s =0
+    for t in data.trace[1]
+        s+= sum(sum.(t))
+    end
+    fits.llml / s
+end
 
 """
     deviance(data::AbstractHistogramData, model::AbstractGmodel)

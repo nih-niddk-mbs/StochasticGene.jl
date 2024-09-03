@@ -282,6 +282,7 @@ return state index for state (i,z)
 """
 state_index(G::Int, g, z) = g + G * (z - 1)
 
+
 """
     inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
 
@@ -351,6 +352,8 @@ function on_states(G::Int, R, S, insertstep)
     onstates
 end
 
+
+
 """
     on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 
@@ -390,6 +393,19 @@ off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 
 
 """
+    off_states(reporters)
+
+TBW
+"""
+function off_states(reporters)
+    offstates = Int[]
+    for i in eachindex(reporters)
+        (reporters[i]) < 1 && push!(offstates,i)
+    end
+    offstates
+end
+
+"""
     T_dimension(G, R, S)
 
 Compute transition matrix dimension of GRS model
@@ -425,13 +441,19 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     reporters
 end
 
-function num_reporters_per_state(G::Vector, R::Vector, S::Vector, insertstep::Vector, f=sum)
+function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
+    reporters = Vector[]
     for i in eachindex(R)
-        nstates[i] = T_dimension(G[i], R[i], S[i])
-        state = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
-
-
+        repi = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
+        for j in 1:i-1
+            (j ∈ sources[i]) && (repi = repeat(repi,outer=(G[j],)))
+        end
+        for j in i+1:length(R)
+            (j ∈ sources[i]) && (repi = repeat(repi,inner=(G[j],)))
+        end
+        push!(reporters,repi)
     end
+    reporters
 end
 
 num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
@@ -1033,11 +1055,11 @@ end
 function make_mat_T2(components, rates)
     nG = components.nG
     nR = components.nR
-    GR = make_mat_GC(nG, nG)
+    GR = make_mat_GR(nG)
     G = make_mat(components.elementsG, rates, nG)
-    R = make_mat(components.elementsR, rates, nR)
+    RGbar = make_mat(components.elementsR, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    make_mat_T2(G, GR, R, RG, nG, nR)
+    make_mat_T2(G, GR, RGbar, RG, nG, nR)
 end
 
 function make_mat_C(components, rates)

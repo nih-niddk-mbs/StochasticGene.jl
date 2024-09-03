@@ -487,9 +487,9 @@ function rlabels_GRSM(model)
 end
 
 function rlabels(model::GRSMcoupledmodel)
-    rlabels = Array{String}(undef, 0)
+    rlabels = Array{String}(undef, 1, 0)
     for i in eachindex(model.G)
-        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
+        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i]))
     end
     hcat(rlabels, ["Coupling"])
 end
@@ -633,17 +633,29 @@ filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
+filename(label::String, gene::String, model::String, nalleles::Int) = "_" * label * "_" * gene * "_" * model * "_" * "($nalleles)" * ".txt"
+
+
+function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
+    m = ""
+    for i in eachindex(G)
+        m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
+    end
+    "_" * label * gene * m
+end
 
 """
     filename(data, model::GRSMcoupledmodel)
 """
-function filename(data, model::GRSMcoupledmodel)
-    m = ""
-    for i in eachindex(model.G)
-        m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
-    end
-    return filename(data.label, data.gene, m, model.nalleles)
-end
+filename(data, model::GRSMcoupledmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+
+# function filename(data, model::GRSMcoupledmodel)
+#     m = ""
+#     for i in eachindex(model.G)
+#         m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
+#     end
+#     return filename(data.label, data.gene, m, model.nalleles)
+# end
 
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)

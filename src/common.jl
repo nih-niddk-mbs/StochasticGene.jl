@@ -324,7 +324,7 @@ end
 negative loglikelihood of combined time series traces and each trace
 """
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
@@ -616,7 +616,9 @@ transform_rates(r, model::AbstractGmodel) = log.(r)
 
 transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
+
 # function transform_rates!(p, model::GRSMcoupledmodel)
+
 
 # end
 

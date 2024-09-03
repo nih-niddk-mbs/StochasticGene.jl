@@ -20,17 +20,33 @@ function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, prob
     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end
+"""
+    ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+
+
+"""
+function ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    lb = trace[3] > 0. ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
+    return ll + lb, lp
+end
+"""
+    ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
+
+
+"""
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
     for t in traces
         T = length(t)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
     # for t in trace[2]
     #     T = length(t)
-    #     logb = set_logb(t, nT, r[end-noiseparams+1:end], reporters_per_state, probfn)
+    #     logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
     #     l = forward_log(loga, logb, logp0, nT, T)
     #     push!(logpredictions, trace[3] / length(trace[2]) * logsumexp(l[:, T]))
     # end
@@ -46,26 +62,26 @@ function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, tr
         m = components.model[i]
         rep = reporters[m]
         ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
-        lla, lpa = ll_hmm(r[m], components.modelcomponents[i].nT, rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+        lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
         lp = vcat(lp,lpa)
     end
     return ll, lp
 end
 
-function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    lp = Float64[]
-    ll = 0.
-    for i in eachindex(trace)
-        m = components.model[i]
-        ll += trace[3] > 0. ? ll_background(a[m], p0[m], offstates[m], trace[i][3], trace[i][4]) : 0.
-        lla, lpa = ll_hmm(r[m], nT, noiseparams[m], reporters_per_state[m], probfn[m], trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
-        ll += lla
-        lp = vcat(lp,lpa)
-    end
-    return ll, lp
-end
+# function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+#     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+#     lp = Float64[]
+#     ll = 0.
+#     for i in eachindex(trace)
+#         m = components.model[i]
+#         ll += trace[3] > 0. ? ll_background(a[m], p0[m], offstates[m], trace[i][3], trace[i][4]) : 0.
+#         lla, lpa = ll_hmm(r[m], nT, noiseparams[m], reporters_per_state[m], probfn[m], trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+#         ll += lla
+#         lp = vcat(lp,lpa)
+#     end
+#     return ll, lp
+# end
 
 function ll_background(a, p0, offstates, weight, n)
     l = -log(sum(p0[offstates]' * a[offstates, offstates]^n))
@@ -81,7 +97,7 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     for (i, t) in enumerate(trace[1])
         T = length(t)
         loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -93,7 +109,7 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noisep
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -108,7 +124,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -123,7 +139,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, nT, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -185,7 +201,7 @@ function make_logap(r, interval, elementsT, N)
 end
 
 """
-set_logb(trace, N, params, reporters)
+    set_logb(trace, params, reporters, probfn=prob_Gaussian)
 
 returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
@@ -194,7 +210,8 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 -`T`: number of observations
 
 """
-function set_logb(trace, N, params, reporters, probfn=prob_Gaussian)
+function set_logb(trace, params, reporters, probfn=prob_Gaussian)
+    N = length(reporters)
     d = probfn(params, reporters, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
@@ -567,7 +584,7 @@ return predicted state path using Viterbi algorithm
 """
 function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn)
     loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb(trace, N, r[end-noiseparams+1:end], reporters_per_state, probfn)
+    logb = set_logb(trace, r[end-noiseparams+1:end], reporters_per_state, probfn)
     viterbi(loga, logb, logp0, N, length(trace))
 end
 
