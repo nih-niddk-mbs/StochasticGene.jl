@@ -249,6 +249,7 @@ ll is negative log likelihood
 """
 function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
     paramt, dt = proposal(d, proposalcv, model)
+    println(paramt)
     priort = logprior(paramt, model)
     llt, logpredictionst = loglikelihood(paramt, data, model)
     mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)

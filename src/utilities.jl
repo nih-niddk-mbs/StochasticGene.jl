@@ -585,14 +585,39 @@ exponential of array
 expv(v::Array) = exp.(v)
 
 
+"""
+    logv(v::Array)
+
+TBW
+"""
 logv(v::Array) = log.(v)
 
 
+"""
+    log_shift(v::Float64,a::Float64)
+    log_shift(v::Array,a::Float64)
+
+TBW
+"""
 log_shift(v::Float64,a::Float64) = log(v + a)
 
 log_shift(v::Array,a::Float64) = log.(v .+ a)
 
+"""
+    log_shift1(v)
+
+TBW
+"""
 log_shift1(v) = log_shift(v,1.)
+
+
+"""
+    invlog_shift1(v::Float64)
+
+TBW
+"""
+invlog_shift1(v::Float64) = exp(v) - 1
+invlog_shift1(v::Array) = exp.(v) .- 1
 
 """
     logit(x::Float64)

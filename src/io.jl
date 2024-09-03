@@ -631,9 +631,9 @@ return output file names
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
-filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$(nalleles)")
+filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$nalleles")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
-filename(label::String, gene::String, model::String, nalleles::Int) = "_" * label * "_" * gene * "_" * model * "_" * "($nalleles)" * ".txt"
+filename(label::String, gene::String, model::String, nalleles::Int) = "_" * label * "_" * gene * "_" * model * "_" * "$nalleles" * ".txt"
 
 
 function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
@@ -641,7 +641,7 @@ function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
     for i in eachindex(G)
         m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
     end
-    "_" * label * gene * m
+    "_" * label * gene * m * ".txt"
 end
 
 """

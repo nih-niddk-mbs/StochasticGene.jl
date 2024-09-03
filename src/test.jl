@@ -223,7 +223,7 @@ function test_fit_trace_hierarchical(; G=2, R=3, S=3, insertstep=1, transitions=
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
     rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, hierarchical[1])
-    isempty(rinit) && (rinit = StochasticGene.set_rates(rm, transitions, R, S, insertstep, noisepriors, length(data.trace[1])))
+    isempty(rinit) && (rinit = StochasticGene.set_rinit(rm, transitions, R, S, insertstep, noisepriors, length(data.trace[1])))
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical, method)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)

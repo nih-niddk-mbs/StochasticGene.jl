@@ -589,6 +589,11 @@ function transform_array(v::Array, index::Int, f1::Function, f2::Function)
     vcat(f1(v[1:index-1, :]), f2(v[index:end, :]))
 end
 
+function transform_array(v::Vector, index::Int, f1::Function, f2::Function)
+    vcat(f1(v[1:index-1]), f2(v[index:end]))
+end
+
+
 """
     transform_array(v::Array, index, mask, f1, f2)
 
@@ -597,11 +602,16 @@ apply function f1 to array v at indices up to index and f2 after index accountin
 function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
-        if typeof(v) <: Vector
-            return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
-        else
-            return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end, :]))
-        end
+        return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f2(v[n+1:end, :]))
+    else
+        return f1(v)
+    end
+end
+
+function transform_array(v::Vector, index::Int, mask::Vector, f1::Function, f2::Function)
+    if index > 0 && index ∈ mask
+        n = findfirst(index .== mask)
+        return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
     else
         return f1(v)
     end
@@ -636,6 +646,9 @@ inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
 inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
+inverse_transform_rates(p, model::AbstractGRSMcoupledmodel) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlog_shift1)
+
+
 
 """
     get_param(model)
@@ -646,7 +659,7 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-# get_params(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam])
+get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 
 """
