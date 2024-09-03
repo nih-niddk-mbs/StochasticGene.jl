@@ -587,6 +587,13 @@ expv(v::Array) = exp.(v)
 
 logv(v::Array) = log.(v)
 
+
+log_shift(v::Float64,a::Float64) = log(v + a)
+
+log_shift(v::Array,a::Float64) = log.(v .+ a)
+
+log_shift1(v) = log_shift(v,1.)
+
 """
     logit(x::Float64)
 

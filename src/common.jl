@@ -616,11 +616,7 @@ transform_rates(r, model::AbstractGmodel) = log.(r)
 
 transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
-
-# function transform_rates!(p, model::GRSMcoupledmodel)
-
-
-# end
+transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
 # function transform_rates(pin, model::GRSMcoupledmodel)
 #     p = copy(pin)
@@ -722,17 +718,17 @@ copy rates from model structure
 """
 copy_r(model) = copy(model.rates)
 
-"""
-setr(r,model)
+# """
+#     resetr(r, model::AbstractGRSMmodel)
 
-"""
-function setr(r, model::AbstractGRSMmodel)
-    n = model.G - 1
-    nr = model.R
-    eta = get_eta(r, n, nr)
-    r[2*n+1+nr+1:2*n+1+nr+nr] = eta
-    r
-end
+# """
+# function resetr(r, model::AbstractGRSMmodel)
+#     n = model.G - 1
+#     nr = model.R
+#     eta = get_eta(r, n, nr)
+#     r[2*n+1+nr+1:2*n+1+nr+nr] = eta
+#     r
+# end
 """
     logprior(param,model::AbstractGMmodel)
 
