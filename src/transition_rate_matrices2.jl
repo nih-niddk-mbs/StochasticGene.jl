@@ -114,6 +114,24 @@ struct TDComponents <: AbstractTComponents
     elementsTG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
+struct ModelCoupledComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Int
+    targetTransition::Int
+    elementsG::Vector
+    elementsGt::Vector
+    elementsGs::Vector
+    elementsRG::Vector
+    elementsRGbar::Vector
+end
+
+struct TCoupledComponents
+    model::Tuple
+    sources::Tuple
+    modelcomponents::Vector{ModelCoupledComponents}
+end
 
 
 """
@@ -229,6 +247,15 @@ for fitting traces and mRNA histograms
 make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
 
 """
+    make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
+
+TBW
+"""
+make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+
+
+
+"""
     make_components_M(transitions, G, R, insertstep, decay, splicetype)
 
 return Mcomponents structure  
@@ -243,6 +270,14 @@ function make_components_M(transitions, G, R, nhist, decay, splicetype)
     return MComponents(elementsT, elementsB, nT, U, Um, Up)
 end
 
+function make_components_M2(transitions, G, R, nhist, decay)
+    indices = set_indices(length(transitions), R)
+    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
+    elementsB = set_elements_B2(G, R, indices.nu[R+1])
+    U, Um, Up = make_mat_U(nhist, decay)
+    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
+end
+
 """
     make_components_T(transitions, G, R, S, insertstep, splicetype)
 
@@ -254,6 +289,16 @@ function make_components_T(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     TComponents(nT, elementsT)
+end
+"""
+    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+
+TBW
+"""
+function make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
+    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
 end
 
 """
@@ -274,6 +319,42 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     make_components_TAI(elementsT, nT, onstates)
 end
+
+
+
+
+"""
+    make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+
+TBW
+"""
+function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+end
+
+"""
+    make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+
+TBW
+"""
+make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
+"""
+    make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+
+TBW
+"""
+function make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    comp = ModelCoupledComponents[]
+    for i in eachindex(G)
+        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+    end
+    TCoupledComponents(model, sources, comp)
+end
+
+
 
 """
     state_index(G::Int,i,z)
@@ -786,12 +867,6 @@ function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, spli
         return set_elements_T(transitions, indices.gamma), G
     end
 end
-function set_elements_T(transitions, gamma::Vector)
-    elementsT = Vector{Element}(undef, 0)
-    set_elements_G!(elementsT, transitions, gamma)
-    elementsT
-end
-
 """
     set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
 
@@ -811,6 +886,14 @@ function set_elements_T2(transitions, G, R, S, insertstep, indices::Indices, spl
         return set_elements_G(transitions, indices.gamma), G
     end
 end
+
+function set_elements_T(transitions, gamma::Vector)
+    elementsT = Vector{Element}(undef, 0)
+    set_elements_G!(elementsT, transitions, gamma)
+    elementsT
+end
+
+
 
 
 
@@ -872,6 +955,59 @@ function set_elements_B2(G, R, ejectindex, base=2)
 end
 
 """
+    set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+
+TBW
+"""
+function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        if i == target_transition
+            push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        end
+        i += 1
+    end
+end
+
+"""
+    set_elements_Gt(transitions, target_transition, gamma)
+
+TBW
+"""
+function set_elements_Gt(transitions, target_transition, gamma)
+    elementsGt = Vector{Element}(undef, 0)
+    set_elements_Gt!(elementsGt, transitions, target_transition, gamma)
+    return elementsGt
+end
+
+"""
+    set_elements_Gs(nS)
+
+TBW
+"""
+function set_elements_Gs(nS)
+    [Element(nS, nS, 0, 1)]
+end
+
+"""
+    set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+
+TBW
+"""
+function set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    if R > 0
+        elementsG, elementsRG, elementsRGbar, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
+        elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
+        elementsGs = set_elements_Gs(source_state)
+        return elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT
+    else
+        return elementsG, elementsGt, G
+    end
+end
+
+
+"""
 make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 
 set matrix elements of T to those in vector argument elements
@@ -911,7 +1047,7 @@ function make_mat_U(total::Int, decay::Float64)
     return U, Uminus, Uplus
 end
 """
-make_M_mat
+    make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
 
 return M matrix used to compute steady state RNA distribution
 """
@@ -919,6 +1055,11 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, tota
     U, Uminus, Uplus = make_mat_U(total, decay)
     make_mat_M(T, B, U, Uminus, Uplus)
 end
+"""
+    make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
+
+TBW
+"""
 function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
     nT = size(T, 1)
     total = size(U, 1)
@@ -927,6 +1068,11 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, 
     return M
 end
 
+"""
+    make_mat_M(components::MComponents, rates::Vector)
+
+TBW
+"""
 function make_mat_M(components::MComponents, rates::Vector)
     T = make_mat(components.elementsT, rates, components.nT)
     B = make_mat(components.elementsB, rates, components.nT)
@@ -935,123 +1081,16 @@ end
 
 
 """
-make_T_mat
+    make_mat_T(components::AbstractTComponents, rates)
 
 construct matrices from elements
 """
 make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
-
-make_mat_TA(components::TAIComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
-
-make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
-
-make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
-
-make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
-
-function make_mat_GR(components, rates)
-    nG = components.nG
-    nR = components.nR
-    G = make_mat(components.elementsG, rates, nG)
-    R = make_mat(components.elementsR, rates, nR)
-    RB = make_mat(components.elementsRB, rates, nR)
-    G, R, RB
-end
-
-##### Coupling Under development
-
-struct ModelCoupledComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    sourceState::Int
-    targetTransition::Int
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRG::Vector
-    elementsRGbar::Vector
-end
-
-struct TCoupledComponents
-    model::Tuple
-    sources::Tuple
-    modelcomponents::Vector{ModelCoupledComponents}
-end
-
-function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        if i == target_transition
-            push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        end
-        i += 1
-    end
-end
-
-function set_elements_Gt(transitions, target_transition, gamma)
-    elementsGt = Vector{Element}(undef, 0)
-    set_elements_Gt!(elementsGt, transitions, target_transition, gamma)
-    return elementsGt
-end
-
-function set_elements_Gs(nS)
-    [Element(nS, nS, 0, 1)]
-end
-
-function set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    if R > 0
-        elementsG, elementsRG, elementsRGbar, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-        elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
-        elementsGs = set_elements_Gs(source_state)
-        return elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT
-    else
-        return elementsG, elementsGt, G
-    end
-end
-
 """
-    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    make_mat_T2(components, rates)
 
 TBW
 """
-function make_components_T2(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
-end
-
-function make_components_M2(transitions, G, R, nhist, decay)
-    indices = set_indices(length(transitions), R)
-    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
-    elementsB = set_elements_B2(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
-    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
-end
-
-function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
-end
-
-make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
-
-function make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = ModelCoupledComponents[]
-    for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
-    end
-    TCoupledComponents(model, sources, comp)
-end
-
-make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
-
-function make_mat_T2(G, GR, R, RG, nG, nR)
-    kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(R, sparse(I, nG, nG))
-end
-
 function make_mat_T2(components, rates)
     nG = components.nG
     nR = components.nR
@@ -1061,6 +1100,61 @@ function make_mat_T2(components, rates)
     RG = make_mat(components.elementsRG, rates, nR)
     make_mat_T2(G, GR, RGbar, RG, nG, nR)
 end
+
+
+"""
+    make_mat_T2(G, GR, R, RG, nG, nR)
+
+TBW
+"""
+function make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(RGbar, sparse(I, nG, nG))
+end
+
+
+"""
+    make_mat_TA(components::TAIComponents, rates)
+
+TBW
+"""
+make_mat_TA(components::TAIComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
+
+"""
+    make_mat_TI(components::TAIComponents, rates)
+
+TBW
+"""
+make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
+
+"""
+    make_mat_TA(elementsTA, rates, nT)
+
+TBW
+"""
+make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
+
+"""
+    make_mat_TI(elementsTI, rates, nT)
+
+TBW
+"""
+make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
+
+"""
+    make_mat_GR(components, rates)
+
+TBW
+"""
+function make_mat_GR(components, rates)
+    nG = components.nG
+    nR = components.nR
+    G = make_mat(components.elementsG, rates, nG)
+    R = make_mat(components.elementsR, rates, nR)
+    RB = make_mat(components.elementsRB, rates, nR)
+    G, R, RB
+end
+
+
 
 function make_mat_C(components, rates)
     nT = components.nT
