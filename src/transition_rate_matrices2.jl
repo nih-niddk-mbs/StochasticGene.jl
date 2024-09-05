@@ -1086,6 +1086,16 @@ end
 construct matrices from elements
 """
 make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
+
+"""
+    make_mat_T2(G, GR, R, RG, nG, nR)
+
+TBW
+"""
+function make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(RGbar, sparse(I, nG, nG))
+end
+
 """
     make_mat_T2(components, rates)
 
@@ -1100,17 +1110,6 @@ function make_mat_T2(components, rates)
     RG = make_mat(components.elementsRG, rates, nR)
     make_mat_T2(G, GR, RGbar, RG, nG, nR)
 end
-
-
-"""
-    make_mat_T2(G, GR, R, RG, nG, nR)
-
-TBW
-"""
-function make_mat_T2(G, GR, RGbar, RG, nG, nR)
-    kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(RGbar, sparse(I, nG, nG))
-end
-
 
 """
     make_mat_TA(components::TAIComponents, rates)
