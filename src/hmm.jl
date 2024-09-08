@@ -298,12 +298,36 @@ function kolmogorov_forward(Q, interval, save=false, method=Tsit5())
     solve(prob, method, save_everystep=save)[:, 2]
 end
 """
+kolmogorov_backward(Q::Matrix,interval)
+
+return the solution of the Kolmogorov forward equation 
+returns initial condition and solution at time = interval
+
+- `Q`: transition rate matrix
+- `interval`: interval between frames (total integration time)
+"""
+function kolmogorov_backward(Q, interval, save=false, method=Tsit5())
+    tspan = (0.0, interval)
+    prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
+    solve(prob, method, save_everystep=save)[:, 2]
+end
+"""
     fkf!(du,u::Matrix, p, t)
 
-in place update of du of ODE system for DifferentialEquations,jl
+in place update of du of Kolmogorov forward equation for DifferentialEquations.jl
+
 """
 function fkf!(du, u::Matrix, p, t)
     du .= u * p
+end
+
+"""
+    fkb!(du,u::Matrix, p, t)
+
+in place update of du of Kolmogorov backward equation for DifferentialEquations.jl
+"""
+function fkb!(du, u::Matrix, p, t)
+    du .= - u * p
 end
 
 """

@@ -1190,24 +1190,30 @@ function make_matvec_C(components, rates)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
     G = Vector{SparseMatrixCSC}(undef, n)
-    V = Vector{SparseMatrixCSC}(undef, n)
+    Gt = Vector{SparseMatrixCSC}(undef, n)
     Gs = Vector{SparseMatrixCSC}(undef, n)
     IG = Vector{SparseMatrixCSC}(undef, n)
+    IR = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
     for i in eachindex(components.model)
         T[i], G[i], Gt[i], Gs[i], IG[i], IR[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
     end
-    return T, G, V, Gs, IG, IT
+    return T, G, Gt, Gs, IG, IR, IT
 end
 
 function make_mat_TCr(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr(coupling_strength, T, G, kron(IR,Gt), Gs, IG, IT, components.sources, components.model)
+    make_mat_TCr(coupling_strength, T, G, kron.(IR, Gt), Gs, IG, IT, components.sources, components.model)
+end
+
+function make_mat_TCreduced(components, rates, coupling_strength)
+    T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+    make_mat_TCreduced(coupling_strength, T, G, kron.(IR, Gt), Gs, IG, IT, components.sources, components.model)
 end
 
 function make_mat_TC(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TC(coupling_strength, T, kron(IR,Gt), kron(IR,Gs), IT, components.sources, components.model)
+    make_mat_TC(coupling_strength, T, kron.(IR, Gt), kron.(IR, Gs), IT, components.sources, components.model)
 end
 
 function make_mat_T(T, IT, sources, model)
@@ -1238,8 +1244,15 @@ function kron_forward(T, I, sources, model, first, last)
     T
 end
 
-function kron_backward(T, I, sources, model, first, last)
+function kron_forward(T, I, model, first, last)
     for j in first:last
+        T = kron(T, I[model[j]])
+    end
+    T
+end
+
+function kron_backward(T, I, sources, model, first, last)
+    for j in first:-1:last
         if j ∈ sources
             T = kron(I[model[j]], T)
         end
@@ -1247,32 +1260,39 @@ function kron_backward(T, I, sources, model, first, last)
     T
 end
 
+function kron_backward(T, I, model, first, last)
+    for j in first:-1:last
+        T = kron(I[model[j]], T)
+    end
+    T
+end
+
 function make_mat_TC(coupling_strength, T, V, U, IT, sources, model)
     n = length(model)
-    N = prod(size.(IT))
+    N = prod(size.(IT, 2))
     Tc = zeros(N, N)
     for α in 1:n
         Tα = T[model[α]]
-        Tα = kron_backward(Tα, IT, sources[α], model, α - 1, 1)
-        Tα = kron_forward(Tα, IT, sources[α], model, α + 1, n)
+        Tα = kron_backward(Tα, IT, model, α - 1, 1)
+        Tα = kron_forward(Tα, IT, model, α + 1, n)
         for β in 1:α-1
             if β ∈ sources[α]
                 Vβ = V[model[α]]
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
+                Vβ = kron_forward(Vβ, IT, model, α + 1, n)
+                Vβ = kron_backward(Vβ, IT, model, α - 1, β + 1)
                 Vβ = kron(U[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Tα .+= coupling_strength[model[α]] * Vβ
+                Vβ = kron_backward(Vβ, IT, model, β - 1, 1)
+                Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         for β in α+1:n
             if β ∈ sources[α]
                 Vβ = V[model[α]]
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
+                Vβ = kron_backward(Vβ, IT, model, β - 1, 1)
+                Vβ = kron_forward(Vβ, IT, model, α + 1, β - 1)
                 Vβ = kron(U[model[β]], Vβ)
-                Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
-                Tα .+= coupling_strength[model[α]] * Vβ
+                Vβ = kron_forward(Vβ, IT, model, β + 1, n)
+                Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         Tc += Tα
@@ -1280,14 +1300,13 @@ function make_mat_TC(coupling_strength, T, V, U, IT, sources, model)
     return Tc
 end
 
-
 function make_mat_TCr(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
         Tα = T[model[α]]
-        Tα = kron_backward(Tα, IT, sources[α], model, α - 1, 1)
-        Tα = kron_forward(Tα, IT, sources[α], model, α + 1, n)
+        Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
+        Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
         for β in 1:α-1
             if β ∈ sources[α]
                 Gβ = IT[model[α]]
@@ -1299,8 +1318,8 @@ function make_mat_TCr(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
                 Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
                 Vβ = kron(Gs[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Tα .+= Gβ + coupling_strength[model[α]] * Vβ
+                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)              
+                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
             end
         end
         for β in α+1:n
@@ -1309,19 +1328,20 @@ function make_mat_TCr(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
                 Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
                 Gβ = kron(Gβ, G[model[β]])
-                Gβ = kron_forwardward(Gβ, IG, sources[α], model, β + 1, n)
+                Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
                 Vβ = V[model[α]]
                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
-                Vβ = kron(Gs[model[β]], Vβ)
+                Vβ = kron(Vβ, Gs[model[β]])
                 Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
-                Tα .+= Gβ + coupling_strength[model[α]] * Vβ
+                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
             end
         end
         push!(Tc, Tα)
     end
     return Tc
 end
+
 function make_mat_TCreduced(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]
@@ -1353,16 +1373,17 @@ function make_mat_TCreduced(coupling_strength, T, G, V, Gs, IG, IT, sources, mod
                         Vβ = kron(IG[model[j]], Vβ)
                     end
                 end
-                Gβ = kron(G[model[j]], Gβ)
-                Vβ = kron(Gs[model[j]], Vβ)
+                Gβ = kron(G[model[β]], Gβ)
+                Vβ = kron(Gs[model[β]], Vβ)
                 for j in β-1:-1:1
                     if j ∈ sources[α]
                         Gβ = kron(G[model[j]], Gβ)
                         Vβ = kron(G[model[j]], Vβ)
                     end
                 end
-                Tα .+= Gβ
-                Tα .+= coupling_strength[model[α]] * Vβ
+                Tα += Gβ
+                println(Vβ)
+                Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         for β in α+1:n
@@ -1389,8 +1410,9 @@ function make_mat_TCreduced(coupling_strength, T, G, V, Gs, IG, IT, sources, mod
                         Vβ = kron(Vβ, IG[model[j]])
                     end
                 end
-                Tα .+= Gβ
-                Tα .+= coupling_strength[model[α]] * Vβ
+                Tα += Gβ
+                println(coupling_strength[sources[α][β]])
+                Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         push!(Tc, Tα)
@@ -1424,7 +1446,12 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcoupled(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+function test_mat_Tcr(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
-    make_mat_TC(components, r, coupling_strength)
+    return make_mat_TCr(components, r, coupling_strength), make_mat_TCreduced(components, r, coupling_strength)
+end
+
+function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
+    return make_mat_TC(components, r, coupling_strength), components
 end
