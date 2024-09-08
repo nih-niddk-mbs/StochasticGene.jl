@@ -1203,17 +1203,17 @@ end
 
 function make_mat_TCr(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr(coupling_strength, T, G, kron.(IR, Gt), Gs, IG, IT, components.sources, components.model)
+    make_mat_TCr(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
 end
 
 function make_mat_TCreduced(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCreduced(coupling_strength, T, G, kron.(IR, Gt), Gs, IG, IT, components.sources, components.model)
+    make_mat_TCreduced(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
 end
 
 function make_mat_TC(components, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TC(coupling_strength, T, kron.(IR, Gt), kron.(IR, Gs), IT, components.sources, components.model)
+    T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
+    make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt),  IT, components.sources, components.model)
 end
 
 function make_mat_T(T, IT, sources, model)
@@ -1267,7 +1267,7 @@ function kron_backward(T, I, model, first, last)
     T
 end
 
-function make_mat_TC(coupling_strength, T, V, U, IT, sources, model)
+function make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
     n = length(model)
     N = prod(size.(IT, 2))
     Tc = zeros(N, N)
@@ -1300,7 +1300,7 @@ function make_mat_TC(coupling_strength, T, V, U, IT, sources, model)
     return Tc
 end
 
-function make_mat_TCr(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
+function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
@@ -1342,7 +1342,7 @@ function make_mat_TCr(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
     return Tc
 end
 
-function make_mat_TCreduced(coupling_strength, T, G, V, Gs, IG, IT, sources, model)
+function make_mat_TCreduced(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]
     for α in 1:n
