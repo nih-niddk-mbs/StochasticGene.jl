@@ -69,19 +69,20 @@ function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, tr
     return ll, lp
 end
 
-# function ll_hmm_coupled(r, couplingStrength, components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-#     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-#     lp = Float64[]
-#     ll = 0.
-#     for i in eachindex(trace)
-#         m = components.model[i]
-#         ll += trace[3] > 0. ? ll_background(a[m], p0[m], offstates[m], trace[i][3], trace[i][4]) : 0.
-#         lla, lpa = ll_hmm(r[m], nT, noiseparams[m], reporters_per_state[m], probfn[m], trace[i][1], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
-#         ll += lla
-#         lp = vcat(lp,lpa)
-#     end
-#     return ll, lp
-# end
+function ll_hmm_coupled_full(r, couplingStrength, components, reporters, interval, trace)
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    lp = Float64[]
+    ll = 0.
+    for i in eachindex(trace[1])
+        m = components.model[i]
+        rep = reporters[m]
+        ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
+        lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
+        ll += lla
+        lp = vcat(lp,lpa)
+    end
+    return ll, lp
+end
 
 function ll_background(a, p0, offstates, weight, n)
     l = -log(sum(p0[offstates]' * a[offstates, offstates]^n))
