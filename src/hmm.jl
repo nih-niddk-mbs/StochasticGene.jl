@@ -73,7 +73,8 @@ function ll_hmm_coupled_full(r, couplingStrength, components, reporters, interva
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
-    for i in eachindex(trace[1])
+    for t in traces 
+        T = length(t)
         m = components.model[i]
         rep = reporters[m]
         ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.

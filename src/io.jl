@@ -965,7 +965,7 @@ end
 
 read in joint trace files
 """
-function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+function read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
     l = length(label)
     traces = [Vector[] for _ in 1:l]
     if isempty(path)
@@ -986,6 +986,33 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
                     for i in eachindex(label)
                         push!(traces[i], tset[i])
                     end
+                    tset = Vector{Vector}(undef, length(label))
+                end
+            end
+        end
+        return traces
+    end
+end
+
+function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    l = length(label)
+    traces = Vector[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            tset = Vector{Vector}(undef, l)
+            files = sort(readdir(path))
+            for file in files
+                complete = true
+                for i in eachindex(label)
+                    if occursin(label[i], file)
+                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+                    end
+                    complete &= isassigned(tset, i)
+                end
+                if complete
+                    push!(traces, test)
                     tset = Vector{Vector}(undef, length(label))
                 end
             end
