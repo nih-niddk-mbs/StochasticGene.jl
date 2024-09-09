@@ -220,7 +220,16 @@ state_index(G::Int, g, z) = g + G * (z - 1)
 
 
 """
-function inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
+function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
+    base = S > 0 ? 3 : 2
+    g = mod(i - 1, G) + 1
+    z = div(i - g, G) + 1
+    zdigits = digit_vector(z, base, R)
+    r = num_reporters_per_index(z, R, insertstep, base, f)
+    return g, z, zdigits, r
+end
+
+function inverse_state(i::Int, G::Tuple, R, S, insertstep::Int, model, f=sum)
     base = S > 0 ? 3 : 2
     g = mod(i - 1, G) + 1
     z = div(i - g, G) + 1
@@ -283,9 +292,16 @@ function on_states(G::Int, R, S, insertstep)
     on_states!(onstates, G, R, insertstep, base)
     onstates
 end
-
-
-
+function on_states(onstates::Vector, G, R, S)
+    base = S > 0 ? 3 : 2
+    o = Int[]
+    for i in 1:G, z in 1:base^R
+        if i ∈ onstates
+            push!(o, state_index(G, i, z))
+        end
+    end
+    o
+end
 """
     on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 
@@ -300,16 +316,7 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     end
 end
 
-function on_states(onstates::Vector, G, R, S)
-    base = S > 0 ? 3 : 2
-    o = Int[]
-    for i in 1:G, z in 1:base^R
-        if i ∈ onstates
-            push!(o, state_index(G, i, z))
-        end
-    end
-    o
-end
+
 
 function off_states(G::Int, R, S, insertstep)
     base = S > 0 ? 3 : 2
@@ -347,10 +354,10 @@ function T_dimension(G, R, S)
     G * base^R
 end
 
-function T_dimension(G::Tuple, R::Tuple, S::Tuple)
+function T_dimension(G::Tuple, R::Tuple, S::Tuple, model)
     nT = Int[]
-    for i in eachindex(G)
-        push!(nT, T_dimension(G[i], R[i], S[i]))
+    for m in model
+        push!(nT, T_dimension(G[m], R[m], S[m]))
     end
     nT
 end

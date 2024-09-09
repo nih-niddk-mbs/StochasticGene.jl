@@ -404,11 +404,11 @@ end
 function load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple, nalleles, priorcv, propcv, splicetype, probfn, noisepriors, method=1)
     reporter = HMMReporter[]
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[2])
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     for i in eachindex(G)
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
-        push!(reporter, HMMReporter(noiseparams, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+        push!(reporter, HMMReporter(noiseparams, n_per_state[:,i], probfn[i], weightind, off_states(n_per_state[:,i])))
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")

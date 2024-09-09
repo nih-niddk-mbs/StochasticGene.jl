@@ -54,7 +54,7 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, lo
 end
 
 
-function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, trace)
+function ll_hmm_coupled_reduced(r, couplingStrength, components, reporters, interval, trace)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
@@ -69,7 +69,7 @@ function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, tr
     return ll, lp
 end
 
-function ll_hmm_coupled_full(r, couplingStrength, components, reporters, interval, trace)
+function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, trace)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
     ll = 0.
