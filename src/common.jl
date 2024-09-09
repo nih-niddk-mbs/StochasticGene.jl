@@ -133,7 +133,7 @@ structure for reporters
 """
 struct HMMReporter
     n::Int
-    per_state::Vector{Int}
+    per_state::Vector
     probfn::Function
     weightind::Int
     offstates::Vector{Int}
