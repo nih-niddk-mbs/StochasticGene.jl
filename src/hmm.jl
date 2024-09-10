@@ -10,30 +10,28 @@
 ###
 
 """
-    ll_hmm(r, nT, reporters, elementsT, interval, trace)
+    ll_hmm(r, nT, reporters_per_state, elementsT, interval, trace)
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
 function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, elementsT, nT)
-    lb = trace[3] > 0. ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end
 """
     ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
-
 """
 function ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    lb = trace[3] > 0. ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end
 """
     ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
-
 
 """
 function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
@@ -44,43 +42,38 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, lo
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
-    # for t in trace[2]
-    #     T = length(t)
-    #     logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
-    #     l = forward_log(loga, logb, logp0, nT, T)
-    #     push!(logpredictions, trace[3] / length(trace[2]) * logsumexp(l[:, T]))
-    # end
     -sum(logpredictions), -logpredictions
 end
 
-
-function ll_hmm_coupled_reduced(r, couplingStrength, components, reporters, interval, trace)
+function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, interval, trace)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     lp = Float64[]
-    ll = 0.
+    ll = 0.0
     for i in eachindex(trace[1])
         m = components.model[i]
-        rep = reporters[m]
-        ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
+        rep = reporter[m]
+        ll += trace[3][i] > 0.0 ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.0
         lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
-        lp = vcat(lp,lpa)
+        lp = vcat(lp, lpa)
     end
     return ll, lp
 end
 
-function ll_hmm_coupled(r, couplingStrength, components, reporters, interval, trace)
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+function ll_hmm_coupled(r, couplingStrength, components, reporter, interval, trace)
+    a, p0 = make_ap(r, couplingStrength, interval, components)
     lp = Float64[]
-    ll = 0.
-    for t in traces 
-        T = length(t)
+    ll = 0.0
+    for t in traces
+        T = length(t[1])
         m = components.model[i]
         rep = reporters[m]
-        ll += trace[3][i] > 0. ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.
+        logb = set_logb(t, r, reporter)
+        l = forward_log(loga, logb, logp0, nT, T)
+        ll += trace[3][i] > 0.0 ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.0
         lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
         ll += lla
-        lp = vcat(lp,lpa)
+        lp = vcat(lp, lpa)
     end
     return ll, lp
 end
@@ -120,8 +113,8 @@ end
 
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
-    a, p0 = make_ap(r[:,1], interval, elementsT, nT)
-    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    a, p0 = make_ap(r[:, 1], interval, elementsT, nT)
+    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     loga = log.(max.(a, 0))
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
@@ -135,8 +128,8 @@ end
 
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
-    a, p0 = make_ap(r[:,1], interval, components)
-    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.
+    a, p0 = make_ap(r[:, 1], interval, components)
+    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     loga = log.(max.(a, 0))
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
@@ -185,8 +178,8 @@ function make_ap_coupled(r, couplingStrength, interval, components)
     p0 = Vector[]
     Qtr = make_mat_TC(components, r, couplingStrength)
     for Q in Qtr
-        push!(a,kolmogorov_forward(sparse(Q'),interval))
-        push!(p0,normalized_nullspace(Q))
+        push!(a, kolmogorov_forward(sparse(Q'), interval))
+        push!(p0, normalized_nullspace(Q))
     end
     return a, p0
 end
@@ -203,7 +196,7 @@ function make_logap(r, interval, elementsT, N)
 end
 
 """
-    set_logb(trace, params, reporters, probfn=prob_Gaussian)
+    set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
 
 returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 
@@ -212,9 +205,9 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 -`T`: number of observations
 
 """
-function set_logb(trace, params, reporters, probfn=prob_Gaussian)
-    N = length(reporters)
-    d = probfn(params, reporters, N)
+function set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
+    N = length(reporters_per_state)
+    d = probfn(params, reporters_per_state, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
     for obs in trace
@@ -222,6 +215,26 @@ function set_logb(trace, params, reporters, probfn=prob_Gaussian)
             logb[j, t] = logpdf(d[j], obs)
         end
         t += 1
+    end
+    return logb
+end
+
+function set_logb_coupled(traces, params, reporter)
+    d = Vector[]
+    for rep in reporter
+        N = length(rep)
+        push!(d,probfn(params, rep.per_state, N))
+    end
+    logb = zeros(N, length(trace[1]))
+    logb = Matrix{Float64}(undef, N, length(trace))
+    for trace in traces
+        for t in eachindex(trace)
+            for j in 1:N
+                for d in d
+                    logb[j, t] += logpdf(d[j], trace[t])
+                end
+            end
+        end
     end
     return logb
 end
@@ -239,47 +252,47 @@ end
 # end
 
 """
-    prob_Gaussian(par, reporters, N)
+    prob_Gaussian(par, reporters_per_state, N)
 
 return Gaussian Distribution 
-mean = background + number of reporters * reporter mean
-variance = sum of variances of background and reporters
+mean = background + number of reporters_per_state * reporter mean
+variance = sum of variances of background and reporters_per_state
 
 - `par`: 4 dimemsional vector of mean and std parameters
-- `reporters`: number of reporters per HMM state
+- `reporters_per_state`: number of reporters per HMM state
 -`N`: number of HMM states
 """
-function prob_Gaussian(par, reporters, N)
+function prob_Gaussian(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = Normal(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2))
+        d[i] = Normal(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2))
     end
     d
 end
 """
-    prob_GaussianMixture(par,reporters,N)
+    prob_GaussianMixture(par,reporters_per_state,N)
 
 return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight parameter
 
 """
-function prob_GaussianMixture(par, reporters, N)
+function prob_GaussianMixture(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
+        d[i] = MixtureModel(Normal, [(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
     end
     d
 end
 
 
 """
-    prob_GaussianMixture_6(par, reporters, N)
+    prob_GaussianMixture_6(par, reporters_per_state, N)
 
 Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
 """
-function prob_GaussianMixture_6(par, reporters, N)
+function prob_GaussianMixture_6(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters[i] * par[3], sqrt(par[2]^2 + reporters[i] * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+        d[i] = MixtureModel(Normal, [(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
     end
     d
 end
@@ -329,7 +342,7 @@ end
 in place update of du of Kolmogorov backward equation for DifferentialEquations.jl
 """
 function fkb!(du, u::Matrix, p, t)
-    du .= - u * p
+    du .= -u * p
 end
 
 """
