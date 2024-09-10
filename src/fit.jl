@@ -65,7 +65,7 @@ then G = (2,3).
 - `datapath=""`: path to data file or folder or array of files or folders
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
-- `elongationtime=6.0`: average time for elongation
+- `elongationtime=6.0`: average time for elongation, vector of times for coupled model
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
@@ -413,7 +413,7 @@ function load_model_coupled(r, rm, fittedparam, fixedeffects, transitions, G::Tu
     for i in eachindex(G)
         noiseparams = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
-        push!(reporter, HMMReporter(noiseparams, n_per_state[:,i], probfn[i], weightind, off_states(n_per_state[:,i])))
+        push!(reporter, HMMReporter(noiseparams, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")

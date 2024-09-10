@@ -34,9 +34,9 @@ end
     ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
 
 """
-function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
+function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
-    for t in traces
+    for t in trace[1]
         T = length(t)
         logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
@@ -60,22 +60,17 @@ function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, inter
     return ll, lp
 end
 
-function ll_hmm_coupled(r, couplingStrength, components, reporter, interval, trace)
-    a, p0 = make_ap(r, couplingStrength, interval, components)
-    lp = Float64[]
-    ll = 0.0
-    for t in traces
-        T = length(t[1])
-        m = components.model[i]
-        rep = reporters[m]
-        logb = set_logb(t, r, reporter)
-        l = forward_log(loga, logb, logp0, nT, T)
-        ll += trace[3][i] > 0.0 ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.0
-        lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
-        ll += lla
-        lp = vcat(lp, lpa)
+function ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 1)
+        logb = set_logb_coupled(t, noiseparams, reporter, components.N)
+        l = forward_log(log.(max.(a, 0)), logb, log.(max.(p0, 0)), nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
     end
-    return ll, lp
+    -sum(logpredictions), -logpredictions
 end
 
 function ll_background(a, p0, offstates, weight, n)
@@ -177,6 +172,13 @@ function make_ap_coupled(r, couplingStrength, interval, components)
     a = SparseMatrixCSC[]
     p0 = Vector[]
     Qtr = make_mat_TC(components, r, couplingStrength)
+    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+end
+
+function make_ap_coupled_reduced(r, couplingStrength, interval, components)
+    a = SparseMatrixCSC[]
+    p0 = Vector[]
+    Qtr = make_mat_TC(components, r, couplingStrength)
     for Q in Qtr
         push!(a, kolmogorov_forward(sparse(Q'), interval))
         push!(p0, normalized_nullspace(Q))
@@ -205,7 +207,7 @@ returns matrix logb = P(Observation_i | State_j) for Gaussian distribution
 -`T`: number of observations
 
 """
-function set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
+function set_logb(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
     N = length(reporters_per_state)
     d = probfn(params, reporters_per_state, N)
     logb = Matrix{Float64}(undef, N, length(trace))
@@ -219,16 +221,15 @@ function set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
     return logb
 end
 
-function set_logb_coupled(trace, params, reporter, model)
+function set_logb_coupled(trace, params, reporter, N)
     d = Vector[]
-    for m in model
-        rep = reporter[m]
-        N = length(rep)
-        push!(d, rep.probfn(params[m], rep.per_state, N))
+    for i in eachindex(params)
+        rep = reporter[i]
+        push!(d, rep.probfn(params[i], rep.per_state, N))
     end
-    logb = zeros(size(trace))
+    logb = zeros(N,size(trace,1))
     t = 1
-    for obs in eachrow(traces)
+    for obs in eachrow(trace)
         for j in 1:N
             for i in eachindex(d)
                 logb[j, t] += logpdf(d[i][j], obs[i])

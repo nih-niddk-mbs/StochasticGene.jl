@@ -114,6 +114,21 @@ struct TDComponents <: AbstractTComponents
     elementsTG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
+"""
+ 	ModelCoupledComponents
+
+fields:
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Int
+    targetTransition::Int
+    elementsG::Vector
+    elementsGt::Vector
+    elementsGs::Vector
+    elementsRG::Vector
+    elementsRGbar::Vector
+"""
 struct ModelCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
@@ -126,8 +141,17 @@ struct ModelCoupledComponents <: AbstractTComponents
     elementsRG::Vector
     elementsRGbar::Vector
 end
+"""
+ 	TCoupledComponents
 
+fields:
+    N::Int: total number of states
+    model::Tuple: model index for each trace
+    sources::Tuple: source model for each
+    modelcomponents::Vector{ModelCoupledComponents}
+"""
 struct TCoupledComponents
+    N::Int
     model::Tuple
     sources::Tuple
     modelcomponents::Vector{ModelCoupledComponents}
@@ -403,8 +427,8 @@ function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertste
 end
 
 function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, model, f=sum)
-    nT = T_dimension(G, R, S)
-    reporters = Matrix(undef,prod(nT),0)
+    nT = T_dimension.(G, R, S)
+    reporters = Vector[]
     for m in model
         rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], f)
         for j in 1:m-1
@@ -413,7 +437,7 @@ function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple
         for j in m+1:length(model)
             rep = repeat(rep, inner=(nT[model[j]],))
         end
-        reporters = hcat(reporters,rep)
+        push!(reporters, rep)
     end
     reporters
 end
@@ -606,7 +630,7 @@ function make_components_Tcoupled(model, sources, source_state, target_transitio
     for i in eachindex(G)
         push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
-    TCoupledComponents(model, sources, comp)
+    TCoupledComponents(prod(T_dimension(G, R, S, model)), model, sources, comp)
 end
 
 """
@@ -1249,7 +1273,7 @@ function make_mat_TC(components, rates, coupling_strength)
 end
 
 function make_mat_T(T, IT, sources, model)
-    Tc = zeros(size(model))
+    Tc = spzeros(size(model))
     for α in eachindex(model)
         Tα = T[model[α]]
         for j in α-1:-1:1
@@ -1302,7 +1326,7 @@ end
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
     n = length(model)
     N = prod(size.(IT, 2))
-    Tc = zeros(N, N)
+    Tc = spzeros(N, N)
     for α in 1:n
         Tα = T[model[α]]
         Tα = kron_backward(Tα, IT, model, α - 1, 1)

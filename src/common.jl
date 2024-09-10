@@ -329,8 +329,8 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
-    r, couplingStrength = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, model.components, model.reporter, data.interval, data.trace)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
 """
@@ -409,6 +409,7 @@ convert MCMC params into form to compute likelihood for coupled model
 """
 function prepare_rates(param, model::GRSMcoupledmodel)
     r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
     rates = get_rates(param, model)
     j = 1
@@ -425,7 +426,10 @@ function prepare_rates(param, model::GRSMcoupledmodel)
             push!(couplingStrength, 0.0)
         end
     end
-    return r, couplingStrength
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-model.reporter[i].n+1:end])
+    end
+    return r, couplingStrength, noiseparams
 end
 
 
