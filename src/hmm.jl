@@ -219,22 +219,22 @@ function set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
     return logb
 end
 
-function set_logb_coupled(traces, params, reporter)
+function set_logb_coupled(trace, params, reporter, model)
     d = Vector[]
-    for rep in reporter
+    for m in model
+        rep = reporter[m]
         N = length(rep)
-        push!(d,probfn(params, rep.per_state, N))
+        push!(d, rep.probfn(params[m], rep.per_state, N))
     end
-    logb = zeros(N, length(trace[1]))
-    logb = Matrix{Float64}(undef, N, length(trace))
-    for trace in traces
-        for t in eachindex(trace)
-            for j in 1:N
-                for d in d
-                    logb[j, t] += logpdf(d[j], trace[t])
-                end
+    logb = zeros(size(trace))
+    t = 1
+    for obs in eachrow(traces)
+        for j in 1:N
+            for i in eachindex(d)
+                logb[j, t] += logpdf(d[i][j], obs[i])
             end
         end
+        t += 1
     end
     return logb
 end
@@ -345,101 +345,6 @@ function fkb!(du, u::Matrix, p, t)
     du .= -u * p
 end
 
-"""
-expected_transitions(α, a, b, β, N, T)
-
-returns ξ and γ 
-ξ[i,j,t] = P(q[t] = S[i], q[t+1] = S[j] | O, λ)
-γ[i,t] = ∑_j ξ[i,j,t]
-"""
-function expected_transitions(α, a, b, β, N, T)
-    ξ = Array{Float64}(undef, N, N, T - 1)
-    γ = Array{Float64}(undef, N, T - 1)
-    for t in 1:T-1
-        for j = 1:N
-            for i = 1:N
-                ξ[i, j, t] = α[i, t] * a[i, j] * b[j, t+1] * β[j, t+1]
-            end
-        end
-        S = sum(ξ[:, :, t])
-        ξ[:, :, t] = S == 0.0 ? zeros(N, N) : ξ[:, :, t] / S
-        γ[:, t] = sum(ξ[:, :, t], dims=2)
-    end
-    return ξ, γ
-end
-
-"""
-    expected_transitions_log(logα, a, b, logβ, N, T)
-
-TBW
-"""
-function expected_transitions_log(logα, a, b, logβ, N, T)
-    ξ = Array{Float64}(undef, N, N, T - 1)
-    γ = Array{Float64}(undef, N, T - 1)
-    for t in 1:T-1
-        for j = 1:N
-            for i = 1:N
-                ξ[i, j, t] = logα[i, t] + log(a[i, j]) + log(b[j, t+1]) + logβ[j, t+1]
-            end
-        end
-        S = logsumexp(ξ[:, :, t])
-        ξ[:, :, t] .-= S
-        for i in 1:N
-            γ[i, t] = logsumexp(ξ[i, :, t])
-        end
-    end
-    return ξ, γ
-end
-"""
-expected_a(a, b, p0, N, T)
-expected_a(ξ, γ, N)
-
-returns the expected probability matrix a
-"""
-function expected_a(a, b, p0, N, T)
-    α, C = forward(a, b, p0, N, T)
-    β = backward(a, b, C, N, T)
-    ξ, γ = expected_transitions(α, a, b, β, N, T)
-    expected_a(ξ, γ, N)
-end
-function expected_a(ξ, γ, N::Int)
-    a = zeros(N, N)
-    ξS = sum(ξ, dims=3)
-    γS = sum(γ, dims=2)
-    for i in 1:N, j in 1:N
-        a[i, j] = ξS[i, j] / γS[i]
-    end
-    return a
-end
-function expected_a_log(a, b, p0, N, T)
-    α = forward_log(a, b, p0, N, T)
-    β = backward_log(a, b, N, T)
-    ξ, γ = expected_transitions_log(α, a, b, β, N, T)
-    expected_a_log(ξ, γ, N)
-end
-
-function expected_a_log(ξ, γ, N::Int)
-    a = zeros(N, N)
-    ξS = zeros(N, N)
-    γS = zeros(N)
-    for i in 1:N
-        for j in 1:N
-            ξS[i, j] = logsumexp(ξ[i, j, :])
-        end
-        γS[i] = logsumexp(γ[i, :])
-    end
-    for i in 1:N, j in 1:N
-        a[i, j] = ξS[i, j] - γS[i]
-    end
-    return a
-end
-
-function expected_a_loop(a, b, p0, N, T)
-    α = forward_loop(a, b, p0, N, T)
-    β = backward_loop(a, b, N, T)
-    ξ, γ = expected_transitions(α, a, b, β, N, T)
-    expected_rate(ξ, γ, N)
-end
 
 """
 forward(a, b, p0, N, T)
@@ -576,6 +481,101 @@ function backward_loop(a, b, N, T)
     return β
 end
 
+"""
+expected_transitions(α, a, b, β, N, T)
+
+returns ξ and γ 
+ξ[i,j,t] = P(q[t] = S[i], q[t+1] = S[j] | O, λ)
+γ[i,t] = ∑_j ξ[i,j,t]
+"""
+function expected_transitions(α, a, b, β, N, T)
+    ξ = Array{Float64}(undef, N, N, T - 1)
+    γ = Array{Float64}(undef, N, T - 1)
+    for t in 1:T-1
+        for j = 1:N
+            for i = 1:N
+                ξ[i, j, t] = α[i, t] * a[i, j] * b[j, t+1] * β[j, t+1]
+            end
+        end
+        S = sum(ξ[:, :, t])
+        ξ[:, :, t] = S == 0.0 ? zeros(N, N) : ξ[:, :, t] / S
+        γ[:, t] = sum(ξ[:, :, t], dims=2)
+    end
+    return ξ, γ
+end
+
+"""
+    expected_transitions_log(logα, a, b, logβ, N, T)
+
+TBW
+"""
+function expected_transitions_log(logα, a, b, logβ, N, T)
+    ξ = Array{Float64}(undef, N, N, T - 1)
+    γ = Array{Float64}(undef, N, T - 1)
+    for t in 1:T-1
+        for j = 1:N
+            for i = 1:N
+                ξ[i, j, t] = logα[i, t] + log(a[i, j]) + log(b[j, t+1]) + logβ[j, t+1]
+            end
+        end
+        S = logsumexp(ξ[:, :, t])
+        ξ[:, :, t] .-= S
+        for i in 1:N
+            γ[i, t] = logsumexp(ξ[i, :, t])
+        end
+    end
+    return ξ, γ
+end
+"""
+expected_a(a, b, p0, N, T)
+expected_a(ξ, γ, N)
+
+returns the expected probability matrix a
+"""
+function expected_a(a, b, p0, N, T)
+    α, C = forward(a, b, p0, N, T)
+    β = backward(a, b, C, N, T)
+    ξ, γ = expected_transitions(α, a, b, β, N, T)
+    expected_a(ξ, γ, N)
+end
+function expected_a(ξ, γ, N::Int)
+    a = zeros(N, N)
+    ξS = sum(ξ, dims=3)
+    γS = sum(γ, dims=2)
+    for i in 1:N, j in 1:N
+        a[i, j] = ξS[i, j] / γS[i]
+    end
+    return a
+end
+function expected_a_log(a, b, p0, N, T)
+    α = forward_log(a, b, p0, N, T)
+    β = backward_log(a, b, N, T)
+    ξ, γ = expected_transitions_log(α, a, b, β, N, T)
+    expected_a_log(ξ, γ, N)
+end
+
+function expected_a_log(ξ, γ, N::Int)
+    a = zeros(N, N)
+    ξS = zeros(N, N)
+    γS = zeros(N)
+    for i in 1:N
+        for j in 1:N
+            ξS[i, j] = logsumexp(ξ[i, j, :])
+        end
+        γS[i] = logsumexp(γ[i, :])
+    end
+    for i in 1:N, j in 1:N
+        a[i, j] = ξS[i, j] - γS[i]
+    end
+    return a
+end
+
+function expected_a_loop(a, b, p0, N, T)
+    α = forward_loop(a, b, p0, N, T)
+    β = backward_loop(a, b, N, T)
+    ξ, γ = expected_transitions(α, a, b, β, N, T)
+    expected_rate(ξ, γ, N)
+end
 
 """
     viterbi(loga, logb, logp0, N, T)

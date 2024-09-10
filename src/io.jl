@@ -932,6 +932,11 @@ function read_dwelltimes(datapath)
     bins, DT
 end
 
+"""
+    read_tracefiles(path, cond1, traceinfo::Tuple, col=3)
+
+TBW
+"""
 function read_tracefiles(path, cond1, traceinfo::Tuple, col=3)
     start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
     stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
@@ -961,7 +966,7 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
     end
 end
 """
-    read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
 
 read in joint trace files
 """
@@ -994,7 +999,7 @@ function read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop
     end
 end
 
-function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+function read_tracefiles_v(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
     l = length(label)
     traces = Vector[]
     if isempty(path)
@@ -1012,7 +1017,7 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
                     complete &= isassigned(tset, i)
                 end
                 if complete
-                    push!(traces, test)
+                    push!(traces, tset)
                     tset = Vector{Vector}(undef, length(label))
                 end
             end
@@ -1021,6 +1026,32 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
     end
 end
 
+function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    l = length(label)
+    traces = Matrix[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            tset = Vector{Vector}(undef, l)
+            files = sort(readdir(path))
+            for file in files
+                complete = true
+                for i in eachindex(label)
+                    if occursin(label[i], file)
+                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+                    end
+                    complete &= isassigned(tset, i)
+                end
+                if complete
+                    push!(traces, hcat(tset...))
+                    tset = Vector{Vector}(undef, length(label))
+                end
+            end
+        end
+        return traces
+    end
+end
 """
     read_tracefile(path::String, start::Int, stop::Int, col=3)
 
