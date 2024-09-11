@@ -77,22 +77,19 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
 
 """
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
-    simulator(repeat(r,1,nalleles), transitions, G, R, S, insertstep; nalleles, nhist, onstates, bins, traceinterval, probfn, noiseparams, totalsteps, totaltime, tol, reporterfn, splicetype, verbose)
-end
 
+function simulator(r, transitions::Tuple, G, R, S, insertstep; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    # if length(r[:, 1]) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
+    #     throw("r has too few elements")
+    # end
+    # if insertstep > R > 0
+    #     throw("insertstep>R")
+    # end
+    # if S > 0
+    #     S = R - insertstep + 1
+    # end
+    S = reset_S(S,R,insertstep)
 
-
-function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
-    if length(r[:, 1]) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
-        throw("r has too few elements")
-    end
-    if insertstep > R > 0
-        throw("insertstep>R")
-    end
-    if S > 0
-        S = R - insertstep + 1
-    end
     mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, length(reactions), nalleles)
@@ -123,6 +120,7 @@ function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::In
         end
     end
     if traceinterval > 0
+        par,tracelog = trace_update(r,t,state)
         par = r[end-noiseparams+1:end, 1]
         tracelog = [(t, state[:, 1])]
     end
@@ -135,10 +133,11 @@ function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
-        t, rindex = findmin(tau)   # reaction index and allele for least time transition
+        t, rindex = findmin_tau(tau)   # reaction index and allele for least time transition
         index = rindex[1]
         allele = rindex[2]
-        initial, final, disabled, enabled, action = set_arguments(reactions[index])
+        initial, final, disabled, enabled, action = set_arguments(reactions, index)
+        # initial, final, disabled, enabled, action = set_arguments(reactions[index])
         dth = t - t0
         t0 = t
         update_mhist!(mhist, m, dth, nhist)
@@ -177,6 +176,7 @@ function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::In
             verbose && println(tIA)
         end
         if traceinterval > 0
+            update_tracelog!(tracelog,t,state)
             push!(tracelog, (t, state[:, 1]))
         end
     end  # while
@@ -200,6 +200,20 @@ function simulator(r::Matrix{Float64}, transitions::Tuple, G::Int, R::Int, S::In
     end
 end
 
+function findmin_tau(tau::Matrix)
+    findmin(tau)
+end
+
+function findmin_tau(tau::Vector{Matrix})
+    t = Float64[]
+    index = Int[]
+    for tau in tau
+        m = findmin(tau)
+        push!(tau,m[1])
+        push!(index,m[2])
+    end
+
+end
 
 """
     simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
@@ -237,7 +251,7 @@ simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltim
 return initial proposed next reaction times and states
 
 """
-function initialize(r::Matrix, G, R, nreactions, nalleles, initstate=1, initreaction=1)
+function initialize(r::Matrix, G::Int, R, nreactions, nalleles, initstate=1, initreaction=1)
     tau = fill(Inf, nreactions, nalleles)
     states = zeros(Int, G + R, nalleles)
     for n in 1:nalleles
@@ -245,6 +259,10 @@ function initialize(r::Matrix, G, R, nreactions, nalleles, initstate=1, initreac
         states[initstate, n] = 1
     end
     return tau, states
+end
+
+function initialize(r::Matrix, G::Tuple, R, nreactions, nalleles, initstate=1, initreaction=1)
+
 end
 """
     initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
@@ -401,12 +419,16 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
 end
 
 """
-    set_arguments(reaction)
+    set_arguments(reaction,index::Int)
 
 return values of fields of Reaction structure
 """
-set_arguments(reaction) = (reaction.initial, reaction.final, reaction.disabled, reaction.enabled, reaction.action)
+set_arguments(reaction,index::Int) = (reaction[index].initial, reaction[index].final, reaction[index].enabled, reaction[index].action)
 
+function set_arguments(reaction, index::Vector)
+    r = reaction[index[1]][index[2]]
+    return r.initial, r.final, r.enabled, r.action
+end
 
 """
     set_reactionindices(Gtransitions, R, S, insertstep)
@@ -427,40 +449,45 @@ function set_reactionindices(Gtransitions, R, S, insertstep)
     ReactionIndices(g, i, r, e, s, d)
 end
 """
-    set_reactions(Gtransitions, G, R, S, insertstep)
+    set_reactions(Gtransitions, G::Int, R, S, insertstep)
 
 return vector of Reaction structures for each transition in GRS model
 
 reporter first appears at insertstep
+
 """
-function set_reactions(Gtransitions, G, R, S, insertstep)
+function set_reactions(Gtransitions, G::Tuple, R, S, insertstep)
+
+end
+
+function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     actions = set_actions()
     indices = set_reactionindices(Gtransitions, R, S, insertstep)
     reactions = Reaction[]
     nG = length(Gtransitions)
     Sstride = R - insertstep + 1
     for g in eachindex(Gtransitions)
-        u = Int[]
-        d = Int[]
+        disabled = Int[]
+        enabled = Int[]
         ginitial = Gtransitions[g][1]
         gfinal = Gtransitions[g][2]
         for s in eachindex(Gtransitions)
             # if ginitial == Gtransitions[s][1] && gfinal != Gtransitions[s][2]
             if ginitial == Gtransitions[s][1]
-                push!(u, s)
+                push!(disabled, s)
             end
             if gfinal == Gtransitions[s][1]
-                push!(d, s)
+                push!(enabled, s)
             end
         end
         if gfinal == G
             push!(d, nG + 1)
-            push!(reactions, Reaction(actions["activateG!"], g, u, d, ginitial, gfinal))
+            push!(reactions, Reaction(actions["activateG!"], g, disabled, enabled, ginitial, gfinal))
         elseif ginitial == G
             push!(u, nG + 1)
-            push!(reactions, Reaction(actions["deactivateG!"], g, u, d, ginitial, gfinal))
+            push!(reactions, Reaction(actions["deactivateG!"], g, disabled, enabled, ginitial, gfinal))
         else
-            push!(reactions, Reaction(actions["transitionG!"], g, u, d, ginitial, gfinal))
+            push!(reactions, Reaction(actions["transitionG!"], g, disabled, enabled, ginitial, gfinal))
         end
     end
     for i in indices.irange
@@ -506,6 +533,7 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[indices.decay], 0, 0))
     return reactions
 end
+
 """
     update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action)
 
@@ -513,7 +541,7 @@ updates proposed next reaction time and state given the selected action and retu
 
 (uses if-then statements because that executes faster than an element of an array of functions)
 
-Arguments are same as defined in simulator
+Arguments are defined in simulator
 
 """
 function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
@@ -556,7 +584,18 @@ end
 update tau and state for G transition
 
 """
-function transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function transitionG!(tau::Vector{Matrix}, state::Vector{Matrix}, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    for e in enabled
+        tau[e, allele] = -log(rand()) / r[e, allele] + t
+    end
+    for d in disabled
+        tau[d, allele] = Inf
+    end
+    state[final, allele] = 1
+    state[initial, allele] = 0
+end
+
+function transitionG!(tau::Matrix, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     for e in enabled
         tau[e, allele] = -log(rand()) / r[e, allele] + t
     end
@@ -570,7 +609,7 @@ end
 	activateG!(tau,state,index,t,m,r,allele,G,R,disabled,enabled,initial,final)
 
 """
-function activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function activateG!(tau::Matrix, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     if R > 0 && state[G+1, allele] > 0
         tau[enabled[end], allele] = Inf
@@ -581,7 +620,7 @@ end
 
 
 """
-function deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function deactivateG!(tau::Matrix, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
 end
 """
@@ -589,7 +628,7 @@ end
 
 
 """
-function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+function initiate!(tau::Matrix, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1], allele]) + t
     end
@@ -604,7 +643,7 @@ function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enable
     tau[index, allele] = Inf
 end
 """
-    transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
+    transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
 
 
 """

@@ -762,8 +762,9 @@ end
 
 """
     num_rates(transitions, R, S, insertstep)
+    num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
 
-compute number of transition rates 
+compute number of transition rates (not counting noise parameters)
 """
 function num_rates(transitions, R, S, insertstep)
     if R > 0
@@ -781,6 +782,18 @@ function num_rates(transitions, R, S, insertstep)
     end
 end
 
+function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+    n = 0
+    for i in eachindex(R)
+        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
+    end
+    n
+end
+
+"""
+    num_rates(model::AbstractGRSMmodel)
+
+"""
 num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
 """
@@ -797,15 +810,13 @@ function num_rates(model::String)
     end
 end
 
-function total_rates(model::AbstractGmodel)
+
+"""
+    total_parameters(model::AbstractGmodel)
+
+total number of parameters
+"""
+function num_total_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
-end
-
-function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
-    n = 0
-    for i in eachindex(R)
-        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
-    end
-    n
 end
