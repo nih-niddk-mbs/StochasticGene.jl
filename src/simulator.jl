@@ -77,6 +77,134 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
 
 """
+function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    
+    
+    !isempty(coupling) && (r, noiseparams, nalleles=prepare_coupled(r, transitions, G, R, S, insertstep, coupling, nalleles, nhist, noiseparams))
+
+    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
+        throw("r has too few elements")
+    end
+    if insertstep > R > 0
+        throw("insertstep>R")
+    end
+    if S > 0
+        S = R - insertstep + 1
+    end
+    
+
+    mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
+    reactions = set_reactions(transitions, G, R, S, insertstep)
+    tau, state = initialize(r, G, R, length(reactions), nalleles)
+    if length(bins) < 1
+        onoff = false
+    else
+        onoff = true
+        if ~(eltype(onstates) <: Vector)
+            bins = [bins]
+            onstates = [onstates]
+        end
+        nn = length(onstates)
+        tIA = Vector{Float64}[]
+        tAI = Vector{Float64}[]
+        before = Vector{Int}(undef, nn)
+        after = Vector{Int}(undef, nn)
+        ndt = Int[]
+        dt = Float64[]
+        histofftdd = Vector{Int}[]
+        histontdd = Vector{Int}[]
+        for i in eachindex(onstates)
+            push!(ndt, length(bins[i]))
+            push!(dt, bins[i][2] - bins[i][1])
+            push!(histofftdd, zeros(Int, ndt[i]))
+            push!(histontdd, zeros(Int, ndt[i]))
+            push!(tIA, zeros(nalleles))
+            push!(tAI, zeros(nalleles))
+        end
+    end
+    if traceinterval > 0
+        par = r[end-noiseparams+1:end]
+        tracelog = [(t, state[:, 1])]
+    end
+    if verbose
+        invactions = invert_dict(set_actions())
+    end
+    if totaltime > 0.0
+        err = 0.0
+        totalsteps = 0
+    end
+    while (err > tol && steps < totalsteps) || t < totaltime
+        steps += 1
+        t, rindex = findmin_tau(tau)   # reaction index and allele for least time transition
+        index = rindex[1]
+        allele = rindex[2]
+        initial, final, disabled, enabled, action = set_arguments(reactions[index])
+        dth = t - t0
+        t0 = t
+        update_mhist!(mhist, m, dth, nhist)
+        if t - ts > tsample && traceinterval == 0
+            err, mhist0 = update_error(mhist, mhist0)
+            ts = t
+        end
+
+        if onoff
+            # find before and after states for the same allele to define dwell time histograms 
+            for i in eachindex(onstates)
+                before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+            end
+        end
+
+        if verbose
+            println("---")
+            println("m:", m)
+            println(state)
+            onoff && println("before", before)
+            println(tau)
+            println("t:", t)
+            println(rindex)
+            println(invactions[action], " ", allele)
+            println(initial, "->", final)
+        end
+
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
+
+        if onoff
+            for i in eachindex(onstates)
+                after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+                firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+            end
+            verbose && println(tAI)
+            verbose && println(tIA)
+        end
+        if traceinterval > 0
+            push!(tracelog, (t, state[:, 1]))
+        end
+    end  # while
+    verbose && println(steps)
+    # counts = max(sum(mhist), 1)
+    # mhist /= counts
+    if onoff
+        dwelltimes = Vector[]
+        push!(dwelltimes, mhist[1:nhist])
+        for i in eachindex(histontdd)
+            push!(dwelltimes, histontdd[i])
+            push!(dwelltimes, histofftdd[i])
+        end
+        return dwelltimes
+    elseif traceinterval > 0.0
+        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
+    elseif onoff && traceinterval > 0
+        return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
+    else
+        return mhist[1:nhist]
+    end
+end
+
+
+
+
+
+
 function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
     if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
         throw("r has too few elements")
@@ -413,10 +541,10 @@ function set_reactionindices(Gtransitions, R, S, insertstep)
     end
     nG = length(Gtransitions)
     g = 1:nG
-    i = nG + 1 : nG + Int(R > 0)
-    r = nG + 2 : nG + R
-    e = nG + R + 1 : nG + R + 1
-    s = nG + 1 + R + 1 : nG + 1 + R + S
+    i = nG+1:nG+Int(R > 0)
+    r = nG+2:nG+R
+    e = nG+R+1:nG+R+1
+    s = nG+1+R+1:nG+1+R+S
     d = nG + 1 + R + S + 1
     ReactionIndices(g, i, r, e, s, d)
 end
@@ -427,15 +555,23 @@ return vector of Reaction structures for each transition in GRS model
 
 reporter first appears at insertstep
 """
-function set_reactions(Gtransitions, G, R, S, insertstep)
+function set_reactions(Gtransitions, G::Tuple, R, S, insertstep)
+    reactions = Vector{Reaction}[]
+    for i in eachindex(G)
+        push!(reactions, set_reactions(Gransitions[i], G[i], R[i], S[i], insertstep[i]))
+    end
+    reactions
+
+end
+function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     actions = set_actions()
     indices = set_reactionindices(Gtransitions, R, S, insertstep)
     reactions = Reaction[]
     nG = length(Gtransitions)
     Sstride = R - insertstep + 1
     for g in eachindex(Gtransitions)
-        u = Int[]
-        d = Int[]
+        u = Int[] #disabled (upstream)
+        d = Int[] #enabled (downstream)
         ginitial = Gtransitions[g][1]
         gfinal = Gtransitions[g][2]
         for s in eachindex(Gtransitions)
@@ -545,12 +681,15 @@ end
 
 
 """
-    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 update tau and state for G transition
 
 """
-function transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]], final[index[1]])
+end
+function transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     for e in enabled
         tau[e, allele] = -log(rand()) / r[e] + t
     end
@@ -561,29 +700,41 @@ function transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enable
     state[initial, allele] = 0
 end
 """
-	activateG!(tau,state,index,t,m,r,allele,G,R,disabled,enabled,initial,final)
+    activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
+	activateG!(tau,state,index::Int,t,m,r,allele,G,R,disabled,enabled,initial,final)
 
 """
-function activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]], final[index[1]])
+end
+function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
     if R > 0 && state[G+1, allele] > 0
         tau[enabled[end], allele] = Inf
     end
 end
 """
-    deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
-
+    deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 """
-function deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
+    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]], final[index[1]])
+end
+function deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
 end
 """
-    initiate!(tau, state, index, t, m, r, allele, G, R, S, enabled)
+    initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
+    initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
+
 
 
 """
-function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+function initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, nsertstep)
+    initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]], final[index[1]], insertstep[index[1]])
+end
+function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
@@ -598,11 +749,15 @@ function initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enable
     tau[index, allele] = Inf
 end
 """
-    transitionR!(tau, state, index, t, m, r, allele, G, R, S, u, d, initial, final)
+    transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+    transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
 
 
 """
-function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+function transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+    transitionR!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]], final[index[1]], insertstep[index[1]])
+end
+function transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / r[enabled[1]] + t
     end
@@ -629,10 +784,14 @@ function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, ena
 end
 
 """
-    eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled)
+    eject!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial)
+    eject!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial)
 
 """
-function eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
+function eject!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial)
+    eject!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled[index[1]], enabled[index[1]], initial[index[1]])
+end
+function eject!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial)
     if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
@@ -645,18 +804,26 @@ function eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, 
     set_decay!(tau, enabled[end], t, m, r)
 end
 """
-    splice!(tau, state, index, t, m, r, allele, G, R, initial)
+    splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
+    splice!(tau, state, index::Int, t, m, r, allele, G, R, initial)
 
 """
-function splice!(tau, state, index, t, m, r, allele, G, R, initial)
+function splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
+    splice!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], initial[index[1]])
+end
+function splice!(tau, state, index::Int, t, m, r, allele, G, R, initial)
     state[initial, allele] = 1
     tau[index, allele] = Inf
 end
 """
-    decay!(tau, index, t, m, r)
+    decay!(tau, index::Tuple, t, m, r)
+    decay!(tau, index::Int, t, m, r)
 
 """
-function decay!(tau, index, t, m, r)
+function decay!(tau, index::Tuple, t, m, r)
+    decay!(tau[index[1]], index[2], t, m[index[1]], r[index[1]])
+end
+function decay!(tau, index::Int, t, m, r)
     m -= 1
     if m == 0
         tau[index, 1] = Inf
@@ -667,12 +834,16 @@ function decay!(tau, index, t, m, r)
 end
 
 """
-    set_decay!(tau, index, t, m, r)
+    set_decay!(tau, index::Tuple, t, m, r)
+    set_decay!(tau, index::Int, t, m, r)
 
 update tau matrix for decay rate
 
 """
-function set_decay!(tau, index, t, m, r)
+function set_decay!(tau, index::Tuple, t, m, r)
+    set_decay!(tau[index[1]], index[2], t, m[index[1]], r[index[1]])
+end
+function set_decay!(tau, index::Int, t, m, r)
     m += 1
     if m == 1
         tau[index, 1] = -log(rand()) / r[index] + t
