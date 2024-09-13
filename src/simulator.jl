@@ -104,7 +104,9 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
     end
 
     if traceinterval > 0
+        par = set_par(r)
         par = r[end-noiseparams+1:end]
+        set_tracelog(t,state)
         tracelog = [(t, state[:, 1])]
     end
     if verbose
@@ -142,24 +144,10 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
             println(index, " ", allele)
             println(invactions[action], " ", allele)
             println(initial, "->", final)
+            println(steps)
         end
 
         m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
-
-        if verbose
-            println(t)
-            println(tau)
-            println(state)
-            println(index)
-            println("m: ", m)
-            println(nhist)
-            println(r)
-            println(disabled)
-            println(enabled)
-            println(initial)
-            println(final)
-            println(action)
-        end
 
         if onoff
             set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
@@ -186,7 +174,7 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
     elseif onoff && traceinterval > 0
         return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
-        return mhist[1:nhist]
+        return mhist
     end
 end
 
@@ -510,6 +498,15 @@ initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0
 
 TBW
 """
+function update_error(mhist::Vector{Vector}, mhist0) 
+    n = 0
+    for i in eachindex(mhist)
+        n = max(n, norm(mhist[i] / sum(mhist[i]) - mhist0[i] / sum(mhist0[i]), Inf))
+    end
+    return n, copy(mhist)
+end
+
+
 update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
 """
     update_mhist!(mhist,m,dt,nhist)
@@ -825,7 +822,7 @@ update tau and state for G transition
 
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled, enabled, initial, final)
+    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
 end
 function transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     for e in enabled
@@ -843,7 +840,7 @@ end
 
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled, enabled, initial, final)
+    activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
 end
 function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
@@ -857,7 +854,7 @@ end
 
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], disabled, enabled, initial, final)
+    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
 end
 function deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
@@ -870,7 +867,7 @@ end
 
 """
 function initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-    initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
+    initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
 end
 function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if final + 1 > G + R || state[final+1, allele] == 0
@@ -893,7 +890,7 @@ end
 
 """
 function transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-    transitionR!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
+    transitionR!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
 end
 function transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if state[initial-1, allele] > 0
@@ -927,7 +924,8 @@ end
 
 """
 function eject!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial)
-    eject!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial)
+    m[index[1]] = eject!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial)
+    m
 end
 function eject!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial)
     if state[initial-1, allele] > 0
@@ -947,7 +945,7 @@ end
 
 """
 function splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
-    splice!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele[index[1]], G[index[1]], R[index[1]], initial)
+    splice!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], initial)
 end
 function splice!(tau, state, index::Int, t, m, r, allele, G, R, initial)
     state[initial, allele] = 1
