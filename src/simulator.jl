@@ -59,17 +59,23 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `insertstep`: reporter insertion step
  	
 #Named arguments
+- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
+- `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
+    1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
+    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
+    3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
+    4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
+    5. Int indicating number of coupling parameters
 - `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
 - `onstates::Vector`: a vector of ON states (use empty set for any R step is ON) or vector of vector of ON states
-- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
 - `probfn`=prob_GaussianMixture: reporter distribution
-- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
-- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
-- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
-- `totaltime`::Float64=0.0: total time of simulation
-- `splicetype`::String: splice action
 - `reporterfn`=sum: how individual reporters are combined
+- `splicetype`::String: splice action
+- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
+- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
+- `totaltime`::Float64=0.0: total time of simulation
+- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 - `verbose::Bool=false`: flag for printing state information
     
 #Example:
@@ -80,7 +86,7 @@ julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),co
 function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
     if !isempty(coupling)
-        nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+        coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
     end
 
     # if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
@@ -178,6 +184,7 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
 end
 
 
+
 """
     set_tracelog(tracelog, t, state::Vector{Matrix})
 
@@ -224,6 +231,27 @@ end
 set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
 
 """
+    targets(coupling)
+
+Find coupled targets for each unit
+"""
+function targets(coupling)
+    targets = Vector{Int}[]
+    models = coupling[1]
+    sources = coupling[2]
+    for m in models
+        t = Int[]
+        for i in eachindex(sources)
+            if m ∈ sources[i]
+                push!(t, i)
+            end
+        end
+        push!(targets, t)
+    end
+    targets
+end
+
+"""
     prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
 
 TBW
@@ -235,7 +263,8 @@ function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles
     if noiseparams isa Number
         noiseparams = fill(noiseparams, length(G))
     end
-    return nalleles, noiseparams, prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+    coupling = (coupling...,targets(coupling))
+    return coupling, nalleles, noiseparams, prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
 end
 
 
@@ -874,32 +903,45 @@ end
 
 function couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
-    source = index[1]
-
-    for t in targets
-
-    end
-
-# as source
-    if sourceinitial == sourcestate && sourcefinal != sourcestate && targettransition == enabled
-        update_transitionrate()
-    else sourceinitial != sourcestate && sourcefinal == sourcestate && targettransition == enabled
-        updatetransitionrate()
-    end
-# as target
-    if initialtargettransition == disabled && finaltargettransition == enabled
-        # update depending on source state_index
-
-    else
-
-    end
 
 
-    for i in eachindex(coupling[1])
-        if state[index[1]] == coupling # activated state
-            tau[] = - log(rand()) / (r[] + r*couplingweight) + t
-        end
-    end
+#     source = index[1]
+
+#     for t in targets
+
+#     end
+
+# # as source
+unit = index[1]
+models = coupling[1]
+sources = coupling[2]
+targets = coupling[6]
+
+if final == coupling[4]
+for t in targets
+
+
+
+
+#     if sourceinitial == sourcestate && sourcefinal != sourcestate && targettransition == enabled
+#         update_transitionrate()
+#     else sourceinitial != sourcestate && sourcefinal == sourcestate && targettransition == enabled
+#         updatetransitionrate()
+#     end
+# # as target
+#     if initialtargettransition == disabled && finaltargettransition == enabled
+#         # update depending on source state_index
+
+#     else
+
+#     end
+
+
+#     for i in eachindex(coupling[1])
+#         if state[index[1]] == coupling # activated state
+#             tau[] = - log(rand()) / (r[] + r*couplingweight) + t
+#         end
+#     end
 end
 """
     transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
