@@ -514,7 +514,8 @@ function initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction
     return tau, states
 end
 """
-    initialize_sim(r, nhist, tol, samplefactor=20.0, errfactor=10.0)
+    initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
+    initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0)
 
 """
 function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
@@ -531,7 +532,6 @@ function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfac
     end
     return nhist, mhist, mhist0, zeros(Int, length(r)), 0, 0.0, 0.0, 0.0, samplefactor / rmin, errfactor * tol
 end
-
 
 initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0) = nhist, zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
 
@@ -551,7 +551,8 @@ end
 
 update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
 """
-    update_mhist!(mhist,m,dt,nhist)
+    update_mhist!(mhist, m::Vector, dt, nhist)
+    update_mhist!(mhist, m::Int, dt, nhist)
 
 """
 function update_mhist!(mhist, m::Vector, dt, nhist)
@@ -872,6 +873,28 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,
 end
 
 function couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+
+    source = index[1]
+
+    for t in targets
+
+    end
+
+# as source
+    if sourceinitial == sourcestate && sourcefinal != sourcestate && targettransition == enabled
+        update_transitionrate()
+    else sourceinitial != sourcestate && sourcefinal == sourcestate && targettransition == enabled
+        updatetransitionrate()
+    end
+# as target
+    if initialtargettransition == disabled && finaltargettransition == enabled
+        # update depending on source state_index
+
+    else
+
+    end
+
+
     for i in eachindex(coupling[1])
         if state[index[1]] == coupling # activated state
             tau[] = - log(rand()) / (r[] + r*couplingweight) + t
@@ -929,8 +952,6 @@ end
     initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
     initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
 
-
-
 """
 function initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
@@ -952,7 +973,6 @@ end
 """
     transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-
 
 """
 function transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
