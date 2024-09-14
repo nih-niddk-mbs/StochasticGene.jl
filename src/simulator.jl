@@ -104,11 +104,10 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
     end
 
     if traceinterval > 0
-        par = set_par(r)
-        par = r[end-noiseparams+1:end]
-        set_tracelog(t,state)
-        tracelog = [(t, state[:, 1])]
+        par = set_par(r, noiseparams)
+        tracelog = initialize_tracelog(t, state)
     end
+
     if verbose
         invactions = invert_dict(set_actions())
     end
@@ -147,16 +146,16 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
             println(steps)
         end
 
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep, coupling)
 
         if onoff
             set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
         end
         if traceinterval > 0
-            push!(tracelog, (t, state[:, 1]))
+            set_tracelog!(tracelog, t, state)
+
         end
     end  # while
-
     verbose && println(steps)
     # counts = max(sum(mhist), 1)
     # mhist /= counts
@@ -170,13 +169,59 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
         end
         return dwelltimes
     elseif traceinterval > 0.0
-        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
+        return [mhist, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
     elseif onoff && traceinterval > 0
         return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
         return mhist
     end
 end
+
+
+"""
+    set_tracelog(tracelog, t, state::Vector{Matrix})
+
+TBW
+"""
+function set_tracelog!(tracelog, t, state::Vector{Matrix})
+    for i in eachindex(state)
+        set_tracelog!(tracelog[i], t, state[i])
+    end
+end
+
+function set_tracelog!(tracelog, t, state::Matrix)
+    push!(tracelog, (t, state[:, 1]))
+end
+"""
+    initialize_tracelog(t, state::Vector{Vector})
+    initialize_tracelog(t,state::Vector{Int})
+
+TBW
+"""
+function initialize_tracelog(t, state::Vector{Matrix})
+    tracelog = Vector{Vector}(undef, length(state))
+    for i in eachindex(state)
+        tracelog[i] = initialize_tracelog(t, state[i])
+    end
+    tracelog
+end
+initialize_tracelog(t, state::Matrix) = [(t, state[:, 1])]
+
+
+"""
+    set_par(r, noiseparams::Vector)
+    set_par(r, noiseparams::Int)
+
+TBW
+"""
+function set_par(r, noiseparams::Vector)
+    par = Vector[]
+    for i in eachindex(noiseparams)
+        push!(par, set_par(r[i], noiseparams[i]))
+    end
+    par
+end
+set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
 
 """
     prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -291,8 +336,6 @@ function findmin_tau(tau::Matrix)
     t, ind = findmin(tau)
     return t, ind[1], ind[2]
 end
-
-
 
 # function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 #     if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
@@ -411,7 +454,6 @@ end
 #     end
 # end
 
-
 """
     simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
 
@@ -498,7 +540,7 @@ initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0
 
 TBW
 """
-function update_error(mhist::Vector{Vector}, mhist0) 
+function update_error(mhist::Vector{Vector}, mhist0)
     n = 0
     for i in eachindex(mhist)
         n = max(n, norm(mhist[i] / sum(mhist[i]) - mhist0[i] / sum(mhist0[i]), Inf))
@@ -537,7 +579,20 @@ Return array of frame times and intensities
 - `G` and `R` as defined in simulator
 
 """
-function make_trace(tracelog, G, R, S, onstates::Vector{Int}, interval, par, insertstep, probfn, reporterfn=sum)
+function make_trace(tracelog, G::Tuple, R, S, onstates, interval, par, insertstep, probfn, reporterfn=sum)
+    trace = Matrix[]
+    for i in eachindex(tracelog)
+        push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], onstates, interval, par[i], insertstep[i], probfn, reporterfn))
+    end
+    trace
+end
+
+"""
+    make_trace(tracelog, G::Int, R, S, onstates::Vector{Int}, interval, par, insertstep, probfn, reporterfn=sum)
+
+TBW
+"""
+function make_trace(tracelog, G::Int, R, S, onstates::Vector{Int}, interval, par, insertstep, probfn, reporterfn=sum)
     n = length(tracelog)
     trace = Matrix(undef, 0, 4)
     state = tracelog[1][2]
@@ -561,11 +616,13 @@ function make_trace(tracelog, G, R, S, onstates::Vector{Int}, interval, par, ins
     return trace
 end
 
-"""
-    make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
 
 """
-function make_trace(tracelog, G, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
+    make_trace(tracelog, G::Int, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
+
+TBW
+"""
+function make_trace(tracelog, G::Int, R, S, onstates::Vector{Vector}, interval, par, insertstep, probfn, reporterfn=sum)
     traces = Vector[]
     for o in onstates
         push!(traces, make_trace(tracelog, G, R, S, o, interval, par, insertstep, probfn, reporterfn))
@@ -781,17 +838,17 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
+function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep, coupling)
     if action < 5
         if action < 3
             if action == 1
-                activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+                activateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
             else
-                deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+                deactivateG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
             end
         else
             if action == 3
-                transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+                transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
             else
                 initiate!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
             end
@@ -814,17 +871,24 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,
     return m
 end
 
-
+function couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    for i in eachindex(coupling[1])
+        if state[index[1]] == coupling # activated state
+            tau[] = - log(rand()) / (r[] + r*couplingweight) + t
+        end
+    end
+end
 """
     transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 update tau and state for G transition
 
 """
-function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
+function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
-function transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
     for e in enabled
         tau[e, allele] = -log(rand()) / r[e] + t
     end
@@ -839,11 +903,12 @@ end
 	activateG!(tau,state,index::Int,t,m,r,allele,G,R,disabled,enabled,initial,final)
 
 """
-function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
+function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
-function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
+    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     if R > 0 && state[G+1, allele] > 0
         tau[enabled[end], allele] = Inf
     end
@@ -853,11 +918,12 @@ end
     deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
 """
-function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final)
+function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
-function deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final)
-    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final)
+function deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
+    transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 """
     initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
