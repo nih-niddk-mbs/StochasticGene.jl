@@ -55,8 +55,6 @@ struct M2Components
     Uplus::SparseMatrixCSC
 end
 
-
-
 """
 	AbstractTComponents
 
@@ -75,8 +73,6 @@ struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
-
-
 struct T2Components <: AbstractTComponents
     nT::Int
     nG::Int

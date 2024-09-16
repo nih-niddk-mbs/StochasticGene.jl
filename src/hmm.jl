@@ -46,18 +46,17 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
 end
 
 function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, interval, trace)
+    nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    lp = Float64[]
-    ll = 0.0
-    for i in eachindex(trace[1])
-        m = components.model[i]
-        rep = reporter[m]
-        ll += trace[3][i] > 0.0 ? ll_background(a[m], p0[m], rep.offstates, trace[3][i], trace[4]) : 0.0
-        lla, lpa = ll_hmm(r[m], length(p0[m]), rep.n, rep.per_state, rep.probfn, trace[1][i], log.(max.(a[m], 0)), log.(max.(p0[m], 0)))
-        ll += lla
-        lp = vcat(lp, lpa)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 1)
+        logb = set_logb_coupled_reduced(t, noiseparams, reporter, components.modelcomponents)
+        l = forward_log_reduced(log.(max.(a, 0)), logb, log.(max.(p0, 0)), nT, T, components.modelcomponets)
+        push!(logpredictions, logsumexp(l[:, T]))
     end
-    return ll, lp
+    # lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    -sum(logpredictions), -logpredictions
 end
 
 function ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, trace)
@@ -70,12 +69,21 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, 
         l = forward_log(log.(max.(a, 0)), logb, log.(max.(p0, 0)), nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
+    # lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     -sum(logpredictions), -logpredictions
 end
 
 function ll_background(a, p0, offstates, weight, n)
     l = -log(sum(p0[offstates]' * a[offstates, offstates]^n))
     weight * l
+end
+
+function ll_background_coupled(a, p0, offstates, weight, n)
+    l = 0
+    for i in eachindex(a)
+        l += ll_background(a[i], p0[i], offstates[i], weight[i], n[i])
+    end
+    l
 end
 """
     ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
@@ -222,6 +230,25 @@ function set_logb(trace, params, reporters_per_state, probfn::Function=prob_Gaus
 end
 
 function set_logb_coupled(trace, params, reporter, N)
+    d = Vector[]
+    for i in eachindex(params)
+        rep = reporter[i]
+        push!(d, rep.probfn(params[i], rep.per_state, N))
+    end
+    logb = zeros(N, size(trace, 1))
+    t = 1
+    for obs in eachrow(trace)
+        for j in 1:N
+            for i in eachindex(d)
+                logb[j, t] += logpdf(d[i][j], obs[i])
+            end
+        end
+        t += 1
+    end
+    return logb
+end
+
+function set_logb_coupled_reduced(trace, params, reporter, N, components)
     d = Vector[]
     for i in eachindex(params)
         rep = reporter[i]
@@ -400,13 +427,13 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
-function forward_log_reduced(loga, logb, logp0, N, T)
+function forward_log_coupled_reduced(loga, logb, logp0, N, T, componenrts)
 
 
 
 end
 
-function forward_log_reduced!(ϕ, ψ, loga, logb, logp0, N, T)
+function forward_log_coupled_reduced!(ϕ, ψ, loga, logb, logp0, N, T, components)
 
 
 end

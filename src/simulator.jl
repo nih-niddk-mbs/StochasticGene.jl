@@ -901,63 +901,56 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled,
     return m
 end
 
+"""
+    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+
+TBW
+"""
 function couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
-
-
-    #     source = index[1]
-
-    #     for t in targets
-
-    #     end
-
-    # # as source
-
-    unit = index[1]
-    ind = models[unit]
     models = coupling[1]
-    sources = coupling[2]
-    sstate = coupling[3]
-    ttrans = coupling[4]
-    targets = coupling[6]
+    unit = models[index[1]]
+    sources = coupling[2][unit]
+    sstate = coupling[3][unit]
+    ttrans = coupling[4][unit]
+    targets = coupling[6][unit]
 
+    if initial != sstate && final == sstate
+        newrate = oldrate
+        for target in targets
+            newrate += r[target][] + r[end][]
+        end
+        tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
+    end
 
-    for t in targets[ind]
-        if tau[t][sstate, allele] != Inf
-            if final == coupling[4]
-                tau[t][sstate, allele] = t / r
-            else
-                tau[t][sstate, allele] = t / r
+    if ttrans ∈ enabled
+        for s in sources
+            newrate = baserate
+            if sstate[s] == final
+                newrate += r[target][] + r[][]
             end
         end
-    end
-
-    for s in sources[ind]
-
+        tau[unit][ttrans, allele] = -log(rand())/newrate + t
     end
 
 
-
-    #     if sourceinitial == sourcestate && sourcefinal != sourcestate && targettransition == enabled
-    #         update_transitionrate()
-    #     else sourceinitial != sourcestate && sourcefinal == sourcestate && targettransition == enabled
-    #         updatetransitionrate()
-    #     end
-    # # as target
-    #     if initialtargettransition == disabled && finaltargettransition == enabled
-    #         # update depending on source state_index
-
-    #     else
-
-    #     end
-
-
-    #     for i in eachindex(coupling[1])
-    #         if state[index[1]] == coupling # activated state
-    #             tau[] = - log(rand()) / (r[] + r*couplingweight) + t
-    #         end
-    #     end
 end
+
+
+
+"""
+    reset_tau(tau, t, oldrate, newrate)
+
+TBW
+"""
+function reset_tau(tau, t, oldrate, newrate) 
+    if tau != Inf
+        return oldrate / newrate * (tau - t) + t
+    else
+        return tau
+    end
+end
+
 """
     transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final)
 
