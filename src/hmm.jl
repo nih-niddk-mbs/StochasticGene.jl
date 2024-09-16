@@ -227,7 +227,7 @@ function set_logb_coupled(trace, params, reporter, N)
         rep = reporter[i]
         push!(d, rep.probfn(params[i], rep.per_state, N))
     end
-    logb = zeros(N,size(trace,1))
+    logb = zeros(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
         for j in 1:N
@@ -398,6 +398,17 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
             ϕ[k, t] = logsumexp(ψ)
         end
     end
+end
+
+function forward_log_reduced(loga, logb, logp0, N, T)
+
+
+
+end
+
+function forward_log_reduced!(ϕ, ψ, loga, logb, logp0, N, T)
+
+
 end
 """
 forward_loop(a, b, p0, N, T)
