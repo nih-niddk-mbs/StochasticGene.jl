@@ -87,7 +87,6 @@ struct T2Components <: AbstractTComponents
 end
 
 
-
 """
 struct TAIComponents{elementType} <: AbstractTComponents
 
@@ -240,7 +239,7 @@ state_index(G::Int, g, z) = g + G * (z - 1)
 
 
 """
-    inverse_state(i::Int, G, R, S, insertstep::Int, f=sum)
+    inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
 
 
 """

@@ -152,7 +152,7 @@ Arguments:
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(Qtr)
+function make_ap(Qtr, interval)
     return kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
 end
 
