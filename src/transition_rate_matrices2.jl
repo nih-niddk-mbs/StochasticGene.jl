@@ -1351,6 +1351,8 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
     return Tc
 end
 
+make_mat_GC(coupling_strength, G, Gs, Gt, IG, sources, model) = make_mat_TC(coupling_strength, G, Gs, Gt, IG, sources, model)
+
 function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
     n = length(model)
     Tc = SparseMatrixCSC[]

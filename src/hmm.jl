@@ -161,37 +161,54 @@ Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
 function make_ap(Qtr, interval)
-    return kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+    return kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
 function make_ap(r, interval, elementsT, N)
     # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
 function make_ap(r, interval, components)
     # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
 function make_ap_coupled(r, couplingStrength, interval, components)
     a = SparseMatrixCSC[]
     p0 = Vector[]
     Qtr = make_mat_TC(components, r, couplingStrength)
-    kolmogorov_forward(sparse(Qtr'), interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
 function make_ap_coupled_reduced(r, couplingStrength, interval, components)
-    a = SparseMatrixCSC[]
+    a = Array[]
     p0 = Vector[]
     Qtr = make_mat_TC(components, r, couplingStrength)
     for Q in Qtr
-        push!(a, kolmogorov_forward(sparse(Q'), interval))
+       a = kolmogorov_forward(Q', interval)
+        push!(a, kolmogorov_forward(Q', interval))
         push!(p0, normalized_nullspace(Q))
     end
     return a, p0
+end
+
+function decompose4(a,components::ModelCoupledComponents,sources)
+    b = Array{Float64}(undef,nR,nG,nR,nG)
+    for i in 1:nG, j in nR, k in 1:nG, l in 1:nR
+        b[i,j,k,l] = a[state_index(nG,i,j),state_index(nG,k,l)]
+    end
+    b
+end
+
+function decompose3(a, components::ModelCoupledComponents, sources)
+    b = Array{Float64}(undef, nT, nT, nG)
+    for i in 1:nG, j in nR, k in 1:nG, l in 1:nR
+        b[i, j, k, l] = a[state_index(nG, i, j), state_index(nG, k, l)]
+    end
+    b
 end
 
 make_p0(r, elementsT, N) = normalized_nullspace(make_mat(elementsT, r, N))
