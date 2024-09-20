@@ -1493,7 +1493,7 @@ function make_mat_TCreduced(coupling_strength, T, G, Gs, V, IG, IT, sources, mod
             if β ∈ sources[α]
                 Gβ = IT[model[α]]
                 Vβ = V[model[α]]
-                for j in β-1:-1:1
+                for j in α-1:-1:1
                     if j ∈ sources[α]
                         Gβ = kron(G[model[β]], Gβ)
                         Vβ = kron(G[model[β]], Vβ)
