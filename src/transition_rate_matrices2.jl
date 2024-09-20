@@ -1254,18 +1254,18 @@ end
 
 function make_mat_TCr(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
+    make_mat_TCr(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model), make_mat_TC(coupling_strength, G, Gs, Gt, IG, sources, model)
 end
 
-function make_mat_TCr2(components, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
-end
+# function make_mat_TCr2(components, rates, coupling_strength)
+#     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+#     make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
+# end
 
-function make_mat_TCreduced(components, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCreduced(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
-end
+# function make_mat_TCreduced(components, rates, coupling_strength)
+#     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+#     Q = make_mat_TCreduced(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
+# end
 
 function make_mat_TC(components, rates, coupling_strength)
     T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
@@ -1355,8 +1355,6 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
     end
     return Tc
 end
-
-make_mat_GC(coupling_strength, G, Gs, Gt, IG, sources, model) = make_mat_TC(coupling_strength, G, Gs, Gt, IG, sources, model)
 
 function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
     n = length(model)
