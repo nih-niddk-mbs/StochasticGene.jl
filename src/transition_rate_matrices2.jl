@@ -248,14 +248,16 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     return g, z, zdigits, r
 end
 
-function inverse_state(i::Int, G::Tuple, R, S, insertstep::Int, model, f=sum)
-    base = S > 0 ? 3 : 2
-    g = mod(i - 1, G) + 1
-    z = div(i - g, G) + 1
-    zdigits = digit_vector(z, base, R)
-    r = num_reporters_per_index(z, R, insertstep, base, f)
-    return g, z, zdigits, r
-end
+# function inverse_state(i::Int, G::Tuple, R, S, insertstep::Int, model, f=sum)
+#     for m in model
+#     base = S > 0 ? 3 : 2
+#     g = mod(i - 1, G) + 1
+#     z = div(i - g, G) + 1T
+#     zdigits = digit_vector(z, base, R)
+#     r = num_reporters_per_index(z, R, insertstep, base, f)
+#     e
+#     return g, z, zdigits, r
+# end
 
 function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
     base = S > 0 ? 3 : 2
@@ -1254,18 +1256,8 @@ end
 
 function make_mat_TCr(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model), make_mat_TC(coupling_strength, G, Gs, Gt, IG, sources, model)
+    make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model), make_mat_TC(coupling_strength, G, Gs, Gt, IG, components.sources, components.model)
 end
-
-# function make_mat_TCr2(components, rates, coupling_strength)
-#     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-#     make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
-# end
-
-# function make_mat_TCreduced(components, rates, coupling_strength)
-#     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-#     Q = make_mat_TCreduced(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model)
-# end
 
 function make_mat_TC(components, rates, coupling_strength)
     T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
@@ -1363,6 +1355,22 @@ function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
         Tα = T[model[α]]
         Tα = kron_backward(Tα, IG, model, α - 1, 1)
         Tα = kron_forward(Tα, IG, model, α + 1, n)
+        for β in 1:α-1
+            Gβ = IT[model[α]]
+            Gβ = kron_forward(Gβ, IG, model, α + 1, n)
+            Gβ = kron_backward(Gβ, IG, model, α - 1, β + 1)
+            Gβ = kron(G[model[β]], Gβ)
+            Gβ = kron_backward(Gβ, IG, model, β - 1, 1)
+            Tα += Gβ
+        end
+        for β in α+1:n
+            Gβ = IT[model[α]]
+            Gβ = kron_backward(Gβ, IG, model, α - 1, 1)
+            Gβ = kron_forward(Gβ, IG, model, α + 1, β - 1)
+            Gβ = kron(Gβ, G[model[β]])
+            Gβ = kron_forward(Gβ, IG, model, β + 1, n)
+            Tα += Gβ
+        end
         for β in 1:α-1
             Gβ = IT[model[α]]
             Gβ = kron_forward(Gβ, IG, model, α + 1, n)
@@ -1555,4 +1563,71 @@ end
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength), components
+end
+
+
+function compare(p0,x,y,z)
+    p = reshape(p0,2,2,2,2)
+    pm = marg(p, 4)
+    a = p[x,y,z,:] / pm[x,y,z]
+    p1 = marg(p, 2)
+    p1m = marg(p, (2,4))
+    b = p1[x,z,:] / p1m[x,z]
+    return a, b, a ≈ b
+end
+
+marg(p,dims) = dropdims(sum(p,dims=dims),dims=dims)
+
+function a(r,coupling,transitions,G,R,S,insertstep, coupling_strength=[1.,1])
+    components=StochasticGene.make_components_Tcoupled(coupling,transitions,G,R,S,insertstep)
+    Tc=StochasticGene.make_mat_TC(components,r,coupling_strength)
+    Tcr, GG = make_mat_TCr(components, r, coupling_strength)
+    p0=StochasticGene.normalized_nullspace(Tc)
+    p01 = StochasticGene.normalized_nullspace(Tcr[1])
+    p02 = StochasticGene.normalized_nullspace(Tcr[2])
+    p0G = StochasticGene.normalized_nullspace(GG)
+    p0R = reshape(p0,2,2,2,2)
+    p01R = reshape(p01,2,2)
+    p02R = reshape(p02,2,2,2)
+    pG = reshape(p0G,2,2)
+    return p0R, p01R, p02R, pG
+end
+
+function conditional_distributiona(joint_prob::Array, dist_index::Int)
+    # Sum over the distribution index to get the marginal distribution
+    marginal_prob = sum(joint_prob, dims=dist_index)
+    
+    # Ensure no zero probabilities to avoid division by zero
+    marginal_prob[marginal_prob .== 0] .= eps()
+    
+    # Expand the marginal to the shape of the joint distribution for broadcasting
+    marginal_prob_expanded = repeat(marginal_prob, inner=(1, 1, 1, size(joint_prob, dist_index)))
+    
+    # Divide the joint distribution by the marginal to get the conditional distribution
+    cond_prob = joint_prob ./ marginal_prob_expanded
+    
+    return cond_prob
+end
+
+function conditional_distribution(joint_prob::Array, dist_index::Int, cond_indices::Vector{Int})
+    # Sum over the dimensions that are not part of the conditional variables
+    dims_to_sum = setdiff(1:ndims(joint_prob), vcat(dist_index, cond_indices))
+    marginal_prob = sum(joint_prob, dims=Tuple(dims_to_sum))  # Pass dims as a tuple
+
+    # Ensure no zero probabilities to avoid division by zero
+    marginal_prob[marginal_prob .== 0] .= eps()
+
+    # Expand the marginal to the shape of the joint distribution for broadcasting
+    repeat_dims = ones(Int, ndims(joint_prob))
+    for i in cond_indices
+        repeat_dims[i] = size(joint_prob, i)
+    end
+    repeat_dims[dist_index] = size(joint_prob, dist_index)
+    
+    marginal_prob_expanded = repeat(marginal_prob, repeat_dims...)
+
+    # Compute the conditional distribution by dividing the joint distribution by the expanded marginal
+    cond_prob = joint_prob ./ marginal_prob_expanded
+    
+    return cond_prob
 end

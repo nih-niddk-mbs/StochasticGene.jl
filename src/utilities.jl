@@ -311,7 +311,7 @@ sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 mulognormal(mean, cv) = log.(mean) - 0.5 * log.(1 .+ cv .^ 2)
 
-mean_dwelltime(x,t) = t' * x
+mean_dwelltime(x, t) = t' * x
 
 """
 mean_histogram(x)
@@ -479,16 +479,16 @@ end
     onstate_prob(r,components::TComponents)
 
 """
-function onstate_prob(r,components::TComponents,reporter_per_state)
+function onstate_prob(r, components::TComponents, reporter_per_state)
     Qtr = make_mat(components.elementsT, r, components.nT)
-    p0=normalized_nullspace(Qtr)
+    p0 = normalized_nullspace(Qtr)
     return sum(p0[reporter_per_state.>0]), p0
 end
 
-onstate_prob(param,model::AbstractGmodel) = onstate_prob(get_rates(param, model),model.components,model.reporter.per_state)
+onstate_prob(param, model::AbstractGmodel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
 
-onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates,model.components,model.reporter.per_state)
- 
+onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
+
 
 """
 burstoccupancy(n,nr,r)
@@ -599,16 +599,16 @@ logv(v::Array) = log.(v)
 
 TBW
 """
-log_shift(v::Float64,a::Float64) = log(v + a)
+log_shift(v::Float64, a::Float64) = log(v + a)
 
-log_shift(v::Array,a::Float64) = log.(v .+ a)
+log_shift(v::Array, a::Float64) = log.(v .+ a)
 
 """
     log_shift1(v)
 
 TBW
 """
-log_shift1(v) = log_shift(v,1.)
+log_shift1(v) = log_shift(v, 1.0)
 
 
 """
@@ -673,6 +673,10 @@ function logsumexp(v::Array)
     end
 end
 
+function mean_elongationtime(r, transitions, R)
+    n = length(transitions)
+    meantime(r[n+2:n+R])
+end
 
 function meantime(r::Vector)
     sum(1 ./ r)

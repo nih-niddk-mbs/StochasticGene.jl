@@ -46,7 +46,7 @@ end
 - `method`: 1 for directly solving ODE otherwise use eigendecomposition
 """
 function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method::Int=1)
-    t = [max(2*tin[1]-tin[2],0); tin]
+    t = [max(2 * tin[1] - tin[2], 0); tin]
     S = time_evolve(t, Td, Sinit, method)
     return vec(sum(S[:, barrier], dims=1))
 end
@@ -151,7 +151,7 @@ function marginalize(p::Vector, nT)
     marginalize(p, nT, nhist)
 end
 
-marginalize(P::Matrix) = sum(P, dims=1)
+marginalize(P::Matrix; dims=1) = sum(P, dims=dims)
 
 
 

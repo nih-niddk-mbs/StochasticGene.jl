@@ -199,7 +199,7 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
     noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling[5])
+    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling)
     rinit = set_rinit(rinit, priormean)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, coupling, method)
@@ -664,7 +664,7 @@ function prior_ratemean(transitions, R::Tuple, S, insertstep, decayrate, noisepr
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i]))
     end
-    [rm; fill(0.0, coupling)]
+    [rm; fill(0.0, coupling[5])]
 end
 
 """

@@ -184,23 +184,21 @@ function make_ap_coupled(r, couplingStrength, interval, components)
 end
 
 function make_ap_coupled_reduced(r, couplingStrength, interval, components)
-    a = Array[]
+    a = Matrix[]
     p0 = Vector[]
-    Qtr = make_mat_TCr(components, r, couplingStrength)
-    QG = make_mat_GC(components, r, couplingStrength)
+    Qtr, QG = make_mat_TCr(components, r, couplingStrength)
     aG = kolmogorov_forward(QG', interval)
     for Q in Qtr
-       a = kolmogorov_forward(Q', interval)
         push!(a, kolmogorov_forward(Q', interval))
         push!(p0, normalized_nullspace(Q))
     end
     return a, aG, p0
 end
 
-function decompose4(a,components::ModelCoupledComponents,sources)
-    b = Array{Float64}(undef,nR,nG,nR,nG)
+function decompose4(a, components::ModelCoupledComponents, sources)
+    b = Array{Float64}(undef, nR, nG, nR, nG)
     for i in 1:nG, j in nR, k in 1:nG, l in 1:nR
-        b[i,j,k,l] = a[state_index(nG,i,j),state_index(nG,k,l)]
+        b[i, j, k, l] = a[state_index(nG, i, j), state_index(nG, k, l)]
     end
     b
 end

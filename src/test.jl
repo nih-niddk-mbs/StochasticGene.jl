@@ -172,9 +172,12 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.
 end
 
 function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70])
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], weight, nframes))
-    model = load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
+    priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1., noisepriors, elongationtime)
+    model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10., Int[], 1., propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures,model,data
@@ -220,11 +223,11 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int
 end
 
 function test_fit_trace_hierarchical(; G=2, R=3, S=3, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, .2,.2,.2,.2,.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=1000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+ length(noisepriors)), tuple()), method=(1, true))
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
     rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, hierarchical[1])
     isempty(rinit) && (rinit = StochasticGene.set_rinit(rm, transitions, R, S, insertstep, noisepriors, length(data.trace[1])))
-    model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical, method)
+    model = StochasticGene.load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, hierarchical, method)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     nrates = num_rates(transitions, R, S, insertstep)
