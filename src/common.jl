@@ -328,6 +328,11 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
+#     # ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+#     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+# end
+
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)

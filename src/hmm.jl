@@ -24,19 +24,26 @@ end
     ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 """
-function ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm_log(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
+    return ll + lb, lp
+end
+
+function ll_hmm(r, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], a, p0)
     return ll + lb, lp
 end
 """
     ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
 
 """
-function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, loga, logp0)
+function ll_hmm_log(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
     logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
+    for t in traces
         T = length(t)
         logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
         l = forward_log(loga, logb, logp0, nT, T)
@@ -45,11 +52,22 @@ function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, trace, log
     -sum(logpredictions), -logpredictions
 end
 
-function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, interval, trace)
+function ll_hmm(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, a, p0)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in traces
+        T = length(t)
+        b = set_b(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, interval, traces)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
+    for t in traces
         T = size(t, 1)
         logb = set_logb_coupled_reduced(t, noiseparams, reporter, components.modelcomponents)
         l = forward_log_reduced(log.(max.(a, 0)), logb, log.(max.(p0, 0)), nT, T, components.modelcomponets)
@@ -59,11 +77,11 @@ function ll_hmm_coupled_reduced(r, couplingStrength, components, reporter, inter
     -sum(logpredictions), -logpredictions
 end
 
-function ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, trace)
+function ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
+    for t in traces
         T = size(t, 1)
         logb = set_logb_coupled(t, noiseparams, reporter, components.N)
         l = forward_log(log.(max.(a, 0)), logb, log.(max.(p0, 0)), nT, T)
@@ -244,6 +262,20 @@ function set_logb(trace, params, reporters_per_state, probfn::Function=prob_Gaus
         t += 1
     end
     return logb
+end
+
+function set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
+    N = length(reporters_per_state)
+    d = probfn(params, reporters_per_state, N)
+    b = Matrix{Float64}(undef, N, length(trace))
+    t = 1
+    for obs in trace
+        for j in 1:N
+            b[j, t] = pdf(d[j], obs)
+        end
+        t += 1
+    end
+    return b
 end
 
 function set_logb_coupled(trace, params, reporter, N)
@@ -444,16 +476,6 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
-function forward_log_coupled_reduced(loga, logb, logp0, N, T, componenrts)
-
-
-
-end
-
-function forward_log_coupled_reduced!(ϕ, ψ, loga, logb, logp0, N, T, components)
-
-
-end
 """
 forward_loop(a, b, p0, N, T)
 
