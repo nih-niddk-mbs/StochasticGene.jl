@@ -232,7 +232,8 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
             println(datapath)
             println(datacond)
             println(traceinfo)
-            weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
+            # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
+            weight = 1 - traceinfo[4]
             nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
             if datatype == "trace"
                 return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
@@ -255,7 +256,8 @@ function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
     trace = read_tracefiles(datapath, datacond, traceinfo)
     weight = Float64[]
     for f in traceinfo[4]
-        push!(weight, (1 - f) / f * length(trace))
+        # push!(weight, (1 - f) / f * length(trace))
+        push!(weight, 1-f)
     end
     nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
@@ -341,24 +343,6 @@ function load_model_hierarchical(data::AbstractExperimentalData, r, rm, transiti
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
     pool = Pool(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-end
-"""
-    load_model(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple, nalleles, priorcv, propcv, splicetype, probfn, noisepriors, method=1)
-
-Reduced coupled model for joint trace data
-"""
-function load_model_reduced(r, rm, fittedparam, fixedeffects, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple, nalleles, priorcv, propcv, splicetype, probfn, noisepriors, method=1)
-    reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[2])
-    for i in eachindex(G)
-        noiseparams = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
-        push!(reporter, HMMReporter(noiseparams, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
-    end
-    priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
-    GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 """

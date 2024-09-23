@@ -20,35 +20,36 @@ function ll_hmm(r, nT, components::T2Components, n_noiseparams::Int, reporters_p
     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
     return ll + lb, lp
 end
+
 function ll_hmm(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, a, p0)
     logpredictions = Array{Float64}(undef, 0)
     for t in traces
         T = length(t)
-        b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn)
+        b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
     sum(logpredictions), logpredictions
 end
 
-
 """
     ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
 
 TBW
 """
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter, interval, traces)
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
-    for t in traces[1]
+    for t in trace[1]
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, reporter, nT)
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
-    # lb = trace[3] > 0.0 ? ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
-    sum(logpredictions), logpredictions
+    offstates = [r.offstates for r in reporter]
+    lb = prod(trace[3]) > 0.0 ? ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    sum(logpredictions) + lb, logpredictions
 end
 
 """
@@ -56,9 +57,11 @@ end
 
 L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 """
-function ll_background(a, p0, offstates, weight, nframes)
-    l = -log(sum(p0[offstates]' * a[offstates, offstates]^nframes))
-    weight * l
+function ll_background(a, p0, offstates, poff, nframes)
+    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+    println(p)
+    l = - (1-poff)*log(1-p) - poff *log(p)
+    # weight * l
 end
 
 """
@@ -77,7 +80,7 @@ end
 
 ### Obsolete
 
-# function ll_hmm1(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+# function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 #     a, p0 = make_ap(r, interval, elementsT, nT)
 #     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
 #     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
@@ -102,7 +105,7 @@ function ll_hmm_log(r, nT, noiseparams::Int, reporters_per_state, probfn, traces
     logpredictions = Array{Float64}(undef, 0)
     for t in traces
         T = length(t)
-        logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn, nT)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -119,7 +122,7 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     for (i, t) in enumerate(trace[1])
         T = length(t)
         loga, logp0 = make_logap(r[:, i], interval, elementsT, nT)
-        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -131,7 +134,7 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noisep
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -146,7 +149,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -161,7 +164,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2
     logp0 = log.(max.(p0, 0))
     for (i, t) in enumerate(trace[1])
         T = length(t)
-        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn)
+        logb = set_logb(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
         l = forward_log(loga, logb, logp0, nT, T)
         push!(logpredictions, logsumexp(l[:, T]))
     end
@@ -185,22 +188,20 @@ p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
 
 Arguments:
 - `r`: transition rates
-- `interval`: time interval between intensity observations
-- `elementsT`: structure of T matrix elements
+- `interval`: time interval between intensity observations (frame interval)
+- `elementsT`: vector of T matrix elements
 - `N`: number of HMM states
 
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
 
-function make_ap(r, interval, elementsT, N)
-    # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+function make_ap(r, interval, elementsT::Vector, N)
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
 function make_ap(r, interval, components)
-    # Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
     Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
@@ -210,17 +211,6 @@ function make_ap_coupled(r, couplingStrength, interval, components)
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
-function make_ap_coupled_reduced(r, couplingStrength, interval, components)
-    a = Matrix[]
-    p0 = Vector[]
-    Qtr, QG = make_mat_TCr(components, r, couplingStrength)
-    aG = kolmogorov_forward(QG', interval)
-    for Q in Qtr
-        push!(a, kolmogorov_forward(Q', interval))
-        push!(p0, normalized_nullspace(Q))
-    end
-    return a, aG, p0
-end
 
 """
     make_logap(r, transitions, interval, G)
@@ -232,24 +222,6 @@ function make_logap(r, interval, elementsT, N)
     log.(max.(a, 0)), log.(max.(p0, 0))
 end
 
-function decompose4(a, components::ModelCoupledComponents, sources)
-    b = Array{Float64}(undef, nR, nG, nR, nG)
-    for i in 1:nG, j in nR, k in 1:nG, l in 1:nR
-        b[i, j, k, l] = a[state_index(nG, i, j), state_index(nG, k, l)]
-    end
-    b
-end
-
-function decompose3(a, components::ModelCoupledComponents, sources)
-    b = Array{Float64}(undef, nT, nT, nG)
-    for i in 1:nG, j in nR, k in 1:nG, l in 1:nR
-        b[i, j, k, l] = a[state_index(nG, i, j), state_index(nG, k, l)]
-    end
-    b
-end
-
-
-
 """
     set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
 
@@ -259,8 +231,8 @@ returns matrix b = P(Observation_i | State_j) for Gaussian distribution
 -`N`: number of hidden states
 -`T`: number of observations
 """
-function set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
-    N = length(reporters_per_state)
+function set_b(trace, params, reporters_per_state, probfn::Function, N)
+    # N = length(reporters_per_state)
     d = probfn(params, reporters_per_state, N)
     b = Matrix{Float64}(undef, N, length(trace))
     t = 1
@@ -272,13 +244,51 @@ function set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussia
     end
     return b
 end
+"""
+    set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
 
-function set_b_coupled(trace, params, reporter, N)
+    returns log of matrix b
+"""
+function set_logb(trace, params, reporters_per_state, probfn::Function, N)
+    # N = length(reporters_per_state)
+    d = probfn(params, reporters_per_state, N)
+    logb = Matrix{Float64}(undef, N, length(trace))
+    t = 1
+    for obs in trace
+        for j in 1:N
+            logb[j, t] = logpdf(d[j], obs)
+        end
+        t += 1
+    end
+    return logb
+end
+
+"""
+    set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
+    set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector , N)
+    set_b_coupled(trace, d, N)
+
+returns matrix b for coupled system
+"""
+
+function set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector, N)
+    d = Vector[]
+    for i in eachindex(params)
+        push!(d, probfn[i](params[i], rep_per_state[i], N))
+    end
+    set_b_coupled(trace, d, N)
+end
+
+function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
     d = Vector[]
     for i in eachindex(params)
         rep = reporter[i]
         push!(d, rep.probfn(params[i], rep.per_state, N))
     end
+    set_b_coupled(trace, d, N)
+end
+
+function set_b_coupled(trace, d, N)
     b = zeros(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
@@ -293,42 +303,11 @@ function set_b_coupled(trace, params, reporter, N)
 end
 
 """
-    set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
+    set_logb_coupled(trace, params, reporter, N)
+
+
 """
-function set_logb(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
-    N = length(reporters_per_state)
-    d = probfn(params, reporters_per_state, N)
-    logb = Matrix{Float64}(undef, N, length(trace))
-    t = 1
-    for obs in trace
-        for j in 1:N
-            logb[j, t] = logpdf(d[j], obs)
-        end
-        t += 1
-    end
-    return logb
-end
-
 function set_logb_coupled(trace, params, reporter, N)
-    d = Vector[]
-    for i in eachindex(params)
-        rep = reporter[i]
-        push!(d, rep.probfn(params[i], rep.per_state, N))
-    end
-    logb = zeros(N, size(trace, 1))
-    t = 1
-    for obs in eachrow(trace)
-        for j in 1:N
-            for i in eachindex(d)
-                logb[j, t] += logpdf(d[i][j], obs[i])
-            end
-        end
-        t += 1
-    end
-    return logb
-end
-
-function set_logb_coupled_reduced(trace, params, reporter, N, components)
     d = Vector[]
     for i in eachindex(params)
         rep = reporter[i]
@@ -698,7 +677,6 @@ function viterbi(loga, logb, logp0, N, T)
     return q
 end
 
-
 """
     viterbi_exp(a, b, p0, N, T)
 
@@ -718,19 +696,42 @@ end
 
 return predicted state path using Viterbi algorithm
 """
-function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn)
-    loga, logp0 = make_logap(r, interval, elementsT, N)
-    logb = set_logb(trace, r[end-noiseparams+1:end], reporters_per_state, probfn)
-    viterbi(loga, logb, logp0, N, length(trace))
+# function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn)
+#     loga, logp0 = make_logap(r, interval, elementsT, N)
+#     logb = set_logb(trace, r[end-noiseparams+1:end], reporters_per_state, probfn)
+#     viterbi(loga, logb, logp0, N, length(trace))
+# end
+
+# function predicted_statepath(trace, interval, r, tcomponents, reporter)
+#     predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
+# end
+
+# function predicted_statepath(trace, interval, model::AbstractGmodel)
+#     tcomponents = tcomponent(model)
+#     predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
+# end
+
+function predicted_state(r, nT, components::T2Components, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
+    states = Vector[]
+    a, p0 = make_ap(r, interval, components)
+    for t in traces
+        T = length(t)
+        b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
+        push!(states, viterbi_exp(a, b, p0, nT, T))
+    end
+    states
 end
 
-function predicted_statepath(trace, interval, r, tcomponents, reporter)
-    predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
-end
-
-function predicted_statepath(trace, interval, model::AbstractGmodel)
-    tcomponents = tcomponent(model)
-    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
+function predicted_state(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporter, interval, traces)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    states = Array{Float64}(undef, 0)
+    for t in traces
+        T = size(t, 1)
+        b = set_b_coupled(t, noiseparams, reporter, nT)
+        push!(states, viterbi_exp(a, b, p0, nT, T))
+    end
+    states
 end
 
 
@@ -798,11 +799,11 @@ function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramDa
     predicted_traces(predicted_states(data, model), model)
 end
 
-function predicted_traces(ts::Vector, model)
-    tp = Vector{Float64}[]
-    d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
-    for t in ts
-        push!(tp, [mean(d[state]) for state in t])
-    end
-    tp, ts
-end
+# function predicted_traces(ts::Vector, model)
+#     tp = Vector{Float64}[]
+#     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
+#     for t in ts
+#         push!(tp, [mean(d[state]) for state in t])
+#     end
+#     tp, ts
+# end

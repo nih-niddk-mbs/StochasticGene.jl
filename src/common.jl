@@ -343,18 +343,28 @@ end
 convert MCMC params into form to compute likelihood for coupled model
 """
 function prepare_rates(param, model::GRSMcoupledmodel)
+    rates = get_rates(param, model)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    prepare_rates(rates, sourceStates,model.Gtransitions, model.G, model.R, model.S,model.insertstep, n_noise)
+end
+
+"""
+    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+
+"""
+function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
-    rates = get_rates(param, model)
     j = 1
-    for i in eachindex(model.G)
-        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter[i].n
+    for i in eachindex(G)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
         push!(r, rates[j:j+n-1])
         j += n
     end
-    for i in eachindex(model.G)
-        if model.components.modelcomponents[i].sourceState > 0
+    for i in eachindex(G)
+        if sourceStates[i] > 0
             push!(couplingStrength, rates[j])
             j += 1
         else
@@ -362,12 +372,10 @@ function prepare_rates(param, model::GRSMcoupledmodel)
         end
     end
     for i in eachindex(r)
-        push!(noiseparams, r[i][end-model.reporter[i].n+1:end])
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
     end
     return r, couplingStrength, noiseparams
 end
-
-
 """
 loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmodel)
 
@@ -375,8 +383,10 @@ negative loglikelihood of time series traces and mRNA FISH steady state histogra
 """
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    M = make_mat_M2(model.components.mcomponents, r[1:num_rates(model)])
     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
@@ -409,8 +419,6 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-
-
 """
     hyper_distribution(p)
 
@@ -436,7 +444,6 @@ function prepare_rates(param, model::GRSMhierarchicalmodel)
     p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
     return r, p, h
 end
-
 
 
 # Likelihood functions
