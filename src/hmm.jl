@@ -728,6 +728,12 @@ function predicted_statepath(trace, interval, r, tcomponents, reporter)
     predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
 end
 
+function predicted_statepath(trace, interval, model::AbstractGmodel)
+    tcomponents = tcomponent(model)
+    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
+end
+
+
 """
     predicted_trace(statepath, noise_dist)
     predicted_trace(statepath, r, reporter, nstates)
@@ -759,30 +765,19 @@ function predicted_trace_state(trace, interval, model)
     predicted_trace_state(trace, interval, model.rates, model.tcomponents, model.reporter, d)
 end
 
-# function predicted_trace_state(trace, interval, model)
-#     t = predicted_statepath(trace, interval, model)
-#     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
-#     tp = [mean(d[state]) for state in t]
-#     return tp, t
+
+# """
+#     predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+
+# return vector of predicted state vectors
+# """
+# function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
+#     ts = Vector{Int}[]
+#     for t in data.trace[1]
+#         push!(ts, predicted_statepath(t, data.interval, model))
+#     end
+#     ts
 # end
-
-function predicted_statepath(trace, interval, model::AbstractGmodel)
-    tcomponents = tcomponent(model)
-    predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
-end
-
-"""
-    predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
-
-return vector of predicted state vectors
-"""
-function predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
-    ts = Vector{Int}[]
-    for t in data.trace[1]
-        push!(ts, predicted_statepath(t, data.interval, model))
-    end
-    ts
-end
 
 
 """

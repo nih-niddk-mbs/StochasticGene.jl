@@ -1034,7 +1034,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
 
 TBW
 """
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true)
+function write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true)
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1063,7 +1063,7 @@ end
     write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
 
 """
-function write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=true)
+function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=true)
     # exclude_label = ~hierarchical
     for (root, dirs, files) in walkdir(folder)
         for f in files
@@ -1140,8 +1140,8 @@ end
     make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 
 """
-function make_trace(trace, interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
+function make_trace(trace, interval::Float64, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+    tcomponents = make_components_T2(transitions, G, R, S, insertstep, splicetype)
     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
     make_trace(trace, interval, r::Vector, tcomponents, reporter)
 end
@@ -1151,11 +1151,30 @@ end
 
 TBW
 """
-function make_trace(trace, interval, r::Vector, tcomponents, reporter)
+function make_trace(trace, interval::Float64, r::Vector, tcomponents, reporter)
     d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
     predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
 end
 
+
+
+"""
+    make_trace_histogram(datapath, datacond, start=1, stop=-1)
+
+TBW
+"""
+function make_trace_histogram(datapath, datacond, start=1, stop=-1)
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    ft = reduce(vcat, traces)
+    h = histogram(ft, normalize=true)
+    return ft, h
+end
+
+"""
+    make_correlation(interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+
+TBW
+"""
 function make_correlation(interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
     tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
@@ -1165,64 +1184,57 @@ function make_correlation(interval, r::Vector, transitions, G, R, S, insertstep,
 
 end
 
-function make_trace_histogram(datapath, datacond, start=1, stop=-1)
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    ft = reduce(vcat, traces)
-    h = histogram(ft, normalize=true)
-    return ft, h
-end
-
-function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
+# function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+#     tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
 
 
-end
+# end
 
-"""
-    plot_traces(fits, stats, data, model, ratetype="median")
-
-
-"""
-function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    tp, ts = make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
-    plt = plot(trace)
-    plt = plot!(tp)
-    display(plt)
-    return tp, ts
-end
+# """
+#     plot_traces(fits, stats, data, model, ratetype="median")
 
 
-function plot_traces(fits, stats, data, model, index=1, ratetype="median")
-    r = get_rates(fits, stats, model, ratetype)
-    plot_traces(r, data, model, index)
-end
+# """
+# function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
+#     tp, ts = make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
+#     plt = plot(trace)
+#     plt = plot!(tp)
+#     display(plt)
+#     return tp, ts
+# end
 
-function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel, index=1)
 
-    tp, ts = predicted_traces(data, model)
-    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-    # hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+# function plot_traces(fits, stats, data, model, index=1, ratetype="median")
+#     r = get_rates(fits, stats, model, ratetype)
+#     plot_traces(r, data, model, index)
+# end
 
-    # plt = Plots.Plot[]
-    # for t in data.trace[1]
-    #     push!(plt, plot(collect(1:length(t)),t))
-    # end
-    # push!(plt, scatter(collect(1:length(data.nRNA),data.histRNA / data.nRNA))
-    # push!(plt, plot(hist))
-    plt1 = scatter(data.trace[1][index])
-    plt1 = plot!(tp[index])
-    # plt2 = scatter(data.trace[1][10])
-    # plt2 = plot!(tp[10])
-    # plt3 = scatter(data.trace[1][20])
-    # plt3 = plot!(tp[20])
-    # plt4 = scatter(data.histRNA/data.nRNA)
-    # plt4 = plot!(hist)
+# function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel, index=1)
 
-    # x = collect(1:length(tp[2]))
-    # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
-    display(plt1)
-    return tp, ts
-end
+#     tp, ts = predicted_traces(data, model)
+#     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+#     # hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+
+#     # plt = Plots.Plot[]
+#     # for t in data.trace[1]
+#     #     push!(plt, plot(collect(1:length(t)),t))
+#     # end
+#     # push!(plt, scatter(collect(1:length(data.nRNA),data.histRNA / data.nRNA))
+#     # push!(plt, plot(hist))
+#     plt1 = scatter(data.trace[1][index])
+#     plt1 = plot!(tp[index])
+#     # plt2 = scatter(data.trace[1][10])
+#     # plt2 = plot!(tp[10])
+#     # plt3 = scatter(data.trace[1][20])
+#     # plt3 = plot!(tp[20])
+#     # plt4 = scatter(data.histRNA/data.nRNA)
+#     # plt4 = plot!(hist)
+
+#     # x = collect(1:length(tp[2]))
+#     # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
+#     display(plt1)
+#     return tp, ts
+# end
 
 
 """
