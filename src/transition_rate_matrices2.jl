@@ -7,7 +7,7 @@
 # i.e. reaction directions go from column to row,
 # Notation:  M = transpose of transition rate matrix of full (countably infinite) stochastic process including mRNA kinetics
 # Q = finite transition rate matrix for GRS continuous Markov process
-# T = Q'
+# T = Q' is the transpose transition rate matrix
 # transpose of Q is more convenient for solving chemical master equation
 #
 
@@ -248,17 +248,6 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     return g, z, zdigits, r
 end
 
-# function inverse_state(i::Int, G::Tuple, R, S, insertstep::Int, model, f=sum)
-#     for m in model
-#     base = S > 0 ? 3 : 2
-#     g = mod(i - 1, G) + 1
-#     z = div(i - g, G) + 1T
-#     zdigits = digit_vector(z, base, R)
-#     r = num_reporters_per_index(z, R, insertstep, base, f)
-#     e
-#     return g, z, zdigits, r
-# end
-
 function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
     base = S > 0 ? 3 : 2
     z = Int[]
@@ -337,8 +326,11 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     end
 end
 
+"""
+    off_states(G::Int, R, S, insertstep)
 
-
+return barrier (off) states, complement of sojourn (on) states
+"""
 function off_states(G::Int, R, S, insertstep)
     base = S > 0 ? 3 : 2
     nT = G * base^R
@@ -375,9 +367,9 @@ function T_dimension(G, R, S)
     G * base^R
 end
 
-function T_dimension(G::Tuple, R::Tuple, S::Tuple, model)
+function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)
     nT = Int[]
-    for m in model
+    for m in unit_model
         push!(nT, T_dimension(G[m], R[m], S[m]))
     end
     nT
@@ -423,16 +415,16 @@ function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertste
     reporters
 end
 
-function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, model, f=sum)
+function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
     nT = T_dimension.(G, R, S)
     reporters = Vector[]
-    for m in model
+    for m in unit_model
         rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], f)
         for j in 1:m-1
-            rep = repeat(rep, outer=(nT[model[j]],))
+            rep = repeat(rep, outer=(nT[unit_model[j]],))
         end
-        for j in m+1:length(model)
-            rep = repeat(rep, inner=(nT[model[j]],))
+        for j in m+1:length(unit_model)
+            rep = repeat(rep, inner=(nT[unit_model[j]],))
         end
         push!(reporters, rep)
     end
@@ -483,151 +475,6 @@ function set_indices(ntransitions, R, S, insertstep, offset)
     else
         Indices(offset .+ collect(1:ntransitions), offset .+ [ntransitions + 1], Int[], offset + ntransitions + 2)
     end
-end
-
-"""
-    make_components_MTAI(transitions,G,R,S,insertstep,onstates,splicetype="")
-
-make MTAI structure for GRS models (fitting mRNA, on time, and off time histograms)
-"""
-function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    MTAIComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TAI(elementsT, nT, onstates))
-end
-
-function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsTG = set_elements_T(transitions, indices.gamma)
-    c = Vector{Element}[]
-    for i in eachindex(onstates)
-        if dttype[i] == "ON"
-            push!(c, set_elements_TA(elementsT, onstates[i]))
-        elseif dttype[i] == "OFF"
-            push!(c, set_elements_TI(elementsT, onstates[i]))
-        elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsTG, onstates[i]))
-        elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TI(elementsTG, onstates[i]))
-        end
-        # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
-    end
-    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
-end
-
-"""
-    make_components_MT(transitions,G,R,S,insertstep,decay,splicetype="")
-
-return MTcomponents structure for GRS models 
-
-for fitting traces and mRNA histograms
-"""
-make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
-
-"""
-    make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
-
-TBW
-"""
-make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
-
-
-
-"""
-    make_components_M(transitions, G, R, insertstep, decay, splicetype)
-
-return Mcomponents structure  
-
-matrix components for fitting mRNA histograms
-"""
-function make_components_M(transitions, G, R, nhist, decay, splicetype)
-    indices = set_indices(length(transitions), R)
-    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, splicetype)
-    elementsB = set_elements_B(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
-    return MComponents(elementsT, elementsB, nT, U, Um, Up)
-end
-
-function make_components_M2(transitions, G, R, nhist, decay)
-    indices = set_indices(length(transitions), R)
-    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
-    elementsB = set_elements_B2(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
-    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
-end
-
-"""
-    make_components_T(transitions, G, R, S, insertstep, splicetype)
-
-return Tcomponent structure 
-
-for fitting traces and also for creating TA and TI matrix components
-"""
-function make_components_T(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    TComponents(nT, elementsT)
-end
-"""
-    make_components_T2(transitions, G, R, S, insertstep, splicetype)
-
-TBW
-"""
-function make_components_T2(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
-end
-
-"""
-    make_components_TAI(elementsT, nT::Int, onstates::Vector)
-
-return TAIComponent structure
-"""
-function make_components_TAI(elementsT, nT::Int, onstates::Vector)
-    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
-end
-
-# function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
-#     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
-# end
-
-function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    make_components_TAI(elementsT, nT, onstates)
-end
-
-"""
-    make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
-
-
-"""
-function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
-end
-
-"""
-    make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
-
-
-"""
-make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
-
-"""
-    make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-
-
-"""
-function make_components_Tcoupled(model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = ModelCoupledComponents[]
-    for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
-    end
-    TCoupledComponents(prod(T_dimension(G, R, S, model)), model, sources, comp)
 end
 
 """
@@ -760,7 +607,7 @@ end
 """
     set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
-TBW
+set R matrix elements
 """
 function set_elements_RS2!(elementsRG, elementsR, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
@@ -1060,6 +907,153 @@ function set_elements_Coupled(source_state, target_transition, transitions, G, R
 end
 
 
+
+"""
+    make_components_MTAI(transitions,G,R,S,insertstep,onstates,splicetype="")
+
+make MTAI structure for GRS models (fitting mRNA, on time, and off time histograms)
+"""
+function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    MTAIComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TAI(elementsT, nT, onstates))
+end
+
+function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsTG = set_elements_T(transitions, indices.gamma)
+    c = Vector{Element}[]
+    for i in eachindex(onstates)
+        if dttype[i] == "ON"
+            push!(c, set_elements_TA(elementsT, onstates[i]))
+        elseif dttype[i] == "OFF"
+            push!(c, set_elements_TI(elementsT, onstates[i]))
+        elseif dttype[i] == "ONG"
+            push!(c, set_elements_TA(elementsTG, onstates[i]))
+        elseif dttype[i] == "OFFG"
+            push!(c, set_elements_TI(elementsTG, onstates[i]))
+        end
+        # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
+    end
+    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
+end
+
+"""
+    make_components_MT(transitions,G,R,S,insertstep,decay,splicetype="")
+
+return MTcomponents structure for GRS models 
+
+for fitting traces and mRNA histograms
+"""
+make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
+
+"""
+    make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
+
+TBW
+"""
+make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+
+
+
+"""
+    make_components_M(transitions, G, R, insertstep, decay, splicetype)
+
+return Mcomponents structure  
+
+matrix components for fitting mRNA histograms
+"""
+function make_components_M(transitions, G, R, nhist, decay, splicetype)
+    indices = set_indices(length(transitions), R)
+    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, splicetype)
+    elementsB = set_elements_B(G, R, indices.nu[R+1])
+    U, Um, Up = make_mat_U(nhist, decay)
+    return MComponents(elementsT, elementsB, nT, U, Um, Up)
+end
+
+function make_components_M2(transitions, G, R, nhist, decay)
+    indices = set_indices(length(transitions), R)
+    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
+    elementsB = set_elements_B2(G, R, indices.nu[R+1])
+    U, Um, Up = make_mat_U(nhist, decay)
+    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
+end
+
+"""
+    make_components_T(transitions, G, R, S, insertstep, splicetype)
+
+return Tcomponent structure 
+
+for fitting traces and also for creating TA and TI matrix components
+"""
+function make_components_T(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    TComponents(nT, elementsT)
+end
+"""
+    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+
+TBW
+"""
+function make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
+    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
+end
+
+"""
+    make_components_TAI(elementsT, nT::Int, onstates::Vector)
+
+return TAIComponent structure
+"""
+function make_components_TAI(elementsT, nT::Int, onstates::Vector)
+    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
+end
+
+# function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
+#     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
+# end
+
+function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    make_components_TAI(elementsT, nT, onstates)
+end
+
+"""
+    make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+
+
+"""
+function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+end
+
+"""
+    make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+
+
+"""
+make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
+"""
+    make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+
+
+"""
+function make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    comp = ModelCoupledComponents[]
+    for i in eachindex(G)
+        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+    end
+    TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+end
+
+
 """
 make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
 
@@ -1264,18 +1258,18 @@ function make_mat_TC(components, rates, coupling_strength)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
 end
 
-function make_mat_T(T, IT, sources, model)
-    Tc = spzeros(size(model))
-    for α in eachindex(model)
-        Tα = T[model[α]]
+function make_mat_T(T, IT, sources, unit_model)
+    Tc = spzeros(size(unit_model))
+    for α in eachindex(unit_model)
+        Tα = T[unit_model[α]]
         for j in α-1:-1:1
             if j ∈ sources[α]
-                Tα = kron(IT[model[j]], Tα)
+                Tα = kron(IT[unit_model[j]], Tα)
             end
         end
         for j in α+1:n
             if j ∈ sources[α]
-                Tα = kron(Tα, IT[model[j]])
+                Tα = kron(Tα, IT[unit_model[j]])
             end
         end
         Tc += Tα
@@ -1283,248 +1277,67 @@ function make_mat_T(T, IT, sources, model)
     Tc
 end
 
-function kron_forward(T, I, sources, model, first, last)
+function kron_forward(T, I, sources, unit_model, first, last)
     for j in first:last
         if j ∈ sources
-            T = kron(T, I[model[j]])
+            T = kron(T, I[unit_model[j]])
         end
     end
     T
 end
 
-function kron_forward(T, I, model, first, last)
+function kron_forward(T, I, unit_model, first, last)
     for j in first:last
-        T = kron(T, I[model[j]])
+        T = kron(T, I[unit_model[j]])
     end
     T
 end
 
-function kron_backward(T, I, sources, model, first, last)
+function kron_backward(T, I, sources, unit_model, first, last)
     for j in first:-1:last
         if j ∈ sources
-            T = kron(I[model[j]], T)
+            T = kron(I[unit_model[j]], T)
         end
     end
     T
 end
 
-function kron_backward(T, I, model, first, last)
+function kron_backward(T, I, unit_model, first, last)
     for j in first:-1:last
-        T = kron(I[model[j]], T)
+        T = kron(I[unit_model[j]], T)
     end
     T
 end
 
-function make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
-    n = length(model)
+function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
+    n = length(unit_model)
     N = prod(size.(IT, 2))
     Tc = spzeros(N, N)
     for α in 1:n
-        Tα = T[model[α]]
-        Tα = kron_backward(Tα, IT, model, α - 1, 1)
-        Tα = kron_forward(Tα, IT, model, α + 1, n)
+        Tα = T[unit_model[α]]
+        Tα = kron_backward(Tα, IT, unit_model, α - 1, 1)
+        Tα = kron_forward(Tα, IT, unit_model, α + 1, n)
         for β in 1:α-1
             if β ∈ sources[α]
-                Vβ = V[model[α]]
-                Vβ = kron_forward(Vβ, IT, model, α + 1, n)
-                Vβ = kron_backward(Vβ, IT, model, α - 1, β + 1)
-                Vβ = kron(U[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IT, model, β - 1, 1)
+                Vβ = V[unit_model[α]]
+                Vβ = kron_forward(Vβ, IT, unit_model, α + 1, n)
+                Vβ = kron_backward(Vβ, IT, unit_model, α - 1, β + 1)
+                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron_backward(Vβ, IT, unit_model, β - 1, 1)
                 Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         for β in α+1:n
             if β ∈ sources[α]
-                Vβ = V[model[α]]
-                Vβ = kron_backward(Vβ, IT, model, β - 1, 1)
-                Vβ = kron_forward(Vβ, IT, model, α + 1, β - 1)
-                Vβ = kron(U[model[β]], Vβ)
-                Vβ = kron_forward(Vβ, IT, model, β + 1, n)
+                Vβ = V[unit_model[α]]
+                Vβ = kron_backward(Vβ, IT, unit_model, β - 1, 1)
+                Vβ = kron_forward(Vβ, IT, unit_model, α + 1, β - 1)
+                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron_forward(Vβ, IT, unit_model, β + 1, n)
                 Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         Tc += Tα
-    end
-    return Tc
-end
-
-function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
-    n = length(model)
-    Tc = SparseMatrixCSC[]
-    for α in 1:n
-        Tα = T[model[α]]
-        Tα = kron_backward(Tα, IG, model, α - 1, 1)
-        Tα = kron_forward(Tα, IG, model, α + 1, n)
-        for β in 1:α-1
-            Gβ = IT[model[α]]
-            Gβ = kron_forward(Gβ, IG, model, α + 1, n)
-            Gβ = kron_backward(Gβ, IG, model, α - 1, β + 1)
-            Gβ = kron(G[model[β]], Gβ)
-            Gβ = kron_backward(Gβ, IG, model, β - 1, 1)
-            Tα += Gβ
-        end
-        for β in α+1:n
-            Gβ = IT[model[α]]
-            Gβ = kron_backward(Gβ, IG, model, α - 1, 1)
-            Gβ = kron_forward(Gβ, IG, model, α + 1, β - 1)
-            Gβ = kron(Gβ, G[model[β]])
-            Gβ = kron_forward(Gβ, IG, model, β + 1, n)
-            Tα += Gβ
-        end
-        for β in 1:α-1
-            Gβ = IT[model[α]]
-            Gβ = kron_forward(Gβ, IG, model, α + 1, n)
-            Gβ = kron_backward(Gβ, IG, model, α - 1, β + 1)
-            Gβ = kron(G[model[β]], Gβ)
-            Gβ = kron_backward(Gβ, IG, model, β - 1, 1)
-            Tα += Gβ
-            if β ∈ sources[α]
-                Vβ = V[model[α]]
-                Vβ = kron_forward(Vβ, IG, model, α + 1, n)
-                Vβ = kron_backward(Vβ, IG, model, α - 1, β + 1)
-                Vβ = kron(Gs[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IG, model, β - 1, 1)
-                Tα += coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        for β in α+1:n
-            Gβ = IT[model[α]]
-            Gβ = kron_backward(Gβ, IG, model, α - 1, 1)
-            Gβ = kron_forward(Gβ, IG, model, α + 1, β - 1)
-            Gβ = kron(Gβ, G[model[β]])
-            Gβ = kron_forward(Gβ, IG, model, β + 1, n)
-            Tα += Gβ
-            if β ∈ sources[α]
-                Vβ = V[model[α]]
-                Vβ = kron_backward(Vβ, IG, model, α - 1, 1)
-                Vβ = kron_forward(Vβ, IG, model, α + 1, β - 1)
-                Vβ = kron(Vβ, Gs[model[β]])
-                Vβ = kron_forward(Vβ, IG, model, β + 1, n)
-                Tα += coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        push!(Tc, Tα)
-    end
-    return Tc
-end
-
-
-function make_mat_TCr2(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
-    n = length(model)
-    Tc = SparseMatrixCSC[]
-    for α in 1:n
-        Tα = T[model[α]]
-        Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
-        Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
-        for β in 1:α-1
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, n)
-                Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, β + 1)
-                Gβ = kron(G[model[β]], Gβ)
-                Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
-                Vβ = V[model[α]]
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
-                Vβ = kron(Gs[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        for β in α+1:n
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, 1)
-                Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
-                Gβ = kron(Gβ, G[model[β]])
-                Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
-                Vβ = V[model[α]]
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
-                Vβ = kron(Vβ, Gs[model[β]])
-                Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
-                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        push!(Tc, Tα)
-    end
-    return Tc
-end
-
-function make_mat_TCreduced(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
-    n = length(model)
-    Tc = SparseMatrixCSC[]
-    for α in 1:n
-        Tα = T[model[α]]
-        for j in α-1:-1:1
-            if j ∈ sources[α]
-                Tα = kron(IG[model[j]], Tα)
-            end
-        end
-        for j in α+1:n
-            if j ∈ sources[α]
-                Tα = kron(Tα, IG[model[j]])
-            end
-        end
-        for β in 1:α-1
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Vβ = V[model[α]]
-                for j in α+1:n
-                    if j ∈ sources[α]
-                        Gβ = kron(Gβ, IG[model[j]])
-                        Vβ = kron(Vβ, IG[model[j]])
-                    end
-                end
-                for j in α-1:-1:β+1
-                    if j ∈ sources[α]
-                        Gβ = kron(IG[model[j]], Gβ)
-                        Vβ = kron(IG[model[j]], Vβ)
-                    end
-                end
-                Gβ = kron(G[model[β]], Gβ)
-                Vβ = kron(Gs[model[β]], Vβ)
-                for j in β-1:-1:1
-                    if j ∈ sources[α]
-                        Gβ = kron(G[model[j]], Gβ)
-                        Vβ = kron(G[model[j]], Vβ)
-                    end
-                end
-                Tα += Gβ
-                println(Vβ)
-                Tα += coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        for β in α+1:n
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Vβ = V[model[α]]
-                for j in α-1:-1:1
-                    if j ∈ sources[α]
-                        Gβ = kron(G[model[β]], Gβ)
-                        Vβ = kron(G[model[β]], Vβ)
-                    end
-                end
-                for j in α+1:β-1
-                    if j ∈ sources[α]
-                        Gβ = kron(Gβ, IG[model[j]])
-                        Vβ = kron(Vβ, IG[model[j]])
-                    end
-                end
-                Gβ = kron(Gβ, G[model[β]])
-                Vβ = kron(Vβ, Gs[model[β]])
-                for j in β+1:n
-                    if j ∈ sources[α]
-                        Gβ = kron(Gβ, IG[model[j]])
-                        Vβ = kron(Vβ, IG[model[j]])
-                    end
-                end
-                Tα += Gβ
-                println(coupling_strength[sources[α][β]])
-                Tα += coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        push!(Tc, Tα)
     end
     return Tc
 end
@@ -1540,6 +1353,9 @@ function make_mat_M2(components::M2Components, rates::Vector)
     B = make_mat_B2(components, rates)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
+
+
+######
 
 function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
     components = make_components_MT2(transitions, G, R, S, insertstep, nhist, 1.01, "")
@@ -1578,7 +1394,7 @@ end
 
 marg(p,dims) = dropdims(sum(p,dims=dims),dims=dims)
 
-function a(r,coupling,transitions,G,R,S,insertstep, coupling_strength=[1.,1])
+function test_distributions(r,coupling,transitions,G,R,S,insertstep, coupling_strength=[1.,1])
     components=StochasticGene.make_components_Tcoupled(coupling,transitions,G,R,S,insertstep)
     Tc=StochasticGene.make_mat_TC(components,r,coupling_strength)
     Tcr, GG = make_mat_TCr(components, r, coupling_strength)
@@ -1631,3 +1447,185 @@ function conditional_distribution(joint_prob::Array, dist_index::Int, cond_indic
     
     return cond_prob
 end
+
+
+# function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
+#     n = length(model)
+#     Tc = SparseMatrixCSC[]
+#     for α in 1:n
+#         Tα = T[model[α]]
+#         Tα = kron_backward(Tα, IG, model, α - 1, 1)
+#         Tα = kron_forward(Tα, IG, model, α + 1, n)
+#         for β in 1:α-1
+#             Gβ = IT[model[α]]
+#             Gβ = kron_forward(Gβ, IG, model, α + 1, n)
+#             Gβ = kron_backward(Gβ, IG, model, α - 1, β + 1)
+#             Gβ = kron(G[model[β]], Gβ)
+#             Gβ = kron_backward(Gβ, IG, model, β - 1, 1)
+#             Tα += Gβ
+#         end
+#         for β in α+1:n
+#             Gβ = IT[model[α]]
+#             Gβ = kron_backward(Gβ, IG, model, α - 1, 1)
+#             Gβ = kron_forward(Gβ, IG, model, α + 1, β - 1)
+#             Gβ = kron(Gβ, G[model[β]])
+#             Gβ = kron_forward(Gβ, IG, model, β + 1, n)
+#             Tα += Gβ
+#         end
+#         for β in 1:α-1
+#             Gβ = IT[model[α]]
+#             Gβ = kron_forward(Gβ, IG, model, α + 1, n)
+#             Gβ = kron_backward(Gβ, IG, model, α - 1, β + 1)
+#             Gβ = kron(G[model[β]], Gβ)
+#             Gβ = kron_backward(Gβ, IG, model, β - 1, 1)
+#             Tα += Gβ
+#             if β ∈ sources[α]
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_forward(Vβ, IG, model, α + 1, n)
+#                 Vβ = kron_backward(Vβ, IG, model, α - 1, β + 1)
+#                 Vβ = kron(Gs[model[β]], Vβ)
+#                 Vβ = kron_backward(Vβ, IG, model, β - 1, 1)
+#                 Tα += coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         for β in α+1:n
+#             Gβ = IT[model[α]]
+#             Gβ = kron_backward(Gβ, IG, model, α - 1, 1)
+#             Gβ = kron_forward(Gβ, IG, model, α + 1, β - 1)
+#             Gβ = kron(Gβ, G[model[β]])
+#             Gβ = kron_forward(Gβ, IG, model, β + 1, n)
+#             Tα += Gβ
+#             if β ∈ sources[α]
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_backward(Vβ, IG, model, α - 1, 1)
+#                 Vβ = kron_forward(Vβ, IG, model, α + 1, β - 1)
+#                 Vβ = kron(Vβ, Gs[model[β]])
+#                 Vβ = kron_forward(Vβ, IG, model, β + 1, n)
+#                 Tα += coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         push!(Tc, Tα)
+#     end
+#     return Tc
+# end
+
+
+# function make_mat_TCr2(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
+#     n = length(model)
+#     Tc = SparseMatrixCSC[]
+#     for α in 1:n
+#         Tα = T[model[α]]
+#         Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
+#         Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
+#         for β in 1:α-1
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, n)
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, β + 1)
+#                 Gβ = kron(G[model[β]], Gβ)
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
+#                 Vβ = kron(Gs[model[β]], Vβ)
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         for β in α+1:n
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, 1)
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
+#                 Gβ = kron(Gβ, G[model[β]])
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
+#                 Vβ = kron(Vβ, Gs[model[β]])
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
+#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         push!(Tc, Tα)
+#     end
+#     return Tc
+# end
+
+# function make_mat_TCreduced(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
+#     n = length(model)
+#     Tc = SparseMatrixCSC[]
+#     for α in 1:n
+#         Tα = T[model[α]]
+#         for j in α-1:-1:1
+#             if j ∈ sources[α]
+#                 Tα = kron(IG[model[j]], Tα)
+#             end
+#         end
+#         for j in α+1:n
+#             if j ∈ sources[α]
+#                 Tα = kron(Tα, IG[model[j]])
+#             end
+#         end
+#         for β in 1:α-1
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Vβ = V[model[α]]
+#                 for j in α+1:n
+#                     if j ∈ sources[α]
+#                         Gβ = kron(Gβ, IG[model[j]])
+#                         Vβ = kron(Vβ, IG[model[j]])
+#                     end
+#                 end
+#                 for j in α-1:-1:β+1
+#                     if j ∈ sources[α]
+#                         Gβ = kron(IG[model[j]], Gβ)
+#                         Vβ = kron(IG[model[j]], Vβ)
+#                     end
+#                 end
+#                 Gβ = kron(G[model[β]], Gβ)
+#                 Vβ = kron(Gs[model[β]], Vβ)
+#                 for j in β-1:-1:1
+#                     if j ∈ sources[α]
+#                         Gβ = kron(G[model[j]], Gβ)
+#                         Vβ = kron(G[model[j]], Vβ)
+#                     end
+#                 end
+#                 Tα += Gβ
+#                 println(Vβ)
+#                 Tα += coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         for β in α+1:n
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Vβ = V[model[α]]
+#                 for j in α-1:-1:1
+#                     if j ∈ sources[α]
+#                         Gβ = kron(G[model[β]], Gβ)
+#                         Vβ = kron(G[model[β]], Vβ)
+#                     end
+#                 end
+#                 for j in α+1:β-1
+#                     if j ∈ sources[α]
+#                         Gβ = kron(Gβ, IG[model[j]])
+#                         Vβ = kron(Vβ, IG[model[j]])
+#                     end
+#                 end
+#                 Gβ = kron(Gβ, G[model[β]])
+#                 Vβ = kron(Vβ, Gs[model[β]])
+#                 for j in β+1:n
+#                     if j ∈ sources[α]
+#                         Gβ = kron(Gβ, IG[model[j]])
+#                         Vβ = kron(Vβ, IG[model[j]])
+#                     end
+#                 end
+#                 Tα += Gβ
+#                 println(coupling_strength[sources[α][β]])
+#                 Tα += coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         push!(Tc, Tα)
+#     end
+#     return Tc
+# end

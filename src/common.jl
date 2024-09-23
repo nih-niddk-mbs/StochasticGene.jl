@@ -328,15 +328,45 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMmodel)
-#     # ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-#     ll_hmm(get_rates(param, model), model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-# end
+"""
+    loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
 
+coupled model
+"""
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
+"""
+    prepare_rates(param, model::GRSMcoupledmodel)
+
+convert MCMC params into form to compute likelihood for coupled model
+"""
+function prepare_rates(param, model::GRSMcoupledmodel)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    rates = get_rates(param, model)
+    j = 1
+    for i in eachindex(model.G)
+        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter[i].n
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(model.G)
+        if model.components.modelcomponents[i].sourceState > 0
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-model.reporter[i].n+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
+
 
 """
 loglikelihood(param, data::TraceRNAData{Vector{Float64}}, model::AbstractGRSMmodel)
@@ -407,35 +437,6 @@ function prepare_rates(param, model::GRSMhierarchicalmodel)
     return r, p, h
 end
 
-"""
-    prepare_rates(param, model::GRSMcoupledmodel)
-
-convert MCMC params into form to compute likelihood for coupled model
-"""
-function prepare_rates(param, model::GRSMcoupledmodel)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    rates = get_rates(param, model)
-    j = 1
-    for i in eachindex(model.G)
-        n = num_rates(model.Gtransitions[i], model.R[i], model.S[i], model.insertstep[i]) + model.reporter[i].n
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(model.G)
-        if model.components.modelcomponents[i].sourceState > 0
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-model.reporter[i].n+1:end])
-    end
-    return r, couplingStrength, noiseparams
-end
 
 
 # Likelihood functions
