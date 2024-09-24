@@ -357,7 +357,7 @@ function load_model_coupled(r, rm, fittedparam, fixedeffects, transitions, G::Tu
     for i in eachindex(G)
         nnoise = length(noisepriors[i])
         weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
-        push!(reporter, HMMReporter(noiseparams, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")

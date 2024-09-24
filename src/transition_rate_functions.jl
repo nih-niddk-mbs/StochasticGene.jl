@@ -26,18 +26,31 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     return g, z, zdigits, r
 end
 
-function unit_state(i::Int, G::Tuple, R, S, unit_model, f=sum)
-    nT = T_dimension(G,R,S,unit_model)
+function unit_state(i::Int, G::Tuple, R, S, unit_model)
+    nT = T_dimension(G, R, S, unit_model)
     rem = i
     unit = Int[]
     for j in unit_model
         push!(unit, mod(rem - 1, nT[j]) + 1)
-        rem = div(rem-unit[j],nT[j]) + 1
+        rem = div(rem - unit[j], nT[j]) + 1
     end
-    reverse(unit)
+    unit
 end
 
-function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
+function inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)
+    units = unit_state(i, G, R, S, unit_model)
+    inverse_state(units, G, R, S, insertstep, f)
+end
+
+function inverse_state(units::Vector, G::Tuple, R, S, insertstep, f=sum)
+    states = Tuple[]
+    for i in eachindex(units)
+        push!(states, inverse_state(units[i], G[i], R[i], S[i], insertstep[i], f))
+    end
+    states
+end
+
+function inverse_state(i::Vector{Int}, G::Int, R, S, insertstep::Int)
     base = S > 0 ? 3 : 2
     z = Int[]
     g = Int[]
@@ -53,13 +66,13 @@ function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
     return g, z, zdigits, r
 end
 
-function inverse_state(i::Vector{Vector{Int}}, G, R, S, insertstep)
+function inverse_state(i::Vector{Vector{Int}}, G::Int, R, S, insertstep)
     z = Vector{Int}[]
     g = Vector{Int}[]
     zdigits = Vector{Vector}[]
     r = Vector{Int}[]
     for i in i
-        gi, zi, zdi, ri = inverse_state(i, G, R, S, insertstep)
+        gi, zi, zdi, ri = inverse_state(i, G::Int, R, S, insertstep)
         push!(z, zi)
         push!(g, gi)
         push!(zdigits, zdi)
