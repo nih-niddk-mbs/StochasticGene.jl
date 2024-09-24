@@ -248,6 +248,17 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     return g, z, zdigits, r
 end
 
+function unit_state(i::Int, G::Tuple, R, S, unit_model, f=sum)
+    nT = T_dimension(G,R,S,unit_model)
+    rem = i
+    unit = Int[]
+    for j in unit_model
+        push!(unit, mod(rem - 1, nT[j]) + 1)
+        rem = div(rem-unit[j],nT[j]) + 1
+    end
+    reverse(unit)
+end
+
 function inverse_state(i::Vector{Int}, G, R, S, insertstep::Int)
     base = S > 0 ? 3 : 2
     z = Int[]
@@ -365,6 +376,14 @@ Compute transition matrix dimension of GRS model
 function T_dimension(G, R, S)
     base = S > 0 ? 3 : 2
     G * base^R
+end
+
+function T_dimension(G::Tuple, R::Tuple, S::Tuple)
+    nT = Int[]
+    for m in eachindex(G)
+        push!(nT, T_dimension(G[m], R[m], S[m]))
+    end
+    nT
 end
 
 function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)

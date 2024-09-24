@@ -77,7 +77,7 @@ then G = (2,3).
 - `label::String=""`: label of output files produced
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
 - `method=1`: method variable, for hierarchical models: method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
-- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
+- `nalleles=1`: number of alleles, value in alleles folder will be used if it exists  
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
 - `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
@@ -355,8 +355,8 @@ function load_model_coupled(r, rm, fittedparam, fixedeffects, transitions, G::Tu
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
     n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     for i in eachindex(G)
-        noiseparams = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams : 0
+        nnoise = length(noisepriors[i])
+        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
         push!(reporter, HMMReporter(noiseparams, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)

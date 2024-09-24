@@ -37,13 +37,30 @@ end
 
 TBW
 """
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, reporter, nT)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    offstates = [r.offstates for r in reporter]
+    lb = prod(trace[3]) > 0.0 ? ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    sum(logpredictions) + lb, logpredictions
+end
+
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    ps = [r.per_state for r in reporter]
+    pf = [r.probfn for r in reporter]
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 1)
+        b = set_b_coupled(t, noiseparams, ps, pf, nT)
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
@@ -60,7 +77,7 @@ L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 function ll_background(a, p0, offstates, poff, nframes)
     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
     println(p)
-    l = - (1-poff)*log(1-p) - poff *log(p)
+    l = -(1 - poff) * log(1 - p) - poff * log(p)
     # weight * l
 end
 
@@ -722,13 +739,19 @@ function predicted_state(r, nT, components::T2Components, n_noiseparams::Int, re
     states
 end
 
-function predicted_state(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporter, interval, traces)
+function predicted_state(rates, coupling, transitions, G, R, S, insertstep, n_noise, components, reporters_per_state, probfn, interval, traces)
+    sourceStates = coupling[3]
+    r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
+    predicted_state(r, couplingStrength, noiseparams, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
+end
+
+function predicted_state(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    states = Array{Float64}(undef, 0)
+    states = Array[]
     for t in traces
         T = size(t, 1)
-        b = set_b_coupled(t, noiseparams, reporter, nT)
+        b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
         push!(states, viterbi_exp(a, b, p0, nT, T))
     end
     states
