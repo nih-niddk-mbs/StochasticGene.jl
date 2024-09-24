@@ -473,14 +473,19 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
-function test_mat_Tcr(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+function test_mat_Tc2(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TCr(components, r, coupling_strength), make_mat_TCreduced(components, r, coupling_strength)
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
+    T = []
+    for i in eachindex(G)
+        c = make_components_T2(transitions[i], G[i], R[i], S[i], insertstep[i],"")
+        push!(T,make_mat_T(c,r[i]))
+    end
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
-    return make_mat_TC(components, r, coupling_strength), components
+    return make_mat_TC(components, r, coupling_strength), T
 end
 
 
