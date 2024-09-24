@@ -146,6 +146,11 @@ function ll_hmm_hierarchical(r::Matrix, nT, elementsT::Vector, noiseparams, repo
     -sum(logpredictions), -logpredictions
 end
 
+"""
+    ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
 function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     loga, logp0 = make_logap(r[:, 1], interval, elementsT, nT)
@@ -158,6 +163,11 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, elementsT::Vector, noisep
     -sum(logpredictions), -logpredictions
 end
 
+"""
+    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+
+TBW
+"""
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, elementsT, nT)
@@ -173,6 +183,11 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
     -sum(logpredictions) + lb, -logpredictions
 end
 
+"""
+    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+
+TBW
+"""
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2Components, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, components)
@@ -188,16 +203,9 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::T2
     -sum(logpredictions) + lb, -logpredictions
 end
 
-"""
-    make_p0(r, elementsT, N)
-
-equilibrium distribution p0
-"""
-make_p0(r, elementsT, N) = normalized_nullspace(make_mat(elementsT, r, N))
-
 
 """
-make_ap(r, interval, elementsT, nT )
+    make_ap(r, interval, components::T2Components)
 
 Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
 a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GRSM model
@@ -206,29 +214,40 @@ p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
 Arguments:
 - `r`: transition rates
 - `interval`: time interval between intensity observations (frame interval)
-- `elementsT`: vector of T matrix elements
-- `N`: number of HMM states
+- `components`: T2 matrix components
 
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-
-function make_ap(r, interval, elementsT::Vector, N)
-    Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
-end
-
-function make_ap(r, interval, components)
+function make_ap(r, interval, components::T2Components)
     Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
+"""
+    make_ap_coupled(r, couplingStrength, interval, components)
+
+
+"""
 function make_ap_coupled(r, couplingStrength, interval, components)
     Qtr = make_mat_TC(components, r, couplingStrength)
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
+"""
+    make_ap(r, interval, elementsT::Vector, N)
 
+Arguments:
+- `r`: transition rates
+- `interval`: time interval between intensity observations (frame interval)
+- `elementsT`: vector of T matrix elements
+- `N`: number of HMM states
+
+"""
+function make_ap(r, interval, elementsT::Vector, N)
+    Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+end
 """
     make_logap(r, transitions, interval, G)
 
@@ -763,7 +782,6 @@ function predicted_state(r, couplingStrength, noiseparams::Vector, components::T
     states
 end
 
-
 """
     predicted_trace(statepath, noise_dist)
     predicted_trace(statepath, r, reporter, nstates)
@@ -795,7 +813,6 @@ function predicted_trace_state(trace, interval, model)
     predicted_trace_state(trace, interval, model.rates, model.tcomponents, model.reporter, d)
 end
 
-
 # """
 #     predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
 
@@ -808,7 +825,6 @@ end
 #     end
 #     ts
 # end
-
 
 """
     predicted_traces(ts::Vector{Vector}, model)
