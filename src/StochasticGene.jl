@@ -88,7 +88,10 @@ export
 include("common.jl")
 
 # Transition rate matrices of stochastic models defining master equations
-include("transition_rate_matrices2.jl")
+include("transition_rate_structures.jl")
+include("transition_rate_functions.jl")
+include("transition_rate_set_elements.jl")
+include("transition_rate_make.jl")
 
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
