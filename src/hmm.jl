@@ -37,7 +37,7 @@ end
 
 TBW
 """
-function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
@@ -52,7 +52,7 @@ function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, r
     sum(logpredictions) + lb, logpredictions
 end
 
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     ps = [r.per_state for r in reporter]
@@ -728,6 +728,12 @@ return predicted state path using Viterbi algorithm
 #     predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
 # end
 
+function predicted_state(r, N, components, reporter, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    b = set_b(trace, r[end-reporter.n+1:end], reporter.per_state, reporter.probfn, N)
+    viterbi_exp(a, b, p0, N, length(trace))
+end
+
 function predicted_state(r, nT, components::T2Components, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector[]
     a, p0 = make_ap(r, interval, components)
@@ -779,7 +785,7 @@ end
 return predicted trace and state path
 """
 function predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
-    t = predicted_statepath(trace, interval, r, tcomponents, reporter)
+    t = predicted_state(r, tcomponents.nT, tcomponents, reporter, interval, trace)
     tp = predicted_trace(t, noise_dist)
     return tp, t
 end
