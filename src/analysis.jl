@@ -1112,6 +1112,27 @@ function make_traces_dataframe(datapath, datacond::String, interval, r, transiti
     DataFrame(permutedims(v, (2, 1))[:])
 end
 
+function make_traces_dataframe(datapath, datacond::String, interval, r, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false)
+    tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, hierarchical)
+    l = maximum(length.(tp))
+    data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+    pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+    if state
+        g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
+        gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        v = [data pred gs s zs]
+    else
+        v = [data pred]
+    end
+    # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
+    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
+    DataFrame(permutedims(v, (2, 1))[:])
+end
+
 """
     make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 

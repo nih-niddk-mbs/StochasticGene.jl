@@ -136,7 +136,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         end
 
         if onoff
-            before = set_before(onstates, state, allele, G, R, inserstep)
+            before = set_before(before, onstates, state, allele, G, R, insertstep)
         end
 
         if verbose
@@ -179,7 +179,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     elseif onoff && traceinterval > 0
         return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
-        return mhist
+        return mhist[1:nhist]
     end
 end
 
@@ -288,11 +288,11 @@ end
 
 find before and after states for the same allele to define dwell time histograms
 """
-function set_before(onstates, state, allele, G, R, inserstep)
+function set_before(before, onstates, state, allele, G, R, insertstep)
     for i in eachindex(onstates)
         before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
     end
-
+    before
 end
 
 """

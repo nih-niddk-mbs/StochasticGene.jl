@@ -19,6 +19,8 @@ using MultivariateStats
 using Optim
 
 export
+    CSV,
+    DataFrame,
     rna_setup,
     folder_setup,
     makeswarm,

@@ -100,7 +100,7 @@ TBW
 function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-    TRGComponents(nT, G, nR, elementsGbar, elementsRGbar, elementsRG)
+    TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
 end
 
 """

@@ -111,21 +111,6 @@ struct TDComponents <: AbstractTComponents
     elementsTD::Vector{Vector{Element}}
 end
 
-"""
- 	TCoupledComponents
-
-fields:
-    N::Int: total number of states
-    model::Tuple: model index for each trace
-    sources::Tuple: source model for each
-    modelcomponents::Vector{ModelCoupledComponents}
-"""
-struct TCoupledComponents
-    N::Int
-    model::Tuple
-    sources::Tuple
-    modelcomponents::Vector{ModelCoupledComponents}
-end
 
 """
  	ModelCoupledComponents
@@ -154,6 +139,23 @@ struct ModelCoupledComponents <: AbstractTComponents
     elementsGs::Vector
     elementsRGbar::Vector
     elementsRG::Vector
+end
+
+
+"""
+ 	TCoupledComponents
+
+fields:
+    N::Int: total number of states
+    model::Tuple: model index for each trace
+    sources::Tuple: source model for each
+    modelcomponents::Vector{ModelCoupledComponents}
+"""
+struct TCoupledComponents
+    N::Int
+    model::Tuple
+    sources::Tuple
+    modelcomponents::Vector{ModelCoupledComponents}
 end
 
 
