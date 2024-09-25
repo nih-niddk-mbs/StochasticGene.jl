@@ -73,7 +73,7 @@ struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
-struct T2Components <: AbstractTComponents
+struct RGComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
@@ -167,9 +167,9 @@ struct MTComponents
     tcomponents::TComponents
 end
 
-struct MT2Components
+struct MRGComponents
     mcomponents::M2Components
-    tcomponents::T2Components
+    tcomponents::RGComponents
 end
 
 
@@ -972,7 +972,7 @@ make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype=""
 
 TBW
 """
-make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MRGComponents(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
 
 
 
@@ -1019,7 +1019,7 @@ TBW
 function make_components_T2(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-    T2Components(nT, G, nR, elementsG, elementsR, elementsRG)
+    RGComponents(nT, G, nR, elementsG, elementsR, elementsRG)
 end
 
 """

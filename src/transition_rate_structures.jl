@@ -66,7 +66,7 @@ struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
-struct T2Components <: AbstractTComponents
+struct RGComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
@@ -160,9 +160,9 @@ struct MTComponents
     tcomponents::TComponents
 end
 
-struct MT2Components
+struct MRGComponents
     mcomponents::M2Components
-    tcomponents::T2Components
+    tcomponents::RGComponents
 end
 
 

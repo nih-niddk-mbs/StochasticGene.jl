@@ -715,7 +715,7 @@ end
 
 ##### Coupling Under development
 
-# struct T2Components <: AbstractTComponents
+# struct RGComponents <: AbstractTComponents
 #     nG::Int
 #     nR::Int
 #     elementsG::Vector
@@ -735,9 +735,9 @@ end
 #     Uplus::SparseMatrixCSC
 # end
 
-# struct MT2Components
+# struct MRGComponents
 #     mcomponents::M2Components
-#     tcomponents::T2Components
+#     tcomponents::RGComponents
 # end
 
 
@@ -873,7 +873,7 @@ end
 # function make_components_T2(transitions, G, R, S, insertstep, splicetype)
 #     indices = set_indices(length(transitions), R, S, insertstep)
 #     elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-#     T2Components(G, nR, elementsG, elementsR, elementsRG)
+#     RGComponents(G, nR, elementsG, elementsR, elementsRG)
 # end
 
 # function make_components_M2(transitions, G, R, nhist, decay)
@@ -884,7 +884,7 @@ end
 #     M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
 # end
 
-# make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MT2Components(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+# make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MRGComponents(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
 
 # function make_mat_T2(components, rates)
 #     nG = components.nG
