@@ -28,9 +28,9 @@ export
     TraceData,
     TraceRNAData,
     GMmodel,
-    GMfixedeffectsmodel,
     GRSMmodel,
-    GRSMfixedeffectsmodel,
+    GRSMhierarchicalmodel,
+    GRSMcoupledmodel,
     fit,
     run_mh,
     metropolis_hastings,
@@ -42,6 +42,7 @@ export
     write_dataframes_only,
     write_winners,
     write_augmented,
+    write_traces,
     fix_filenames,
     fix,
     large_deviance,
@@ -70,8 +71,11 @@ export
     make_components_M,
     make_components_T,
     make_components_TAI,
+    make_components_TRG,
+    make_components_Tcoupled,
     likelihoodarray,
     likelihoodfn,
+    loglikelihood,
     datapdf,
     normalize_histogram,
     norm,
@@ -89,8 +93,8 @@ include("common.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")
+include("transition_rate_elements.jl")
 include("transition_rate_functions.jl")
-include("transition_rate_set_elements.jl")
 include("transition_rate_make.jl")
 
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
@@ -121,14 +125,6 @@ include("biowulf.jl")
 # functions for hidden markov models
 include("hmm.jl")
 
-# # functions for fitting time series traces
-# include("trace.jl")
-
-# # functions specific for Gene Trap experiments of Wan et al.
-# include("genetrap.jl")
-
-# # functions for scRNA and FISH experiments of Trzaskoma et al.
-# include("rna.jl")
 
 """
 A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.
