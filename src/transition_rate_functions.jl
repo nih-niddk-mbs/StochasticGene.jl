@@ -209,20 +209,20 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     end
     reporters
 end
-function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
-    reporters = Vector[]
-    for i in eachindex(R)
-        repi = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
-        for j in 1:i-1
-            (j ∈ sources[i]) && (repi = repeat(repi, outer=(G[j],)))
-        end
-        for j in i+1:length(R)
-            (j ∈ sources[i]) && (repi = repeat(repi, inner=(G[j],)))
-        end
-        push!(reporters, repi)
-    end
-    reporters
-end
+# function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
+#     reporters = Vector[]
+#     for i in eachindex(R)
+#         repi = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
+#         for j in 1:i-1
+#             (j ∈ sources[i]) && (repi = repeat(repi, outer=(G[j],)))
+#         end
+#         for j in i+1:length(R)
+#             (j ∈ sources[i]) && (repi = repeat(repi, inner=(G[j],)))
+#         end
+#         push!(reporters, repi)
+#     end
+#     reporters
+# end
 
 function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
     nT = T_dimension.(G, R, S)

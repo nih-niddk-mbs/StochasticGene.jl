@@ -1117,20 +1117,34 @@ end
 
 
 """
+# function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
+#     traces = read_tracefiles(datapath, datacond, start, stop)
+#     nrates = num_rates(transitions, R, S, insertstep) + noiseparams
+#     hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
+#     tp = Vector{Float64}[]
+#     ts = Vector{Int}[]
+#     tcomponents = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+#     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+
+#     predict_trace_state()
+#     for (i, t) in enumerate(traces)
+#         r = hierarchical ? rin[:, i] : rin
+#         a, b = make_trace(t, interval, r, tcomponents, reporter)
+#         push!(tp, a)
+#         push!(ts, b)
+#     end
+#     return tp, ts, traces
+# end
+
+
 function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
     traces = read_tracefiles(datapath, datacond, start, stop)
     nrates = num_rates(transitions, R, S, insertstep) + noiseparams
     hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
     tp = Vector{Float64}[]
     ts = Vector{Int}[]
-    tcomponents = make_components_T2(transitions, G, R, S, insertstep, splicetype)
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    for (i, t) in enumerate(traces)
-        r = hierarchical ? rin[:, i] : rin
-        a, b = make_trace(t, interval, r, tcomponents, reporter)
-        push!(tp, a)
-        push!(ts, b)
-    end
+    components = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    ts, tp = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
     return tp, ts, traces
 end
 

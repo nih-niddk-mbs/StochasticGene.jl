@@ -37,7 +37,7 @@ end
 
 TBW
 """
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     logpredictions = Array{Float64}(undef, 0)
@@ -52,7 +52,7 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     sum(logpredictions) + lb, logpredictions
 end
 
-function ll_hmm_coupleda(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     ps = [r.per_state for r in reporter]
@@ -325,12 +325,12 @@ function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
 end
 
 function set_b_coupled(trace, d, N)
-    b = zeros(N, size(trace, 1))
+    b = ones(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
         for j in 1:N
             for i in eachindex(d)
-                b[j, t] += pdf(d[i][j], obs[i])
+                b[j, t] *= pdf(d[i][j], obs[i])
             end
         end
         t += 1
@@ -753,24 +753,29 @@ function predicted_state(r, N, components, reporter, interval, trace)
     viterbi_exp(a, b, p0, N, length(trace))
 end
 
-function predicted_state(r, nT, components::T2Components, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
-    states = Vector[]
+function predicted_states(r, nT, components::T2Components, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
+    states = Vector{Int}[]
+    intensity = Vector[]
     a, p0 = make_ap(r, interval, components)
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
     for t in traces
         T = length(t)
         b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
-        push!(states, viterbi_exp(a, b, p0, nT, T))
+        spath = viterbi_exp(a, b, p0, nT, T)
+        push!(states, spath)
+        push!(intensity, [mean(d[s]) for s in spath])
     end
-    states
+    states, intensity
 end
 
-function predicted_state(rates, coupling, transitions, G, R, S, insertstep, n_noise, components, reporters_per_state, probfn, interval, traces)
+
+function predicted_states(rates, coupling, transitions, G, R, S, insertstep, n_noise, components, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
     r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
-    predicted_state(r, couplingStrength, noiseparams, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
+    predicted_states(r, couplingStrength, noiseparams, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
 end
 
-function predicted_state(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
+function predicted_states(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     states = Array[]
@@ -796,6 +801,8 @@ function predicted_trace(statepath, r, reporter, nstates)
     d = model.reporter.probfn(r[end-model.reporter.n+1:end], reporter.per_state, nstates)
     predicted_trace(statepath, d)
 end
+
+
 
 """
     predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
@@ -838,7 +845,7 @@ function predicted_traces(ts::Vector, model)
     for t in ts
         push!(tp, [mean(d[state]) for state in t])
     end
-    tp, ts
+    tp
 end
 function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
     predicted_traces(predicted_states(data, model), model)

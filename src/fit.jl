@@ -17,7 +17,7 @@ halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPN
 
 Create transitions tuple
 """
-function get_transitions(G, TransitionType)
+function get_transitions(G::Int, TransitionType)
     typeof(G) <: AbstractString && (G = parse(Int, G))
     if G == 2
         return ([1, 2], [2, 1])
@@ -40,6 +40,15 @@ function get_transitions(G, TransitionType)
     else
         throw("transition type unknown")
     end
+end
+
+"""
+    get_transitions(G::Tuple, TransitionType)
+
+TBW
+"""
+function get_transitions(G::Tuple, TransitionType)
+    Tuple([get_transitions(G, TransitionType) for G in G])
 end
 
 """
