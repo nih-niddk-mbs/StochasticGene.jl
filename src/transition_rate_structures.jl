@@ -23,29 +23,20 @@ struct Element
 end
 
 """
-	struct MComponents
+	struct Indices
 
-structure for matrix components for matrix M
+index ranges for rates
+gamma: G transitions
+nu: R transitions
+eta: splice transitions
+decay: mRNA decay rate
+
 """
-struct MComponents
-    elementsT::Vector{Element}
-    elementsB::Vector{Element}
-    nT::Int
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
-end
-
-struct M2Components
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRG::Vector
-    elementsR::Vector
-    elementsB::Vector{Element}
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
+struct Indices
+    gamma::Vector{Int}
+    nu::Vector{Int}
+    eta::Vector{Int}
+    decay::Int
 end
 
 """
@@ -59,19 +50,33 @@ abstract type AbstractTComponents end
 	struct TComponents
 
 fields:
-nT, elementsT
+    nT::Int
+    elementsT::Vector
 
 """
 struct TComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector
 end
-struct RGComponents <: AbstractTComponents
+
+"""
+	struct TRGComponents
+
+fields: 
     nT::Int
     nG::Int
     nR::Int
     elementsG::Vector
-    elementsR::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+
+"""
+struct TRGComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRGbar::Vector
     elementsRG::Vector
 end
 
@@ -80,7 +85,10 @@ end
 struct TAIComponents{elementType} <: AbstractTComponents
 
 fields:
-nT, elementsT, elementsTA, elementsTI
+    nT::Int
+    elementsT::Vector{Element}
+    elementsTA::Vector{elementType}
+    elementsTI::Vector{elementType}
 
 """
 struct TAIComponents{elementType} <: AbstractTComponents
@@ -102,33 +110,7 @@ struct TDComponents <: AbstractTComponents
     elementsTG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
-"""
- 	ModelCoupledComponents
 
-fields:
-    nT::Int
-    nG::Int
-    nR::Int
-    sourceState::Int
-    targetTransition::Int
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRG::Vector
-    elementsRGbar::Vector
-"""
-struct ModelCoupledComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    sourceState::Int
-    targetTransition::Int
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRG::Vector
-    elementsRGbar::Vector
-end
 """
  	TCoupledComponents
 
@@ -145,6 +127,87 @@ struct TCoupledComponents
     modelcomponents::Vector{ModelCoupledComponents}
 end
 
+"""
+ 	ModelCoupledComponents
+
+fields:
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Int
+    targetTransition::Int
+    elementsG::Vector
+    elementsGt::Vector
+    elementsGs::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+
+"""
+struct ModelCoupledComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Int
+    targetTransition::Int
+    elementsG::Vector
+    elementsGt::Vector
+    elementsGs::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+end
+
+
+
+"""
+	struct MComponents
+
+structure for matrix components for matrix M
+
+fields:
+    elementsT::Vector{Element}
+    elementsB::Vector{Element}
+    nT::Int
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+"""
+struct MComponents
+    elementsT::Vector{Element}
+    elementsB::Vector{Element}
+    nT::Int
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+end
+
+"""
+    struct MRGComponents
+
+fields:
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+    elementsB::Vector{Element}
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+end
+"""
+struct MRGComponents
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+    elementsB::Vector{Element}
+    U::SparseMatrixCSC
+    Uminus::SparseMatrixCSC
+    Uplus::SparseMatrixCSC
+end
+
+
 
 """
  	MTComponents
@@ -160,9 +223,9 @@ struct MTComponents
     tcomponents::TComponents
 end
 
-struct MRGComponents
-    mcomponents::M2Components
-    tcomponents::RGComponents
+struct MTRGComponents
+    mcomponents::MRGComponents
+    tcomponents::TRGComponents
 end
 
 
@@ -192,28 +255,5 @@ struct MTDComponents
     mcomponents::MComponents
     tcomponents::TDComponents
 end
-"""
-	struct Indices
 
-index ranges for rates
-gamma: G transitions
-nu: R transitions
-eta: splice transitions
-decay: mRNA decay rate
-
-"""
-struct Indices
-    gamma::Vector{Int}
-    nu::Vector{Int}
-    eta::Vector{Int}
-    decay::Int
-end
-
-
-struct Indices_coupled
-    gamma::Vector{Int}
-    nu::Vector{Int}
-    eta::Vector{Int}
-    decay::Int
-end
 

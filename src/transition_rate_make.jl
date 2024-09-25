@@ -49,11 +49,11 @@ for fitting traces and mRNA histograms
 make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_T(transitions, G, R, S, insertstep, splicetype))
 
 """
-    make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
+    make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
 
 TBW
 """
-make_components_MT2(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MRGComponents(make_components_M2(transitions, G, R, nhist, decay), make_components_T2(transitions, G, R, S, insertstep, splicetype))
+make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(make_components_MRG(transitions, G, R, nhist, decay), make_components_TRG(transitions, G, R, S, insertstep, splicetype))
 
 
 
@@ -72,12 +72,12 @@ function make_components_M(transitions, G, R, nhist, decay, splicetype)
     return MComponents(elementsT, elementsB, nT, U, Um, Up)
 end
 
-function make_components_M2(transitions, G, R, nhist, decay)
+function make_components_MRG(transitions, G, R, nhist, decay)
     indices = set_indices(length(transitions), R)
-    elementsG, elementsRG, elementsR, nR = set_elements_T2(transitions, G, R, 0, 1, indices, "")
-    elementsB = set_elements_B2(G, R, indices.nu[R+1])
+    elementsG, elementsRGbar, elementsRG, nR = set_elements_GRS(transitions, G, R, 0, 1, indices, "")
+    elementsB = set_elements_BRG(G, R, indices.nu[R+1])
     U, Um, Up = make_mat_U(nhist, decay)
-    M2Components(G, nR, elementsG, elementsRG, elementsR, elementsB, U, Um, Up)
+    MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
 end
 
 """
@@ -93,14 +93,14 @@ function make_components_T(transitions, G, R, S, insertstep, splicetype)
     TComponents(nT, elementsT)
 end
 """
-    make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 
 TBW
 """
-function make_components_T2(transitions, G, R, S, insertstep, splicetype)
+function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRG, elementsR, nR, nT = set_elements_T2(transitions, G, R, S, insertstep, indices, splicetype)
-    RGComponents(nT, G, nR, elementsG, elementsR, elementsRG)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    TRGComponents(nT, G, nR, elementsGbar, elementsRGbar, elementsRG)
 end
 
 """
@@ -129,8 +129,8 @@ end
 """
 function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRG, elementsRGbar)
+    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
 end
 
 """
@@ -232,8 +232,8 @@ function make_mat_B2(components, rates)
     kron(RB, sparse(I, nG, nG))
 end
 
-function make_mat_M2(components::M2Components, rates::Vector)
-    T = make_mat_T2(components, rates)
+function make_mat_MRG(components::MRGComponents, rates::Vector)
+    T = make_mat_TRG(components, rates)
     B = make_mat_B2(components, rates)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
@@ -247,27 +247,27 @@ construct matrices from elements
 make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
 
 """
-    make_mat_T2(G, GR, R, RG, nG, nR)
+    make_mat_TRG(G, GR, R, RG, nG, nR)
 
 TBW
 """
-function make_mat_T2(G, GR, RGbar, RG, nG, nR)
+function make_mat_TRG(G, GR, RGbar, RG, nG, nR)
     kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(RGbar, sparse(I, nG, nG))
 end
 
 """
-    make_mat_T2(components, rates)
+    make_mat_TRG(components, rates)
 
 TBW
 """
-function make_mat_T2(components, rates)
+function make_mat_TRG(components, rates)
     nG = components.nG
     nR = components.nR
     GR = make_mat_GR(nG)
     G = make_mat(components.elementsG, rates, nG)
-    RGbar = make_mat(components.elementsR, rates, nR)
+    RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    make_mat_TRG(G, GR, RGbar, RG, nG, nR)
 end
 
 """
@@ -307,7 +307,7 @@ function make_mat_GR(components, rates)
     nG = components.nG
     nR = components.nR
     G = make_mat(components.elementsG, rates, nG)
-    R = make_mat(components.elementsR, rates, nR)
+    R = make_mat(components.elementsRGbar, rates, nR)
     RB = make_mat(components.elementsRB, rates, nR)
     G, R, RB
 end
@@ -320,7 +320,7 @@ function make_mat_C(components, rates)
     G = make_mat(components.elementsG, rates, nG)
     RGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
-    T = make_mat_T2(G, GR, RGbar, RG, nG, nR)
+    T = make_mat_TRG(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
     if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
         Gs = spzeros(0)
@@ -459,9 +459,9 @@ end
 ######
 
 function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
-    components = make_components_MT2(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T = make_mat_T2(components.tcomponents, r)
-    M = make_mat_M2(components.mcomponents, r)
+    components = make_components_MTRG(transitions, G, R, S, insertstep, nhist, 1.01, "")
+    T = make_mat_TRG(components.tcomponents, r)
+    M = make_mat_MRG(components.mcomponents, r)
     B = make_mat_B2(components.mcomponents, r)
     return T, M, B, components
 end
@@ -481,8 +481,8 @@ end
 function test_mat_Tc2(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     T = []
     for i in eachindex(G)
-        c = make_components_T2(transitions[i], G[i], R[i], S[i], insertstep[i],"")
-        push!(T,make_mat_T2(c,r[i]))
+        c = make_components_TRG(transitions[i], G[i], R[i], S[i], insertstep[i],"")
+        push!(T,make_mat_TRG(c,r[i]))
     end
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength), T, kron(T[1], sparse(I,size(T[2]))) + kron(sparse(I,size(T[1])),T[2])

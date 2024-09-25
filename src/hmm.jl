@@ -10,11 +10,11 @@
 ###
 
 """
-    ll_hmm(r, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    ll_hmm(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_hmm(r, nT, components::RGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
@@ -105,10 +105,10 @@ end
 # end
 
 """
-    ll_hmm_log(r, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    ll_hmm_log(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 """
-function ll_hmm_log(r, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm_log(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm_log(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
@@ -130,11 +130,11 @@ function ll_hmm_log(r, nT, noiseparams::Int, reporters_per_state, probfn, traces
 end
 
 """
-    ll_hmm_hierarchical(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+    ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
 
 TBW
 """
-function ll_hmm_hierarchical(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+function ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     for (i, t) in enumerate(trace[1])
         T = length(t)
@@ -147,11 +147,11 @@ function ll_hmm_hierarchical(r::Matrix, nT, components::RGComponents, noiseparam
 end
 
 """
-    ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+    ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
 
 TBW
 """
-function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, components)
     for (i, t) in enumerate(trace[1])
@@ -182,11 +182,11 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
 end
 
 """
-    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 TBW
 """
-function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::RGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, components)
     lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
@@ -201,7 +201,7 @@ end
 
 
 """
-    make_ap(r, interval, components::RGComponents)
+    make_ap(r, interval, components::TRGComponents)
 
 Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
 a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GRSM model
@@ -210,13 +210,13 @@ p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
 Arguments:
 - `r`: transition rates
 - `interval`: time interval between intensity observations (frame interval)
-- `components`: T2 matrix components
+- `components`: TRG matrix components
 
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(r, interval, components::RGComponents)
-    Qtr = make_mat_T2(components, r) ##  transpose of the Markov process transition rate matrix Q
+function make_ap(r, interval, components::TRGComponents)
+    Qtr = make_mat_TRG(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
 end
 
@@ -749,7 +749,7 @@ function predicted_state(r, N, components, reporter, interval, trace)
     viterbi_exp(a, b, p0, N, length(trace))
 end
 
-function predicted_states(r::Vector, nT, components::RGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
+function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
     intensity = Vector[]
     a, p0 = make_ap(r, interval, components)
@@ -764,7 +764,7 @@ function predicted_states(r::Vector, nT, components::RGComponents, n_noiseparams
     states, intensity
 end
 
-function predicted_states(r::Matrix, nT, components::RGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
+function predicted_states(r::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
     intensity = Vector[]
     a, p0 = make_ap(r[:,1], interval, components)
@@ -798,38 +798,38 @@ function predicted_states(r, couplingStrength, noiseparams::Vector, components::
     states
 end
 
-"""
-    predicted_trace(statepath, noise_dist)
-    predicted_trace(statepath, r, reporter, nstates)
+# """
+#     predicted_trace(statepath, noise_dist)
+#     predicted_trace(statepath, r, reporter, nstates)
 
-return predicted trace from state path
-"""
-function predicted_trace(statepath, noise_dist)
-    [mean(noise_dist[state]) for state in statepath]
-end
+# return predicted trace from state path
+# """
+# function predicted_trace(statepath, noise_dist)
+#     [mean(noise_dist[state]) for state in statepath]
+# end
 
-function predicted_trace(statepath, r, reporter, nstates)
-    d = model.reporter.probfn(r[end-model.reporter.n+1:end], reporter.per_state, nstates)
-    predicted_trace(statepath, d)
-end
+# function predicted_trace(statepath, r, reporter, nstates)
+#     d = model.reporter.probfn(r[end-model.reporter.n+1:end], reporter.per_state, nstates)
+#     predicted_trace(statepath, d)
+# end
 
 
 
-"""
-    predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
+# """
+#     predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
 
-return predicted trace and state path
-"""
-function predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
-    t = predicted_state(r, tcomponents.nT, tcomponents, reporter, interval, trace)
-    tp = predicted_trace(t, noise_dist)
-    return tp, t
-end
+# return predicted trace and state path
+# """
+# function predicted_trace_state(trace, interval, r::Vector, tcomponents, reporter, noise_dist)
+#     t = predicted_state(r, tcomponents.nT, tcomponents, reporter, interval, trace)
+#     tp = predicted_trace(t, noise_dist)
+#     return tp, t
+# end
 
-function predicted_trace_state(trace, interval, model)
-    d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
-    predicted_trace_state(trace, interval, model.rates, model.tcomponents, model.reporter, d)
-end
+# function predicted_trace_state(trace, interval, model)
+#     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
+#     predicted_trace_state(trace, interval, model.rates, model.tcomponents, model.reporter, d)
+# end
 
 # """
 #     predicted_states(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model::AbstractGmodel)
@@ -844,23 +844,23 @@ end
 #     ts
 # end
 
-"""
-    predicted_traces(ts::Vector{Vector}, model)
-    predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
+# """
+#     predicted_traces(ts::Vector{Vector}, model)
+#     predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
 
-return vector of predicted traces and vector of state paths
-"""
-function predicted_traces(ts::Vector, model)
-    tp = Vector{Float64}[]
-    d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
-    for t in ts
-        push!(tp, [mean(d[state]) for state in t])
-    end
-    tp
-end
-function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
-    predicted_traces(predicted_states(data, model), model)
-end
+# return vector of predicted traces and vector of state paths
+# """
+# function predicted_traces(ts::Vector, model)
+#     tp = Vector{Float64}[]
+#     d = model.reporter.probfn(model.rates[end-model.reporter.n+1:end], model.reporter.per_state, tcomponent(model).nT)
+#     for t in ts
+#         push!(tp, [mean(d[state]) for state in t])
+#     end
+#     tp
+# end
+# function predicted_traces(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
+#     predicted_traces(predicted_states(data, model), model)
+# end
 
 # function predicted_traces(ts::Vector, model)
 #     tp = Vector{Float64}[]

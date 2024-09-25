@@ -1124,7 +1124,7 @@ function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::
     hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
     tp = Vector{Float64}[]
     ts = Vector{Int}[]
-    components = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     ts, tp = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
     return tp, ts, traces
 end
@@ -1135,7 +1135,7 @@ end
 #     hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
 #     tp = Vector{Float64}[]
 #     ts = Vector{Int}[]
-#     tcomponents = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+#     tcomponents = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 #     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
 
 #     predict_trace_state()
@@ -1153,7 +1153,7 @@ end
 
 # """
 # function make_trace(trace, interval::Float64, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-#     tcomponents = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+#     tcomponents = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 #     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
 #     make_trace(trace, interval, r::Vector, tcomponents, reporter)
 # end

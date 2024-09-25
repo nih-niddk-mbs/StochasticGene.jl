@@ -288,7 +288,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         elseif typeof(data) <: AbstractTraceData
             reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
             # components = make_components_T(transitions, G, R, S, insertstep, splicetype)
-            components = make_components_T2(transitions, G, R, S, insertstep, splicetype)
+            components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
         elseif typeof(data) <: AbstractTraceHistogramData
             reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
             components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
