@@ -34,6 +34,7 @@ export
     GRSMhierarchicalmodel,
     GRSMcoupledmodel,
     fit,
+    mean_elongationtime,
     run_mh,
     metropolis_hastings,
     prob_Gaussian,

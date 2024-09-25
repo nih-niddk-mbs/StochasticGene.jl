@@ -674,8 +674,12 @@ function logsumexp(v::Array)
 end
 
 function mean_elongationtime(r, transitions, R)
-    n = length(transitions)
-    meantime(r[n+2:n+R])
+    if R > 0
+        n = length(transitions)
+        return meantime(r[n+2:n+R+1])
+    else
+        return 1.0
+    end
 end
 
 function meantime(r::Vector)

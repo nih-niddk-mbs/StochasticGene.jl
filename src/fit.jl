@@ -172,7 +172,7 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling)
-    rinit = set_rinit(rinit, priormean)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, coupling, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
@@ -586,7 +586,7 @@ end
 
 default priors for rates (includes all parameters, fitted or not)
 """
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime)
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
     if S > 0
         S = R - insertstep + 1
     end

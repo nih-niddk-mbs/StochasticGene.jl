@@ -598,9 +598,9 @@ function deviance(fits, data::AbstractTraceData, model)
 end
 
 function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)
-    s =0
+    s = 0
     for t in data.trace[1]
-        s+= sum(sum.(t))
+        s += sum(sum.(t))
     end
     fits.llml / s
 end
@@ -1063,12 +1063,12 @@ end
     write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
 
 """
-function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel = "-h", state=true)
+function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel="-h", state=true)
     # exclude_label = ~hierarchical
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-                occursin(hlabel,f) ? hierarchical = true : hierarchical = false
+                occursin(hlabel, f) ? hierarchical = true : hierarchical = false
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f), get_row(ratetype))
@@ -1097,7 +1097,7 @@ function make_traces_dataframe(datapath, datacond::String, interval, r, transiti
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
     if state
-        g, z, zdigits, r = inverse_state(ts,G,R,S,insertstep)
+        g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
         gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
@@ -1115,18 +1115,20 @@ end
 function make_traces_dataframe(datapath, datacond::String, interval, r, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false)
     tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, hierarchical)
     l = maximum(length.(tp))
-    data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
-    pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
-    if state
-        g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
-        gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        v = [data pred gs s zs]
-    else
-        v = [data pred]
+    for j in eachindex(traces)
+        data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+        pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+        if state
+            g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
+            gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            v = [data pred gs s zs]
+        else
+            v = [data pred]
+        end
     end
     # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
     # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
