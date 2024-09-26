@@ -798,10 +798,12 @@ function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertst
         push!(states, viterbi_exp(a, b, p0, nT, T))
     end
     units = Vector[]
+    intensity = Vector[]
     for s in states
         push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+        push!(intensity, [[d[i] for d in d] for i in s])
     end
-    states, units
+    units, intensity
 end
 
 
