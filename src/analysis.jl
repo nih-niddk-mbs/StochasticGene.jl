@@ -1141,27 +1141,25 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, splicetype)
     ts, tp = predicted_states(rin, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
     l = maximum(length.(traces))
-    cols = []
+    cols = Matrix(undef,length(traces),0)
     for k in coupling[1]
-        td = [d[k] for d in tp]
-        data = ["data($k)_$k" => [t[k]; fill(missing, l - length(traces[:, k]))] for t in eachrow(traces)]
-        pred = ["model_mean($i)_$k" => [mean(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
-        predstd = ["model_std($i)_$k" => [std(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
+        data = ["data$i"*"_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:,k]))] for i in eachindex(traces)]
+        pred = ["model_mean$i" * "_$k" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+        predstd = ["std_mean$i" * "_$k" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
         cols = hcat(cols, [data pred predstd])
         if state
-            index = [s[k] for s in ts[j]]
+            index = [[s[k] for s in t] for t in ts]
             g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
-            gs = ["Gstate($i)_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            gs = ["Gstate$i"*"_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            s = ["Rstate($i)_k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            s = ["Rstate$i"*"_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            zs = ["Reporters($i)_k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            zs = ["Reporters$i"*"_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             cols = hcat(cols, [gs s zs])
         end
     end
     DataFrame(permutedims(cols, (2, 1))[:])
 end
-
 
 # function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
 #     traces = read_tracefiles(datapath, datacond, start, stop)
