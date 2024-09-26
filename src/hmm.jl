@@ -1,7 +1,7 @@
 # This file is part of StochasticGene.jl   
 
 ### hmm.jl
-### Fit discrete HMMs and continuous hidden Markov process models directly to intensity traces
+### Fit discrete HMMs and continuous hidden Markov process models directly to observations (e.g. intensity traces)
 ###
 ### Notation in discrete HMM algorithms follows Rabier, 1989
 ###
@@ -715,9 +715,9 @@ end
 returns maximum likelihood state path using Viterbi algorithm
 """
 function viterbi_exp(a, b, p0, N, T)
-    loga = log.(a)
-    logb = log.(b)
-    logp0 = log.(p0)
+    loga = log.(max.(a, 0.0))
+    logb = log.(max.(b, 0.0))
+    logp0 = log.(max.(p0, 0.0))
     viterbi(loga, logb, logp0, N, T)
 end
 
@@ -745,13 +745,13 @@ return predicted state path using Viterbi algorithm
 
 function predicted_state(r, N, components, reporter, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    b = set_b(trace, r[end-reporter.n+1:end], reporter.per_state, reporter.probfn, N)
+    b = set_logb(trace, r[end-reporter.n+1:end], reporter.per_state, reporter.probfn, N)
     viterbi_exp(a, b, p0, N, length(trace))
 end
 
 function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
-    intensity = Vector[]
+    observation_dist = Vector[]
     a, p0 = make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
     for t in traces
@@ -759,16 +759,16 @@ function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparam
         b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
         spath = viterbi_exp(a, b, p0, nT, T)
         push!(states, spath)
-        # push!(intensity, [mean(d[s]) for s in spath])
-        push!(intensity, [d[s] for s in spath])
+        # push!(observation_dist, [mean(d[s]) for s in spath])
+        push!(observation_dist, [d[s] for s in spath])
     end
-    states, intensity
+    states, observation_dist
 end
 
 
 function predicted_states(r::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
-    intensity = Vector[]
+    observation_dist = Vector[]
     a, p0 = make_ap(r[:, 1], interval, components)
     for (i, t) in enumerate(traces)
         T = length(t)
@@ -776,9 +776,9 @@ function predicted_states(r::Matrix, nT, components::TRGComponents, n_noiseparam
         spath = viterbi_exp(a, b, p0, nT, T)
         push!(states, spath)
         d = probfn(r[end-n_noiseparams+1:end, i], reporters_per_state, nT)
-        push!(intensity, [d[s] for s in spath])
+        push!(observation_dist, [d[s] for s in spath])
     end
-    states, intensity
+    states, observation_dist
 end
 
 
@@ -798,12 +798,12 @@ function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertst
         push!(states, viterbi_exp(a, b, p0, nT, T))
     end
     units = Vector[]
-    intensity = Vector[]
+    observation_dist = Vector[]
     for s in states
         push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
-        push!(intensity, [[d[i] for d in d] for i in s])
+        push!(observation_dist, [[d[i] for d in d] for i in s])
     end
-    units, intensity
+    units, observation_dist
 end
 
 
