@@ -1034,7 +1034,7 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
 
 TBW
 """
-function write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true)
+function write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true, coupling=tuple())
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1050,7 +1050,7 @@ function write_traces_folder(folder, datafolder::Vector, datacond, interval, rat
                             transitions = get_transitions(G, parts.label)
                             datapath = joinpath(datafolder,)
                             # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state)
+                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state, coupling=coupling)
                         end
                     end
                 end
@@ -1063,7 +1063,7 @@ end
     write_traces(folder, datapath, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=false)
 
 """
-function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel="-h", state=true)
+function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; hlabel="-h", state=true, coupling = tuple())
     # exclude_label = ~hierarchical
     for (root, dirs, files) in walkdir(folder)
         for f in files
@@ -1075,7 +1075,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
                 out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
                 # make_traces(r, datapath, datacond, transitions, G, R, S, insertstep, traceinfo, splicetype, probfn, noiseparams, weightind, outfile=out)
-                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state, hierarchical=hierarchical)
+                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
             end
         end
     end
@@ -1086,13 +1086,19 @@ end
 
 
 """
-function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true, hierarchical=false)
-    df = make_traces_dataframe(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state, hierarchical)
+function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype=""; state=true, hierarchical=false, coupling = tuple())
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, state, hierarchical, coupling)
     CSV.write(outfile, df)
 end
 
-function make_traces_dataframe(datapath, datacond::String, interval, r, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false)
-    tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, hierarchical)
+function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false, coupling=tuple())
+     if hierarchical
+        nrates = num_rates(transitions, R, S, insertstep) + noiseparams
+        rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
+    end
+    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+    ts, tp = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
     l = maximum(length.(tp))
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
@@ -1112,9 +1118,10 @@ function make_traces_dataframe(datapath, datacond::String, interval, r, transiti
     DataFrame(permutedims(v, (2, 1))[:])
 end
 
-function make_traces_dataframe(datapath, datacond::String, interval, r, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false)
-    tp, ts, traces = make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype, hierarchical)
-    l = maximum(length.(tp))
+function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", state=true, hierarchical=false, coupling= tuple())   
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, splicetype)
+    ts, tp = predicted_states(rin, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
+     l = maximum(length.(tp))
     for j in eachindex(traces)
         data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
         pred = ["model$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
@@ -1130,27 +1137,9 @@ function make_traces_dataframe(datapath, datacond::String, interval, r, transiti
             v = [data pred]
         end
     end
-    # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
-    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
     DataFrame(permutedims(v, (2, 1))[:])
 end
 
-"""
-    make_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-
-
-"""
-
-function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-    hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
-    tp = Vector{Float64}[]
-    ts = Vector{Int}[]
-    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-    ts, tp = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
-    return tp, ts, traces
-end
 
 # function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
 #     traces = read_tracefiles(datapath, datacond, start, stop)
@@ -1160,8 +1149,6 @@ end
 #     ts = Vector{Int}[]
 #     tcomponents = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 #     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-
-#     predict_trace_state()
 #     for (i, t) in enumerate(traces)
 #         r = hierarchical ? rin[:, i] : rin
 #         a, b = make_trace(t, interval, r, tcomponents, reporter)

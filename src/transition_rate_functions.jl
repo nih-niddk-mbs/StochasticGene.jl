@@ -25,16 +25,7 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     r = num_reporters_per_index(z, R, insertstep, base, f)
     return g, z, zdigits, r
 end
-function unit_state(i::Int, G::Tuple, R, S, unit_model)
-    nT = T_dimension(G, R, S, unit_model)
-    rem = i
-    unit = Vector{Int}(undef,length(unit_model))
-    for j in reverse(unit_model)
-        unit[j] = mod(rem - 1, nT[j]) + 1
-        rem = div(rem - unit[j], nT[j]) + 1
-    end
-    unit
-end
+
 
 function inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)
     units = unit_state(i, G, R, S, unit_model)
@@ -78,6 +69,22 @@ function inverse_state(i::Vector{Vector{Int}}, G::Int, R, S, insertstep)
         push!(r, ri)
     end
     return g, z, zdigits, r
+end
+
+"""
+    unit_state(i::Int, G::Tuple, R, S, unit_model)
+
+TBW
+"""
+function unit_state(i::Int, G::Tuple, R, S, unit_model)
+    nT = T_dimension(G, R, S, unit_model)
+    rem = i
+    unit = Vector{Int}(undef, length(unit_model))
+    for j in reverse(unit_model)
+        unit[j] = mod(rem - 1, nT[j]) + 1
+        rem = div(rem - unit[j], nT[j]) + 1
+    end
+    Tuple(unit)
 end
 
 """

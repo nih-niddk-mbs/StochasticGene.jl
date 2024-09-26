@@ -759,44 +759,51 @@ function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparam
         b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
         spath = viterbi_exp(a, b, p0, nT, T)
         push!(states, spath)
-        push!(intensity, [mean(d[s]) for s in spath])
+        # push!(intensity, [mean(d[s]) for s in spath])
+        push!(intensity, [d[s] for s in spath])
     end
     states, intensity
 end
 
+
 function predicted_states(r::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
     intensity = Vector[]
-    a, p0 = make_ap(r[:,1], interval, components)
-    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
+    a, p0 = make_ap(r[:, 1], interval, components)
     for (i, t) in enumerate(traces)
         T = length(t)
         b = set_b(t, r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
         spath = viterbi_exp(a, b, p0, nT, T)
         push!(states, spath)
-        push!(intensity, [mean(d[s]) for s in spath])
+        d = probfn(r[end-n_noiseparams+1:end, i], reporters_per_state, nT)
+        push!(intensity, [d[s] for s in spath])
     end
     states, intensity
 end
 
 
-function predicted_states(rates, coupling, transitions, G, R, S, insertstep, n_noise, components, reporters_per_state, probfn, interval, traces)
+function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
     r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
-    predicted_states(r, couplingStrength, noiseparams, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
-end
-
-function predicted_states(r, couplingStrength, noiseparams::Vector, components::TCoupledComponents, reporters_per_state, probfn, interval, traces)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     states = Array[]
+    d = []
+    for i in eachindex(noiseparams)
+        push!(d, probfn[i](noiseparams[i], reporters_per_state[i], nT))
+    end
     for t in traces
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
         push!(states, viterbi_exp(a, b, p0, nT, T))
     end
-    states
+    units = Vector[]
+    for s in states
+        push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+    end
+    states, units
 end
+
 
 # """
 #     predicted_trace(statepath, noise_dist)
