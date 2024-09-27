@@ -115,7 +115,7 @@ include("utilities.jl")
 # Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms
 # include("simulator.jl")
 include("simulator_coupled.jl")
-include("telegraphsplice.jl")
+# include("telegraphsplice.jl")
 
 # functions for fitting models to data
 include("fit.jl")

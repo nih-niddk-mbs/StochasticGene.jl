@@ -46,7 +46,7 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
 """
-    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
 Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null vector will return a vector of the mRNA histogram and ON and OFF time histograms. If traceinterval > 0, it will return a vector containing the mRNA histogram and the traces
 
@@ -59,16 +59,16 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `insertstep`: reporter insertion step
  	
 #Named arguments
-- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
+- `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
 - `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
     1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
     2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
     3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
     5. Int indicating number of coupling parameters
-- `nalleles`: Number of alleles
+- `nalleles`: Number of alleles, set to 1 if coupling nonempty
 - `nhist::Int`: Size of mRNA histogram
-- `onstates::Vector`: a vector of ON states (use empty set for any R step is ON) or vector of vector of ON states
+- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON)
 - `probfn`=prob_GaussianMixture: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
 - `splicetype`::String: splice action
@@ -80,10 +80,16 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
     
 #Example:
 
-julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
-
+julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],[3,2]),3,2,2,1,nhist=20,bins=[collect(2.:2.:200),collect(.2:.2:20)],onstates=[Int[],[3]],nalleles=2, totalsteps = 200000)
+5-element Vector{Vector}:
+ [7823.967526508377, 33289.19787176562, 69902.6774554014, 92942.59127561412, 91816.91189325438, 70259.88319069796, 43895.28637479579, 22426.725922619895, 9005.190755732247, 3043.2417332890695, 1005.6412773072143, 203.11430396725336, 6.420639815427421, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+ [2911, 2568, 2228, 1694, 1354, 1088, 819, 661, 514, 401  …  0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ [622, 643, 592, 596, 553, 524, 520, 489, 448, 437  …  19, 13, 12, 12, 14, 10, 10, 17, 8, 8]
+ [550, 584, 569, 555, 498, 510, 497, 495, 489, 487  …  89, 96, 107, 99, 89, 103, 86, 97, 87, 77]
+ [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
+ 
 """
-function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -107,7 +113,7 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
         onoff = false
     else
         onoff = true
-        onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
+        onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles, coupling)
     end
 
     if traceinterval > 0
@@ -137,7 +143,7 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
         end
 
         if onoff
-            before = set_before(before, onstates, state, allele, G, R, insertstep)
+            before = set_before(before, onstates, state, allele, G, R, insertstep, index)
         end
 
         if verbose
@@ -184,15 +190,80 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
 end
 
 """
+    set_onoff(onstates, bins, nalleles)
+
+TBW
+"""
+function set_onoff(onstates, bins, nalleles, coupling)
+    bins, onstates = set_bins_onstates(onstates, bins, coupling)
+    # if ~(eltype(onstates) <: Vector)
+    #     bins = [bins]
+    #     onstates = [onstates]
+    # end
+    nn = length(onstates)
+    tIA = Vector{Float64}[]
+    tAI = Vector{Float64}[]
+    before = Vector{Int}(undef, nn)
+    after = Vector{Int}(undef, nn)
+    ndt = Int[]
+    dt = Float64[]
+    histofftdd = Vector{Int}[]
+    histontdd = Vector{Int}[]
+    for i in eachindex(onstates)
+        push!(ndt, length(bins[i]))
+        push!(dt, bins[i][2] - bins[i][1])
+        push!(histofftdd, zeros(Int, ndt[i]))
+        push!(histontdd, zeros(Int, ndt[i]))
+        push!(tIA, zeros(nalleles))
+        push!(tAI, zeros(nalleles))
+    end
+    return onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+end
+
+function set_bins_onstates(onstates, bins, coupling)
+    if isempty(coupling)
+        if ~(eltype(onstates) <: Vector)
+            onstates = [onstates]
+        end
+        if ~(eltype(bins) <: Vector)
+            bins = [bins]
+        end
+        if length(bins) != length(onstates)
+            throw("number of time bin vectors do not match number of onstates")
+        end
+    else
+        if length(onstates) % length(coupling[1]) != 0
+            throw("number of onstate vectors is not divisible by number of units")
+        elseif length(bins) != length(onstates)
+            throw("number of time bin vectors do not match number of onstates")
+        end
+    end
+    return bins, onstates
+end
+
+"""
     set_before(onstates, state, allele, G, R, inserstep)
 
 find before and after states for the same allele to define dwell time histograms
 """
-function set_before(before, onstates, state, allele, G, R, insertstep)
+function set_before(before, onstates, state::Matrix, allele, G, R, insertstep, index)
     for i in eachindex(onstates)
         before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
     end
     before
+end
+
+function set_before(before, onstates, state::Vector{Matrix}, allele, G::Tuple, R, insertstep, index)
+    for i in eachindex(onstates)
+        before[i] = isempty(onstates[i]) ? num_reporters(state[index[1]][i], 1, G[index[1]], R[index[1]], insertstep[index[1]]) : Int(gstate(G[index[1]], state[index[1]], 1) ∈ onstates[i])
+    end
+    before
+end
+
+function onstate_unit(onstates)
+    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+
+
 end
 
 """
@@ -222,7 +293,12 @@ return number of states with R steps > 1
 #     reporters
 # end
 
-num_reporters(state::Matrix, allele, G, R, insertstep) = sum(state[G+insertstep:G+R,allele] .> 1)
+num_reporters(state, allele, G::Int, R, insertstep) = sum(state[G+insertstep:G+R, allele] .> 1)
+
+function num_reporters(state, allele, G::Tuple, R, insertstep)
+
+
+end
 
 """
     firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
@@ -254,36 +330,6 @@ function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
     if t12 <= ndt && t12 > 0 && t2[allele] > 0
         hist[ceil(Int, t12)] += 1
     end
-end
-
-"""
-    set_onoff(onstates, bins, nalleles)
-
-TBW
-"""
-function set_onoff(onstates, bins, nalleles)
-    if ~(eltype(onstates) <: Vector)
-        bins = [bins]
-        onstates = [onstates]
-    end
-    nn = length(onstates)
-    tIA = Vector{Float64}[]
-    tAI = Vector{Float64}[]
-    before = Vector{Int}(undef, nn)
-    after = Vector{Int}(undef, nn)
-    ndt = Int[]
-    dt = Float64[]
-    histofftdd = Vector{Int}[]
-    histontdd = Vector{Int}[]
-    for i in eachindex(onstates)
-        push!(ndt, length(bins[i]))
-        push!(dt, bins[i][2] - bins[i][1])
-        push!(histofftdd, zeros(Int, ndt[i]))
-        push!(histontdd, zeros(Int, ndt[i]))
-        push!(tIA, zeros(nalleles))
-        push!(tAI, zeros(nalleles))
-    end
-    return onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
 end
 
 """
@@ -358,9 +404,9 @@ end
 TBW
 """
 function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-    if nalleles isa Number
-        nalleles = fill(nalleles, length(G))
-    end
+    # if nalleles isa Number
+    #     nalleles = fill(1, length(G))
+    # end
     if noiseparams isa Number
         noiseparams = fill(noiseparams, length(G))
     end
@@ -382,6 +428,7 @@ function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
         push!(rv, r[n+1:n+num])
         n += num
     end
+    push!(rv, r[end-coupling[5]:end])
     rv
 end
 
@@ -400,7 +447,7 @@ function findmin_tau(tau::Vector{Matrix})
         if t < τ
             τ = t
             index = (i, ind)
-            allele = a
+            # allele = a
         end
     end
     τ, index, allele
@@ -453,7 +500,7 @@ function initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreacti
     tau = Matrix[]
     states = Matrix[]
     for i in eachindex(G)
-        t, s = initialize(r[i], G[i], R[i], reactions[i], nalleles[i], initstate, initreaction)
+        t, s = initialize(r[i], G[i], R[i], reactions[i], 1, initstate, initreaction)
         push!(tau, t)
         push!(states, s)
     end
