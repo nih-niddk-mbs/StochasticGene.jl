@@ -106,7 +106,8 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
     if length(bins) < 1
         onoff = false
     else
-        onoff, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
+        onoff = true
+        onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
     end
 
     if traceinterval > 0
@@ -143,7 +144,6 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
             println("---")
             println("m:", m)
             println(state)
-            onoff && println("before", before)
             println(tau)
             println("t:", t)
             println(index, " ", allele)
@@ -183,7 +183,108 @@ function simulator_coupled(r, transitions, G, R, S, insertstep; coupling=tuple()
     end
 end
 
+"""
+    set_before(onstates, state, allele, G, R, inserstep)
 
+find before and after states for the same allele to define dwell time histograms
+"""
+function set_before(before, onstates, state, allele, G, R, insertstep)
+    for i in eachindex(onstates)
+        before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+    end
+    before
+end
+
+"""
+    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
+
+TBW
+"""
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
+    for i in eachindex(onstates)
+        after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+        firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+    end
+    verbose && println(tAI)
+    verbose && println(tIA)
+end
+
+"""
+    num_reporters(state::Matrix, allele, G, R, insertstep=1)
+
+return number of states with R steps > 1
+"""
+# function num_reporters(state::Matrix, allele, G, R, insertstep)
+#     reporters = 0
+#     for i in G+insertstep:G+R
+#         reporters = reporters + Int(state[i, allele] > 1)
+#     end
+#     reporters
+# end
+
+num_reporters(state::Matrix, allele, G, R, insertstep) = sum(state[G+insertstep:G+R,allele] .> 1)
+
+"""
+    firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
+
+decide if transition exits or enters sojourn states then in place update appropriate histogram
+"""
+function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
+    if before == 1 && after == 0  # turn off
+        firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+        if verbose
+            println("off:", allele)
+        end
+    elseif before == 0 && after == 1 # turn on
+        firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+        if verbose
+            println("on:", allele)
+        end
+    end
+end
+
+"""
+    firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
+
+in place update of first passage time histograms
+"""
+function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
+    t1[allele] = t
+    t12 = (t - t2[allele]) / dt
+    if t12 <= ndt && t12 > 0 && t2[allele] > 0
+        hist[ceil(Int, t12)] += 1
+    end
+end
+
+"""
+    set_onoff(onstates, bins, nalleles)
+
+TBW
+"""
+function set_onoff(onstates, bins, nalleles)
+    if ~(eltype(onstates) <: Vector)
+        bins = [bins]
+        onstates = [onstates]
+    end
+    nn = length(onstates)
+    tIA = Vector{Float64}[]
+    tAI = Vector{Float64}[]
+    before = Vector{Int}(undef, nn)
+    after = Vector{Int}(undef, nn)
+    ndt = Int[]
+    dt = Float64[]
+    histofftdd = Vector{Int}[]
+    histontdd = Vector{Int}[]
+    for i in eachindex(onstates)
+        push!(ndt, length(bins[i]))
+        push!(dt, bins[i][2] - bins[i][1])
+        push!(histofftdd, zeros(Int, ndt[i]))
+        push!(histontdd, zeros(Int, ndt[i]))
+        push!(tIA, zeros(nalleles))
+        push!(tAI, zeros(nalleles))
+    end
+    return onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+end
 
 """
     set_tracelog(tracelog, t, state::Vector{Matrix})
@@ -283,63 +384,7 @@ function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
     end
     rv
 end
-"""
-    set_before(onstates, state, allele, G, R, inserstep)
 
-find before and after states for the same allele to define dwell time histograms
-"""
-function set_before(before, onstates, state, allele, G, R, insertstep)
-    for i in eachindex(onstates)
-        before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-    end
-    before
-end
-
-"""
-    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
-
-TBW
-"""
-function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
-    for i in eachindex(onstates)
-        after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-        firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
-    end
-    verbose && println(tAI)
-    verbose && println(tIA)
-end
-
-
-"""
-    set_onoff(onstates, bins, nalleles)
-
-TBW
-"""
-function set_onoff(onstates, bins, nalleles)
-    onoff = true
-    if ~(eltype(onstates) <: Vector)
-        bins = [bins]
-        onstates = [onstates]
-    end
-    nn = length(onstates)
-    tIA = Vector{Float64}[]
-    tAI = Vector{Float64}[]
-    before = Vector{Int}(undef, nn)
-    after = Vector{Int}(undef, nn)
-    ndt = Int[]
-    dt = Float64[]
-    histofftdd = Vector{Int}[]
-    histontdd = Vector{Int}[]
-    for i in eachindex(onstates)
-        push!(ndt, length(bins[i]))
-        push!(dt, bins[i][2] - bins[i][1])
-        push!(histofftdd, zeros(Int, ndt[i]))
-        push!(histontdd, zeros(Int, ndt[i]))
-        push!(tIA, zeros(nalleles))
-        push!(tAI, zeros(nalleles))
-    end
-    return onoff, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
-end
 
 """
     findmin_tau(tau::Vector{Matrix})
@@ -364,123 +409,6 @@ end
 function findmin_tau(tau::Matrix)
     t, ind = findmin(tau)
     return t, ind[1], ind[2]
-end
-
-function simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams::Int=4, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
-    if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
-        throw("r has too few elements")
-    end
-    if insertstep > R > 0
-        throw("insertstep>R")
-    end
-    if S > 0
-        S = R - insertstep + 1
-    end
-    _, mhist, mhist0, m, steps, t, ts, t0, tsample, err = initialize_sim(r, nhist, tol)
-    reactions = set_reactions(transitions, G, R, S, insertstep)
-    tau, state = initialize(r, G, R, length(reactions), nalleles)
-    if length(bins) < 1
-        onoff = false
-    else
-        onoff = true
-        if ~(eltype(onstates) <: Vector)
-            bins = [bins]
-            onstates = [onstates]
-        end
-        nn = length(onstates)
-        tIA = Vector{Float64}[]
-        tAI = Vector{Float64}[]
-        before = Vector{Int}(undef, nn)
-        after = Vector{Int}(undef, nn)
-        ndt = Int[]
-        dt = Float64[]
-        histofftdd = Vector{Int}[]
-        histontdd = Vector{Int}[]
-        for i in eachindex(onstates)
-            push!(ndt, length(bins[i]))
-            push!(dt, bins[i][2] - bins[i][1])
-            push!(histofftdd, zeros(Int, ndt[i]))
-            push!(histontdd, zeros(Int, ndt[i]))
-            push!(tIA, zeros(nalleles))
-            push!(tAI, zeros(nalleles))
-        end
-    end
-    if traceinterval > 0
-        par = r[end-noiseparams+1:end]
-        tracelog = [(t, state[:, 1])]
-    end
-    if verbose
-        invactions = invert_dict(set_actions())
-    end
-    if totaltime > 0.0
-        err = 0.0
-        totalsteps = 0
-    end
-    while (err > tol && steps < totalsteps) || t < totaltime
-        steps += 1
-        t, rindex = findmin(tau)   # reaction index and allele for least time transition
-        index = rindex[1]
-        allele = rindex[2]
-        initial, final, disabled, enabled, action = set_arguments(reactions, index)
-        dth = t - t0
-        t0 = t
-        update_mhist!(mhist, m, dth, nhist)
-        if t - ts > tsample && traceinterval == 0
-            err, mhist0 = update_error(mhist, mhist0)
-            ts = t
-        end
-
-        if onoff
-            # find before and after states for the same allele to define dwell time histograms 
-            for i in eachindex(onstates)
-                before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-            end
-        end
-
-        if verbose
-            println("---")
-            println("m:", m)
-            println(state)
-            onoff && println("before", before)
-            println(tau)
-            println("t:", t)
-            println(rindex)
-            println(invactions[action], " ", allele)
-            println(initial, "->", final)
-        end
-
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, final, action, insertstep)
-
-        if onoff
-            for i in eachindex(onstates)
-                after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-                firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
-            end
-            verbose && println(tAI)
-            verbose && println(tIA)
-        end
-        if traceinterval > 0
-            push!(tracelog, (t, state[:, 1]))
-        end
-    end  # while
-    verbose && println(steps)
-    # counts = max(sum(mhist), 1)
-    # mhist /= counts
-    if onoff
-        dwelltimes = Vector[]
-        push!(dwelltimes, mhist[1:nhist])
-        for i in eachindex(histontdd)
-            push!(dwelltimes, histontdd[i])
-            push!(dwelltimes, histofftdd[i])
-        end
-        return dwelltimes
-    elseif traceinterval > 0.0
-        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
-    elseif onoff && traceinterval > 0
-        return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
-    else
-        return mhist[1:nhist]
-    end
 end
 
 """
@@ -700,48 +628,7 @@ function state_index(state::Array, G, R, S, allele=1)
     end
 end
 
-"""
-    num_reporters(state::Matrix, allele, G, R, insertstep=1)
 
-return number of states with R steps > 1
-"""
-function num_reporters(state::Matrix, allele, G, R, insertstep)
-    reporters = 0
-    for i in G+insertstep:G+R
-        reporters = reporters + Int(state[i, allele] > 1)
-    end
-    reporters
-end
-"""
-    firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
-
-decide if transition exits or enters sojourn states then in place update appropriate histogram
-"""
-function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
-    if before == 1 && after == 0  # turn off
-        firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-        if verbose
-            println("off:", allele)
-        end
-    elseif before == 0 && after == 1 # turn on
-        firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-        if verbose
-            println("on:", allele)
-        end
-    end
-end
-"""
-    firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
-
-in place update of first passage time histograms
-"""
-function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
-    t1[allele] = t
-    t12 = (t - t2[allele]) / dt
-    if t12 <= ndt && t12 > 0 && t2[allele] > 0
-        hist[ceil(Int, t12)] += 1
-    end
-end
 
 """
     set_arguments(reaction)
