@@ -475,8 +475,6 @@ function reset_S(S::Int, R::Int, insertstep::Int)
     return S
 end
 
-
-
 """
     reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
 
