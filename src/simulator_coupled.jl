@@ -97,6 +97,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     S = reset_S(S, R, insertstep)
 
+
     # if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
     #     throw("r has too few elements")
     # end
@@ -493,7 +494,7 @@ function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
         push!(rv, r[n+1:n+num])
         n += num
     end
-    push!(rv, r[end-coupling[5]:end])
+    push!(rv, r[end-coupling[5]+1:end])
     rv
 end
 
@@ -952,12 +953,13 @@ function couplingG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, ena
 
     for target in targets
         if isfinite(tau[target][ttrans[target], 1])
-            if initial != sstate[unit] && final[index] == sstate[unit]
+            if initial != sstate[unit] && final == sstate[unit]
                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][models[unit]]) * (tau[target][ttrans[target], 1] - t) + t
-            elseif initial == sstate[unit] && final[index] != sstate[unit]
+            elseif initial == sstate[unit] && final != sstate[unit]
                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
+       
     end
     # unit as target
     # new state moves to a target transition
