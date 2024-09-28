@@ -32,6 +32,20 @@ function ll_hmm(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, 
     sum(logpredictions), logpredictions
 end
 
+function ll_hmm_fast(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    d =probfn(r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
+    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    logpredictions = Array{Float64}(undef, 0)
+    for t in traces
+        T = length(t)
+        b = set_b(t, d, nT)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions) + lb, logpredictions
+end
+
 """
     ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
 
@@ -276,6 +290,20 @@ function set_b(trace, params, reporters_per_state, probfn::Function, N)
     end
     return b
 end
+
+function set_b(trace, d, N)
+    b = Matrix{Float64}(undef, N, length(trace))
+    for (t, obs) in enumerate(trace)
+        for j in 1:N
+            b[j, t] = pdf(d[j], obs)
+        end
+    end
+    return b
+end
+
+
+
+
 """
     set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
 
