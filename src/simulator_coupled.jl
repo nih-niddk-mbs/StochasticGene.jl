@@ -93,9 +93,9 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-     end
+    end
 
-     S = reset_S(S, R, insertstep)
+    S = reset_S(S, R, insertstep)
 
     # if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
     #     throw("r has too few elements")
@@ -119,7 +119,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         par = set_par(r, noiseparams)
         tracelog = initialize_tracelog(t, state)
         if isempty(onstates)
-            onstates = fill(Int64[],length(state))
+            onstates = fill(Int64[], length(state))
         end
     end
 
@@ -176,13 +176,13 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     results = Vector[]
     push!(results, prune_mhist(mhist, nhist))
-    if onoff 
-            for i in eachindex(histontdd)
-            push!(dwelltimes, histontdd[i])
-            push!(dwelltimes, histofftdd[i])
+    if onoff
+        for i in eachindex(histontdd)
+            push!(results, histontdd[i])
+            push!(results, histofftdd[i])
         end
     end
-    if traceinterval > 0.
+    if traceinterval > 0.0
         push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
     end
     if verbose
@@ -677,8 +677,8 @@ end
 
 TBW
 """
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector}, interval, par, probfn, reporterfn=sum)
-    traces = Vector[]
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn=sum)
+    traces = []
     for o in onstates
         push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
     end
@@ -937,50 +937,40 @@ end
 
 TBW
 """
-function couplingG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+function couplingG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    models = coupling[1]
+    unit = models[index]
+    sources = coupling[2][unit]
+    sstate = coupling[3]
+    ttrans = coupling[4]
+    targets = coupling[6][unit]
 
-        models = coupling[1]
-        unit = models[index[1]]
-        sources = coupling[2][unit]
-        sstate = coupling[3][unit]
-        ttrans = coupling[4][unit]
-        targets = coupling[6][unit]
+    # unit just changed state
 
-        if initial != sstate && final == sstate
-            newrate = oldrate
-            for target in targets
-                newrate += r[target][] + r[end][]
+    # unit as source
+    # new state moves into a primed source state
+
+    for target in targets
+        if isfinite(tau[target][ttrans[target], 1])
+            if initial != sstate[unit] && final[index] == sstate[unit]
+                tau[target][ttrans[target], 1] = 1 / (1 + r[end][models[unit]]) * (tau[target][ttrans[target], 1] - t) + t
+            elseif initial == sstate[unit] && final[index] != sstate[unit]
+                tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
-            tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
         end
-
-        if ttrans ∈ enabled
-            for s in sources
-                newrate = baserate
-                if sstate[s] == final
-                    newrate += r[target][] + r[][]
-                end
-            end
-            tau[unit][ttrans, allele] = -log(rand()) / newrate + t
-        end
-
-
-end
-
-
-
-"""
-    reset_tau(tau, t, oldrate, newrate)
-
-TBW
-"""
-function reset_tau(tau, t, oldrate, newrate)
-    if tau != Inf
-        return oldrate / newrate * (tau - t) + t
-    else
-        return tau
     end
+    # unit as target
+    # new state moves to a target transition
+    for source in sources
+        if ttrans[index] ∈ enabled
+            if state[source][sstate[source], 1] > 0
+                tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
+            end
+        end
+    end
+
 end
+
 
 """
     transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
@@ -990,7 +980,7 @@ update tau and state for G transition
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index[1], t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 """
     transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1013,7 +1003,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index[1], t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 """
     activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1032,7 +1022,7 @@ end
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index[1], t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 """
     deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
