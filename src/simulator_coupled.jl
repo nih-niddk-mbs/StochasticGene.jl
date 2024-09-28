@@ -93,6 +93,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+        (traceinterval > 0) && (bins = Float64[])  # Do not produce ON OFF histograms if producing traces
     end
 
     # if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
@@ -113,7 +114,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         onoff = false
     else
         onoff = true
-        onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles, coupling)
+        onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles, coupling)
     end
 
     if traceinterval > 0
@@ -143,7 +144,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         end
 
         if onoff
-            before = set_before(before, onstates, state, allele, G, R, insertstep, index)
+            before = set_before(before, onstates, state, allele, G, R, insertstep)
         end
 
         if verbose
@@ -174,32 +175,87 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     if onoff
         dwelltimes = Vector[]
-        push!(dwelltimes, mhist[1:nhist])
+        push!(dwelltimes, prune_mhist(mhist, nhist))
         for i in eachindex(histontdd)
             push!(dwelltimes, histontdd[i])
             push!(dwelltimes, histofftdd[i])
         end
-        return dwelltimes
+        return prune_mhist(mhist, nhist), histontdd, histofftdd
     elseif traceinterval > 0.0
-        return [mhist[1:nhist], make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
+        return [prune_mhist(mhist, nhist), make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn), tracelog]
     elseif onoff && traceinterval > 0
-        return [mhist[1:nhist], histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
+        return [prune_mhist(mhist, nhist), histontdd, histofftdd, make_trace(tracelog, G, R, S, onstates, traceinterval, par, insertstep, probfn, reporterfn)]
     else
-        return mhist[1:nhist]
+        return prune_mhist(mhist, nhist)
     end
 end
 
+function prune_mhist(mhist, nhist)
+    if eltype(mhist) <: Vector
+        for i in eachindex(mhist)
+            mhist[i] = mhist[i][1:nhist[i]]
+        end
+    else
+        mhist = mhist[1:nhist]
+    end
+    return mhist
+end
+
+"""
+    set_onoff(onstates, bins, nalleles, coupling)
+
+TBW
+"""
+function set_onoff(onstates, bins, nalleles, coupling)
+    if isempty(coupling)
+        if ~(eltype(onstates) <: Vector)
+            onstates = [onstates]
+        end
+        if ~(eltype(bins) <: Vector)
+            bins = [bins]
+        end
+        if length(bins) != length(onstates)
+            throw("number of time bin vectors do not match number of onstates")
+        end
+        before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
+        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+    else
+        if ~(eltype(onstates) <: Vector && eltype(eltype(onstates)) <: Vector)
+            throw("onstates not a vector of vectors of vectors")
+        end
+        if ~(eltype(bins) <: Vector && eltype(eltype(bins)) <: Vector)
+            throw("bins not a vector of vectors of vectors")
+        end
+
+        tIA = Vector[]
+        tAI = Vector[]
+        before = Vector[]
+        after = Vector[]
+        ndt = Vector[]
+        dt = Vector[]
+        histofftdd = Vector[]
+        histontdd = Vector[]
+
+        for i in eachindex(onstates)
+            b, a, nndt, ddt, off, on, IA, AI = set_onoff(onstates[i], bins[i], 1)
+            push!(before, b)
+            push!(after, a)
+            push!(ndt, nndt)
+            push!(dt, ddt)
+            push!(histofftdd, off)
+            push!(histontdd, on)
+            push!(tIA, IA)
+            push!(tAI, AI)
+        end
+        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+    end
+end
 """
     set_onoff(onstates, bins, nalleles)
 
 TBW
 """
-function set_onoff(onstates, bins, nalleles, coupling)
-    bins, onstates = set_bins_onstates(onstates, bins, coupling)
-    # if ~(eltype(onstates) <: Vector)
-    #     bins = [bins]
-    #     onstates = [onstates]
-    # end
+function set_onoff(onstates, bins, nalleles)
     nn = length(onstates)
     tIA = Vector{Float64}[]
     tAI = Vector{Float64}[]
@@ -217,53 +273,29 @@ function set_onoff(onstates, bins, nalleles, coupling)
         push!(tIA, zeros(nalleles))
         push!(tAI, zeros(nalleles))
     end
-    return onstates, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+    return before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
 end
 
-function set_bins_onstates(onstates, bins, coupling)
-    if isempty(coupling)
-        if ~(eltype(onstates) <: Vector)
-            onstates = [onstates]
-        end
-        if ~(eltype(bins) <: Vector)
-            bins = [bins]
-        end
-        if length(bins) != length(onstates)
-            throw("number of time bin vectors do not match number of onstates")
-        end
-    else
-        if length(onstates) % length(coupling[1]) != 0
-            throw("number of onstate vectors is not divisible by number of units")
-        elseif length(bins) != length(onstates)
-            throw("number of time bin vectors do not match number of onstates")
-        end
-    end
-    return bins, onstates
-end
 
 """
     set_before(onstates, state, allele, G, R, inserstep)
 
 find before and after states for the same allele to define dwell time histograms
 """
-function set_before(before, onstates, state::Matrix, allele, G, R, insertstep, index)
+function set_before(before, onstates, state, allele, G::Int, R, insertstep)
     for i in eachindex(onstates)
         before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
     end
     before
 end
 
-function set_before(before, onstates, state::Vector{Matrix}, allele, G::Tuple, R, insertstep, index)
+function set_before(before, onstates, state, allele, G::Tuple, R, insertstep)
     for i in eachindex(onstates)
-        before[i] = isempty(onstates[i]) ? num_reporters(state[index[1]][i], 1, G[index[1]], R[index[1]], insertstep[index[1]]) : Int(gstate(G[index[1]], state[index[1]], 1) ∈ onstates[i])
+        for j in eachindex(onstates[i])
+            before[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+        end
     end
     before
-end
-
-function onstate_unit(onstates)
-    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-
-
 end
 
 """
@@ -271,14 +303,27 @@ end
 
 TBW
 """
-function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
     for i in eachindex(onstates)
         after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-        firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+        firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
     end
     verbose && println(tAI)
     verbose && println(tIA)
 end
+
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
+    for i in eachindex(onstates)
+        for j in eachindex(onstates[i])
+            after[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+            firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i][j], tIA[i][j], t, dt[i][j], ndt[i][j], 1, before[i][j], after[i][j], verbose)
+        end
+    end
+    verbose && println(tAI)
+    verbose && println(tIA)
+end
+
+
 
 """
     num_reporters(state::Matrix, allele, G, R, insertstep=1)
@@ -295,10 +340,6 @@ return number of states with R steps > 1
 
 num_reporters(state, allele, G::Int, R, insertstep) = sum(state[G+insertstep:G+R, allele] .> 1)
 
-function num_reporters(state, allele, G::Tuple, R, insertstep)
-
-
-end
 
 """
     firstpassagetime!(histofftdd,histontdd, tAI, tIA, t, dt, ndt, allele,insertstep,before,after)
@@ -524,17 +565,17 @@ end
 """
 function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
     if nhist isa Number
-        nhist = fill(nhist, length(r))
+        nhist = fill(nhist, length(r) - 1)
     end
     mhist = Vector[]
     mhist0 = similar(mhist)
     rmin = Inf
-    for i in eachindex(r)
+    for i in eachindex(nhist)
         rmin = min(rmin, minimum(r[i]))
         push!(mhist, zeros(nhist[i] + 1))
         push!(mhist0, ones(nhist[1] + 1))
     end
-    return nhist, mhist, mhist0, zeros(Int, length(r)), 0, 0.0, 0.0, 0.0, samplefactor / rmin, errfactor * tol
+    return nhist, mhist, mhist0, zeros(Int, length(r) - 1), 0, 0.0, 0.0, 0.0, samplefactor / rmin, errfactor * tol
 end
 
 initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0) = nhist, zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
@@ -840,32 +881,32 @@ end
 
 TBW
 """
-function couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+function couplingG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
-    models = coupling[1]
-    unit = models[index[1]]
-    sources = coupling[2][unit]
-    sstate = coupling[3][unit]
-    ttrans = coupling[4][unit]
-    targets = coupling[6][unit]
+    #     models = coupling[1]
+    #     unit = models[index[1]]
+    #     sources = coupling[2][unit]
+    #     sstate = coupling[3][unit]
+    #     ttrans = coupling[4][unit]
+    #     targets = coupling[6][unit]
+    # oldrate=0
+    #     if initial != sstate && final == sstate
+    #         newrate = oldrate
+    #         for target in targets
+    #             newrate += r[target][] + r[end][]
+    #         end
+    #         tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
+    #     end
 
-    if initial != sstate && final == sstate
-        newrate = oldrate
-        for target in targets
-            newrate += r[target][] + r[end][]
-        end
-        tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
-    end
-
-    if ttrans ∈ enabled
-        for s in sources
-            newrate = baserate
-            if sstate[s] == final
-                newrate += r[target][] + r[][]
-            end
-        end
-        tau[unit][ttrans, allele] = -log(rand()) / newrate + t
-    end
+    #     if ttrans ∈ enabled
+    #         for s in sources
+    #             newrate = baserate
+    #             if sstate[s] == final
+    #                 newrate += r[target][] + r[][]
+    #             end
+    #         end
+    #         tau[unit][ttrans, allele] = -log(rand()) / newrate + t
+    #     end
 
 
 end
@@ -892,7 +933,7 @@ update tau and state for G transition
 
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
-    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+    transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
     couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 function transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -912,7 +953,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    # couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
     transitionG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
@@ -926,7 +967,7 @@ end
 
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
-    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
+    deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
     couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 function deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -938,9 +979,9 @@ end
 
 """
 function initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-    initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
+    initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep[index[1]])
 end
-function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
+function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep::Int)
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
@@ -960,7 +1001,7 @@ end
 
 """
 function transitionR!(tau, state, index::Tuple, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
-    transitionR!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep)
+    transitionR!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, final, insertstep[index[1]])
 end
 function transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final, insertstep)
     if state[initial-1, allele] > 0
