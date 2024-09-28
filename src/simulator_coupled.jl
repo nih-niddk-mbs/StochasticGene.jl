@@ -939,30 +939,30 @@ TBW
 """
 function couplingG!(tau, state, index, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
-    #     models = coupling[1]
-    #     unit = models[index[1]]
-    #     sources = coupling[2][unit]
-    #     sstate = coupling[3][unit]
-    #     ttrans = coupling[4][unit]
-    #     targets = coupling[6][unit]
-    # oldrate=0
-    #     if initial != sstate && final == sstate
-    #         newrate = oldrate
-    #         for target in targets
-    #             newrate += r[target][] + r[end][]
-    #         end
-    #         tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
-    #     end
+        models = coupling[1]
+        unit = models[index[1]]
+        sources = coupling[2][unit]
+        sstate = coupling[3][unit]
+        ttrans = coupling[4][unit]
+        targets = coupling[6][unit]
 
-    #     if ttrans ∈ enabled
-    #         for s in sources
-    #             newrate = baserate
-    #             if sstate[s] == final
-    #                 newrate += r[target][] + r[][]
-    #             end
-    #         end
-    #         tau[unit][ttrans, allele] = -log(rand()) / newrate + t
-    #     end
+        if initial != sstate && final == sstate
+            newrate = oldrate
+            for target in targets
+                newrate += r[target][] + r[end][]
+            end
+            tau[target][coupling[4][target], allele] = reset_tau(tau, t, oldrate, newrate)
+        end
+
+        if ttrans ∈ enabled
+            for s in sources
+                newrate = baserate
+                if sstate[s] == final
+                    newrate += r[target][] + r[][]
+                end
+            end
+            tau[unit][ttrans, allele] = -log(rand()) / newrate + t
+        end
 
 
 end
@@ -1013,7 +1013,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    # couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+    couplingG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 end
 """
     activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
