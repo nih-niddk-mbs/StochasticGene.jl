@@ -34,10 +34,10 @@ end
 
 function ll_hmm_fast(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    d =probfn(r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
+    d =probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     logpredictions = Array{Float64}(undef, 0)
-    for t in traces
+    for t in trace[1]
         T = length(t)
         b = set_b(t, d, nT)
         _, C = forward(a, b, p0, nT, T)

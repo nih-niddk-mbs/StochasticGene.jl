@@ -250,6 +250,8 @@ function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=
     return h1, h2
 end
 
+@time fitsj, statsj, measuresj, dataj, modelj, optionsj = StochasticGene.fit(1, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [1.0, 1.0]), "test", "test", "tracejoint-nstate", "tracejoint-nstate", [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21], tuple(), transitions, G, R, S, insertstep, coupling, ".", 60.0, [6.5, 5.0], Float64[], 10.0, 1, Int[], 1.0, "", prob_Gaussian, [[15000, 10000, 80000, 10000], [21000, 13000, 80000, 10000]]);
+
 # """
 # 0.006249532442813658
 # 0.01590032848543878
