@@ -174,7 +174,7 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, coupling, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -421,13 +421,13 @@ function set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nin
 end
 
 """
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
 
 TBW
 """
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams)
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
     if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
     else
         return fittedparam
     end
@@ -504,19 +504,24 @@ function reset_nalleles(nalleles, coupling)
 end
 
 """
-    default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
 
 create vector of fittedparams that includes all rates except the decay time
 """
-function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple)
+function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
     fittedparam = Int[]
     for i in eachindex(R)
-        fittedparam = vcat(fittedparam, default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i]))
+        fittedparam = vcat(fittedparam, length(fittedparam) .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i],coupling))
     end
-    fittedparam
+    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
 end
 
-function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams)
+"""
+    default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
+
+TBW
+"""
+function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
     n = num_rates(transitions, R, S, insertstep)
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)
@@ -529,8 +534,8 @@ end
 
 make default fixedeffects tuple and fittedparams vector from fixedeffects String
 """
-function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams)
+function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
     fixed = split(fixedeffects, "-")
     if length(fixed) > 1
         fixed = parse.(Int, fixed)
