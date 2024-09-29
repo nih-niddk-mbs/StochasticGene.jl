@@ -96,7 +96,6 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     fittedparam = StochasticGene.set_fittedparam(fittedparam, data.label, transitions, R, S, insertstep, noiseparams, coupling)
     model = load_model(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple(), coupling, 1)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
-    println(nsamples)
     fits, stats, measures = run_mh(data, model, options)
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
