@@ -89,14 +89,13 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
     end
 
     S = reset_S(S, R, insertstep)
-
 
     # if length(r) < num_rates(transitions, R, S, insertstep) + noiseparams * (traceinterval > 0)
     #     throw("r has too few elements")
@@ -119,7 +118,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     if traceinterval > 0
         par = set_par(r, noiseparams)
         tracelog = initialize_tracelog(t, state)
-        if isempty(onstates)
+        if isempty(onstates) && !isempty(coupling)
             onstates = fill(Int64[], length(state))
         end
     end
@@ -175,7 +174,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     # counts = max(sum(mhist), 1)
     # mhist /= counts
 
-    results = Vector[]
+    results = []
     push!(results, prune_mhist(mhist, nhist))
     if onoff
         for i in eachindex(histontdd)
@@ -548,6 +547,19 @@ function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntr
     for i in eachindex(trace)
         trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
     end
+    trace
+end
+
+function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+    trace = Array{Array{Float64}}(undef, ntrials)
+    for i in eachindex(trace)
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2]
+        tr = Vector[]
+        for t in t
+            tr = push!(tr, t[1:end-1,2])
+        end
+        trace[i] = hcat(tr...)
+        end
     trace
 end
 

@@ -250,7 +250,16 @@ function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=
     return h1, h2
 end
 
-@time fitsj, statsj, measuresj, dataj, modelj, optionsj = StochasticGene.fit(1, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [1.0, 1.0]), "test", "test", "tracejoint-nstate", "tracejoint-nstate", [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21], tuple(), transitions, G, R, S, insertstep, coupling, ".", 60.0, [6.5, 5.0], Float64[], 10.0, 1, Int[], 1.0, "", prob_Gaussian, [[15000, 10000, 80000, 10000], [21000, 13000, 80000, 10000]]);
+function test_fit_tracejoint(; coupling = ((1,2),(tuple(),tuple(1)),(2,0),(0,1),2), G=(2,2), R=(2,1), S=(2,0), insertstep=(1,1), transitions= (([1,2],[2,1]),([1,2],[2,1])), rtarget=[0.02, 0.1, 0.5, 0.4, 0.4, .01, 0.0, 0.01, 50, 15, 200, 70, 0.02, 0.1, 0.5, 0.2, 0.1, 50, 15, 200, 70, -.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[[50, 15, 200, 70],[50, 15, 200, 70]])
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1., noisepriors, [5.,5.], coupling)
+    model = load_model(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple(), coupling, 1)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options)
+    StochasticGene.get_rates(fits.parml, model), rtarget
+end
+
 
 # """
 # 0.006249532442813658
