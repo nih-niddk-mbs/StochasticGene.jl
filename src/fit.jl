@@ -122,7 +122,7 @@ julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if typeof(fixedeffects) <: AbstractString
-        fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors))
+        fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors), coupling)
         println(transitions)
         println(fixedeffects)
         println(fittedparam)
@@ -138,7 +138,7 @@ end
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1)
     transitions = get_transitions(G, TransitionType)
-    fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors))
+    fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling)
     println(transitions)
     println(fixedeffects)
     println(fittedparam)
@@ -267,7 +267,7 @@ function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
     weight = Float64[]
     for f in traceinfo[4]
         # push!(weight, (1 - f) / f * length(trace))
-        push!(weight, 1-f)
+        push!(weight, 1 - f)
     end
     nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
@@ -510,8 +510,10 @@ create vector of fittedparams that includes all rates except the decay time
 """
 function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
     fittedparam = Int[]
+    totalrates = 0
     for i in eachindex(R)
-        fittedparam = vcat(fittedparam, length(fittedparam) .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i],coupling))
+        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling))
+        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
     end
     [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
 end
@@ -604,7 +606,7 @@ end
 
 
 """
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime, coupling)
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
 
 default priors for rates (includes all parameters, fitted or not)
 """
@@ -612,11 +614,11 @@ function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, nois
     if S > 0
         S = R - insertstep + 1
     end
-    [fill(0.01, length(transitions)); .1; fill(R / elongationtime, R); fill(0.2, max(0, S - insertstep + 1)); decayrate; noisepriors]
+    [fill(0.01, length(transitions)); 0.1; fill(R / elongationtime, R); fill(0.2, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 
 """
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, nhyper::Int, elongationtime, coupling, cv=1.0)
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhyper::Int, elongationtime, cv=1.0)
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
@@ -685,7 +687,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_array(rm[fittedparam],length(rm),fittedparam,logv,log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
+        return distribution_array(transform_array(rm[fittedparam], length(rm), fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
     else
         throw("priorcv not the same length as prior mean")
     end
