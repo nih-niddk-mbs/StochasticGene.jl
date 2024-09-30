@@ -239,12 +239,7 @@ function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell,
     s = '"'
     # s3 = s * s * s
     f = open(fitfile, "w")
-    if isempty(src)
-        write(f, "@everywhere using StochasticGene\n")
-    else
-        write(f, "@everywhere include($s$src$s)\n")
-        write(f, "@everywhere using .StochasticGene\n")
-    end
+    write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
     write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, ARGS[1], $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method)")
@@ -263,12 +258,7 @@ function write_fitfile_models(fitfile, nchains, datatype, dttype, datapath, gene
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
     s = '"'
     f = open(fitfile, "w")
-    if isempty(src)
-        write(f, "@everywhere using StochasticGene\n")
-    else
-        write(f, "@everywhere include($s$src$s)\n")
-        write(f, "@everywhere using .StochasticGene\n")
-    end
+    write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
 
@@ -285,8 +275,9 @@ function write_prolog(f, src)
     if isempty(src)
         write(f, "@everywhere using StochasticGene\n")
     else
-        write(f, "@everywhere include($s$src$s)\n")
-        write(f, "@everywhere using .StochasticGene\n")
+        write(f, "@everywhere using Pkg\n")
+        write(f, "@everywhere Pkg.activate($s$src$s)\n")
+        write(f, "@everywhere using StochasticGene\n")
     end
 
 end
