@@ -32,7 +32,7 @@ function ll_hmm(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, 
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_fast(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     d =probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0

@@ -116,7 +116,6 @@ include("utilities.jl")
 # include("simulator.jl")
 include("simulator_coupled.jl")
 
-
 # functions for fitting models to data
 include("fit.jl")
 
