@@ -494,13 +494,14 @@ function rlabels_GRSM(model)
 end
 
 function rlabels(model::GRSMcoupledmodel)
-    rlabels = Array{String}(undef, 1, 0)
+    labels = Array{String}(undef, 1, 0)
     for i in eachindex(model.G)
-        rlabels = hcat(rlabels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i]))
+        labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i],i))
     end
     for i in 1:model.coupling
-        hcat(rlabels, ["Coupling_$i"])
+        labels = hcat(labels, ["Coupling_$i"])
     end
+    reshape(labels, 1, :)
 end
 
 function rlabels(model::GRSMhierarchicalmodel)
@@ -722,7 +723,6 @@ last accepted
 """
 function write_rates(file::String, fits::Fit, stats, model)
     f = open(file, "w")
-    println(rlabels(model))
     writedlm(f, rlabels(model), ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
@@ -777,9 +777,6 @@ write parameter statistics into a file
 """
 function write_param_stats(file, stats::Stats, model)
     f = open(file, "w")
-    println(model.fittedparam)
-    println(length(rlabels(model)))
-    println(length(model.rates))
     writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
