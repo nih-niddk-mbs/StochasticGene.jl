@@ -90,7 +90,6 @@ L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 """
 function ll_background(a, p0, offstates, poff, nframes)
     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-    println(p)
     l = -(1 - poff) * log(1 - p) - poff * log(p)
     # weight * l
 end
@@ -157,7 +156,7 @@ function ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noisepara
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
-    -sum(logpredictions), -logpredictions
+    sum(logpredictions), logpredictions
 end
 
 """
@@ -174,7 +173,7 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
-    -sum(logpredictions), -logpredictions
+    sum(logpredictions), logpredictions
 end
 
 """
@@ -192,7 +191,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vec
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
-    -sum(logpredictions) + lb, -logpredictions
+    sum(logpredictions) + lb, logpredictions
 end
 
 """
@@ -210,7 +209,7 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TR
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
-    -sum(logpredictions) + lb, -logpredictions
+    sum(logpredictions) + lb, logpredictions
 end
 
 

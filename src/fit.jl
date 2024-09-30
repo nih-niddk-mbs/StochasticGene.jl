@@ -170,16 +170,14 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
-    noiseparams = occursin("trace", lowercase(datatype)) ? length(noisepriors) : zero(Int)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, hierarchical, coupling, method)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
-
 
 """
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -425,11 +423,23 @@ end
 
 TBW
 """
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling)
     if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling)
+        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling)
     else
         return fittedparam
+    end
+end
+
+function num_noiseparams(datatype, noisepriors)
+    if occursin("trace",lowercase(datatype))
+        if eltype(noisepriors) <: Number
+            return length(noisepriors)
+        else
+            return length.(noisepriors)
+        end
+    else
+        return 0
     end
 end
 
