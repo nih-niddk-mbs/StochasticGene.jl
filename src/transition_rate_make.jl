@@ -370,7 +370,7 @@ function make_mat_TC(components, rates, coupling_strength)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
 end
 
-function make_mat_Tkron(T<:Matrix, IT, sources, unit_model)
+function make_mat_Tkron(T::Matrix, IT, sources, unit_model)
     Tc = spzeros(size(unit_model))
     for α in eachindex(unit_model)
         Tα = T[unit_model[α]]
