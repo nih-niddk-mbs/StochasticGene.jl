@@ -677,6 +677,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
+    write_info(joinpath(path, "info" * name), model)
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -810,6 +811,18 @@ function write_burstsize(file::String, b::BurstMeasures)
     writedlm(f, b.median, ',')
     writedlm(f, b.mad, ',')
     writedlm(f, b.quantiles, ',')
+    close(f)
+end
+
+"""
+    write_info(file::String, info)
+
+TBW
+"""
+function write_info(file::String, model)
+    f = open(file, "w")
+    writedlm(f, rlabels(model), ',')
+    writedlm(f, [model.rates], ',')
     close(f)
 end
 
