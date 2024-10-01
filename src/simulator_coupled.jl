@@ -190,21 +190,6 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     end
     return results
 
-    # if onoff && traceinterval == 0.
-    #     dwelltimes = Vector[]
-    #     push!(dwelltimes, prune_mhist(mhist, nhist))
-    #     for i in eachindex(histontdd)
-    #         push!(dwelltimes, histontdd[i])
-    #         push!(dwelltimes, histofftdd[i])
-    #     end
-    #     return dwelltimes
-    # elseif traceinterval > 0.0 && !onoff
-    #     return [prune_mhist(mhist, nhist), make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn), tracelog]
-    # elseif onoff && traceinterval > 0
-    #     return [prune_mhist(mhist, nhist), histontdd, histofftdd, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn)]
-    # else
-    #     return prune_mhist(mhist, nhist)
-    # end
 end
 
 function prune_mhist(mhist, nhist)

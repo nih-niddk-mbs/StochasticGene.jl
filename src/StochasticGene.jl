@@ -1,4 +1,5 @@
-
+# StochasticGene.jl
+# Author: Carson C. Chow
 module StochasticGene
 
 using Distributions
