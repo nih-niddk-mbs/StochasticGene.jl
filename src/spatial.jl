@@ -21,7 +21,7 @@ function read_tracefiles_spatial(path::String, label::String, start::Int, stop::
     end
 end
 
-function set_b(trace, params, reporters_per_state, probfn::Function, N)
+function set_b_spatial(trace, params, reporters_per_state, probfn::Function, N)
     # N = length(reporters_per_state)
     d = probfn(params, reporters_per_state, N)
     b = Matrix{Float64}(undef, N, length(trace))
@@ -37,3 +37,11 @@ function set_b(trace, params, reporters_per_state, probfn::Function, N)
     return b
 end
 
+function prob_Gaussian_spatial(par, reporters_per_state, position)
+    N = length(reporters_per_state)*length(position)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = Normal(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2) + position[i] * par[5])
+    end
+    d
+end
