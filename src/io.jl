@@ -955,20 +955,35 @@ function read_dwelltimes(datapath)
 end
 
 """
-    read_tracefiles(path, cond1, traceinfo::Tuple, col=3)
+    read_tracefile(path::String, start::Int, stop::Int, col=3)
 
-TBW
+Read intensity of a trace file into a vector
+
+Arguments:
+- `path`: folder holding trace files
+- `start`: start index for trace
+- `stop`: stop index for trace, -1 for end
+- `col`: column to read
+
+
 """
-function read_tracefiles(path, cond1, traceinfo::Tuple, col=3)
-    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
-    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
-    read_tracefiles(path, cond1, start, stop, col)
+function read_tracefile(path::String, start::Int, stop::Int, col=3)
+    t = readfile(path, col)
+    if stop < 0
+        (start <= length(t)) && return t[start:end]
+    else
+        (stop <= length(t)) && return t[start:stop]
+    end
 end
 
 """
-    read_tracefiles(path::String, cond1::String, start::Int, cond2::String="", col=3)
+    read_tracefiles(path::String, label::String, start::Int, stop::Int, col=3)
 
-read in trace files
+    Args: same as read_tracefile with
+    label: string to match in file name
+
+
+read in a set of trace files 
 """
 function read_tracefiles(path::String, label::String, start::Int, stop::Int, col=3)
     traces = Vector[]
@@ -987,67 +1002,87 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
 end
+
 """
-    read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    read_tracefiles(path, label, traceinfo::Tuple, col=3)
+
+#Arguments: same as read_tracefiles with
+- `traceinfo`: tuple of (dt, start, stop, ...)
+
+read in a set of trace files from a folder
+"""
+function read_tracefiles(path, label, traceinfo::Tuple, col=3)
+    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
+    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    read_tracefiles(path, label, start, stop, col)
+end
+
+
+
+# function read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+#     l = length(label)
+#     traces = [Vector[] for _ in 1:l]
+#     if isempty(path)
+#         return traces
+#     else
+#         for (root, dirs, files) in walkdir(path)
+#             tset = Vector{Vector}(undef, l)
+#             files = sort(readdir(path))
+#             for file in files
+#                 complete = true
+#                 for i in eachindex(label)
+#                     if occursin(label[i], file)
+#                         tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+#                     end
+#                     complete &= isassigned(tset, i)
+#                 end
+#                 if complete
+#                     for i in eachindex(label)
+#                         push!(traces[i], tset[i])
+#                     end
+#                     tset = Vector{Vector}(undef, length(label))
+#                 end
+#             end
+#         end
+#         return traces
+#     end
+# end
+
+# function read_tracefiles_v(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+#     l = length(label)
+#     traces = Vector[]
+#     if isempty(path)
+#         return traces
+#     else
+#         for (root, dirs, files) in walkdir(path)
+#             tset = Vector{Vector}(undef, l)
+#             files = sort(readdir(path))
+#             for file in files
+#                 complete = true
+#                 for i in eachindex(label)
+#                     if occursin(label[i], file)
+#                         tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+#                     end
+#                     complete &= isassigned(tset, i)
+#                 end
+#                 if complete
+#                     push!(traces, tset)
+#                     tset = Vector{Vector}(undef, length(label))
+#                 end
+#             end
+#         end
+#         return traces
+#     end
+# end
+
+"""
+    read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+
+Args: same as read_tracefile with
+label: vector of strings for traces to be fit simultaneously
 
 read in joint trace files
 """
-function read_tracefiles_r(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    l = length(label)
-    traces = [Vector[] for _ in 1:l]
-    if isempty(path)
-        return traces
-    else
-        for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, l)
-            files = sort(readdir(path))
-            for file in files
-                complete = true
-                for i in eachindex(label)
-                    if occursin(label[i], file)
-                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
-                    end
-                    complete &= isassigned(tset, i)
-                end
-                if complete
-                    for i in eachindex(label)
-                        push!(traces[i], tset[i])
-                    end
-                    tset = Vector{Vector}(undef, length(label))
-                end
-            end
-        end
-        return traces
-    end
-end
-
-function read_tracefiles_v(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    l = length(label)
-    traces = Vector[]
-    if isempty(path)
-        return traces
-    else
-        for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, l)
-            files = sort(readdir(path))
-            for file in files
-                complete = true
-                for i in eachindex(label)
-                    if occursin(label[i], file)
-                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
-                    end
-                    complete &= isassigned(tset, i)
-                end
-                if complete
-                    push!(traces, tset)
-                    tset = Vector{Vector}(undef, length(label))
-                end
-            end
-        end
-        return traces
-    end
-end
-
 function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
     l = length(label)
     traces = Matrix[]
@@ -1074,19 +1109,7 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
         return traces
     end
 end
-"""
-    read_tracefile(path::String, start::Int, stop::Int, col=3)
 
-Read intensity of a trace file into a vector
-"""
-function read_tracefile(path::String, start::Int, stop::Int, col=3)
-    t = readfile(path, col)
-    if stop < 0
-        (start <= length(t)) && return t[start:end]
-    else
-        (stop <= length(t)) && return t[start:stop]
-    end
-end
 
 """
     fix_tracefiles(path::String)
@@ -1103,9 +1126,30 @@ function fix_tracefiles(path::String)
     end
 end
 
-"""
-    readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
 
+
+"""
+    readrates(infolder::String, label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, ratetype::String="median")
+
+Read in rates from a file.
+
+# Arguments
+- `infolder::String`: Folder holding rate files.
+- `label::String`: Label for rate files.
+- `gene::String`: Gene name.
+- `G::Int`: Number of G states.
+- `R::Int`: Number of R steps.
+- `S::Int`: Number of splice states.
+- `insertstep::Int`: R step where splicing starts.
+- `nalleles::Int`: Number of alleles.
+- `ratetype::String`: Type of rate to read. Defaults to `"median"`.
+
+# Returns
+- `Array{Float64, 2}`: The read rates from the file.
+
+# Examples
+```julia
+rates = readrates("data", "label", "gene", 3, 5, 2, 1, 2, "mean")
 
 """
 function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetype="median")
