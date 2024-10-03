@@ -281,11 +281,29 @@ function write_prolog(f, src)
     end
 
 end
-"""
-    create_label(label,inlabel,datacond,cell,TransitionType)
 
 """
-function create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+    create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+
+Create a label string based on the provided parameters.
+
+# Arguments
+- `label`: Initial label string (can be empty).
+- `inlabel`: Initial inlabel string (can be empty).
+- `datatype`: Type of data.
+- `datacond`: Condition of the data. Can be a `String` or a `Vector` of strings.
+- `cell`: Cell type.
+- `TransitionType`: Type of transition.
+
+# Returns
+- `label`: Generated label string.
+- `inlabel`: Generated inlabel string.
+
+# Methods
+- `create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)`: Handles `datacond` as a `String`.
+- `create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)`: Handles `datacond` as a `Vector` of strings.
+"""
+function create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)
     if isempty(label)
         label = datatype * "-" * cell
         ~isempty(TransitionType) && (label = label * "-" * TransitionType)
@@ -293,6 +311,23 @@ function create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     end
     isempty(inlabel) && (inlabel = label)
     return label, inlabel
+end
+
+function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
+    create_label(label, inlabel, datatype, join(datacond, "-"), cell, TransitionType)
+end
+function create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)
+    if isempty(label)
+        label = datatype * "-" * cell
+        ~isempty(TransitionType) && (label = label * "-" * TransitionType)
+        typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
+    end
+    isempty(inlabel) && (inlabel = label)
+    return label, inlabel
+end
+
+function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
+    create_label(label, inlabel, datatype, join(datacond,"-"), cell, TransitionType)
 end
 
 """
