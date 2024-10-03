@@ -728,13 +728,14 @@ Retrieves the alleles from a given file path.
 - `cell`: The type of cell.
 - `allelepath`: The file path to the alleles data.
 
+# Methods
+- `get_alleles(root, cell)`: Retrieves the alleles for a given cell type from the root directory.
+- `get_alleles(allelepath)`: Retrieves the alleles from a given file path.
+
 # Returns
 - `Vector{String}`: A vector of alleles if the file path is not `nothing`.
 - `Nothing`: If the file path is `nothing`.
 
-# Methods
-- `get_alleles(root, cell)`: Retrieves the alleles for a given cell type from the root directory.
-- `get_alleles(allelepath)`: Retrieves the alleles from a given file path.
 
 """
 function get_alleles(allelepath)
