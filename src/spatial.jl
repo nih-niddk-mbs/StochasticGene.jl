@@ -21,15 +21,17 @@ function read_tracefiles_spatial(path::String, label::String, start::Int, stop::
     end
 end
 
-function set_b_spatial(trace, params, reporters_per_state, probfn::Function, N)
+function set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
     # N = length(reporters_per_state)
     d = probfn(params, reporters_per_state, N)
-    b = Matrix{Float64}(undef, N, length(trace))
+    b = Ones(Ns * Np, length(trace))
     t = 1
     for obs in trace
-        for i in location
-            for j in 1:N
-                b[i, j, t] = pdf(d[j], obs[i])
+        for j in 1:Ns
+            for k in 1:Np
+                for i in eachindex(obs)
+                    b[l, t] *= pdf(d[j, k, i], obs[i])
+                end
             end
         end
         t += 1
@@ -40,11 +42,13 @@ end
 function prob_Gaussian_spatial(par, reporters_per_state, position)
     Ns = length(reporters_per_state)
     Np = length(position)
-    d = Array{Distribution{Univariate,Continuous}}(undef, Ns)
-    for i in 1:Ns
-        for j in 1:Np
-            σ = sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2)
-            d[i, j] = Normal(par[1] + reporters_per_state[i] * par[3] * position[j], σ)
+    d = Array{Distribution{Univariate,Continuous}}(undef, Ns, Np)
+    for j in 1:Ns
+        for k in 1:Np
+            for i in 1:Np
+                σ = sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2 * Int(k==i))
+                d[j, k, i] = Normal(par[1] + reporters_per_state[j] * par[3] * Int(k==i), σ)
+            end
         end
     end
 end
