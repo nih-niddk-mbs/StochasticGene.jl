@@ -111,8 +111,6 @@ function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads::Int=1, swarm
 end
 """
     makeswarm_genes(;<keyword arguments> )
-
-@JuliaRegistrator register()
  
 #Arguments
     - `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
@@ -153,6 +151,17 @@ end
 """
     write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
 
+Writes a swarmfile for a single Julia file.
+
+# Arguments
+- `sfile`: The path to the swarmfile to be written.
+- `nchains`: The number of chains to run.
+- `nthreads`: The number of threads to use.
+- `juliafile::String`: The path to the Julia file to be executed.
+- `project`: The Julia project to use (optional, default is an empty string).
+
+# Description
+This function writes a swarmfile that specifies how to run a single Julia file with the given number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
     f = open(sfile, "w")
@@ -165,9 +174,20 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project=""
 end
 
 """
-    write_swarmfile(sfile, nchains, nthreads, juliafile, genes::Vector)
+    write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
 
-write swarmfile for vector of genes
+Writes a swarmfile for a vector of genes.
+
+# Arguments
+- `sfile`: The path to the swarmfile to be written.
+- `nchains`: The number of chains to run.
+- `nthreads`: The number of threads to use.
+- `juliafile::String`: The path to the Julia file to be executed.
+- `genes::Vector{String}`: A vector of gene names.
+- `project`: The Julia project to use (optional, default is an empty string).
+
+# Description
+This function writes a swarmfile that specifies how to run a Julia file for each gene in the given vector of genes, with the specified number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
     f = open(sfile, "w")
@@ -183,9 +203,23 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vec
 end
 
 """
-    write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs})
+    write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
 
-write swarmfile for vector of models
+Writes a swarmfile for a vector of models.
+
+# Arguments
+- `sfile`: The path to the swarmfile to be written.
+- `nchains`: The number of chains to run.
+- `nthreads`: The number of threads to use.
+- `juliafile`: The path to the Julia file to be executed.
+- `datatype`: The type of data.
+- `datacond`: The data condition.
+- `cell`: The type of cell.
+- `models::Vector{ModelArgs}`: A vector of models.
+- `project`: The Julia project to use (optional, default is an empty string).
+
+# Description
+This function writes a swarmfile that specifies how to run a Julia file for each model in the given vector of models, with the specified number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
 """
 function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
     f = open(sfile, "w")
@@ -205,13 +239,64 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond
     close(f)
 end
 
+
 """
     write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
+Writes a fitfile for a given set of parameters.
 
+# Arguments
+- `fitfile`: The path to the fitfile to be written.
+- `nchains`: The number of chains to run.
+- `datatype`: The type of data.
+- `dttype`: The data type.
+- `datapath`: The path to the data.
+- `gene`: The gene.
+- `cell`: The type of cell.
+- `datacond`: The data condition.
+- `traceinfo`: Information about the trace.
+- `infolder`: The input folder.
+- `resultfolder`: The result folder.
+- `inlabel`: The input label.
+- `label`: The label.
+- `fittedparam`: The fitted parameters.
+- `fixedeffects`: The fixed effects.
+- `transitions`: The transitions.
+- `G`: Parameter G.
+- `R`: Parameter R.
+- `S`: Parameter S.
+- `insertstep`: The insert step.
+- `coupling`: The coupling.
+- `root`: The root directory.
+- `maxtime`: The maximum time.
+- `elongationtime`: The elongation time.
+- `priormean`: The prior mean.
+- `nalleles`: The number of alleles.
+- `priorcv`: The prior coefficient of variation.
+- `onstates`: The on states.
+- `decayrate`: The decay rate.
+- `splicetype`: The splice type.
+- `probfn`: The probability function.
+- `noisepriors`: The noise priors.
+- `hierarchical`: Whether the model is hierarchical.
+- `ratetype`: The rate type.
+- `propcv`: The proposal coefficient of variation.
+- `samplesteps`: The number of sample steps.
+- `warmupsteps`: The number of warmup steps.
+- `annealsteps`: The number of anneal steps.
+- `temp`: The temperature.
+- `tempanneal`: The temperature anneal.
+- `temprna`: The RNA temperature.
+- `burst`: The burst.
+- `optimize`: Whether to optimize.
+- `writesamples`: Whether to write samples.
+- `method`: The method.
+- `src`: The source directory.
 
+# Description
+This function writes a fitfile that specifies how to run a fit for a given set of parameters. It includes the necessary prolog and handles the formatting of various parameters.
 """
 function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -230,8 +315,9 @@ end
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
+Write fitfile for genes
 
-write fitfile for genes
+# Arguments as in write_fitfile
 """
 function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -252,6 +338,8 @@ end
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
 write fitfile for models
+
+# Arguments as in write_fitfile
 """
 function write_fitfile_models(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, coupling, fittedparam,
     root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -266,9 +354,16 @@ function write_fitfile_models(fitfile, nchains, datatype, dttype, datapath, gene
     close(f)
 end
 """
-    write_prolog(f,src)
+    write_prolog(f, src)
 
-if src is empty assume StochasticGene is installed as a Julia package
+Writes the prolog for the fitfile.
+
+# Arguments
+- `f`: The file handle to write to.
+- `src`: The source directory.
+
+# Description
+This function writes the prolog for the fitfile. If `src` is empty, it assumes that `StochasticGene` is installed as a Julia package. Otherwise, it activates the specified project and uses `StochasticGene`.
 """
 function write_prolog(f, src)
     s = '"'
@@ -314,25 +409,25 @@ function create_label(label, inlabel, datatype, datacond::String, cell, Transiti
 end
 
 function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
-    create_label(label, inlabel, datatype, join(datacond, "-"), cell, TransitionType)
-end
-function create_label(label, inlabel, datatype, datacond::String, cell, TransitionType)
-    if isempty(label)
-        label = datatype * "-" * cell
-        ~isempty(TransitionType) && (label = label * "-" * TransitionType)
-        typeof(datacond) <: AbstractString && (label = label * "_" * datacond)
-    end
-    isempty(inlabel) && (inlabel = label)
-    return label, inlabel
-end
-
-function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
     create_label(label, inlabel, datatype, join(datacond,"-"), cell, TransitionType)
 end
 
 """
-    create_modelstring(G,R,S,insertstep)
+    create_modelstring(G, R, S, insertstep)
 
+Creates a model string based on the given parameters.
+
+# Arguments
+- `G`: Parameter G.
+- `R`: Parameter R.
+- `S`: Parameter S.
+- `insertstep`: The insert step.
+
+# Returns
+- A string representing the model.
+
+# Description
+This function generates a model string based on the provided parameters. If `R` is greater than 0, it adjusts `S` based on `R` and `insertstep` and returns a concatenated string of `G`, `R`, `S`, and `insertstep`. If `R` is not greater than 0, it returns `G` as the model string.
 """
 function create_modelstring(G, R, S, insertstep)
     if R > 0
@@ -348,8 +443,13 @@ end
 """
     fix(folder)
 
-    Finds jobs that failed and writes a swarmfile for those genes
+Finds jobs that failed and writes a swarmfile for those genes.
 
+# Arguments
+- `folder`: The folder to search for failed jobs.
+
+# Description
+This function finds jobs that failed in the specified folder and writes a swarmfile for those genes.
 """
 fix(folder) = writeruns(fixruns(findjobs(folder)))
 
@@ -364,11 +464,15 @@ function fix_filenames(folder, old="scRNA-ss-", new="scRNA-ss_")
 end
 
 """
-    setup(rootfolder = "scRNA")
+    rna_setup(root=".")
 
-    Sets up the folder system prior to use
-    Defaults to "scRNA"
+Sets up the folder system prior to use. Defaults to the current directory.
 
+# Arguments
+- `root`: The root directory for setting up the folder system. Defaults to the current directory.
+
+# Description
+This function sets up the necessary folder structure for RNA data processing, including creating directories for alleles, halflives, and test data if they do not already exist.
 """
 function rna_setup(root=".")
     folder_setup(root)
@@ -405,7 +509,13 @@ end
 """
     folder_setup(root=".")
 
-creates data and results folders (if they do not already exit)
+Creates data and results folders (if they do not already exist).
+
+# Arguments
+- `root`: The root directory for setting up the folder system. Defaults to the current directory.
+
+# Description
+This function creates the necessary data and results folders within the specified root directory. If the folders already exist, it does nothing.
 """
 function folder_setup(root=".")
     data = joinpath(root, "data")
@@ -422,7 +532,18 @@ end
 """
     getbatches(genes, ngenes, batchsize)
 
+Divides the list of genes into batches of a specified size.
 
+# Arguments
+- `genes`: A vector of gene names.
+- `ngenes`: The total number of genes.
+- `batchsize`: The size of each batch.
+
+# Returns
+- A vector of vectors, where each inner vector contains a batch of gene names.
+
+# Description
+This function divides the list of genes into batches of a specified size. The last batch may contain fewer genes if the total number of genes is not a multiple of the batch size.
 """
 function getbatches(genes, ngenes, batchsize)
     nbatches = div(ngenes, batchsize)
@@ -435,11 +556,21 @@ function getbatches(genes, ngenes, batchsize)
     return batches
 end
 
-
-
 """
     checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
 
+Checks and returns the genes that meet the specified thresholds across multiple conditions and data paths.
+
+# Arguments
+- `root`: The root directory.
+- `conds`: A condition or a list of conditions to check.
+- `datapath`: A data path or a list of data paths to check.
+- `celltype`: The type of cell.
+- `thresholdlow`: The lower threshold for filtering genes.
+- `thresholdhigh`: The upper threshold for filtering genes.
+
+# Returns
+- `Vector{String}`: A vector of genes that meet the specified thresholds across the given conditions and data paths.
 
 """
 function checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
@@ -456,11 +587,21 @@ function checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float
     end
     return geneset
 end
-
 """
-    checkgenes(root, cond::String, datapath::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
+    checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
 
+Checks and returns the genes that meet the specified thresholds across multiple conditions and data paths.
 
+### Arguments
+- `root`: The root directory.
+- `cond`: The condition to check.
+- `datapath`: The data path to check.
+- `cell`: The type of cell.
+- `thresholdlow`: The lower threshold for filtering genes.
+- `thresholdhigh`: The upper threshold for filtering genes.
+
+### Returns
+- `Vector{String}`: A vector of genes that meet the specified thresholds for the given condition and data path.
 """
 function checkgenes(root, cond::String, datapath::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
     if cell == "HBEC"
@@ -480,7 +621,16 @@ end
 """
     folder_path(folder::String, root::String, folderatetype::String=""; make=false)
 
+Returns the full path for a given folder, optionally creating the path if it does not exist.
 
+# Arguments
+- `folder`: A folder name.
+- `root`: The root directory.
+- `foldertype`: The type of folder (optional, default is an empty string).
+- `make`: A boolean flag indicating whether to create the path if it does not exist (optional, default is `false`).
+
+# Returns
+- `String`: The full path for the given folder.
 """
 function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
     f = folder
@@ -501,7 +651,16 @@ end
 """
     folder_path(folder::Vector, root, foldertype)
 
-TBW
+Returns the full paths for a list of folders, optionally creating the paths if they do not exist.
+
+# Arguments
+- `folders`: A list of folder names.
+- `root`: The root directory.
+- `foldertype`: The type of folder (optional, default is an empty string).
+- `make`: A boolean flag indicating whether to create the paths if they do not exist (optional, default is `false`).
+
+# Returns
+- `Vector{String}`: The full paths for the given folders.
 """
 function folder_path(folder::Vector, root, foldertype)
     fv = folder
@@ -514,7 +673,17 @@ end
 """
     get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
 
-TBW
+Retrieves the genes with halflives within the specified thresholds for a given cell type from the root directory.
+
+# Arguments
+- `root`: The root directory.
+- `cell`: The type of cell.
+- `thresholdlow`: The lower threshold for filtering halflives.
+- `thresholdhigh`: The upper threshold for filtering halflives.
+
+# Returns
+- `Vector{String}`: A vector of genes that meet the specified halflife thresholds.
+
 """
 function get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
     path = get_file(root, "data/halflives", cell, "csv")
@@ -524,7 +693,15 @@ end
 """
     get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
 
-TBW
+Retrieves the genes with halflives within the specified thresholds from a given file path.
+
+# Arguments
+- `hlpath`: The file path to the halflives data.
+- `thresholdlow`: The lower threshold for filtering halflives.
+- `thresholdhigh`: The upper threshold for filtering halflives.
+
+# Returns
+- `Vector{String}`: A vector of genes that meet the specified halflife thresholds.
 """
 function get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
     genes = Vector{String}(undef, 0)
@@ -542,10 +719,23 @@ end
 
 """
     get_alleles(allelepath)
-    get_alleles(root, cell) = get_alleles(get_file(root, "data/alleles", cell, "csv"))
+    get_alleles(root, cell)
 
+Retrieves the alleles from a given file path.
 
-TBW
+# Arguments
+- `root`: The root directory.
+- `cell`: The type of cell.
+- `allelepath`: The file path to the alleles data.
+
+# Returns
+- `Vector{String}`: A vector of alleles if the file path is not `nothing`.
+- `Nothing`: If the file path is `nothing`.
+
+# Methods
+- `get_alleles(root, cell)`: Retrieves the alleles for a given cell type from the root directory.
+- `get_alleles(allelepath)`: Retrieves the alleles from a given file path.
+
 """
 function get_alleles(allelepath)
     if ~isnothing(allelepath)
@@ -557,14 +747,27 @@ end
 
 get_alleles(root, cell) = get_alleles(get_file(root, "data/alleles", cell, "csv"))
 
+
+
+"""
+    get_file(root folder, filetype, suffix)
+    get_file(folder, filetype, suffix)
+
+Retrieves the file path for a file of a specified type and suffix within a given folder.
+
+# Arguments
+- `root`: The root directory.
+- `folder`: The folder to search within.
+- `filetype`: The type of file to search for (the prefix of the file name).
+- `suffix`: The suffix of the file name to search for.
+
+# Returns
+- `String`: The full path to the file if found.
+- `Nothing`: If the folder does not exist or the file is not found.
+"""
 get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
 
-"""
-    get_file(folder, filetype, suffix)
-    get_file(root, folder, filetype, suffix) = get_file(joinpath(root, folder), filetype, suffix)
 
-TBW
-"""
 function get_file(folder, filetype, suffix)
     if ispath(folder)
         files = readdir(folder)
@@ -584,7 +787,16 @@ end
 """
     findjobs(folder)
 
-TBW
+Finds and lists unique job identifiers from swarm files in the specified folder.
+
+# Arguments
+- `folder`: The folder to search for swarm files.
+
+# Returns
+- `Vector{String}`: A vector of unique job identifiers.
+
+# Description
+This function searches the specified folder for files with names starting with "swarm_". It extracts and returns a list of unique job identifiers from these file names.
 """
 function findjobs(folder)
     files = readdir(folder)
@@ -598,7 +810,18 @@ end
 """
     fixruns(jobs, message="FAILED")
 
-TBW
+Identifies and processes jobs that failed based on a specified message.
+
+# Arguments
+- `jobs`: A vector of job identifiers.
+- `message`: The message to search for in job histories to identify failures. Defaults to "FAILED".
+
+# Returns
+- `Vector{String}`: A vector of run identifiers that need to be fixed.
+
+# Description
+This function processes a list of job identifiers to find those that contain a specified failure message in their job history. It reads the job history, identifies the lines containing the failure message, and extracts the corresponding run identifiers. It returns a list of these run identifiers.
+
 """
 function fixruns(jobs, message="FAILED")
     runlist = Vector{String}(undef, 0)
@@ -624,9 +847,17 @@ function fixruns(jobs, message="FAILED")
 end
 
 """
-    writeruns(runs, outfile="fitfix.swarm")
+   writeruns(runs, outfile="fitfix.swarm")
 
-TBW
+Writes a list of runs to a specified output file.
+
+# Arguments
+- `runs`: A vector of run identifiers.
+- `outfile`: The name of the output file. Defaults to "fitfix.swarm".
+
+# Description
+This function writes each run identifier from the provided list to the specified output file. Each run is written on a new line. If the output file already exists, it will be overwritten.
+
 """
 function writeruns(runs, outfile="fitfix.swarm")
 
@@ -641,7 +872,17 @@ end
 """
     findswarm(job)
 
-TBW
+Finds the swarm file associated with a given job.
+
+# Arguments
+- `job`: The job identifier.
+
+# Returns
+- `String`: The name of the swarm file associated with the job.
+
+# Description
+This function retrieves the swarm file name associated with a given job by reading the job history and searching for the swarm command. It returns the name of the swarm file.
+
 """
 function findswarm(job)
     sc = "Swarm Command"
@@ -651,24 +892,38 @@ function findswarm(job)
 end
 
 """
-    get_missing_genes(datapath::String,folder::String,cell,type,label,cond,model)
-"""
-
-"""
     get_missing_genes(datapath::String, resultfolder::String, cell, filetype, label, cond, model, root=".")
+    get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)
 
-TBW
+Finds genes that are missing from the results folder based on the given parameters.
+
+# Arguments
+- `datapath`: The path to the data directory.
+- `resultfolder`: The path to the results directory.
+- `cell`: The cell type.
+- `filetype`: The type of file to search for.
+- `label`: The label to use for the search.
+- `cond`: The condition to use for the search.
+- `model`: The model to use for the search.
+- `root`: The root directory. Defaults to the current directory.
+- `genes`: A vector of gene identifiers.
+
+# Returns
+- `Vector{String}`: A vector of missing gene identifiers.
+
+# Methods
+- `get_missing_genes(datapath::String, resultfolder::String, cell, filetype, label, cond, model, root=".")`: Finds missing genes based on the specified parameters.
+- `get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)`: Finds missing genes based on a list of gene identifiers.
+
+# Description
+This function checks for genes that are missing from the results folder based on the specified parameters. It first retrieves the list of genes from the data directory and then compares it with the genes present in the results folder. It returns a list of missing gene identifiers.
+
 """
 function get_missing_genes(datapath::String, resultfolder::String, cell, filetype, label, cond, model, root=".")
     genes = checkgenes(root, cond, datapath, cell, 0.0, 1e8)
     get_missing_genes(genes, folder_path(resultfolder, root, "results"), filetype, label, cond, model)
 end
 
-"""
-    get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)
-
-TBW
-"""
 function get_missing_genes(genes::Vector, resultfolder, filetype, label, cond, model)
     genes1 = get_genes(resultfolder, filetype, label, cond, model)
     get_missing_genes(genes, genes1)
@@ -679,7 +934,17 @@ get_missing_genes(genes, genes1) = union(setdiff(genes1, genes), setdiff(genes, 
 """
     scan_swarmfiles(jobid, folder=".")
 
-TBW
+Scans swarm files in the specified folder for a given job ID.
+
+# Arguments
+- `jobid`: The job identifier.
+- `folder`: The folder to search for swarm files. Defaults to the current directory.
+
+# Returns
+- `Vector{String}`: A vector of gene identifiers found in the swarm files.
+
+# Description
+This function scans the swarm files in the specified folder for the given job ID. It reads the contents of the swarm files and extracts the gene identifiers associated with the job ID. It returns a list of these gene identifiers.
 """
 function scan_swarmfiles(jobid, folder=".")
     if ~(typeof(jobid) <: String)
@@ -697,7 +962,16 @@ end
 """
     scan_swarmfile(file)
 
-TBW
+Scans a single swarm file for gene identifiers.
+
+# Arguments
+- `file`: The path to the swarm file.
+
+# Returns
+- `Vector{String}`: A vector of gene identifiers found in the swarm file.
+
+# Description
+This function reads the contents of a given swarm file and extracts the gene identifiers. It returns a list of these gene identifiers.
 """
 function scan_swarmfile(file)
     genes = Array{String,1}(undef, 0)
@@ -712,7 +986,17 @@ end
 """
     scan_fitfile(file, folder=".")
 
-TBW
+Scans a fit file for gene identifiers.
+
+# Arguments
+- `file`: The name of the fit file.
+- `folder`: The folder where the fit file is located. Defaults to the current directory.
+
+# Returns
+- `Vector{String}`: A vector of gene identifiers found in the fit file.
+
+# Description
+This function reads the contents of a given fit file and extracts the gene identifiers. It returns a list of these gene identifiers.
 """
 function scan_fitfile(file, folder=".")
     genes = Array{String,1}(undef, 0)
@@ -727,7 +1011,15 @@ end
 """
     new_FISHfolder(newroot::String, oldroot::String, rep::String)
 
-TBW
+Creates a new folder structure for FISH data based on an existing structure.
+
+# Arguments
+- `newroot`: The root directory for the new folder structure.
+- `oldroot`: The root directory of the existing folder structure.
+- `rep`: The string to search for in directory names.
+
+# Description
+This function walks through the existing folder structure and creates a new folder structure in the specified new root directory. It searches for directories containing the specified string and replicates their structure in the new root directory.
 """
 function new_FISHfolder(newroot::String, oldroot::String, rep::String)
     for (root, dirs, files) in walkdir(oldroot)

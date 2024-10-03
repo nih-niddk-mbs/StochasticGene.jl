@@ -6,32 +6,32 @@
 """
     AbstractExperimentalData
 
-abstract type for experimental data
+Abstract type for experimental data
 """
 abstract type AbstractExperimentalData end
 """
     AbstractSampleData
 
-abstract type for data in the form of samples
+Abstract type for data in the form of samples
 """
 abstract type AbstractSampleData <: AbstractExperimentalData end
 """
     AbstractHistogramData
 
-abstract type for data in the form of a histogram (probability distribution)
+Abstract type for data in the form of a histogram (probability distribution)
 """
 abstract type AbstractHistogramData <: AbstractExperimentalData end
 """
     AbstractTraceData
     
-abstract type for intensity time series data
+Abstract type for intensity time series data
 """
 abstract type AbstractTraceData <: AbstractExperimentalData end
 
 """
   AbstractRNAData{hType}
 
-abstract type for steady state RNA histogram data
+Abstract type for steady state RNA histogram data
 """
 abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 
@@ -39,7 +39,7 @@ abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 """
     AbstractTraceHistogramData
     
-abstract type for intensity time series data with RNA histogram data
+Abstract type for intensity time series data with RNA histogram data
 """
 abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
 
@@ -48,16 +48,15 @@ abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
 # Do not use underscore "_" in label
 
 """
-    Data structures
+    RNAData{nType,hType}
 
-arguments:
-label: label for the data set
-gene: gene name (case sensitive)
-nRNA: length of histogram
-histRNA: RNA histograms
-bins: number of live cell recording time bins
-OFF:  OFF time probability density
-ON:: ON time probability density
+Structure for storing RNA histogram data.
+
+# Fields
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::nType`: Length of the histogram.
+- `histRNA::hType`: RNA histograms.
 """
 struct RNAData{nType,hType} <: AbstractRNAData{hType}
     label::String
@@ -65,6 +64,20 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     nRNA::nType
     histRNA::hType
 end
+"""
+    RNAOnOffData
+
+Structure for storing RNA ON/OFF time data.
+
+# Fields
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::Int`: Length of the histogram.
+- `histRNA::Vector`: RNA histograms.
+- `bins::Vector`: Number of live cell recording time bins.
+- `ON::Vector`: ON time probability density.
+- `OFF::Vector`: OFF time probability density.
+"""
 struct RNAOnOffData <: AbstractHistogramData
     label::String
     gene::String
@@ -74,6 +87,20 @@ struct RNAOnOffData <: AbstractHistogramData
     ON::Vector
     OFF::Vector
 end
+"""
+    RNADwellTimeData
+
+Structure for storing RNA dwell time data.
+
+# Fields
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::Int`: Length of the histogram.
+- `histRNA::Array`: RNA histograms.
+- `bins::Vector{Vector}`: Number of live cell recording time bins.
+- `DwellTimes::Vector{Vector}`: Dwell times.
+- `DTtypes::Vector`: Types of dwell times.
+"""
 struct RNADwellTimeData <: AbstractHistogramData
     label::String
     gene::String
@@ -83,12 +110,31 @@ struct RNADwellTimeData <: AbstractHistogramData
     DwellTimes::Vector{Vector}
     DTtypes::Vector
 end
+"""
+    TraceData{labelType,geneType,traceType}
+
+Structure for storing trace data.
+
+# Fields
+- `label::labelType`: Label for the data set.
+- `gene::geneType`: Gene name (case sensitive).
+- `interval::Float64`: Time interval between trace points.
+- `trace::traceType`: Trace data.
+"""
 struct TraceData{labelType,geneType,traceType} <: AbstractTraceData
     label::labelType
     gene::geneType
     interval::Float64
     trace::traceType
 end
+"""
+    TraceRNAData{traceType,hType}
+
+Structure for storing trace RNA histogram data.
+
+# Fields
+- `label::String`: Label for the data set.
+"""
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
     gene::String
@@ -101,10 +147,11 @@ end
 # Model structures
 
 """
-Pool
+    Pool
 
-structure for hierarchical model
+Structure for hierarchical model
 
+    # Fields
 - `nhyper::Int`: number of hyper parameter sets
 - `nparams::Int`: number of fitted hyper params per set = length(fittedparam)
 - `nrates`::Int`: number of rates (all params) for each individual
@@ -122,14 +169,16 @@ struct Pool
 end
 
 """
-HMMReporter
+    HMMReporter
 
-structure for reporters
+Structure for reporters.
 
-- `n`: number of noise parameters
-- `per_state`: number of reporters per state
-- `probfn`: noise distribution e.g. prob_GaussianMixture
-- `weightind`: index for mixture model bias parameter (restricted to range [0,1])
+# Fields
+- `n::Int`: Number of noise parameters.
+- `per_state::Vector`: Number of reporters per state.
+- `probfn::Function`: Noise distribution function, e.g., `prob_GaussianMixture`.
+- `weightind::Int`: Index for mixture model bias parameter (restricted to range [0,1]).
+- `offstates::Vector{Int}`: Vector of off states.
 """
 struct HMMReporter
     n::Int
@@ -171,6 +220,21 @@ fields:
 -` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 
 """
+
+"""
+    GMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+Structure for GM models.
+
+# Fields
+- `rates::RateType`: Transition rates.
+- `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+- `G::Int`: Number of G steps.
+- `nalleles::Int`: Number of alleles producing RNA.
+- `rateprior::PriorType`: Prior distribution for rates.
+- `proposal::ProposalType`: MCMC proposal distribution.
+- `fittedparam::ParamType`: Indices of rates to be fitted.
+"""
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
     Gtransitions::Tuple
@@ -185,6 +249,28 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     reporter::ReporterType
 end
 
+"""
+    GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+Structure for GRSM models.
+
+# Fields
+- `rates::RateType`: Transition rates.
+- `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+- `G::Int`: Number of G steps.
+- `R::Int`: Number of R steps.
+- `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+- `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+- `nalleles::Int`: Number of alleles producing RNA.
+- `splicetype::String`: Choices are "", "offeject", "offdecay".
+- `rateprior::PriorType`: Prior distribution for rates.
+- `proposal::ProposalType`: MCMC proposal distribution.
+- `fittedparam::ParamType`: Indices of rates to be fitted.
+- `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
+- `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
+- `components::ComponentType`: Components of the model.
+- `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
+"""
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
@@ -202,7 +288,29 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
     reporter::ReporterType
 end
+"""
+    GRSMhierarchicalmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
 
+Structure for GRSM hierarchical models.
+
+# Fields
+- `rates::RateType`: Transition rates.
+- `pool::Pool`: Pool of rates for hierarchical modeling.
+- `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+- `G::Int`: Number of G steps.
+- `R::Int`: Number of R steps.
+- `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+- `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+- `nalleles::Int`: Number of alleles producing RNA.
+- `splicetype::String`: Choices are "", "offeject", "offdecay".
+- `rateprior::PriorType`: Prior distribution for rates.
+- `proposal::ProposalType`: MCMC proposal distribution.
+- `fittedparam::ParamType`: Indices of rates to be fitted.
+- `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
+- `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
+- `components::ComponentType`: Components of the model.
+- `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
+"""
 struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     pool::Pool
@@ -222,6 +330,29 @@ struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodTyp
     reporter::ReporterType
 end
 
+"""
+    GRSMcoupledmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+Structure for GRSM coupled models.
+
+# Fields
+- `rates::RateType`: Transition rates.
+- `coupling::CouplingType`: Coupling information for the model.
+- `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+- `G::Tuple`: Number of G steps for each coupled component.
+- `R::Tuple`: Number of R steps for each coupled component.
+- `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+- `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+- `nalleles::Int`: Number of alleles producing RNA.
+- `splicetype::String`: Choices are "", "offeject", "offdecay".
+- `rateprior::PriorType`: Prior distribution for rates.
+- `proposal::ProposalType`: MCMC proposal distribution.
+- `fittedparam::ParamType`: Indices of rates to be fitted.
+- `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
+- `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
+- `components::ComponentType`: Components of the model.
+- `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
+"""
 struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     coupling::CouplingType
