@@ -5,17 +5,51 @@
 
 
 """
-    state_index(G::Int,i,z)
+    state_index(G::Int, g, z)
 
-return state index for state (i,z)
+Return the state index for state `(g, z)`.
+
+# Arguments
+- `G::Int`: Total number of genes.
+- `g`: Gene index.
+- `z`: State index.
+
+# Returns
+- `Int`: The state index.
 """
 state_index(G::Int, g, z) = g + G * (z - 1)
 
-
 """
     inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
+    inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)
+    inverse_state(units::Vector, G::Tuple, R, S, insertstep, f=sum)
+    inverse_state(i::Vector{Int}, G::Int, R, S, insertstep::Int)
 
+Return the inverse state for a given state index or vector of units.
 
+# Description
+This function returns the inverse state for a given state index or vector of units. It can handle different types of inputs, including integers, tuples, and vectors.
+
+# Arguments
+- `i::Int`: State index.
+- `G::Int`: Total number of genes.
+- `G::Tuple`: Tuple of total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `unit_model`: Unit model.
+- `units::Vector`: Vector of units.
+- `f`: Function to apply (default is `sum`).
+
+# Methods
+- `inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)`: Handles `i` as an integer.
+- `inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)`: Handles `i` as an integer with a tuple of genes.
+- `inverse_state(units::Vector, G::Tuple, R, S, insertstep, f=sum)`: Handles `units` as a vector.
+- `inverse_state(i::Vector{Int}, G::Int, R, S, insertstep::Int)`: Handles `i` as a vector of integers.
+
+# Returns
+- `Tuple`: Inverse state.
+- `Vector{Tuple}`: Vector of inverse states.
 """
 function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     base = S > 0 ? 3 : 2
@@ -71,10 +105,21 @@ function inverse_state(i::Vector{Vector{Int}}, G::Int, R, S, insertstep)
     return g, z, zdigits, r
 end
 
+
 """
     unit_state(i::Int, G::Tuple, R, S, unit_model)
 
-TBW
+Return the unit state for a given state index.
+
+# Arguments
+- `i::Int`: State index.
+- `G::Tuple`: Tuple of total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `unit_model`: Unit model.
+
+# Returns
+- `Tuple`: Unit state.
 """
 function unit_state(i::Int, G::Tuple, R, S, unit_model)
     nT = T_dimension(G, R, S, unit_model)
@@ -86,11 +131,30 @@ function unit_state(i::Int, G::Tuple, R, S, unit_model)
     end
     Tuple(unit)
 end
-
 """
     on_states(onstates, G, R, S, insertstep)
+    on_states(G::Int, R, S, insertstep)
+    on_states(onstates::Vector, G, R, S)
 
-return vector of new onstates given onstates argument of fit function
+Return vector of on state indices for GR and GRS models.
+
+# Description
+This function returns a vector of on state indices for GR and GRS models. It can handle both empty and non-empty `onstates`.
+
+# Arguments
+- `onstates`: Initial onstates. Can be a vector of integers or empty.
+- `G::Int`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+
+# Methods
+- `on_states(onstates, G, R, S, insertstep)`: Handles both empty and non-empty `onstates`.
+- `on_states(G::Int, R, S, insertstep)`: Generates `onstates` from scratch.
+- `on_states(onstates::Vector, G, R, S)`: Generates `onstates` based on the provided vector.
+
+# Returns
+- `Vector{Int}`: Vector of new onstates.
 """
 function on_states(onstates, G, R, S, insertstep)
     if isempty(onstates)
@@ -99,11 +163,6 @@ function on_states(onstates, G, R, S, insertstep)
         return on_states(onstates, G, R, S)
     end
 end
-"""
-    on_states(G, R, S, insertstep)
-
-return vector of onstates for GRS model given reporter appears at insertstep
-"""
 function on_states(G::Int, R, S, insertstep)
     base = S > 0 ? 3 : 2
     onstates = Int[]
@@ -123,7 +182,20 @@ end
 """
     on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 
-return vector of on state indices for GR and GRS models
+In-place function to generate vector of on state indices for GR and GRS models.
+
+# Description
+This function modifies the `onstates` vector in place to generate a vector of on state indices for GR and GRS models.
+
+# Arguments
+- `onstates::Vector`: Initial onstates.
+- `G::Int`: Total number of genes.
+- `R::Int`: Number of reporters.
+- `insertstep`: Insert step.
+- `base`: Base value.
+
+# Returns
+- `Nothing`: This function modifies the `onstates` vector in place.
 """
 function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
     (R == 0) && throw("Cannot use empty ON state [] for R = 0")
@@ -136,27 +208,39 @@ end
 
 """
     off_states(G::Int, R, S, insertstep)
+    off_states(nT, onstates)
+    off_states(reporters)
 
-return barrier (off) states, complement of sojourn (on) states
+Return barrier (off) states, complement of sojourn (on) states.
+
+# Description
+This function returns the barrier (off) states, which are the complement of the sojourn (on) states.
+
+# Arguments
+- `G::Int`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `nT`: Total number of states.
+- `onstates`: Vector of on states.
+- `reporters`: Vector of reporter states.
+
+# Methods
+- `off_states(G::Int, R, S, insertstep)`: Computes off states based on the given parameters.
+- `off_states(nT, onstates)`: Computes off states as the complement of the given on states.
+- `off_states(reporters)`: Computes off states based on the reporter states.
+
+# Returns
+- `Vector{Int}`: Vector of off states.
 """
 function off_states(G::Int, R, S, insertstep)
     base = S > 0 ? 3 : 2
     nT = G * base^R
     off_states(nT, on_states(G, R, S, insertstep))
 end
-"""
-    off_states(nT,onstates)
 
-return barrier (off) states, complement of sojourn (on) states
-"""
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
 
-
-"""
-    off_states(reporters)
-
-
-"""
 function off_states(reporters)
     offstates = Int[]
     for i in eachindex(reporters)
@@ -167,8 +251,26 @@ end
 
 """
     T_dimension(G, R, S)
+    T_dimension(G::Tuple, R::Tuple, S::Tuple)
+    T_dimension(G::Int, R::Int, S::Int)
 
-Compute transition matrix dimension of GRS model
+Compute the transition matrix dimension of the GRS model.
+
+# Description
+This function computes the transition matrix dimension of the GRS model based on the provided parameters.
+
+# Arguments
+- `G`: Total number of genes or a tuple of total number of genes.
+- `R`: Number of reporters or a tuple of number of reporters.
+- `S`: Number of states or a tuple of number of states.
+
+# Methods
+- `T_dimension(G, R, S)`: Computes the dimension for given integers `G`, `R`, and `S`.
+- `T_dimension(G::Tuple, R::Tuple, S::Tuple)`: Computes the dimension for given tuples `G`, `R`, and `S`.
+- `T_dimension(G::Int, R::Int, S::Int)`: Computes the dimension for given integers `G`, `R`, and `S`.
+
+# Returns
+- `Int`: The dimension of the transition matrix.
 """
 function T_dimension(G, R, S)
     base = S > 0 ? 3 : 2
@@ -192,12 +294,35 @@ function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)
 end
 
 """
-    num_reporters_per_state(G::Int, R::Int, S::Int=0,insertstep=1,f=sum)
+    num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
+    num_reporters_per_state(G::Int, onstates::Vector)
+    num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
 
-return number of a vector of the number reporters for each state index
+Return the number of reporters for each state index.
 
-if f = sum, returns total number of reporters
-if f = any, returns 1 for presence of any reporter
+# Description
+This function returns the number of reporters for each state index. It can handle different types of inputs, including integers, tuples, and vectors.
+
+# Arguments
+- `G::Int`: Total number of genes.
+- `R::Int`: Number of reporters.
+- `S::Int`: Number of states (default is 0).
+- `insertstep`: Insert step (default is 1).
+- `f`: Function to apply (default is `sum`).
+- `onstates::Vector`: Vector of on states.
+- `G::Tuple`: Tuple of total number of genes.
+- `R::Tuple`: Tuple of number of reporters.
+- `S::Tuple`: Tuple of number of states.
+- `insertstep::Tuple`: Tuple of insert steps.
+- `unit_model`: Unit model.
+
+# Methods
+- `num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)`: Computes the number of reporters based on the given parameters.
+- `num_reporters_per_state(G::Int, onstates::Vector)`: Computes the number of reporters based on the provided vector of on states.
+- `num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)`: Computes the number of reporters based on the provided tuples and unit model.
+
+# Returns
+- `Vector{Int}`: Vector of the number of reporters for each state index.
 """
 function num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     base = S > 0 ? 3 : 2
@@ -250,16 +375,49 @@ end
 """
     num_reporters_per_index(z, R, insertstep, base, f=sum)
 
-TBW
+Compute the number of reporters for a given state index.
+
+# Description
+This function computes the number of reporters for a given state index `z`. It uses the `digits` function to determine the number of reporters based on the specified `base` and `insertstep`.
+
+# Arguments
+- `z`: State index.
+- `R`: Number of reporters.
+- `insertstep`: Insert step.
+- `base`: Base value.
+- `f`: Function to apply (default is `sum`).
+
+# Returns
+- `Int`: The number of reporters for the given state index.
 """
 num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
 
 """
-	set_indices(ntransitions, R, S, insertstep)
-	set_indices(ntransitions,R)
-	set_indices(ntransitions)
+    set_indices(ntransitions, R, S, insertstep)
+    set_indices(ntransitions, R)
+    set_indices(ntransitions)
+    set_indices(ntransitions, R, S, insertstep, offset)
 
-	return Indices structure
+Return an `Indices` structure based on the provided parameters.
+
+# Description
+This function returns an `Indices` structure based on the provided parameters. It can handle different combinations of `ntransitions`, `R`, `S`, `insertstep`, and `offset`.
+
+# Arguments
+- `ntransitions`: Number of transitions.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `offset`: Offset value (optional).
+
+# Methods
+- `set_indices(ntransitions, R, S, insertstep)`: Computes the `Indices` structure based on the given parameters.
+- `set_indices(ntransitions, R)`: Computes the `Indices` structure based on `ntransitions` and `R`.
+- `set_indices(ntransitions)`: Computes the `Indices` structure based on `ntransitions`.
+- `set_indices(ntransitions, R, S, insertstep, offset)`: Computes the `Indices` structure based on the given parameters with an offset.
+
+# Returns
+- `Indices`: The computed `Indices` structure.
 """
 function set_indices(ntransitions, R, S, insertstep)
     if insertstep > R > 0
@@ -276,10 +434,6 @@ end
 set_indices(ntransitions, R) = Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), Int[], ntransitions + R + 2)
 set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1], Int[], ntransitions + 2)
 
-"""
-    set_indices(ntransitions, R, S, insertstep, offset)
-
-"""
 function set_indices(ntransitions, R, S, insertstep, offset)
     if insertstep > R > 0
         throw("insertstep>R")

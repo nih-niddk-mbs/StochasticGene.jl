@@ -913,12 +913,14 @@ function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRN
     end
     return hists
 end
-
 """
     transform_array(v, index, f1, f2)
     transform_array(v, index, mask, f1, f2)
 
 Applies transformation functions to an array or vector at specified indices.
+
+# Description
+This function applies the transformation functions `f1` and `f2` to an array or vector `v` at specified indices. If a `mask` is provided, it adjusts the indexing accordingly before applying the transformations.
 
 # Arguments
 - `v`: The array or vector to be transformed.
@@ -926,9 +928,6 @@ Applies transformation functions to an array or vector at specified indices.
 - `mask`: A vector used to adjust the indexing for the transformation.
 - `f1`: The function to apply to the elements up to `index`.
 - `f2`: The function to apply to the elements after `index`.
-
-# Description
-This function applies the transformation functions `f1` and `f2` to an array or vector `v` at specified indices. If a `mask` is provided, it adjusts the indexing accordingly before applying the transformations.
 
 # Methods
 - `transform_array(v::Array, index::Int, f1::Function, f2::Function)`: Applies `f1` to the array `v` up to `index` and `f2` after `index`.
