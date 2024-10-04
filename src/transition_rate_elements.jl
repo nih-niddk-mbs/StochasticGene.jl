@@ -143,8 +143,13 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
                 if abs(sB) == 1
                     push!(elementsT, Element(a, b, nu[R+1], sB))
                 end
-                if S > 0 && abs(sC) == 1
-                    push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
+                # if S > 0 && abs(sC) == 1
+                #     push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
+                # end
+                if S > 0
+                    if S > insertstep - 1 && abs(sC) == 1
+                        push!(elementsT, Element(a, b, eta[S-insertstep+1], sC))
+                    end
                 end
                 if splicetype == "offeject"
                     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
@@ -168,7 +173,8 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
                     if abs(s) == 1
                         push!(elementsT, Element(a, b, nu[j+1], s))
                     end
-                    if S > 0 && j > insertstep - 1
+                    # if S > 0 && j > insertstep - 1
+                    if S > 0 && S > j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                         if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
@@ -314,8 +320,10 @@ function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vecto
             if abs(sB) == 1
                 push!(elementsRGbar, Element(a, b, nu[R+1], sB))
             end
-            if S > 0 && abs(sC) == 1
-                push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], sC))
+            if S > 0
+                if S > insertstep - 1 && abs(sC) == 1
+                    push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
+                end
             end
             if splicetype == "offeject"
                 s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
@@ -339,7 +347,8 @@ function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vecto
                 if abs(s) == 1
                     push!(elementsRGbar, Element(a, b, nu[j+1], s))
                 end
-                if S > 0 && j > insertstep - 1
+                # if S > 0 && j > insertstep - 1
+                if S > 0 && S > j > insertstep - 1
                     s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                     if abs(s) == 1
                         push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))

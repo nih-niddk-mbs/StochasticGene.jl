@@ -264,17 +264,17 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
 end
 
 function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
-    components = make_components_MTRG(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T = make_mat_TRG(components.tcomponents, r)
-    M = make_mat_MRG(components.mcomponents, r)
-    B = make_mat_B2(components.mcomponents, r)
+    components = StochasticGene.make_components_MTRG(transitions, G, R, S, insertstep, nhist, 1.01, "")
+    T = StochasticGene.make_mat_TRG(components.tcomponents, r)
+    M = StochasticGene.make_mat_MRG(components.mcomponents, r)
+    B = StochasticGene.make_mat_B2(components.mcomponents, r)
     return T, M, B, components
 end
 
 function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     components = make_components_MT(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T = make_mat_T(components.tcomponents, r)
-    M = make_mat_M(components.mcomponents, r)
+    T = StochasticGene.make_mat_T(components.tcomponents, r)
+    M = StochasticGene.make_mat_M(components.mcomponents, r)
     T, M, components
 end
 

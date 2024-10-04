@@ -4,6 +4,55 @@
 #
 
 """
+    make_components_T(transitions, G, R, S, insertstep, splicetype)
+
+Return TComponents structure for fitting traces and creating TA and TI matrix components.
+
+# Description
+This function returns a TComponents structure, which is used for fitting traces and creating TA and TI matrix components.
+
+# Arguments
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type.
+
+# Returns
+- `TComponents`: The created TComponents structure.
+"""
+function make_components_T(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    TComponents(nT, elementsT)
+end
+"""
+    make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+
+Return TRGComponents structure for GRS models.
+
+# Description
+This function returns a TRGComponents structure for GRS models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+
+# Arguments
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type.
+
+# Returns
+- `TRGComponents`: The created TRGComponents structure.
+"""
+function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
+end
+
+"""
     make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
 
 Make MTAI structure for GRS models (fitting mRNA, on time, and off time histograms).
@@ -142,7 +191,7 @@ This function returns an MComponents structure, which includes matrix components
 """
 function make_components_M(transitions, G, R, nhist, decay, splicetype)
     indices = set_indices(length(transitions), R)
-    elementsT, nT = set_elements_T(transitions, G, R, 0, 0, indices, splicetype)
+    elementsT, nT = set_elements_T(transitions, G, R, 0, 1, indices, splicetype)
     elementsB = set_elements_B(G, R, indices.nu[R+1])
     U, Um, Up = make_mat_U(nhist, decay)
     return MComponents(elementsT, elementsB, nT, U, Um, Up)
@@ -174,54 +223,7 @@ function make_components_MRG(transitions, G, R, nhist, decay)
     MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
 end
 
-"""
-    make_components_T(transitions, G, R, S, insertstep, splicetype)
 
-Return TComponents structure for fitting traces and creating TA and TI matrix components.
-
-# Description
-This function returns a TComponents structure, which is used for fitting traces and creating TA and TI matrix components.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type.
-
-# Returns
-- `TComponents`: The created TComponents structure.
-"""
-function make_components_T(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    TComponents(nT, elementsT)
-end
-"""
-    make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-
-Return TRGComponents structure for GRS models.
-
-# Description
-This function returns a TRGComponents structure for GRS models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type.
-
-# Returns
-- `TRGComponents`: The created TRGComponents structure.
-"""
-function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-    TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
-end
 
 """
     make_components_TAI(elementsT, nT::Int, onstates::Vector)
