@@ -322,11 +322,6 @@ This function returns a TcoupledComponents structure for coupled models, which i
 """
 make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
-"""
-    make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-
-
-"""
 function make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = ModelCoupledComponents[]
     for i in eachindex(G)
@@ -337,28 +332,63 @@ end
 
 
 """
-make_mat!(T::AbstractMatrix,elements::Vector,rates::Vector)
+    make_mat!(T::AbstractMatrix, elements::Vector, rates::Vector)
 
-set matrix elements of T to those in vector argument elements
+Set matrix elements of T to those in vector argument elements.
+
+# Description
+This function sets the matrix elements of T to those in the vector argument elements, using the provided rates.
+
+# Arguments
+- `T::AbstractMatrix`: The matrix to be modified.
+- `elements::Vector`: Vector of elements to set in the matrix.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `Nothing`: This function modifies the matrix T in place.
 """
 function make_mat!(T::AbstractMatrix, elements::Vector, rates::Vector)
     for e in elements
         T[e.a, e.b] += e.pm * rates[e.index]
     end
 end
-"""
-make_mat(elements,rates,nT)
 
-return an nTxnT sparse matrix T
+"""
+    make_mat(elements::Vector, rates::Vector, nT::Int)
+
+Return an nT x nT sparse matrix T.
+
+# Description
+This function returns an nT x nT sparse matrix T, with elements set according to the provided elements and rates.
+
+# Arguments
+- `elements::Vector`: Vector of elements to set in the matrix.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+- `nT::Int`: Size of the matrix (nT x nT).
+
+# Returns
+- `SparseMatrixCSC`: The created sparse matrix T.
 """
 function make_mat(elements::Vector, rates::Vector, nT::Int)
     T = spzeros(nT, nT)
     make_mat!(T, elements, rates)
     return T
 end
-"""
-make_S_mat
 
+"""
+    make_mat_U(total::Int, decay::Float64)
+
+Return matrices U, Uminus, and Uplus for m transitions.
+
+# Description
+This function returns matrices U, Uminus, and Uplus for m transitions, using the provided total number of transitions and decay rate.
+
+# Arguments
+- `total::Int`: Total number of transitions.
+- `decay::Float64`: Decay rate.
+
+# Returns
+- `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices U, Uminus, and Uplus.
 """
 function make_mat_U(total::Int, decay::Float64)
     U = spzeros(total, total)
@@ -375,20 +405,41 @@ function make_mat_U(total::Int, decay::Float64)
     Uminus[total, total-1] = 1
     return U, Uminus, Uplus
 end
+
 """
     make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
+    make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
+    make_mat_M(components::MComponents, rates::Vector)
 
-return M matrix used to compute steady state RNA distribution
+Return M matrix used to compute steady state RNA distribution.
+
+# Description
+This function returns the M matrix used to compute the steady state RNA distribution. It can either generate the U, Uminus, and Uplus matrices internally, accept them as arguments, or use components to create the matrix.
+
+# Arguments
+- `T::SparseMatrixCSC`: Transition matrix.
+- `B::SparseMatrixCSC`: Boundary matrix.
+- `decay::Float64`: Decay rate.
+- `total::Int`: Total number of transitions.
+- `U::SparseMatrixCSC`: Precomputed U matrix.
+- `Uminus::SparseMatrixCSC`: Precomputed Uminus matrix.
+- `Uplus::SparseMatrixCSC`: Precomputed Uplus matrix.
+- `components::MComponents`: Components structure containing elements and matrices.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Methods
+- `make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)`: Generates the U, Uminus, and Uplus matrices internally.
+- `make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)`: Accepts precomputed U, Uminus, and Uplus matrices.
+- `make_mat_M(components::MComponents, rates::Vector)`: Uses components to create the matrix.
+
+# Returns
+- `SparseMatrixCSC`: The created M matrix.
 """
 function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
     U, Uminus, Uplus = make_mat_U(total, decay)
     make_mat_M(T, B, U, Uminus, Uplus)
 end
-"""
-    make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
 
-TBW
-"""
 function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
     nT = size(T, 1)
     total = size(U, 1)
@@ -397,51 +448,101 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, 
     return M
 end
 
-"""
-    make_mat_M(components::MComponents, rates::Vector)
-
-TBW
-"""
 function make_mat_M(components::MComponents, rates::Vector)
     T = make_mat(components.elementsT, rates, components.nT)
     B = make_mat(components.elementsB, rates, components.nT)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
 
-function make_mat_B2(components, rates)
-    RB = make_mat(components.elementsB, rates, components.nR)
-    nG = components.nG
-    kron(RB, sparse(I, nG, nG))
-end
+"""
+    make_mat_MRG(components::MRGComponents, rates::Vector)
 
+Return MRG matrix used to compute steady state RNA distribution for GRS models.
+
+# Description
+This function returns the MRG matrix used to compute the steady state RNA distribution for GRS models. It uses the provided components and rates to create the matrix.
+
+# Arguments
+- `components::MRGComponents`: Components structure containing elements and matrices for GRS models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `SparseMatrixCSC`: The created MRG matrix.
+"""
 function make_mat_MRG(components::MRGComponents, rates::Vector)
     T = make_mat_TRG(components, rates)
     B = make_mat_B2(components, rates)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)
 end
 
+"""
+    make_mat_B2(components, rates)
+
+Return boundary matrix B2 for GRS models.
+
+# Description
+This function returns the boundary matrix B2 for GRS models, using the provided components and rates.
+
+# Arguments
+- `components`: Components structure containing elements and matrices for GRS models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `SparseMatrixCSC`: The created boundary matrix B2.
+"""
+function make_mat_B2(components, rates)
+    RB = make_mat(components.elementsB, rates, components.nR)
+    nG = components.nG
+    kron(RB, sparse(I, nG, nG))
+end
 
 """
     make_mat_T(components::AbstractTComponents, rates)
 
-construct matrices from elements
+Construct matrices from elements.
+
+# Description
+This function constructs matrices from elements using the provided components and rates.
+
+# Arguments
+- `components::AbstractTComponents`: Components structure containing elements and matrices.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `SparseMatrixCSC`: The created matrix T.
 """
 make_mat_T(components::AbstractTComponents, rates) = make_mat(components.elementsT, rates, components.nT)
 
 """
-    make_mat_TRG(G, GR, R, RG, nG, nR)
+    make_mat_TRG(G, GR, RGbar, RG, nG, nR)
+    make_mat_TRG(components, rates)
 
-TBW
+Return TRG matrix used to compute steady state RNA distribution for GRS models.
+
+# Description
+This function returns the TRG matrix used to compute the steady state RNA distribution for GRS models. It can either accept precomputed matrices or use components and rates to create the matrix.
+
+# Arguments
+- `G`: Gene matrix.
+- `GR`: Gene reporter matrix.
+- `RGbar`: Reporter gene boundary matrix.
+- `RG`: Reporter gene matrix.
+- `nG`: Number of genes.
+- `nR`: Number of reporters.
+- `components`: Components structure containing elements and matrices for GRS models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Methods
+- `make_mat_TRG(G, GR, RGbar, RG, nG, nR)`: Accepts precomputed matrices.
+- `make_mat_TRG(components, rates)`: Uses components and rates to create the matrix.
+
+# Returns
+- `SparseMatrixCSC`: The created TRG matrix.
 """
 function make_mat_TRG(G, GR, RGbar, RG, nG, nR)
     kron(RG, GR) + kron(sparse(I, nR, nR), G) + kron(RGbar, sparse(I, nG, nG))
 end
 
-"""
-    make_mat_TRG(components, rates)
-
-TBW
-"""
 function make_mat_TRG(components, rates)
     nG = components.nG
     nR = components.nR
@@ -453,37 +554,77 @@ function make_mat_TRG(components, rates)
 end
 
 """
+    make_mat_TA(elementsTA, rates, nT)
     make_mat_TA(components::TAIComponents, rates)
 
-TBW
+Return TA matrix used to compute steady state RNA distribution.
+
+# Description
+This function returns the TA matrix used to compute the steady state RNA distribution. It can either accept elements directly or use components and rates to create the matrix.
+
+# Arguments
+- `elementsTA`: Transition elements for TA.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+- `nT::Int`: Number of transition elements.
+- `components::TAIComponents`: Components structure containing elements and matrices for TA.
+
+# Methods
+- `make_mat_TA(elementsTA, rates, nT)`: Accepts elements directly.
+- `make_mat_TA(components::TAIComponents, rates)`: Uses components and rates to create the matrix.
+
+# Returns
+- `SparseMatrixCSC`: The created TA matrix.
 """
+make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
 make_mat_TA(components::TAIComponents, rates) = make_mat(components.elementsTA, rates, components.nT)
 
 """
     make_mat_TI(components::TAIComponents, rates)
+    make_mat_TI(elementsTI, rates, nT)
 
-TBW
+Return TI matrix used to compute steady state RNA distribution.
+
+# Description
+This function returns the TI matrix used to compute the steady state RNA distribution. It can either accept elements directly or use components and rates to create the matrix.
+
+# Arguments
+- `components::TAIComponents`: Components structure containing elements and matrices for TI.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+- `elementsTI`: Transition elements for TI.
+- `nT::Int`: Number of transition elements.
+
+# Methods
+- `make_mat_TI(components::TAIComponents, rates)`: Uses components and rates to create the matrix.
+- `make_mat_TI(elementsTI, rates, nT)`: Accepts elements directly.
+
+# Returns
+- `SparseMatrixCSC`: The created TI matrix.
 """
 make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, rates, components.nT)
 
-"""
-    make_mat_TA(elementsTA, rates, nT)
-
-TBW
-"""
-make_mat_TA(elementsTA, rates, nT) = make_mat(elementsTA, rates, nT)
-
-"""
-    make_mat_TI(elementsTI, rates, nT)
-
-TBW
-"""
 make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
 
 """
     make_mat_GR(components, rates)
+    make_mat_GR(G)
 
-TBW
+Return GR matrix used to compute steady state RNA distribution.
+
+# Description
+This function returns the GR matrix used to compute the steady state RNA distribution. It can either accept components and rates to create the matrix or use a given size to create an identity matrix.
+
+# Arguments
+- `components`: Components structure containing elements and matrices for GR.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+- `G::Int`: Size of the GR matrix.
+
+# Methods
+- `make_mat_GR(components, rates)`: Uses components and rates to create the matrix.
+- `make_mat_GR(G)`: Creates an identity matrix of size G.
+
+# Returns
+- `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created GR matrices (G, R, RB) for the first method.
+- `SparseMatrixCSC`: The created GR matrix for the second method.
 """
 function make_mat_GR(components, rates)
     nG = components.nG
@@ -493,7 +634,50 @@ function make_mat_GR(components, rates)
     RB = make_mat(components.elementsRB, rates, nR)
     G, R, RB
 end
+function make_mat_GR(G)
+    GR = spzeros(G, G)
+    GR[G, G] = 1
+    return GR
+end
 
+"""
+    make_mat_Gs(elements, nG)
+
+Return Gs matrix used to compute steady state RNA distribution.
+
+# Description
+This function returns the Gs matrix used to compute the steady state RNA distribution. It accepts transition elements directly and constructs the matrix.
+
+# Arguments
+- `elements`: Transition elements for Gs.
+- `nG::Int`: Number of gene elements.
+
+# Returns
+- `SparseMatrixCSC`: The created Gs matrix.
+"""
+function make_mat_Gs(elements, nG)
+    G = spzeros(nG, nG)
+    for e in elements
+        G[e.a, e.b] += 1.0
+    end
+    return G
+end
+
+"""
+    make_mat_C(components, rates)
+
+Return matrices used to compute steady state RNA distribution for coupled models.
+
+# Description
+This function returns the matrices used to compute the steady state RNA distribution for coupled models. It uses the provided components and rates to create the matrices.
+
+# Arguments
+- `components`: Components structure containing elements and matrices for coupled models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices (T, G, Gt, Gs, I_G, I_R, I_T).
+"""
 function make_mat_C(components, rates)
     nT = components.nT
     nG = components.nG
@@ -513,20 +697,21 @@ function make_mat_C(components, rates)
     return T, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
-function make_mat_GR(G)
-    GR = spzeros(G, G)
-    GR[G, G] = 1
-    return GR
-end
+"""
+    make_matvec_C(components, rates)
 
-function make_mat_Gs(elements, nG)
-    G = spzeros(nG, nG)
-    for e in elements
-        G[e.a, e.b] += 1.0
-    end
-    return G
-end
+Return matrix-vector product used to compute steady state RNA distribution for coupled models.
 
+# Description
+This function returns the matrix-vector product used to compute the steady state RNA distribution for coupled models. It uses the provided components and rates to create the product.
+
+# Arguments
+- `components`: Components structure containing elements and matrices for coupled models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Returns
+- `SparseVector`: The created matrix-vector product.
+"""
 function make_matvec_C(components, rates)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
@@ -542,35 +727,30 @@ function make_matvec_C(components, rates)
     return T, G, Gt, Gs, IG, IR, IT
 end
 
-function make_mat_TCr(components, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model), make_mat_TC(coupling_strength, G, Gs, Gt, IG, components.sources, components.model)
-end
+"""
+    kron_forward(T, I, sources, unit_model, first, last)
+    kron_forward(T, I, unit_model, first, last)
 
-function make_mat_TC(components, rates, coupling_strength)
-    T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
-    make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
-end
+Perform Kronecker product forward operation.
 
-function make_mat_Tkron(T::Matrix, IT, sources, unit_model)
-    Tc = spzeros(size(unit_model))
-    for α in eachindex(unit_model)
-        Tα = T[unit_model[α]]
-        for j in α-1:-1:1
-            if j ∈ sources[α]
-                Tα = kron(IT[unit_model[j]], Tα)
-            end
-        end
-        for j in α+1:n
-            if j ∈ sources[α]
-                Tα = kron(Tα, IT[unit_model[j]])
-            end
-        end
-        Tc += Tα
-    end
-    Tc
-end
+# Description
+This function performs a forward Kronecker product operation on the matrix `T` using the identity matrices `I` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
 
+# Arguments
+- `T`: Initial matrix to be transformed.
+- `I`: Vector of identity matrices.
+- `sources`: Vector of source indices (optional).
+- `unit_model`: Vector of unit model indices.
+- `first`: Starting index for the operation.
+- `last`: Ending index for the operation.
+
+# Methods
+- `kron_forward(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_forward(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+
+# Returns
+- `T`: The transformed matrix after applying the Kronecker product.
+"""
 function kron_forward(T, I, sources, unit_model, first, last)
     for j in first:last
         if j ∈ sources
@@ -587,6 +767,30 @@ function kron_forward(T, I, unit_model, first, last)
     T
 end
 
+"""
+    kron_backward(T, I, sources, unit_model, first, last)
+    kron_backward(T, I, unit_model, first, last)
+
+Perform Kronecker product backward operation.
+
+# Description
+This function performs a backward Kronecker product operation on the matrix `T` using the identity matrices `I` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
+
+# Arguments
+- `T`: Initial matrix to be transformed.
+- `I`: Vector of identity matrices.
+- `sources`: Vector of source indices (optional).
+- `unit_model`: Vector of unit model indices.
+- `first`: Starting index for the operation.
+- `last`: Ending index for the operation.
+
+# Methods
+- `kron_backward(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_backward(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+
+# Returns
+- `T`: The transformed matrix after applying the Kronecker product.
+"""
 function kron_backward(T, I, sources, unit_model, first, last)
     for j in first:-1:last
         if j ∈ sources
@@ -603,6 +807,33 @@ function kron_backward(T, I, unit_model, first, last)
     T
 end
 
+"""
+    make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
+    make_mat_TC(components, rates, coupling_strength)
+
+Return TC matrix used to compute steady state RNA distribution for coupled models.
+
+# Description
+This function returns the TC matrix used to compute the steady state RNA distribution for coupled models. It can either use the provided coupling strength, matrices, identity matrices, sources, and unit model indices directly, or use components and rates to create the matrix.
+
+# Arguments
+- `coupling_strength`: Strength of the coupling.
+- `T`: Initial matrix.
+- `U`: Matrix U.
+- `V`: Matrix V.
+- `IT`: Identity matrix for T.
+- `sources`: Vector of source indices.
+- `unit_model`: Vector of unit model indices.
+- `components`: Components structure containing elements and matrices for coupled models.
+- `rates::Vector`: Vector of rates corresponding to the elements.
+
+# Methods
+- `make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)`: Uses the provided matrices and indices directly.
+- `make_mat_TC(components, rates, coupling_strength)`: Uses components and rates to create the matrix.
+
+# Returns
+- `SparseMatrixCSC`: The created TC matrix.
+"""
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
     N = prod(size.(IT, 2))
@@ -636,10 +867,35 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     return Tc
 end
 
-
+function make_mat_TC(components, rates, coupling_strength)
+    T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
+    make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
+end
 
 ######
 
+# function make_mat_TCr(components, rates, coupling_strength)
+#     T, G, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+#     make_mat_TCr2(coupling_strength, T, G, Gs, kron.(IR, Gt), IG, IT, components.sources, components.model), make_mat_TC(coupling_strength, G, Gs, Gt, IG, components.sources, components.model)
+# end
+# function make_mat_Tkron(T::Matrix, IT, sources, unit_model)
+#     Tc = spzeros(size(unit_model))
+#     for α in eachindex(unit_model)
+#         Tα = T[unit_model[α]]
+#         for j in α-1:-1:1
+#             if j ∈ sources[α]
+#                 Tα = kron(IT[unit_model[j]], Tα)
+#             end
+#         end
+#         for j in α+1:n
+#             if j ∈ sources[α]
+#                 Tα = kron(Tα, IT[unit_model[j]])
+#             end
+#         end
+#         Tc += Tα
+#     end
+#     Tc
+# end
 
 
 # function make_mat_TCr(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
