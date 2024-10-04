@@ -60,7 +60,6 @@ function inverse_state(i::Int, G::Int, R, S, insertstep::Int, f=sum)
     return g, z, zdigits, r
 end
 
-
 function inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)
     units = unit_state(i, G, R, S, unit_model)
     inverse_state(units, G, R, S, insertstep, f)
@@ -294,6 +293,26 @@ function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)
 end
 
 """
+    num_reporters_per_index(z, R, insertstep, base, f=sum)
+
+Compute the number of reporters for a given state index.
+
+# Description
+This function computes the number of reporters for a given state index `z`. It uses the `digits` function to determine the number of reporters based on the specified `base` and `insertstep`.
+
+# Arguments
+- `z`: State index.
+- `R`: Number of reporters.
+- `insertstep`: Insert step.
+- `base`: Base value.
+- `f`: Function to apply (default is `sum`).
+
+# Returns
+- `Int`: The number of reporters for the given state index.
+"""
+num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+
+"""
     num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
     num_reporters_per_state(G::Int, onstates::Vector)
     num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
@@ -341,20 +360,6 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     end
     reporters
 end
-# function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
-#     reporters = Vector[]
-#     for i in eachindex(R)
-#         repi = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
-#         for j in 1:i-1
-#             (j ∈ sources[i]) && (repi = repeat(repi, outer=(G[j],)))
-#         end
-#         for j in i+1:length(R)
-#             (j ∈ sources[i]) && (repi = repeat(repi, inner=(G[j],)))
-#         end
-#         push!(reporters, repi)
-#     end
-#     reporters
-# end
 
 function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
     nT = T_dimension.(G, R, S)
@@ -371,27 +376,20 @@ function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple
     end
     reporters
 end
-
-"""
-    num_reporters_per_index(z, R, insertstep, base, f=sum)
-
-Compute the number of reporters for a given state index.
-
-# Description
-This function computes the number of reporters for a given state index `z`. It uses the `digits` function to determine the number of reporters based on the specified `base` and `insertstep`.
-
-# Arguments
-- `z`: State index.
-- `R`: Number of reporters.
-- `insertstep`: Insert step.
-- `base`: Base value.
-- `f`: Function to apply (default is `sum`).
-
-# Returns
-- `Int`: The number of reporters for the given state index.
-"""
-num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
-
+# function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
+#     reporters = Vector[]
+#     for i in eachindex(R)
+#         repi = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], f)
+#         for j in 1:i-1
+#             (j ∈ sources[i]) && (repi = repeat(repi, outer=(G[j],)))
+#         end
+#         for j in i+1:length(R)
+#             (j ∈ sources[i]) && (repi = repeat(repi, inner=(G[j],)))
+#         end
+#         push!(reporters, repi)
+#     end
+#     reporters
+# end
 """
     set_indices(ntransitions, R, S, insertstep)
     set_indices(ntransitions, R)
@@ -424,7 +422,8 @@ function set_indices(ntransitions, R, S, insertstep)
         throw("insertstep>R")
     end
     if S > 0
-        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions + R + R - insertstep + 3)
+        # Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions + R + R - insertstep + 3)
+        Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+S-insertstep+2), ntransitions + R + S - insertstep + 3)
     elseif R > 0
         set_indices(ntransitions, R)
     else
@@ -439,9 +438,9 @@ function set_indices(ntransitions, R, S, insertstep, offset)
         throw("insertstep>R")
     end
     if S > 0
-        Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), offset .+ collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), offset + ntransitions + R + R - insertstep + 3)
+        Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), offset .+ collect(ntransitions+R+2:ntransitions+R+S-insertstep+2), offset + ntransitions + R + S - insertstep + 3)
     elseif R > 0
-        Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), Int[], offset .+ ntransitions + R + 2)
+        Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), Int[], offset + ntransitions + R + 2)
     else
         Indices(offset .+ collect(1:ntransitions), offset .+ [ntransitions + 1], Int[], offset + ntransitions + 2)
     end

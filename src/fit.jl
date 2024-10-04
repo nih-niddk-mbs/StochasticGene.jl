@@ -477,7 +477,7 @@ end
 Set S to R - insertstep + 1 if greater than zero
 """
 function reset_S(S::Int, R::Int, insertstep::Int)
-    if S > 0 && S != R - insertstep + 1
+    if S > R - insertstep + 1
         S = R - insertstep + 1
         println("Setting S to ", S)
     end
@@ -491,7 +491,7 @@ end
 function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
     S = collect(S)
     for i in eachindex(S)
-        if S[i] > 0 && S[i] != R[i] - insertstep[i] + 1
+        if S[i] > R[i] - insertstep[i] + 1
             S[i] = R[i] - insertstep[i] + 1
             println("Setting S[$i] to ", S[i])
         end
@@ -620,9 +620,9 @@ end
 default priors for rates (includes all parameters, fitted or not)
 """
 function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-    if S > 0
-        S = R - insertstep + 1
-    end
+    # if S > 0
+    #     S = R - insertstep + 1
+    # end
     [fill(0.01, length(transitions)); 0.1; fill(R / elongationtime, R); fill(0.2, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 

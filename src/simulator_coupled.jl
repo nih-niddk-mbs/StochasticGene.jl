@@ -783,9 +783,9 @@ set_arguments(reaction, index::Int) = (reaction[index].initial, reaction[index].
 return structure of ranges for each type of transition
 """
 function set_reactionindices(Gtransitions, R::Int, S, insertstep)
-    if S > 0
-        S = R - insertstep + 1
-    end
+    # if S > 0
+    #     S = R - insertstep + 1
+    # end
     nG = length(Gtransitions)
     g = 1:nG
     i = nG+1:nG+Int(R > 0)

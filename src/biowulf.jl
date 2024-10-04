@@ -431,9 +431,9 @@ This function generates a model string based on the provided parameters. If `R` 
 """
 function create_modelstring(G, R, S, insertstep)
     if R > 0
-        if S > 0
-            S = R - insertstep + 1
-        end
+        # if S > 0
+        #     S = R - insertstep + 1
+        # end
         return "$G$R$S$insertstep"
     else
         return "$G"

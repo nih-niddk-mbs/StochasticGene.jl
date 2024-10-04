@@ -1205,7 +1205,7 @@ function num_rates(transitions, R, S, insertstep)
         end
         if S == 0
             insertstep = 1
-        else
+        elseif S > R - insertstep + 1
             S = R - insertstep + 1
         end
         return length(transitions) + 1 + R + S + 1
@@ -1221,6 +1221,7 @@ function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
     end
     n
 end
+
 
 """
     num_rates(model)
