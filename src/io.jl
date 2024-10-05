@@ -631,14 +631,9 @@ function get_all_rates(file::String, header::Bool)
     return r
 end
 
-"""
-    filename(data, model::AbstractGRSMmodel)
-    filename(data, model::AbstractGMmodel)
 
-return output file names
-"""
-filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
-filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
+
+
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$nalleles")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
@@ -646,16 +641,24 @@ filename(label::String, gene::String, model::String, nalleles::Int) = "_" * labe
 
 
 function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
-    m = ""
-    for i in eachindex(G)
-        m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
-    end
+    # m = ""
+    # for i in eachindex(G)
+    #     m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
+    # end
+    m = create_modelstring(G::Tuple, R, S, insertstep)
     filename(label,gene,m,nalleles)
 end
 
+
 """
+    filename(data, model::AbstractGRSMmodel)
+    filename(data, model::AbstractGMmodel)
     filename(data, model::GRSMcoupledmodel)
+
+return output file names
 """
+filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMcoupledmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 # function filename(data, model::GRSMcoupledmodel)

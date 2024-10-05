@@ -54,7 +54,7 @@ see fit
 
 """
 function makeswarm(; gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling = tuple(), TransitionType="", root=".", elongationtime=6.0, priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling = tuple(), TransitionType="", root=".", elongationtime=6.0, priormean=Float64[], nalleles=2, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=1, src="")
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
@@ -429,15 +429,20 @@ Creates a model string based on the given parameters.
 # Description
 This function generates a model string based on the provided parameters. If `R` is greater than 0, it adjusts `S` based on `R` and `insertstep` and returns a concatenated string of `G`, `R`, `S`, and `insertstep`. If `R` is not greater than 0, it returns `G` as the model string.
 """
-function create_modelstring(G, R, S, insertstep)
+function create_modelstring(G::Int, R, S, insertstep)
     if R > 0
-        # if S > 0
-        #     S = R - insertstep + 1
-        # end
         return "$G$R$S$insertstep"
     else
         return "$G"
     end
+end
+
+function create_modelstring(G::Tuple, R, S, insertstep)
+        m = ""
+        for i in eachindex(G)
+            m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
+        end
+        return m
 end
 
 """

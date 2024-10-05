@@ -16,7 +16,7 @@ return total loglikelihood of traces with reporter noise and loglikelihood of ea
 """
 function ll_hmm(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
     return ll + lb, lp
 end
@@ -91,8 +91,10 @@ L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 function ll_background(a, p0, offstates, poff, nframes)
     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
     l = -(1 - poff) * log(1 - p) - poff * log(p)
-    # weight * l
+    l
 end
+
+p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates,offstates]^nframes)
 
 """
     ll_background_coupled(a, p0, offstates, weight, n)
