@@ -541,10 +541,10 @@ function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupl
         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2]
         tr = Vector[]
         for t in t
-            tr = push!(tr, t[1:end-1,2])
+            tr = push!(tr, t[1:end-1, 2])
         end
         trace[i] = hcat(tr...)
-        end
+    end
     trace
 end
 
@@ -783,9 +783,6 @@ set_arguments(reaction, index::Int) = (reaction[index].initial, reaction[index].
 return structure of ranges for each type of transition
 """
 function set_reactionindices(Gtransitions, R::Int, S, insertstep)
-    # if S > 0
-    #     S = R - insertstep + 1
-    # end
     nG = length(Gtransitions)
     g = 1:nG
     i = nG+1:nG+Int(R > 0)
@@ -852,23 +849,38 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
         end
     end
     i = G
-    for r in indices.rrange
+    for r in indices.rrange  # Corrected for allowing S < R + insertstep - 1
         i += 1
-        if S == 0
+        if S == 0 || i > G + S
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+        else
+            if insertstep == 1 
+                push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+            else
+                if i < G + insertstep - 1
+                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+                elseif i == G + insertstep - 1
+                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+                elseif i > G + insertstep - 1
+                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+                end
+            end
         end
-        if S > 0 && insertstep == 1
-            push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        end
-        if S > 0 && insertstep > 1 && i > G + insertstep - 1
-            push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        end
-        if S > 0 && insertstep > 1 && i == G + insertstep - 1
-            push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        end
-        if S > 0 && insertstep > 1 && i < G + insertstep - 1
-            push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
-        end
+        # if S == 0
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+        # end
+        # if S > 0 && insertstep == 1
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        # end
+        # if S > 0 && insertstep > 1 && i > G + insertstep - 1
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        # end
+        # if S > 0 && insertstep > 1 && i == G + insertstep - 1
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+        # end
+        # if S > 0 && insertstep > 1 && i < G + insertstep - 1
+        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+        # end
     end
     for e in indices.erange
         if S > 0
@@ -956,7 +968,7 @@ function couplingG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, ena
                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
-       
+
     end
     # unit as target
     # new state moves to a target transition
@@ -1077,7 +1089,7 @@ function transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, insertst
     if final + 1 > G + R || state[final+1, allele] == 0
         tau[enabled[2], allele] = -log(rand()) / r[enabled[2]] + t
     end
-    if S > 0 && final >= G + insertstep
+    if S > 0 && final >= G + insertstep && final <= G + S # Corrected for allowing S < R + insertstep - 1
         # tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
         if final == insertstep + G
             tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
