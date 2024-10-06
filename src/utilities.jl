@@ -6,15 +6,34 @@
 """
     invert_dict(D)
 
-invert a dictionary
+Inverts a dictionary.
+
+# Arguments
+- `D`: The dictionary to be inverted.
+
+# Description
+This function inverts a dictionary by swapping its keys and values.
+
+# Returns
+- `Dict`: The inverted dictionary.
 """
 invert_dict(D) = Dict(D[k] => k for k in keys(D))
+
 
 
 """
     eig_decompose(M)
 
-Take matrix M and return values and vectors
+Performs eigenvalue decomposition on a matrix.
+
+# Arguments
+- `M`: The matrix to be decomposed.
+
+# Description
+This function takes a matrix `M` and returns its eigenvalues and eigenvectors.
+
+# Returns
+- `Tuple{Vector{Float64}, Matrix{Float64}}`: A tuple containing the eigenvalues and eigenvectors of the matrix.
 """
 function eig_decompose(M)
     Meiv = eigen(M)
@@ -24,7 +43,16 @@ end
 """
     nonzero_rows(T)
 
-Returns an array of row indices that have at least one nonzero element for matrix T
+Returns an array of row indices that have at least one nonzero element.
+
+# Arguments
+- `T`: The matrix to be checked.
+
+# Description
+This function returns an array of row indices that have at least one nonzero element for the given matrix `T`.
+
+# Returns
+- `Vector{Int}`: An array of row indices with at least one nonzero element.
 """
 function nonzero_rows(T)
     n = size(T)[2]
@@ -38,27 +66,53 @@ function nonzero_rows(T)
 end
 
 """
-    nonzero_states(states,nonzeros)
+    nonzero_states(states, nonzeros)
 
-return reindexed state vector with zeros removed
+Returns a reindexed state vector with zeros removed.
+
+# Arguments
+- `states`: The original state vector.
+- `nonzeros`: The vector of nonzero indices.
+
+# Description
+This function returns a reindexed state vector with zeros removed by finding the intersection of `states` and `nonzeros`.
+
+# Returns
+- `Vector{Int}`: The reindexed state vector with zeros removed.
 """
 nonzero_states(states, nonzeros) = [findfirst(o .== nonzeros) for o in intersect(states, nonzeros)]
 
 """
-normalize_histogram(hist)
+    normalize_histogram(hist)
 
-Returns normalized histogram hist
+Returns a normalized histogram.
+
+# Arguments
+- `hist`: The histogram to be normalized.
+
+# Description
+This function returns a normalized version of the given histogram `hist`.
+
+# Returns
+- `Vector{Float64}`: The normalized histogram.
 """
 normalize_histogram(hist) = hist / sum(hist)
 
 
 """
-var_update(vartuple, newValue)
+    var_update(vartuple, newValue)
 
-vartuple = count, mean, M2
-iteration step for online algorithm to compute
-mean and variance
-returns count, mean, M2
+Updates the variance calculation with a new value using Welford's online algorithm.
+
+# Arguments
+- `vartuple`: A tuple containing the current count, mean, and M2 (sum of squares of differences from the current mean).
+- `newValue`: The new value to be added to the variance calculation.
+
+# Description
+This function updates the variance calculation with a new value using Welford's online algorithm. It returns the updated count, mean, and M2.
+
+# Returns
+- `Tuple{Int, Float64, Float64}`: The updated count, mean, and M2.
 """
 function var_update(vartuple, newValue)
     count, mean, M2 = vartuple
@@ -69,11 +123,23 @@ function var_update(vartuple, newValue)
     M2 .+= delta .* delta2
     return count, mean, M2
 end
-"""
-cov_update(covtuple,newValue1,newValue2)
 
-update covtuple for online algorithm to compute
-    covariance
+
+"""
+    cov_update(covtuple, newValue1, newValue2)
+
+Updates the covariance calculation with new values using an online algorithm.
+
+# Arguments
+- `covtuple`: A tuple containing the current count, mean of x, mean of y, and C (sum of products of differences from the current means).
+- `newValue1`: The new value for the first variable.
+- `newValue2`: The new value for the second variable.
+
+# Description
+This function updates the covariance calculation with new values using an online algorithm. It returns the updated count, mean of x, mean of y, and C.
+
+# Returns
+- `Tuple{Int, Float64, Float64, Float64}`: The updated count, mean of x, mean of y, and C.
 """
 function cov_update(covtuple, newValue1, newValue2)
     count, meanx, meany, C = covtuple
@@ -84,10 +150,20 @@ function cov_update(covtuple, newValue1, newValue2)
     C .+= dx * (newy - meany)
     return count, meanx, meany, C
 end
-"""
-finalize(vartuple)
 
-Retrieve the mean, variance and sample variance from an aggregate
+"""
+    finalize(vartuple)
+
+Retrieves the mean, variance, and sample variance from an aggregate.
+
+# Arguments
+- `vartuple`: A tuple containing the count, mean, and M2 (sum of squares of differences from the current mean).
+
+# Description
+This function retrieves the mean, variance, and sample variance from an aggregate. It uses the count, mean, and M2 to compute the variance and sample variance.
+
+# Returns
+- `Tuple{Float64, Float64, Float64}`: The mean, variance, and sample variance.
 """
 function finalize(vartuple)
     count, mean, M2 = vartuple
@@ -98,10 +174,22 @@ function finalize(vartuple)
     end
 end
 
+
 """
     truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
 
-return histogram x that accounts for fraction yield of total sum
+Returns a truncated histogram that accounts for a specified fraction of the total sum.
+
+# Arguments
+- `x`: The histogram array.
+- `yield`: The fraction of the total sum to retain.
+- `nhistmax`: The maximum number of histogram bins to retain.
+
+# Description
+This function returns a truncated version of the histogram `x` that accounts for the specified fraction `yield` of the total sum. It iterates through the histogram bins and retains bins until the specified fraction of the total sum is reached or the maximum number of bins `nhistmax` is reached.
+
+# Returns
+- `Array`: The truncated histogram.
 """
 function truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
     if yield < 1.0
@@ -124,10 +212,42 @@ function truncate_histogram(x::Array, yield::Float64, nhistmax::Int)
 end
 
 """
-combine_histogram(x1::Array,x2::Array)
+    trim_hist(hist::Array, nRNA::Array)
 
-add histograms x1 and x2
+Trims the histogram to match the length of the RNA data.
 
+# Arguments
+- `hist`: The histogram array.
+- `nRNA`: The RNA data array.
+
+# Description
+This function trims the histogram `hist` to match the length of the RNA data `nRNA`. It ensures that the histogram and RNA data arrays have the same length.
+
+# Returns
+- `Array`: The trimmed histogram.
+"""
+function trim_hist(h::Array, nh::Array)
+    for i in eachindex(h)
+        h[i] = h[i][1:nh[i]]
+    end
+    return h
+end
+
+
+"""
+    combine_histogram(x1::Array, x2::Array)
+
+Adds two histograms element-wise.
+
+# Arguments
+- `x1`: The first histogram array.
+- `x2`: The second histogram array.
+
+# Description
+This function adds two histograms `x1` and `x2` element-wise. It returns a new histogram that is the element-wise sum of the two input histograms. The length of the resulting histogram is the minimum of the lengths of the input histograms.
+
+# Returns
+- `Array`: The combined histogram.
 """
 function combine_histogram(x1::Array, x2::Array)
     n = min(length(x1), length(x2))
@@ -135,37 +255,90 @@ function combine_histogram(x1::Array, x2::Array)
 end
 
 """
-pooled_mean(means,counts)
+    pooled_mean(means, counts)
 
-compute weighted average of means given count totals
+Computes the weighted average of means given count totals.
+
+# Arguments
+- `means`: An array of means.
+- `counts`: An array of count totals corresponding to the means.
+
+# Description
+This function computes the weighted average of the means given the count totals. The weights are the count totals.
+
+# Returns
+- `Float64`: The weighted average of the means.
 """
 pooled_mean(means, counts) = counts' * means / sum(counts)
 
 """
-pooled_variance(vars,counts)
+    pooled_variance(vars, counts)
 
-computed weighted average of variances given counts
+Computes the weighted average of variances given count totals.
+
+# Arguments
+- `vars`: An array of variances.
+- `counts`: An array of count totals corresponding to the variances.
+
+# Description
+This function computes the weighted average of the variances given the count totals. The weights are the count totals.
+
+# Returns
+- `Float64`: The weighted average of the variances.
 """
 pooled_variance(vars, counts) = (counts .- 1)' * vars / sum(counts .- 1)
 
 """
-pooled_std(std,counts)
+    pooled_std(std, counts)
 
-compute weighted average of standard deviations given counts
+Computes the weighted average of standard deviations given count totals.
+
+# Arguments
+- `std`: An array of standard deviations.
+- `counts`: An array of count totals corresponding to the standard deviations.
+
+# Description
+This function computes the weighted average of the standard deviations given the count totals. The weights are the count totals.
+
+# Returns
+- `Float64`: The weighted average of the standard deviations.
 """
 pooled_std(std, counts) = sqrt(pooled_variance(std .^ 2, counts))
 
 """
-var_ratio(mua,mub,vara,varb,cov)
+    var_ratio(mua, mub, vara, varb, cov)
 
-Compute ratio of variances of two variables given means, variances, and covariance of variables
+Computes the ratio of variances of two variables given their means, variances, and covariance.
+
+# Arguments
+- `mua`: The mean of the first variable.
+- `mub`: The mean of the second variable.
+- `vara`: The variance of the first variable.
+- `varb`: The variance of the second variable.
+- `cov`: The covariance of the two variables.
+
+# Description
+This function computes the ratio of variances of two variables given their means, variances, and covariance.
+
+# Returns
+- `Float64`: The ratio of variances of the two variables.
 """
 var_ratio(mua, mub, vara, varb, cov) = mua^2 / mub^2 * (vara / mua^2 - 2 * cov / (mua * mub) + varb / mub^2)
 
 """
-decimal(x::Vector)
+    decimal(x::Vector, base::Int=3)
 
-convert number to base 10 from any base
+Converts a vector of digits in a specified base to a decimal (base 10) number.
+
+# Arguments
+- `x`: A vector representing the number in the original base, with the least significant digit first.
+- `base`: The base of the original number (default is 3).
+
+# Description
+This function converts a number represented as a vector `x` from the specified base to a decimal (base 10) number. The vector `x` should have the least significant digit first.
+
+# Returns
+- `Int`: The number converted to base 10.
 """
 function decimal(x::Vector, base::Int=3)
     nr = length(x)
@@ -173,16 +346,38 @@ function decimal(x::Vector, base::Int=3)
 end
 
 """
-    digit_vector(z,base,R)
+    digit_vector(z, base, R)
 
-convert z to vector of length R in base=base
+Converts a number to a vector of digits in a specified base.
+
+# Arguments
+- `z`: The number to be converted.
+- `base`: The base for the conversion.
+- `R`: The length of the resulting vector.
+
+# Description
+This function converts the number `z` to a vector of length `R` in the specified `base`.
+
+# Returns
+- `Vector{Int}`: The vector of digits representing the number in the specified base.
 """
 digit_vector(z, base, R) = digits(z - 1, base=base, pad=R)
 
 """
-findbase(l,n,nr)
+    findbase(l, n, nr)
 
-Find the number of G states for transition rate matrix of size l
+Finds the number of G states for a transition rate matrix of a given size.
+
+# Arguments
+- `l`: The size of the transition rate matrix.
+- `n`: The number of states.
+- `nr`: The number of rates.
+
+# Description
+This function finds the number of G states for a transition rate matrix of size `l`.
+
+# Returns
+- `Int`: The number of G states.
 """
 function findbase(l, n, nr)
     if l == (n + 1) * 3^nr
@@ -195,26 +390,37 @@ function findbase(l, n, nr)
 end
 
 """
-KL(x,y)
+    KL(x, y)
 
-Kullback-Leibler distance
+Computes the Kullback-Leibler (KL) divergence between two probability distributions.
+
+# Arguments
+- `x`: The first probability distribution (vector).
+- `y`: The second probability distribution (vector).
+
+# Description
+This function computes the Kullback-Leibler (KL) divergence between two probability distributions `x` and `y`. The KL divergence is a measure of how one probability distribution diverges from a second, expected probability distribution. The function ensures that the values in `x` and `y` are not zero by replacing them with a small epsilon value before computing the logarithms.
+
+# Returns
+- `Float64`: The KL divergence between the two probability distributions.
 """
 KL(x, y) = sum(x .* (log.(max.(x, eps(Float64))) - log.(max.(y, eps(Float64)))))
 
 """
-trim_hist(h::Array,nh::Array)
-
-"""
-function trim_hist(h::Array, nh::Array)
-    for i in eachindex(h)
-        h[i] = h[i][1:nh[i]]
-    end
-    return h
-end
-
-"""
     distribution_array(param::Vector, cv, dist=Normal)
 
+Creates an array of distributions based on the provided parameters and coefficient of variation (cv).
+
+# Arguments
+- `param`: A vector of parameters (means) for the distributions.
+- `cv`: A vector of coefficients of variation for the distributions.
+- `dist`: The type of distribution to create (default is `Normal`). Supported distributions include `LogNormal`, `Gamma`, and any other distribution that can be constructed with the provided parameters and cv.
+
+# Description
+This function creates an array of distributions based on the provided parameters and coefficient of variation (cv). For each parameter in `param`, it creates a distribution of the specified type (`dist`) with the corresponding coefficient of variation from `cv`. If `dist` is `LogNormal` or `Gamma`, it uses specialized functions (`LogNormal_meancv` and `Gamma_meancv`) to create the distributions.
+
+# Returns
+- `Vector{Distribution}`: An array of distributions created based on the provided parameters and coefficient of variation.
 """
 function distribution_array(param::Vector, cv, dist=Normal)
     d = []
@@ -231,25 +437,170 @@ function distribution_array(param::Vector, cv, dist=Normal)
     return d
 end
 
+"""
+    sigmalognormal(cv)
+
+Calculates the standard deviation parameter (σ) for a LogNormal distribution based on the coefficient of variation (cv).
+
+# Arguments
+- `cv`: The coefficient of variation of the LogNormal distribution.
+
+# Description
+This function calculates the standard deviation parameter (σ) for a LogNormal distribution using the provided coefficient of variation (cv).
+
+# Returns
+- `Float64`: The standard deviation parameter (σ) for the LogNormal distribution.
+"""
+sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
 
 """
-LogNormal_array(param,cv)
-Prior distribution arrays
+    mulognormal(mean, cv)
+
+Calculates the mean parameter (μ) for a LogNormal distribution based on the provided mean and coefficient of variation (cv).
+
+# Arguments
+- `mean`: The mean of the LogNormal distribution.
+- `cv`: The coefficient of variation of the LogNormal distribution.
+
+# Description
+This function calculates the mean parameter (μ) for a LogNormal distribution using the provided mean and coefficient of variation (cv).
+
+# Returns
+- `Float64`: The mean parameter (μ) for the LogNormal distribution.
+"""
+mulognormal(mean, cv) = log.(mean) - 0.5 * log.(1 .+ cv .^ 2)
+
+"""
+    Gamma_meancv(mean, cv)
+
+Creates a Gamma distribution based on the provided mean and coefficient of variation (cv).
+
+# Arguments
+- `mean`: The mean of the Gamma distribution.
+- `cv`: The coefficient of variation of the Gamma distribution.
+
+# Description
+This function creates a Gamma distribution based on the provided mean and coefficient of variation (cv). It calculates the shape and scale parameters for the Gamma distribution using the mean and cv.
+
+# Returns
+- `Gamma`: A Gamma distribution created based on the provided mean and coefficient of variation.
+"""
+Gamma_meancv(mean, cv) = Gamma(1 / cv^2, mean * cv^2)
+
+"""
+    LogNormal_meancv(mean, cv)
+
+Creates a LogNormal distribution based on the provided mean and coefficient of variation (cv).
+
+# Arguments
+- `mean`: The mean of the LogNormal distribution.
+- `cv`: The coefficient of variation of the LogNormal distribution.
+
+# Description
+This function creates a LogNormal distribution based on the provided mean and coefficient of variation (cv). It calculates the parameters `μ` and `σ` for the LogNormal distribution using the mean and cv.
+
+# Returns
+- `LogNormal`: A LogNormal distribution created based on the provided mean and coefficient of variation.
+"""
+LogNormal_meancv(mean, cv) = LogNormal(mulognormal(mean, cv), sigmalognormal(cv))
+
+
+
+"""
+    LogNormal_array(param, cv)
+
+Creates an array of LogNormal distributions based on the provided parameters and coefficient of variation (cv).
+
+# Arguments
+- `param`: A vector of parameters (means) for the LogNormal distributions.
+- `cv`: A vector of coefficients of variation for the LogNormal distributions.
+
+# Description
+This function creates an array of LogNormal distributions based on the provided parameters and coefficient of variation (cv). For each parameter in `param`, it creates a LogNormal distribution with the corresponding coefficient of variation from `cv`.
+
+# Returns
+- `Vector{LogNormal}`: An array of LogNormal distributions created based on the provided parameters and coefficient of variation.
 """
 LogNormal_array(param, cv) = distribution_array(param, cv, LogNormal)
 
 """
-Gamma_array(param,cv)
+    Gamma_array(param, cv)
 
+Creates an array of Gamma distributions based on the provided parameters and coefficient of variation (cv).
 
+# Arguments
+- `param`: A vector of parameters (means) for the Gamma distributions.
+- `cv`: A vector of coefficients of variation for the Gamma distributions.
 
+# Description
+This function creates an array of Gamma distributions based on the provided parameters and coefficient of variation (cv). For each parameter in `param`, it creates a Gamma distribution with the corresponding coefficient of variation from `cv`.
+
+# Returns
+- `Vector{Gamma}`: An array of Gamma distributions created based on the provided parameters and coefficient of variation.
 """
 Gamma_array(param, cv) = distribution_array(param, cv, Gamma)
 
 """
-function LogNormalBeta_array(param,cv,ind)
+    setBeta(mean, cv)
 
+Creates a Beta distribution based on the provided mean and coefficient of variation (cv).
 
+# Arguments
+- `mean`: The mean of the Beta distribution.
+- `cv`: The coefficient of variation of the Beta distribution.
+
+# Description
+This function creates a Beta distribution based on the provided mean and coefficient of variation (cv). It calculates the parameters `α` and `β` for the Beta distribution using the mean and cv.
+
+# Returns
+- `Beta`: A Beta distribution created based on the provided mean and coefficient of variation.
+"""
+function setBeta(mean, cv)
+    var = (cv * mean)^2
+    α = mean * (mean * (1 - mean) / var - 1)
+    β = (1 - mean) * (mean * (1 - mean) / var - 1)
+    return Beta(α, β)
+end
+"""
+    Beta_meancv(mean, cv)
+
+Creates a Beta distribution based on the provided mean and coefficient of variation (cv).
+
+# Arguments
+- `mean`: The mean of the Beta distribution.
+- `cv`: The coefficient of variation of the Beta distribution.
+
+# Description
+This function creates a Beta distribution based on the provided mean and coefficient of variation (cv). It calculates the parameters `α` and `β` for the Beta distribution using the mean and cv.
+
+# Returns
+- `Beta`: A Beta distribution created based on the provided mean and coefficient of variation.
+"""
+function Beta_meancv(m, cv)
+    cv2 = cv^2
+    fac = (1 - m) / cv2 / m - 1
+    if fac <= 0.0
+        fac = 2 / m
+    end
+    alpha = m * fac
+    beta = (1 - m) * fac
+    Beta(alpha, beta)
+end
+"""
+    LogNormalBeta_array(param, cv, ind)
+
+Creates an array of LogNormal distributions and a Beta distribution based on the provided parameters and coefficient of variation (cv).
+
+# Arguments
+- `param`: A vector of parameters (means) for the distributions.
+- `cv`: A vector of coefficients of variation for the distributions.
+- `ind`: The index at which to insert the Beta distribution.
+
+# Description
+This function creates an array of LogNormal distributions and a Beta distribution based on the provided parameters and coefficient of variation (cv). For indices before `ind`, it creates LogNormal distributions. At index `ind`, it creates a Beta distribution using the `setBeta` function.
+
+# Returns
+- `Vector{Distribution}`: An array of LogNormal and Beta distributions created based on the provided parameters and coefficient of variation.
 """
 function LogNormalBeta_array(param, cv, ind)
     if ind == 1
@@ -265,7 +616,19 @@ end
 """
     distributionBeta_array(param::Vector, cv::Vector, ind::Int, dist=LogNormal)
 
-fill an array with dist(param,cv)
+Creates an array of distributions and a Beta distribution based on the provided parameters and coefficient of variation (cv).
+
+# Arguments
+- `param`: A vector of parameters (means) for the distributions.
+- `cv`: A vector of coefficients of variation for the distributions.
+- `ind`: The index at which to insert the Beta distribution.
+- `dist`: The type of distribution to create for indices before `ind` (default is `LogNormal`).
+
+# Description
+This function creates an array of distributions and a Beta distribution based on the provided parameters and coefficient of variation (cv). For indices before `ind`, it creates distributions of the specified type (`dist`). At index `ind`, it creates a Beta distribution using the `Beta_meancv` function.
+
+# Returns
+- `Vector{Distribution}`: An array of distributions and a Beta distribution created based on the provided parameters and coefficient of variation.
 """
 function distributionBeta_array(param::Vector, cv::Vector, ind::Int, dist=LogNormal)
     if ind == 1
@@ -278,47 +641,53 @@ function distributionBeta_array(param::Vector, cv::Vector, ind::Int, dist=LogNor
     return d
 end
 
-
-
 """
-Gamma_meancv(mean,cv)
-LogNormal_meancv(mean,cv)
-Beta_meancv(mean,cv)
+    mean_dwelltime(x, t)
 
-Reparameterized distributions to mean and coefficient of variation arguments
+Calculates the mean dwell time given a vector of states and a vector of times.
+
+# Arguments
+- `x`: A vector of states.
+- `t`: A vector of times corresponding to the states.
+
+# Description
+This function calculates the mean dwell time by taking the dot product of the vector of states `x` and the vector of times `t`.
+
+# Returns
+- `Float64`: The mean dwell time.
 """
-Gamma_meancv(mean, cv) = Gamma(1 / cv^2, mean * cv^2)
-LogNormal_meancv(mean, cv) = LogNormal(mulognormal(mean, cv), sigmalognormal(cv))
-function Beta_meancv(m, cv)
-    cv2 = cv^2
-    fac = (1 - m) / cv2 / m - 1
-    if fac <= 0.0
-        fac = 2 / m
-    end
-    alpha = m * fac
-    beta = (1 - m) * fac
-    Beta(alpha, beta)
-end
-"""
-sigmalognormal(cv)
-mulognormal(mean,cv)
-
-compute LogNormal mu and sigma parameters, 
-i.e. mean and sigma of exp(N(mu,sigma))
-given desired mean and coefficient of variation (cv)
-"""
-sigmalognormal(cv) = sqrt.(log.(1 .+ cv .^ 2))
-
-mulognormal(mean, cv) = log.(mean) - 0.5 * log.(1 .+ cv .^ 2)
-
 mean_dwelltime(x, t) = t' * x
 
 """
-mean_histogram(x)
+    mean_histogram(x::Vector{Float64})
 
+Calculates the mean of a histogram.
+
+# Arguments
+- `x`: A vector representing the histogram.
+
+# Description
+This function calculates the mean of a histogram `x` by taking the dot product of the vector of bin indices and the histogram values, then dividing by the sum of the histogram values.
+
+# Returns
+- `Float64`: The mean of the histogram.
 """
 mean_histogram(x::Vector{Float64}) = collect(0:length(x)-1)' * x / sum(x)
 
+"""
+    mean_histogram(x::Vector{Array})
+
+Calculates the mean of multiple histograms.
+
+# Arguments
+- `x`: A vector of histograms, where each histogram is represented as a vector of Float64 values.
+
+# Description
+This function calculates the mean of each histogram in the vector `x` by calling the `mean_histogram` function for each histogram.
+
+# Returns
+- `Vector{Float64}`: A vector of means for each histogram in the input vector.
+"""
 function mean_histogram(x::Vector{Array})
     y = Vector{Float64}(undef, length(x))
     for i in eachindex(x)
@@ -328,32 +697,94 @@ function mean_histogram(x::Vector{Array})
 end
 
 """
-    Difference_Zscore(x1,x2,sig1,sig2) = (x1 .- x2)./ sqrt(sig1.^2 + sig2.^2)
+    Difference_Zscore(x1, x2, sig1, sig2)
 
+Calculates the Z-score for the difference between two sets of values.
 
+# Arguments
+- `x1`: The first set of values.
+- `x2`: The second set of values.
+- `sig1`: The standard deviations corresponding to the first set of values.
+- `sig2`: The standard deviations corresponding to the second set of values.
+
+# Description
+This function calculates the Z-score for the difference between two sets of values `x1` and `x2`. The Z-score is computed as the difference between the values divided by the square root of the sum of the variances.
+
+# Returns
+- `Float64`: The Z-score for the difference between the two sets of values.
 """
 Difference_Zscore(x1, x2, sig1, sig2) = (x1 - x2) / sqrt(sig1^2 + sig2^2)
 
 """
-m2_histogram(x)
+    m2_histogram(x)
 
+Calculates the second moment of a histogram.
+
+# Arguments
+- `x`: A vector representing the histogram.
+
+# Description
+This function calculates the second moment of a histogram `x` by taking the dot product of the squared bin indices and the histogram values, then dividing by the sum of the histogram values.
+
+# Returns
+- `Float64`: The second moment of the histogram.
 """
 m2_histogram(x) = (collect(0:length(x)-1) .^ 2)' * x / sum(x)
 
 """
-var_histogram(x)
+    var_histogram(x)
 
+Calculates the variance of a histogram.
+
+# Arguments
+- `x`: A vector representing the histogram.
+
+# Description
+This function calculates the variance of a histogram `x` by subtracting the square of the mean of the histogram from the second moment of the histogram.
+
+# Returns
+- `Float64`: The variance of the histogram.
 """
 function var_histogram(x)
     m2_histogram(x) - mean_histogram(x)^2
 end
 
+"""
+    moment_histogram(x, n)
+
+Calculates the nth central moment of a histogram.
+
+# Arguments
+- `x`: A vector representing the histogram.
+- `n`: The order of the moment to calculate.
+
+# Description
+This function calculates the nth central moment of a histogram `x` by taking the dot product of the nth power of the deviations from the mean and the histogram values, then dividing by the sum of the histogram values.
+
+# Returns
+- `Float64`: The nth central moment of the histogram.
+"""
 function moment_histogram(x, n)
     y = collect(0:length(x)-1)
     v = (y .- mean_histogram(x)) .^ n
     v' * x / sum(x)
 end
 
+"""
+    factorial_moment(h::Vector, n)
+
+Calculates the nth factorial moment of a histogram.
+
+# Arguments
+- `h`: A vector representing the histogram.
+- `n`: The order of the factorial moment to calculate.
+
+# Description
+This function calculates the nth factorial moment of a histogram `h` by iterating through the histogram values and computing the product of the bin index and the histogram value for each bin.
+
+# Returns
+- `Float64`: The nth factorial moment of the histogram.
+"""
 function factorial_moment(h::Vector, n)
     m = 0
     for i in n:length(h)
@@ -366,6 +797,20 @@ function factorial_moment(h::Vector, n)
     return m / sum(h)
 end
 
+"""
+    moment_param_estimates(h)
+
+Estimates parameters based on the moments of a histogram.
+
+# Arguments
+- `h`: A vector representing the histogram.
+
+# Description
+This function calculates the first three factorial moments of a histogram `h` and uses them to estimate parameters `lambda`, `mu`, and `nu`.
+
+# Returns
+- `Tuple{Float64, Float64, Float64}`: The estimated parameters `lambda`, `mu`, and `nu`.
+"""
 function moment_param_estimates(h)
     e1 = factorial_moment(h, 1)
     e2 = factorial_moment(h, 2)
@@ -381,40 +826,90 @@ function moment_param_estimates(h)
 
     return lambda, mu, nu
 end
-"""
-tstat_2sample(x1,x2)
 
-Compute t statistics of histograms x1 and x2
+"""
+    tstat_2sample(x1, x2)
+
+Computes the t-statistic for the difference between the means of two histograms.
+
+# Arguments
+- `x1`: The first histogram.
+- `x2`: The second histogram.
+
+# Description
+This function computes the t-statistic for the difference between the means of two histograms `x1` and `x2`. The t-statistic is calculated as the difference between the means divided by the square root of the sum of the variances divided by their respective lengths.
+
+# Returns
+- `Float64`: The t-statistic for the difference between the means of the two histograms.
 """
 tstat_2sample(x1, x2) = (mean_histogram(x1) - mean_histogram(x2)) / (sqrt(var_histogram(x1) / length(x1) + var_histogram(x2) / length(x2)))
 
 
 """
-log_2sample(x1,x2)
+    log_2sample(x1, x2)
 
-compute the log of the ratio of means of histograms x1 and x2
+Computes the log of the ratio of the means of two histograms.
+
+# Arguments
+- `x1`: The first histogram.
+- `x2`: The second histogram.
+
+# Description
+This function computes the log of the ratio of the means of two histograms `x1` and `x2`.
+
+# Returns
+- `Float64`: The log of the ratio of the means of the two histograms.
 """
 log_2sample(x1, x2) = log(mean_histogram(x1)) - log(mean_histogram(x2))
 
 """
-delta_2sample(x1,x2)
+    delta_2sample(x1, x2)
 
-compute the difference of means of x1 and x2
+Computes the difference of the means of two histograms.
+
+# Arguments
+- `x1`: The first histogram.
+- `x2`: The second histogram.
+
+# Description
+This function computes the difference of the means of two histograms `x1` and `x2`.
+
+# Returns
+- `Float64`: The difference of the means of the two histograms.
 """
 delta_2sample(x1, x2) = mean_histogram(x1) - mean_histogram(x2)
 
 """
-delta_2frac(x1,x2)
+    delta_2frac(x1, x2)
 
-compute E(x1) - E(x2) of means normalize dot mean of x1
+Computes the normalized difference of the means of two histograms.
+
+# Arguments
+- `x1`: The first histogram.
+- `x2`: The second histogram.
+
+# Description
+This function computes the difference of the means of two histograms `x1` and `x2`, normalized by the mean of the first histogram `x1`.
+
+# Returns
+- `Float64`: The normalized difference of the means of the two histograms.
 """
 delta_2frac(x1, x2) = delta_2sample(x1, x2) / mean_histogram(x1)
 
-
 """
-mediansmooth(xin,window)
+    mediansmooth(xin, window)
 
-median smooth histogram xin over a window
+Applies median smoothing to a histogram over a specified window.
+
+# Arguments
+- `xin`: The input histogram.
+- `window`: The size of the smoothing window.
+
+# Description
+This function applies median smoothing to the input histogram `xin` over the specified window size. It replaces each value in the histogram with the median of the values in the window centered at that value.
+
+# Returns
+- `Vector{Float64}`: The smoothed histogram.
 """
 function mediansmooth(xin, window)
     x = copy(xin)
@@ -425,15 +920,21 @@ function mediansmooth(xin, window)
     x
 end
 
-
 """
-residenceprob_G(file,G,header)
-residenceprob_G(r,n)
+    residenceprob_G(file::String, G, header=false)
 
-Residence probability of G states
-given by exact steady state solution
-of master equation
+Calculates the residence probability of G states from a file.
 
+# Arguments
+- `file`: The file containing the data.
+- `G`: The number of G states.
+- `header`: A boolean indicating whether the file contains a header (default is false).
+
+# Description
+This function calculates the residence probability of G states from the data in the specified file. It reads the rate matrix from the file and computes the residence probabilities for each row in the matrix.
+
+# Returns
+- `Array{Any,2}`: A 2D array where each row contains the residence probabilities for the corresponding row in the rate matrix.
 """
 function residenceprob_G(file::String, G, header=false)
     r = get_all_rates(file, header)
@@ -447,6 +948,21 @@ function residenceprob_G(file::String, G, header=false)
     return p
 end
 
+"""
+    residenceprob_G(r::Vector, n::Int)
+
+Calculates the residence probability of G states given the rates.
+
+# Arguments
+- `r`: A vector representing the rates.
+- `n`: The number of states.
+
+# Description
+This function calculates the residence probability of G states given the rates. It initializes the residence probability array `Gss` and iteratively computes the residence probabilities for each state using the rates `r`.
+
+# Returns
+- `Array{Float64,2}`: A 2D array containing the residence probabilities for each state.
+"""
 function residenceprob_G(r::Vector, n::Int)
     Gss = Array{Float64,2}(undef, 1, n + 1)
     Gss[1, 1] = 1.0
@@ -457,10 +973,29 @@ function residenceprob_G(r::Vector, n::Int)
 end
 
 """
-splicesiteusage()
+    splicesiteusage(model::GRSMmodel)
+    splicesiteusage(r::Vector, n::Int, nr::Int)
 
-splice site usage probability is the probabilty of ejection times
-the probability of not ejection prior to that point
+Calculates the splice site usage for a GRSM model or given rates.
+
+# Arguments
+- `model`: An instance of `GRSMmodel`.
+- `r`: Rates vector.
+- `n`: Number of states.
+- `nr`: Number of splice sites.
+
+# Methods
+
+## `splicesiteusage(model::GRSMmodel)`
+
+Calculates the splice site usage for a GRSM model.
+
+## `splicesiteusage(r::Vector, n::Int, nr::Int)`
+
+Calculates the splice site usage given rates, number of states, and number of splice sites.
+
+# Returns
+- `Vector{Float64}`: Splice site usage probabilities.
 """
 splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G - 1, model.R)
 function splicesiteusage(r::Vector, n::Int, nr::Int)
@@ -476,8 +1011,35 @@ function splicesiteusage(r::Vector, n::Int, nr::Int)
 end
 
 """
-    onstate_prob(r,components::TComponents)
+    onstate_prob(r::Vector, components::TComponents, reporter_per_state)
+    onstate_prob(param, model::AbstractGmodel)
+    onstate_prob(model::AbstractGmodel)
 
+Calculates the probability of being in the "on" state for a given model or rates.
+
+# Arguments
+- `r`: Rates vector.
+- `components`: An instance of `TComponents`.
+- `reporter_per_state`: A vector indicating the reporter per state.
+- `param`: Parameters for the model.
+- `model`: An instance of `AbstractGmodel`.
+
+# Methods
+
+## `onstate_prob(r::Vector, components::TComponents, reporter_per_state)`
+
+Calculates the probability of being in the "on" state given the rates, components, and reporter per state.
+
+## `onstate_prob(param, model::AbstractGmodel)`
+
+Calculates the probability of being in the "on" state given the parameters and model.
+
+## `onstate_prob(model::AbstractGmodel)`
+
+Calculates the probability of being in the "on" state for a given model.
+
+# Returns
+- `Tuple{Float64, Vector{Float64}}`: The probability of being in the "on" state and the steady-state probabilities.
 """
 function onstate_prob(r, components::TComponents, reporter_per_state)
     Qtr = make_mat(components.elementsT, r, components.nT)
@@ -496,6 +1058,34 @@ Burst size distribution of GRS  model
 for total pre-mRNA occupancy and
 unspliced (visible) occupancy
 obtained by marginalizing over conditional steady state distribution
+"""
+"""
+    burstoccupancy(model::GRSMmodel)
+    burstoccupancy(n::Int, nr::Int, r::Vector)
+
+Calculates the burst size distribution of a GRS model for total pre-mRNA occupancy and unspliced (visible) occupancy.
+
+# Description
+This function calculates the burst size distribution for a given GRS model. It computes the total pre-mRNA occupancy and unspliced (visible) occupancy distributions by marginalizing over the conditional steady-state distribution.
+
+# Arguments
+- `model`: An instance of `GRSMmodel`.
+- `n`: The number of states.
+- `nr`: The number of splice sites.
+- `r`: A vector representing the rates.
+
+# Methods
+
+## `burstoccupancy(model::GRSMmodel)`
+
+Calculates the burst size distribution for a given GRSM model.
+
+## `burstoccupancy(n::Int, nr::Int, r::Vector)`
+
+Calculates the burst size distribution given the number of states, number of splice sites, and rates.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}}`: The total pre-mRNA occupancy and unspliced (visible) occupancy distributions.
 """
 burstoccupancy(model::GRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
 
@@ -521,19 +1111,80 @@ function burstoccupancy(n::Int, nr::Int, r::Vector)
     Rss ./= sum(Rss), Rssvisible ./= sum(Rssvisible)
 end
 
+"""
+    model2_mean(ron, roff, eject, decay, nalleles)
+    model2_mean(ron, roff, eject, decay)
+
+Calculates the mean mRNA level for a two-state model.
+
+# Arguments
+- `ron`: The rate of switching to the "on" state.
+- `roff`: The rate of switching to the "off" state.
+- `eject`: The rate of mRNA ejection.
+- `decay`: The rate of mRNA decay.
+- `nalleles`: The number of alleles (optional).
+
+# Methods
+
+## `model2_mean(ron, roff, eject, decay, nalleles)`
+
+Calculates the mean mRNA level for a two-state model with multiple alleles.
+
+## `model2_mean(ron, roff, eject, decay)`
+
+Calculates the mean mRNA level for a two-state model with a single allele.
+
+# Returns
+- `Float64`: The mean mRNA level.
+"""
 model2_mean(ron, roff, eject, decay, nalleles) = 2 * model2_mean(ron, roff, eject, decay)
 
 model2_mean(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay
 
+"""
+    model2_variance(ron, roff, eject, decay, nalleles)
+    model2_variance(ron, roff, eject, decay)
+
+Calculates the variance of mRNA levels for a two-state model.
+
+# Arguments
+- `ron`: The rate of switching to the "on" state.
+- `roff`: The rate of switching to the "off" state.
+- `eject`: The rate of mRNA ejection.
+- `decay`: The rate of mRNA decay.
+- `nalleles`: The number of alleles (optional).
+
+# Methods
+
+## `model2_variance(ron, roff, eject, decay, nalleles)`
+
+Calculates the variance of mRNA levels for a two-state model with multiple alleles.
+
+## `model2_variance(ron, roff, eject, decay)`
+
+Calculates the variance of mRNA levels for a two-state model with a single allele.
+
+# Returns
+- `Float64`: The variance of mRNA levels.
+"""
 model2_variance(ron, roff, eject, decay, nalleles) = 2 * model2_variance(ron, roff, eject, decay)
 
 model2_variance(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay + ron * roff / (ron + roff)^2 * eject^2 / decay / (ron + roff + decay)
 
 """
-test_steadystatemodel(model,nhist)
+    test_steadystatemodel(model::AbstractGMmodel, nhist)
 
-Compare chemical master solution to Gillespie simulation for steadystate mRNA distribution
+Compares the chemical master solution to a Gillespie simulation for the steady-state mRNA distribution.
 
+# Arguments
+- `model`: An instance of `AbstractGMmodel`.
+- `nhist`: The number of histogram bins for the simulation.
+
+# Description
+This function compares the steady-state mRNA distribution obtained from the chemical master equation solution to that obtained from a Gillespie simulation. It uses the rates and number of states from the provided model.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}}`: The steady-state mRNA distributions from the chemical master solution and the Gillespie simulation.
 """
 function test_steadystatemodel(model::AbstractGMmodel, nhist)
     G = model.G
@@ -543,14 +1194,40 @@ function test_steadystatemodel(model::AbstractGMmodel, nhist)
     return g1, g2
 end
 
+"""
+    test_model(data::RNAOnOffData, model::GRSMmodel)
+
+Simulates the RNA on-off model with splicing and compares it to the provided data.
+
+# Arguments
+- `data`: An instance of `RNAOnOffData` containing the observed data.
+- `model`: An instance of `GRSMmodel` representing the model to be tested.
+
+# Description
+This function simulates the RNA on-off model with splicing using the provided model parameters and compares the simulated results to the observed data. It uses the `telegraphsplice0` function to perform the simulation.
+
+# Returns
+- `Nothing`: The function performs the simulation and comparison but does not return a value.
+"""
 function test_model(data::RNAOnOffData, model::GRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
+
 """
- make_histograms(folder,file,label)
- make_histogram(r)
+    make_histograms(folder::String, file::String, label::String)
 
+Creates histograms from data in a file and saves them to a specified folder.
 
+# Arguments
+- `folder`: The folder where the histograms will be saved.
+- `file`: The file containing the data.
+- `label`: A label to be appended to the histogram filenames.
+
+# Description
+This function reads data from the specified file, creates histograms for each row of data, and saves the histograms to the specified folder. Each histogram is saved with a filename that includes the row identifier and the provided label.
+
+# Returns
+- `Nothing`: The function performs the histogram creation and saving but does not return a value.
 """
 function make_histograms(folder, file, label)
     if ~ispath(folder)
@@ -567,6 +1244,20 @@ function make_histograms(folder, file, label)
     end
 end
 
+"""
+    make_histogram(r)
+
+Creates a histogram from a vector of data.
+
+# Arguments
+- `r`: A vector of data values.
+
+# Description
+This function creates a histogram from the provided vector of data values `r`. It counts the occurrences of each unique value in the vector and returns a vector representing the histogram.
+
+# Returns
+- `Vector{Int}`: A vector representing the histogram, where each element corresponds to the count of a unique value in the input vector.
+"""
 function make_histogram(r)
     nhist = maximum(r)
     h = zeros(Int, nhist + 1)
@@ -576,28 +1267,61 @@ function make_histogram(r)
     h
 end
 
-
 """
     expv(v::Array)
 
-exponential of array
+Calculates the element-wise exponential of an array.
+
+# Arguments
+- `v`: An array of numerical values.
+
+# Description
+This function calculates the element-wise exponential of the provided array `v`. It returns a new array where each element is the exponential of the corresponding element in `v`.
+
+# Returns
+- `Array`: An array containing the element-wise exponential of the input array.
 """
 expv(v::Array) = exp.(v)
-
 
 """
     logv(v::Array)
 
-TBW
+Calculates the element-wise natural logarithm of an array.
+
+# Arguments
+- `v`: An array of numerical values.
+
+# Description
+This function calculates the element-wise natural logarithm of the provided array `v`. It returns a new array where each element is the natural logarithm of the corresponding element in `v`.
+
+# Returns
+- `Array`: An array containing the element-wise natural logarithm of the input array.
 """
 logv(v::Array) = log.(v)
 
 
 """
-    log_shift(v::Float64,a::Float64)
-    log_shift(v::Array,a::Float64)
+    log_shift(v::Float64, a::Float64)
+    log_shift(v::Array, a::Float64)
 
-TBW
+Calculates the natural logarithm of a value or array after applying a shift.
+
+# Arguments
+- `v`: A numerical value or an array of numerical values.
+- `a`: The shift value to be added before taking the logarithm.
+
+# Methods
+
+## `log_shift(v::Float64, a::Float64)`
+
+Calculates the natural logarithm of a single value after applying a shift.
+
+## `log_shift(v::Array, a::Float64)`
+
+Calculates the element-wise natural logarithm of an array after applying a shift.
+
+# Returns
+- `Float64` or `Array`: The natural logarithm of the shifted value or array.
 """
 log_shift(v::Float64, a::Float64) = log(v + a)
 
@@ -606,39 +1330,127 @@ log_shift(v::Array, a::Float64) = log.(v .+ a)
 """
     log_shift1(v)
 
-TBW
+Calculates the natural logarithm of a value or array after applying a shift of 1.0.
+
+# Arguments
+- `v`: A numerical value or an array of numerical values.
+
+# Description
+This function calculates the natural logarithm of the provided value or array `v` after applying a shift of 1.0. It uses the `log_shift` function with a shift value of 1.0.
+
+# Returns
+- `Float64` or `Array`: The natural logarithm of the shifted value or array.
 """
 log_shift1(v) = log_shift(v, 1.0)
 
-
 """
     invlog_shift1(v::Float64)
+    invlog_shift1(v::Array)
 
-TBW
+Calculates the inverse of the natural logarithm after applying a shift of 1.0.
+
+# Arguments
+- `v`: A numerical value or an array of numerical values.
+
+# Methods
+
+## `invlog_shift1(v::Float64)`
+
+Calculates the inverse of the natural logarithm for a single value after applying a shift of 1.0.
+
+## `invlog_shift1(v::Array)`
+
+Calculates the element-wise inverse of the natural logarithm for an array after applying a shift of 1.0.
+
+# Returns
+- `Float64` or `Array`: The inverse of the natural logarithm of the shifted value or array.
 """
 invlog_shift1(v::Float64) = exp(v) - 1
 invlog_shift1(v::Array) = exp.(v) .- 1
 
 """
     logit(x::Float64)
+    logit(x::Array)
 
-logit transform
+Applies the logit transform to a value or array.
+
+# Arguments
+- `x`: A numerical value or an array of numerical values.
+
+# Methods
+
+## `logit(x::Float64)`
+
+Applies the logit transform to a single value.
+
+## `logit(x::Array)`
+
+Applies the logit transform element-wise to an array.
+
+# Description
+The logit transform is defined as `log(x) - log(1 - x)`.
+
+# Returns
+- `Float64` or `Array`: The logit-transformed value or array.
 """
 logit(x::Float64) = log(x) - log(1 - x)
 logit(x::Array) = log.(x) .- log.(1 .- x)
 
 """
     invlogit(x::Float64)
+    invlogit(x::Array)
 
-inverse logit transform
+Applies the inverse logit transform to a value or array.
+
+# Arguments
+- `x`: A numerical value or an array of numerical values.
+
+# Methods
+
+## `invlogit(x::Float64)`
+
+Applies the inverse logit transform to a single value.
+
+## `invlogit(x::Array)`
+
+Applies the inverse logit transform element-wise to an array.
+
+# Description
+The inverse logit transform is defined as `1 / (1 + exp(-x))`.
+
+# Returns
+- `Float64` or `Array`: The inverse logit-transformed value or array.
 """
 invlogit(x::Float64) = 1 / (1 + exp(-x))
 invlogit(x::Array) = 1 ./ (1 .+ exp.(-x))
+
 """
-logsumexp(u,v)
+    logsumexp(u::Array, v::Array)
+    logsumexp(u::Float64, v::Float64)
+    logsumexp(v::Array)
 
-returns log of the sum of exponentials of u and v
+Returns the log of the sum of exponentials of the inputs.
 
+# Arguments
+- `u`: An array or a single floating-point value.
+- `v`: An array or a single floating-point value.
+
+# Methods
+
+## `logsumexp(u::Array, v::Array)`
+
+Calculates the log of the sum of exponentials for two arrays element-wise.
+
+## `logsumexp(u::Float64, v::Float64)`
+
+Calculates the log of the sum of exponentials for two floating-point values.
+
+## `logsumexp(v::Array)`
+
+Calculates the log of the sum of exponentials for an array.
+
+# Returns
+- `Array` or `Float64`: The log of the sum of exponentials of the inputs.
 """
 function logsumexp(u::Array, v::Array)
     w = max(u, v)
@@ -658,12 +1470,6 @@ function logsumexp(u::Float64, v::Float64)
     end
 end
 
-"""
-logsumexp(v)
-
-returns log of the sum of exponentials of elements of v
-
-"""
 function logsumexp(v::Array)
     w = maximum(v)
     if w == -Inf
@@ -673,6 +1479,21 @@ function logsumexp(v::Array)
     end
 end
 
+"""
+    mean_elongationtime(r, model)
+
+Calculates the mean elongation time for a given model and rates.
+
+# Arguments
+- `r`: The rates.
+- `model`: The model, which includes the elongation rates and states.
+
+# Description
+This function calculates the mean elongation time for a given model and rates. It uses the elongation rates and states specified in the model to compute the mean time required for elongation.
+
+# Returns
+- `Float64`: The mean elongation time.
+"""
 function mean_elongationtime(r, transitions, R)
     if R > 0
         n = length(transitions)
@@ -682,6 +1503,20 @@ function mean_elongationtime(r, transitions, R)
     end
 end
 
+"""
+    meantime(r::Vector)
+
+Calculates the mean time given a vector of rates.
+
+# Arguments
+- `r`: A vector of rates.
+
+# Description
+This function calculates the mean time by taking the reciprocal of each rate in the vector `r` and summing them up.
+
+# Returns
+- `Float64`: The mean time.
+"""
 function meantime(r::Vector)
     sum(1 ./ r)
 end
@@ -689,7 +1524,17 @@ end
 """
     make_array(v)
 
-convert containuer of arrays into a single array
+Converts a container of arrays into a single array.
+
+# Arguments
+- `v`: A container of arrays.
+
+# Description
+This function concatenates the arrays in the container `v` into a single array.
+
+# Returns
+- `Array`: A single array containing the elements of the input container.
+
 """
 function make_array(v)
     vconcat = Float64[]
@@ -700,9 +1545,19 @@ function make_array(v)
 end
 
 """
-    makestring(v::Vector)
+    makestring(v)
 
 convert a vector of strings into a single string
+
+# Arguments
+- `v`: A vector of strings.
+
+# Description
+This function concatenates the strings in the vector `v` into a single string.
+
+# Returns
+- `String`: A single string containing the elements of the input vector.
+
 """
 function makestring(v)
     s = ""
