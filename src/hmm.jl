@@ -72,6 +72,7 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ps = [r.per_state for r in reporter]
     pf = [r.probfn for r in reporter]
     logpredictions = Array{Float64}(undef, 0)
+    println(trace)
     for t in trace[1]
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, ps, pf, nT)

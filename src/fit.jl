@@ -645,7 +645,7 @@ function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, nois
     r
 end
 
-function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Tuple, elongationtime::Tuple, coupling)
+function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling)
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i]))
