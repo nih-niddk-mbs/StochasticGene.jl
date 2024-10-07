@@ -1,6 +1,19 @@
 # Spatial.jl
 #
 # Experimental code for including spatial information from images of transcriptional bursting
+"""
+    kronecker_delta(i, j)
+
+Computes the Kronecker delta of two integers.
+
+# Arguments
+- `i`: The first integer.
+- `j`: The second integer.
+
+# Returns
+- `Int`: Returns 1 if `i` equals `j`, otherwise returns 0.
+"""
+kronecker_delta(i, j) = i == j ? 1 : 0
 
 """
     read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
@@ -51,7 +64,7 @@ Calculates the probability matrix `b` for given trace data using a specified pro
 # Returns
 - `Matrix`: The probability matrix `b`.
 """
-function set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
     d = probfn(params, reporters_per_state, Ns, Np)
     b = Ones(Ns * Np, length(trace))
     t = 1
@@ -69,7 +82,22 @@ function set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns,
     end
     return b
 end
-
+function set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+    d = probfn(params, reporters_per_state, Ns, Np)
+    b = Ones(Ns, Np, length(trace))
+    t = 1
+    for obs in eachcol(trace)
+        for i in 1:Ns
+            for j in 1:Np
+                for k in eachindex(obs)
+                    b[i, j, t] *= pdf(d[i, j, k], obs[k])
+                end
+            end
+        end
+        t += 1
+    end
+    return b
+end
 """
     prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
 
@@ -98,16 +126,46 @@ function prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kro
     return d
 end
 
-"""
-    kronecker_delta(i, j)
+function forward_spatial(as, ap, b, p0, Ns, Np, T)
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for i in 1:Ns
+            for j in 1:Ns
+                for k in 1:Np
+                    for l in 1:Np
+                        α[j, t] += α[i, t-1] * as[i, j] * ap[k, l] * b[j, t]
+                    end
+                    α[j, t] += α[i, t-1] * as[i, j] * ap[k, l] * b[j, t]
+                end
+            end
+        end
+        C[t] = 1 / sum(α[:, t])
+        α[:, t] *= C[t]
+    end
+    return α, C
+end
 
-Computes the Kronecker delta of two integers.
+function speedtest1(M, n)
+    M^n
+end
 
-# Arguments
-- `i`: The first integer.
-- `j`: The second integer.
-
-# Returns
-- `Int`: Returns 1 if `i` equals `j`, otherwise returns 0.
-"""
-kronecker_delta(i, j) = i == j ? 1 : 0
+function speedtest2(M, n)
+    m = size(M, 1)
+    Mout = Diagonal(ones(m))  # Initialize Mout as an identity matrix
+    for t in 1:n
+        Mtemp = zeros(m, m)  # Temporary matrix to store intermediate results
+        for i in 1:m
+            for j in 1:m
+                for k in 1:m
+                    Mtemp[i, j] += Mout[i, k] * M[k, j]
+                end
+            end
+        end
+        Mout = Mtemp  # Update Mout with the result of the multiplication
+    end
+    return Mout
+end

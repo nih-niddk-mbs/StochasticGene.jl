@@ -1051,14 +1051,6 @@ onstate_prob(param, model::AbstractGmodel) = onstate_prob(get_rates(param, model
 
 onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 
-
-"""
-burstoccupancy(n,nr,r)
-Burst size distribution of GRS  model
-for total pre-mRNA occupancy and
-unspliced (visible) occupancy
-obtained by marginalizing over conditional steady state distribution
-"""
 """
     burstoccupancy(model::GRSMmodel)
     burstoccupancy(n::Int, nr::Int, r::Vector)

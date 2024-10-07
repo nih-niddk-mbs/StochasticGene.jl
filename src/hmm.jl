@@ -34,8 +34,8 @@ end
 
 function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    d =probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
-    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
@@ -62,7 +62,7 @@ function ll_hmm_coupled_2(r, couplingStrength, noiseparams::Vector, components, 
         push!(logpredictions, sum(log.(C)))
     end
     offstates = [r.offstates for r in reporter]
-    lb = prod(trace[3]) > 0.0 ? ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
     sum(logpredictions) + lb, logpredictions
 end
 
@@ -72,7 +72,6 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ps = [r.per_state for r in reporter]
     pf = [r.probfn for r in reporter]
     logpredictions = Array{Float64}(undef, 0)
-    println(trace)
     for t in trace[1]
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, ps, pf, nT)
@@ -80,7 +79,7 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
         push!(logpredictions, sum(log.(C)))
     end
     offstates = [r.offstates for r in reporter]
-    lb = prod(trace[3]) > 0.0 ? ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
     sum(logpredictions) + lb, logpredictions
 end
 
@@ -95,7 +94,7 @@ function ll_background(a, p0, offstates, poff, nframes)
     l
 end
 
-p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates,offstates]^nframes)
+p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
 
 """
     ll_background_coupled(a, p0, offstates, weight, n)
@@ -503,6 +502,20 @@ function forward(a, b, p0, N, T)
                 α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
             end
         end
+        C[t] = 1 / sum(α[:, t])
+        α[:, t] *= C[t]
+    end
+    return α, C
+end
+
+function forward_mm(a, b, p0, N, T)
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
+    for t in 2:T
+        α[:, t] = α[:, t-1] .* a' * b[:, t]
         C[t] = 1 / sum(α[:, t])
         α[:, t] *= C[t]
     end
