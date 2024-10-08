@@ -169,3 +169,20 @@ function speedtest2(M, n)
     end
     return Mout
 end
+
+function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70])
+    trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("tracespatial", "test", interval, (trace, [], weight, nframes))
+    # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
+    priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
+    model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options)
+    StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
+end
+
+
+components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+a, p0 = make_ap(r, interval, components)
+reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)

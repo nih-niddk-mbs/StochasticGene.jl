@@ -612,12 +612,12 @@ function transitionR!(tau, state, index, t, m, r, allele, G, R, S, disabled, ena
         tau[enabled[2], allele] = -log(rand()) / r[enabled[2]] + t
     end
     if S > 0 && final >= G + insertstep
-        # tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
-        if final == insertstep + G
-            tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
-        elseif state[initial, allele] > 1
-            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
-        end
+        tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # if final == insertstep + G
+        #     tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # elseif state[initial, allele] > 1
+        #     tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
+        # end
     end
     for d in disabled
         tau[d, allele] = Inf

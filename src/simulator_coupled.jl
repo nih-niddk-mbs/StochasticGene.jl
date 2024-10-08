@@ -184,10 +184,11 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     end
     if traceinterval > 0.0
         push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
+        if verbose
+            push!(results, tracelog)
+        end
     end
-    if verbose
-        push!(results, tracelog)
-    end
+
     return results
 
 end
@@ -1090,12 +1091,12 @@ function transitionR!(tau, state, index::Int, t, m, r, allele, G, R, S, insertst
         tau[enabled[2], allele] = -log(rand()) / r[enabled[2]] + t
     end
     if S > 0 && final >= G + insertstep && final <= G + S # Corrected for allowing S < R + insertstep - 1
-        # tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
-        if final == insertstep + G
-            tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
-        elseif state[initial, allele] > 1
-            tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
-        end
+        tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # if final == insertstep + G
+        #     tau[enabled[3], allele] = -log(rand()) / r[enabled[3]] + t
+        # elseif state[initial, allele] > 1
+        #     tau[enabled[3], allele] = r[enabled[3]-1] / r[enabled[3]] * (tau[enabled[3]-1, allele] - t) + t
+        # end
     end
     for d in disabled
         tau[d, allele] = Inf
