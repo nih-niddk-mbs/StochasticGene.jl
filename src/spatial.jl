@@ -158,7 +158,7 @@ function make_as(param, Ns)
             d[i,j] = distance(i, j, div(Ns,2))
         end
     end
-    return as ./ sum(as, dims = 2)
+    as ./ sum(as, dims = 2)
 end
 
 function distance(i, j, Ns)

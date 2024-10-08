@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=0, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -300,6 +300,23 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
         frame += interval
     end
     return trace
+end
+
+function make_trace_spatial(trace, as, d_background)
+    Ns = size(as, 1)
+    tracematrix = Matrix{Float64}(undef, Ns, length(trace))
+    cdf = cumsum(as, dims=2)
+    position = rand(1:Ns)
+    for t in eachindex(trace)
+        position = searchsortedfirst(cdf[position, :], rand())
+        tracematrix[position, t] = trace[t]
+        for p in 1:Ns 
+            if p != position
+                tracematrix[p, t] = rand(d_background)
+            end
+        end
+    end
+    tracematrix
 end
 
 """
