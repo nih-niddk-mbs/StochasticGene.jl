@@ -150,20 +150,23 @@ function forward_spatial(as, ap, b, p0, Ns, Np, T)
 end
 
 function make_as(param, Ns)
-    d = StochasticGene.Normal(0, param)
     as = zeros(Ns, Ns)
+    d = zeros(Ns, Ns)
     for i in 1:Ns
         for j in 1:Ns
-            as[i, j] = StochasticGene.pdf(d, distance(i, j, div(Ns,2)))
+            as[i, j] = exp(-distance(i, j, div(Ns,2))^2 / (2 * param^2))
+            d[i,j] = distance(i, j, div(Ns,2))
         end
     end
-    return as
+    return as ./ sum(as, dims = 2)
 end
 
 function distance(i, j, Ns)
-    x = rem(i - j, Ns)
-    y = div(i - j, Ns)
-    return sqrt(x^2 + y^2)
+    xi = rem(i - 1, Ns)
+    yi = div(i - 1, Ns)
+    xj = rem(j - 1, Ns)
+    yj = div(j - 1, Ns)
+    return sqrt((xi-xj)^2 + (yi-yj)^2)
 end
 
 function speedtest1(M, n)
