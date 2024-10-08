@@ -149,6 +149,23 @@ function forward_spatial(as, ap, b, p0, Ns, Np, T)
     return α, C
 end
 
+function make_as(param, Ns)
+    d = StochasticGene.Normal(0, param)
+    as = zeros(Ns, Ns)
+    for i in 1:Ns
+        for j in 1:Ns
+            as[i, j] = StochasticGene.pdf(d, distance(i, j, div(Ns,2)))
+        end
+    end
+    return as
+end
+
+function distance(i, j, Ns)
+    x = rem(i - j, Ns)
+    y = div(i - j, Ns)
+    return sqrt(x^2 + y^2)
+end
+
 function speedtest1(M, n)
     M^n
 end
@@ -183,6 +200,6 @@ function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 
 end
 
 
-components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-a, p0 = make_ap(r, interval, components)
-reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
+# components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+# a, p0 = make_ap(r, interval, components)
+# reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
