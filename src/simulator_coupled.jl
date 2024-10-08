@@ -193,6 +193,165 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
 end
 
+
+"""
+    simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
+
+create simulated trace files in datafolder
+"""
+function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
+    ~ispath(datafolder) && mkpath(datafolder)
+    for i in 1:ntrials
+        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+        l = length(trace)
+        datapath = joinpath(datafolder, "testtrace$i.trk")
+        writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
+    end
+end
+"""
+    simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
+
+TBW
+"""
+function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
+    trace = Array{Array{Float64}}(undef, ntrials)
+    for i in eachindex(trace)
+        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+    end
+    trace
+end
+
+function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+    trace = Array{Array{Float64}}(undef, ntrials)
+    for i in eachindex(trace)
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2]
+        tr = Vector[]
+        for t in t
+            tr = push!(tr, t[1:end-1, 2])
+        end
+        trace[i] = hcat(tr...)
+    end
+    trace
+end
+
+"""
+    simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
+
+simulate a trace
+"""
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
+
+
+"""
+    make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
+
+Return array of frame times and intensities
+
+- `tracelog`: Vector if Tuples of (time,state of allele 1)
+- `interval`: Number of minutes between frames
+- `onstates`: Vector of G on states, empty for GRS models
+- `G` and `R` as defined in simulator
+
+"""
+function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
+    trace = Matrix[]
+    for i in eachindex(tracelog)
+        push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn))
+    end
+    trace
+end
+"""
+    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector}, interval, par, probfn, reporterfn=sum)
+
+TBW
+"""
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn=sum)
+    traces = []
+    for o in onstates
+        push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
+    end
+    traces
+end
+
+"""
+    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
+
+TBW
+"""
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
+    n = length(tracelog)
+    trace = Matrix(undef, 0, 4)
+    state = tracelog[1][2]
+    frame = interval
+    if isempty(onstates)
+        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
+    else
+        reporters = num_reporters_per_state(G, onstates)
+    end
+    i = 2
+    base = S > 0 ? 3 : 2
+    d = probfn(par, reporters, G * base^R)
+    while i < n
+        while tracelog[i][1] <= frame && i < n
+            state = tracelog[i][2]
+            i += 1
+        end
+        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)] state_index(state, G, R, S)])
+        frame += interval
+    end
+    return trace
+end
+
+"""
+    intensity(state, G, R, S, d)
+
+Returns the trace intensity given the state of a system
+
+For R = 0, the intensity is occupancy of any onstates
+For R > 0, intensity is the number of reporters in the nascent mRNA
+
+"""
+function intensity(state, G, R, S, d)
+    stateindex = state_index(state, G, R, S)
+    max(rand(d[stateindex]), 0)
+end
+
+"""
+    gstate(G, state, allele)
+
+TBW
+"""
+gstate(G, state, allele) = argmax(state[1:G, allele])
+
+"""
+    state_index(state::Array, G, allele)
+    state_index(state::Array, G, R, S,allele=1)
+
+returns state index given state vector
+"""
+state_index(state::Array, G, allele) = argmax(state[1:G, allele])
+
+"""
+    state_index(state::Array, G, R, S, allele=1)
+
+TBW
+"""
+function state_index(state::Array, G, R, S, allele=1)
+    Gstate = gstate(G, state, allele)
+    if R == 0
+        return Gstate
+    else
+        if S > 0
+            base = 3
+            Rstate = state[G+1:end, allele]
+        else
+            base = 2
+            Rstate = Int.(state[G+1:end, allele] .> 0)
+        end
+        return Gstate + G * decimal(Rstate, base)
+    end
+end
+
 function prune_mhist(mhist, nhist)
     if eltype(mhist) <: Vector
         for i in eachindex(mhist)
@@ -509,53 +668,6 @@ function findmin_tau(tau::Matrix)
     return t, ind[1], ind[2]
 end
 
-"""
-    simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
-
-create simulated trace files in datafolder
-"""
-function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
-    ~ispath(datafolder) && mkpath(datafolder)
-    for i in 1:ntrials
-        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
-        l = length(trace)
-        datapath = joinpath(datafolder, "testtrace$i.trk")
-        writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
-    end
-end
-"""
-    simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
-
-TBW
-"""
-function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
-    trace = Array{Array{Float64}}(undef, ntrials)
-    for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
-    end
-    trace
-end
-
-function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
-    trace = Array{Array{Float64}}(undef, ntrials)
-    for i in eachindex(trace)
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2]
-        tr = Vector[]
-        for t in t
-            tr = push!(tr, t[1:end-1, 2])
-        end
-        trace[i] = hcat(tr...)
-    end
-    trace
-end
-
-"""
-    simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
-
-simulate a trace
-"""
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
-
 
 """
     initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
@@ -650,116 +762,6 @@ function update_mhist!(mhist, m::Int, dt, nhist)
         mhist[m+1] += dt
     else
         mhist[nhist+1] += dt
-    end
-end
-
-"""
-    make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
-
-Return array of frame times and intensities
-
-- `tracelog`: Vector if Tuples of (time,state of allele 1)
-- `interval`: Number of minutes between frames
-- `onstates`: Vector of G on states, empty for GRS models
-- `G` and `R` as defined in simulator
-
-"""
-function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
-    trace = Matrix[]
-    for i in eachindex(tracelog)
-        push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn))
-    end
-    trace
-end
-"""
-    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector}, interval, par, probfn, reporterfn=sum)
-
-TBW
-"""
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn=sum)
-    traces = []
-    for o in onstates
-        push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
-    end
-    traces
-end
-
-"""
-    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
-
-TBW
-"""
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
-    n = length(tracelog)
-    trace = Matrix(undef, 0, 4)
-    state = tracelog[1][2]
-    frame = interval
-    if isempty(onstates)
-        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
-    else
-        reporters = num_reporters_per_state(G, onstates)
-    end
-    i = 2
-    base = S > 0 ? 3 : 2
-    d = probfn(par, reporters, G * base^R)
-    while i < n
-        while tracelog[i][1] <= frame && i < n
-            state = tracelog[i][2]
-            i += 1
-        end
-        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)] state_index(state, G, R, S)])
-        frame += interval
-    end
-    return trace
-end
-
-"""
-    intensity(state, G, R, S, d)
-
-Returns the trace intensity given the state of a system
-
-For R = 0, the intensity is occupancy of any onstates
-For R > 0, intensity is the number of reporters in the nascent mRNA
-
-"""
-function intensity(state, G, R, S, d)
-    stateindex = state_index(state, G, R, S)
-    max(rand(d[stateindex]), 0)
-end
-
-"""
-    gstate(G, state, allele)
-
-TBW
-"""
-gstate(G, state, allele) = argmax(state[1:G, allele])
-
-"""
-    state_index(state::Array, G, allele)
-    state_index(state::Array, G, R, S,allele=1)
-
-returns state index given state vector
-"""
-state_index(state::Array, G, allele) = argmax(state[1:G, allele])
-
-"""
-    state_index(state::Array, G, R, S, allele=1)
-
-TBW
-"""
-function state_index(state::Array, G, R, S, allele=1)
-    Gstate = gstate(G, state, allele)
-    if R == 0
-        return Gstate
-    else
-        if S > 0
-            base = 3
-            Rstate = state[G+1:end, allele]
-        else
-            base = 2
-            Rstate = Int.(state[G+1:end, allele] .> 0)
-        end
-        return Gstate + G * decimal(Rstate, base)
     end
 end
 
