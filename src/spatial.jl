@@ -204,5 +204,6 @@ end
 
 
 # components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+#  Qtr = make_mat_TRG(components, r)
 # a, p0 = make_ap(r, interval, components)
 # reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)

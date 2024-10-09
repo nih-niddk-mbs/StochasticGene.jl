@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=0, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -137,9 +137,9 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         initial, final, disabled, enabled, action = set_arguments(reactions, index)
         dth = t - t0
         t0 = t
-        update_mhist!(mhist, m, dth, nhist)
+        nhist > 0 && update_mhist!(mhist, m, dth, nhist)
 
-        if t - ts > tsample && traceinterval == 0
+        if t - ts > tsample && traceinterval == 0 && nhist > 0
             err, mhist0 = update_error(mhist, mhist0)
             ts = t
         end
@@ -175,7 +175,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     # mhist /= counts
 
     results = []
-    push!(results, prune_mhist(mhist, nhist))
+    nhist > 0 && push!(results, prune_mhist(mhist, nhist))
     if onoff
         for i in eachindex(histontdd)
             push!(results, histontdd[i])
@@ -192,6 +192,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
     return results
 
 end
+
 
 
 """
@@ -213,7 +214,7 @@ end
 
 TBW
 """
-function simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
+function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
         trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
@@ -266,7 +267,7 @@ end
 TBW
 """
 function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn=sum)
-    traces = []
+    traces = Matrix[]
     for o in onstates
         push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
     end
@@ -302,7 +303,19 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
     return trace
 end
 
-function make_trace_spatial(trace, as, d_background)
+function make_trace_spatial(trace::Vector{T}, as, d_background) where T <: Array
+    spatialtrace = Matrix[]
+    for t in trace
+        push!(spatialtrace, make_trace_spatial(t, as, d_background))
+    end
+    spatialtrace
+end
+
+function make_trace_spatial(trace::Matrix, as, d_background)
+    make_trace_spatial(trace[:,2], as, d_background)
+end
+
+function make_trace_spatial(trace::Vector{Float64}, as, d_background)
     Ns = size(as, 1)
     tracematrix = Matrix{Float64}(undef, Ns, length(trace))
     cdf = cumsum(as, dims=2)
@@ -310,7 +323,7 @@ function make_trace_spatial(trace, as, d_background)
     for t in eachindex(trace)
         position = searchsortedfirst(cdf[position, :], rand())
         tracematrix[position, t] = trace[t]
-        for p in 1:Ns 
+        for p in 1:Ns
             if p != position
                 tracematrix[p, t] = rand(d_background)
             end
@@ -722,7 +735,7 @@ end
 
 """
 function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
-    if nhist isa Number
+    if nhist isa Number && nhist > 0
         nhist = fill(nhist, length(r) - 1)
     end
     mhist = Vector[]
@@ -874,7 +887,7 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
         if S == 0 || i > G + S
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
         else
-            if insertstep == 1 
+            if insertstep == 1
                 push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
             else
                 if i < G + insertstep - 1
@@ -1219,3 +1232,14 @@ function set_decay!(tau, index::Int, t, m, r)
     end
     m
 end
+
+
+# function simulator(T, totalsteps)
+#     τ = fill(Inf, size(T))
+#     nonzeros = T .> 0
+#     τ[1, nonzeros[1,:]] = -log(rand()) / T[1, nonzeros[1,:]]
+#     for i in totalsteps
+#     findmin(τ)
+
+
+# end
