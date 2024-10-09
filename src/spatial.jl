@@ -66,6 +66,9 @@ Calculates the probability matrix `b` for given trace data using a specified pro
 """
 function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
     d = probfn(params, reporters_per_state, Ns, Np)
+    set_b_spatial(trace, d, Ns, Np)
+end
+function set_b_spatial_v(trace, d, Ns, Np)
     b = Ones(Ns * Np, length(trace))
     t = 1
     for obs in eachcol(trace)
@@ -77,22 +80,6 @@ function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, N
                 end
             end
             i += 1
-        end
-        t += 1
-    end
-    return b
-end
-function set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
-    d = probfn(params, reporters_per_state, Ns, Np)
-    b = Ones(Ns, Np, length(trace))
-    t = 1
-    for obs in eachcol(trace)
-        for i in 1:Ns
-            for j in 1:Np
-                for k in eachindex(obs)
-                    b[i, j, t] *= pdf(d[i, j, k], obs[k])
-                end
-            end
         end
         t += 1
     end
@@ -139,7 +126,6 @@ function forward_spatial(as, ap, b, p0, Ns, Np, T)
                     for l in 1:Np
                         α[j, t] += α[i, t-1] * as[i, j] * ap[k, l] * b[j, t]
                     end
-                    α[j, t] += α[i, t-1] * as[i, j] * ap[k, l] * b[j, t]
                 end
             end
         end
@@ -149,23 +135,23 @@ function forward_spatial(as, ap, b, p0, Ns, Np, T)
     return α, C
 end
 
-function make_as(param, Ns)
-    as = zeros(Ns, Ns)
-    d = zeros(Ns, Ns)
-    for i in 1:Ns
-        for j in 1:Ns
-            as[i, j] = exp(-distance(i, j, div(Ns,2))^2 / (2 * param^2))
-            d[i,j] = distance(i, j, div(Ns,2))
+function make_aposition(param, Np)
+    as = zeros(Np, Np)
+    d = zeros(Np, Np)
+    for i in 1:Np
+        for j in 1:Np
+            as[i, j] = exp(-distance(i, j, div(Np,2))^2 / (2 * param^2))
+            d[i,j] = distance(i, j, div(Np,2))
         end
     end
     as ./ sum(as, dims = 2)
 end
 
-function distance(i, j, Ns)
-    xi = rem(i - 1, Ns)
-    yi = div(i - 1, Ns)
-    xj = rem(j - 1, Ns)
-    yj = div(j - 1, Ns)
+function distance(i, j, Np)
+    xi = rem(i - 1, Np)
+    yi = div(i - 1, Np)
+    xj = rem(j - 1, Np)
+    yj = div(j - 1, Np)
     return sqrt((xi-xj)^2 + (yi-yj)^2)
 end
 
@@ -190,16 +176,36 @@ function speedtest2(M, n)
     return Mout
 end
 
+function ll_hmm_spatial(r, p, Ns, Np, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    ap = make_ap(p, Np)
+    a, p0 = StochasticGene.make_ap_spatial(r, interval, components)
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, Ns, Np)
+    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = length(t)
+        b = set_b_spatial_v(trace, d, Ns, Np)
+        _, C = forward_spatial(a,ap, b, p0, Ns, Np, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions), logpredictions
+end
+
 function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70])
-    trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    data = StochasticGene.TraceData("tracespatial", "test", interval, (trace, [], weight, nframes))
-    # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
-    elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
-    priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
-    model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
-    options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
-    fits, stats, measures = run_mh(data, model, options)
-    StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
+
+    trace = simulator(rtarget, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=reporterfn, ap=make_ap(1.0, G))[1]
+    components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+    reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
+    a, p0 = make_ap(r, interval, components)
+    # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    # data = StochasticGene.TraceData("tracespatial", "test", interval, (trace, [], weight, nframes))
+    # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    # elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
+    # priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
+    # model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
+    # options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
+    # fits, stats, measures = run_mh(data, model, options)
+    # StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
 end
 
 
