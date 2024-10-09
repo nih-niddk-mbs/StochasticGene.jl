@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", as=nothing, verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -183,7 +183,11 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         end
     end
     if traceinterval > 0.0
-        push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
+        if isnothing(as)
+            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
+        else
+            push!(results, ake_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, as))
+        end
         if verbose
             push!(results, tracelog)
         end
@@ -200,10 +204,10 @@ end
 
 create simulated trace files in datafolder
 """
-function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
+function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
     ~ispath(datafolder) && mkpath(datafolder)
     for i in 1:ntrials
-        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=reporterfn)[1][1:end-1, 2]
         l = length(trace)
         datapath = joinpath(datafolder, "testtrace$i.trk")
         writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
@@ -217,7 +221,7 @@ TBW
 function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2][1:end-1, 2]
+        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn)[1][1:end-1, 2]
     end
     trace
 end
@@ -225,7 +229,7 @@ end
 function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime)[2]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn)[1]
         tr = Vector[]
         for t in t
             tr = push!(tr, t[1:end-1, 2])
@@ -240,7 +244,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=2, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[2][1:end-1, :]
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[1][1:end-1, :]
 
 
 """
@@ -266,7 +270,7 @@ end
 
 TBW
 """
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn=sum)
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn)
     traces = Matrix[]
     for o in onstates
         push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
@@ -275,11 +279,11 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{
 end
 
 """
-    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
+    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
 
 TBW
 """
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn=sum)
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
     n = length(tracelog)
     trace = Matrix(undef, 0, 4)
     state = tracelog[1][2]
@@ -303,7 +307,7 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
     return trace
 end
 
-function make_trace_spatial(trace::Vector{T}, as, d_background) where T <: Array
+function make_trace_spatial(trace::Vector{T}, as, d_background) where {T<:Array}
     spatialtrace = Matrix[]
     for t in trace
         push!(spatialtrace, make_trace_spatial(t, as, d_background))
@@ -312,7 +316,7 @@ function make_trace_spatial(trace::Vector{T}, as, d_background) where T <: Array
 end
 
 function make_trace_spatial(trace::Matrix, as, d_background)
-    make_trace_spatial(trace[:,2], as, d_background)
+    make_trace_spatial(trace[:, 2], as, d_background)
 end
 
 function make_trace_spatial(trace::Vector{Float64}, as, d_background)
@@ -332,6 +336,10 @@ function make_trace_spatial(trace::Vector{Float64}, as, d_background)
     tracematrix
 end
 
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn, as)
+    trace = make_trace(tracelog, G, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
+    make_trace_spatial(trace, as, probfn(par, 0))
+end
 """
     intensity(state, G, R, S, d)
 

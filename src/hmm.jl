@@ -401,10 +401,14 @@ variance = sum of variances of background and reporters_per_state
 function prob_Gaussian(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = Normal(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2))
+        d[i] = prob_Gaussian(par, reporters_per_state[i])
     end
     d
 end
+function prob_Gaussian(par, reporters)
+    Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
+end
+
 """
     prob_GaussianMixture(par,reporters_per_state,N)
 
@@ -414,11 +418,13 @@ return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight par
 function prob_GaussianMixture(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
-    end
+        d[i] =   prob_GaussianMixture(par, reporters_per_state[i])
+       end
     d
 end
-
+function prob_GaussianMixture(par, reporters)
+    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
+end
 
 """
     prob_GaussianMixture_6(par, reporters_per_state, N)
@@ -428,11 +434,13 @@ Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
 function prob_GaussianMixture_6(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = MixtureModel(Normal, [(par[1] + reporters_per_state[i] * par[3], sqrt(par[2]^2 + reporters_per_state[i] * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+        d[i] = prob_GaussianMixture_6(par, reporters_per_state[i])
     end
     d
 end
-
+function prob_GaussianMixture_6(par, reporters)
+    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+end
 
 """
 kolmogorov_forward(Q::Matrix,interval)
