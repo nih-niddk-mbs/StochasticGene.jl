@@ -131,7 +131,6 @@ function ll_hmm_spatial(r, p, Ns, Np, components::StochasticGene.TRGComponents, 
     ap = make_aposition(p, Np)
     a, p0 = StochasticGene.make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, Ns, Np)
-    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
