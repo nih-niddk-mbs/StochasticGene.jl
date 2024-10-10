@@ -1470,6 +1470,19 @@ function logsumexp(v::Array)
         return w .+ log(sum(exp.(v .- w)))
     end
 end
+"""
+    kronecker_delta(i, j)
+
+Computes the Kronecker delta of two integers.
+
+# Arguments
+- `i`: The first integer.
+- `j`: The second integer.
+
+# Returns
+- `Int`: Returns 1 if `i` equals `j`, otherwise returns 0.
+"""
+kronecker_delta(i, j) = i == j ? 1 : 0
 
 """
     mean_elongationtime(r, model)

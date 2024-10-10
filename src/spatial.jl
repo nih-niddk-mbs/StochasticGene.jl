@@ -69,68 +69,40 @@ function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, N
     set_b_spatial(trace, d, Ns, Np)
 end
 function set_b_spatial_v(trace, d, Ns, Np)
-    b = Ones(Ns * Np, length(trace))
+    b = ones(Ns, Np, length(trace))
     t = 1
     for obs in eachcol(trace)
-        i = 1
         for j in 1:Ns
             for k in 1:Np
                 for l in eachindex(obs)
-                    b[i, t] *= pdf(d[j, k, l], obs[l])
+                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
                 end
             end
-            i += 1
         end
         t += 1
     end
     return b
 end
-"""
-    prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
 
-Generates a 3D array of Normal distributions based on the given parameters and reporters per state.
-
-# Arguments
-- `par`: Parameters for the Gaussian distribution.
-- `reporters_per_state`: Number of reporters per state.
-- `Ns`: Number of states.
-- `Np`: Number of positions.
-- `f::Function`: Function to use for Kronecker delta (default is `kronecker_delta`).
-
-# Returns
-- `Array{Distribution{Univariate,Continuous}}`: A 3D array of Normal distributions.
-"""
-function prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
-    d = Array{Distribution{Univariate,Continuous}}(undef, Ns, Np, Np)
-    for j in 1:Ns
-        for k in 1:Np
-            for l in 1:Np
-                σ = sqrt(par[2]^2 + reporters_per_state[j] * par[4]^2 * f(k, l))
-                d[j, k, l] = Normal(par[1] + reporters_per_state[j] * par[3] * f(k, l), σ)
-            end
-        end
-    end
-    return d
-end
 
 function forward_spatial(as, ap, b, p0, Ns, Np, T)
-    α = zeros(N, T)
+    α = zeros(Ns, Np, T)
     C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / sum(α[:, 1])
-    α[:, 1] *= C[1]
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
     for t in 2:T
-        for i in 1:Ns
-            for j in 1:Ns
-                for k in 1:Np
-                    for l in 1:Np
-                        α[j, t] += α[i, t-1] * as[i, j] * ap[k, l] * b[j, t]
+        for l in 1:Np
+            for k in 1:Ns
+                for j in 1:Np
+                    for i in 1:Ns
+                        α[i, j, t] += α[k, l, t-1] * as[k, i] * ap[l, j] * b[i, j, t]
                     end
                 end
             end
         end
-        C[t] = 1 / sum(α[:, t])
-        α[:, t] *= C[t]
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
     end
     return α, C
 end
@@ -140,11 +112,11 @@ function make_aposition(param, Np)
     d = zeros(Np, Np)
     for i in 1:Np
         for j in 1:Np
-            as[i, j] = exp(-distance(i, j, div(Np,2))^2 / (2 * param^2))
-            d[i,j] = distance(i, j, div(Np,2))
+            as[i, j] = exp(-distance(i, j, div(Np, 2))^2 / (2 * param^2))
+            d[i, j] = distance(i, j, div(Np, 2))
         end
     end
-    as ./ sum(as, dims = 2)
+    as ./ sum(as, dims=2)
 end
 
 function distance(i, j, Np)
@@ -152,43 +124,40 @@ function distance(i, j, Np)
     yi = div(i - 1, Np)
     xj = rem(j - 1, Np)
     yj = div(j - 1, Np)
-    return sqrt((xi-xj)^2 + (yi-yj)^2)
+    return sqrt((xi - xj)^2 + (yi - yj)^2)
 end
 
-function speedtest1(M, n)
-    M^n
-end
-
-function speedtest2(M, n)
-    m = size(M, 1)
-    Mout = Diagonal(ones(m))  # Initialize Mout as an identity matrix
-    for t in 1:n
-        Mtemp = zeros(m, m)  # Temporary matrix to store intermediate results
-        for i in 1:m
-            for j in 1:m
-                for k in 1:m
-                    Mtemp[i, j] += Mout[i, k] * M[k, j]
-                end
-            end
-        end
-        Mout = Mtemp  # Update Mout with the result of the multiplication
-    end
-    return Mout
-end
-
-function ll_hmm_spatial(r, p, Ns, Np, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
-    ap = make_ap(p, Np)
-    a, p0 = StochasticGene.make_ap_spatial(r, interval, components)
+function ll_hmm_spatial(r, p, Ns, Np, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    ap = make_aposition(p, Np)
+    a, p0 = StochasticGene.make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, Ns, Np)
     # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
-        b = set_b_spatial_v(trace, d, Ns, Np)
-        _, C = forward_spatial(a,ap, b, p0, Ns, Np, T)
+        b = set_b_spatial_v(t, d, Ns, Np)
+        _, C = forward_spatial(a, ap, b, p0, Ns, Np, T)
         push!(logpredictions, sum(log.(C)))
     end
     sum(logpredictions), logpredictions
+end
+
+function test_ll_spatial(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Np=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0)
+    Ns = num_rates(transitions, R, S, insertstep)
+    traces = simulator(r, transitions, G, R, S, insertstep, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=sum, ap=make_aposition(1.0, 4))[1]
+    components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, "")
+    reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
+    ll_hmm_spatial(r, p, Ns, Np, components, 4, reporters_per_state, StochasticGene.prob_Gaussian_spatial, interval, ([traces], [], 1.0, 1000)), StochasticGene.ll_hmm(r, Ns, components, 4, reporters_per_state, StochasticGene.prob_Gaussian, StochasticGene.off_states(G, R, S, insertstep), interval, ([traces[1, :]], [], 1.0, 1000))
+
+    # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    # data = StochasticGene.TraceData("tracespatial", "test", interval, (trace, [], weight, nframes))
+    # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    # elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
+    # priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
+    # model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
+    # options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 0., 1.0)
+    # fits, stats, measures = run_mh(data, model, options)
+    # StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
 end
 
 function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70])
@@ -197,6 +166,7 @@ function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 
     components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
     a, p0 = make_ap(r, interval, components)
+    ll_hmm_spatial
     # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     # data = StochasticGene.TraceData("tracespatial", "test", interval, (trace, [], weight, nframes))
     # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
@@ -207,8 +177,6 @@ function test_fit_trace_spatial(; G=2, R=1, S=1, insertstep=1, transitions=([1, 
     # fits, stats, measures = run_mh(data, model, options)
     # StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
 end
-
-
 # components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 #  Qtr = make_mat_TRG(components, r)
 # a, p0 = make_ap(r, interval, components)

@@ -443,6 +443,33 @@ function prob_GaussianMixture_6(par, reporters)
 end
 
 """
+    prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
+
+Generates a 3D array of Normal distributions based on the given parameters and reporters per state.
+
+# Arguments
+- `par`: Parameters for the Gaussian distribution.
+- `reporters_per_state`: Number of reporters per state.
+- `Ns`: Number of states.
+- `Np`: Number of positions.
+- `f::Function`: Function to use for Kronecker delta (default is `kronecker_delta`).
+
+# Returns
+- `Array{Distribution{Univariate,Continuous}}`: A 3D array of Normal distributions.
+"""
+function prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
+    d = Array{Distribution{Univariate,Continuous}}(undef, Ns, Np, Np)
+    for j in 1:Ns
+        for k in 1:Np
+            for l in 1:Np
+                σ = sqrt(par[2]^2 + reporters_per_state[j] * par[4]^2 * f(k, l))
+                d[j, k, l] = Normal(par[1] + reporters_per_state[j] * par[3] * f(k, l), σ)
+            end
+        end
+    end
+    return d
+end
+"""
 kolmogorov_forward(Q::Matrix,interval)
 
 return the solution of the Kolmogorov forward equation 
