@@ -1572,7 +1572,30 @@ function makestring(v)
     return s
 end
 
+"""
+    grid_distance(i, j, Np)
 
+Calculate the Euclidean distance between two points in a grid.
+
+# Arguments
+- `i`: The index of the first point.
+- `j`: The index of the second point.
+- `Np`: The number of points along one dimension of the grid.
+
+# Description
+This function calculates the Euclidean distance between two points `i` and `j` in a grid with `Np` points along one dimension. The points are assumed to be arranged in a 2D grid.
+
+# Returns
+- `Float64`: The Euclidean distance between the two points.
+
+"""
+function distance(i, j, Np)
+    xi = rem(i - 1, Np)
+    yi = div(i - 1, Np)
+    xj = rem(j - 1, Np)
+    yj = div(j - 1, Np)
+    return sqrt((xi - xj)^2 + (yi - yj)^2)
+end
 #
 # function fit_rna_test(root)
 #     gene = "CENPL"

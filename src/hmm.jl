@@ -388,6 +388,43 @@ function set_logb_coupled(trace, params, reporter, N)
 end
 
 """
+    set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+
+Calculates the probability matrix `b` for given trace data using a specified probability function.
+
+# Arguments
+- `trace`: The trace data.
+- `params`: Parameters for the probability function.
+- `reporters_per_state`: Number of reporters per state.
+- `probfn::Function`: The probability function to use.
+- `Ns`: Number of states.
+- `Np`: Number of positions.
+
+# Returns
+- `Matrix`: The probability matrix `b`.
+"""
+function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+    d = probfn(params, reporters_per_state, Ns, Np)
+    set_b_spatial(trace, d, Ns, Np)
+end
+function set_b_spatial_v(trace, d, Ns, Np)
+    b = ones(Ns, Np, length(trace))
+    t = 1
+    for obs in eachcol(trace)
+        for j in 1:Ns
+            for k in 1:Np
+                for l in eachindex(obs)
+                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
+                end
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
+
+"""
     prob_Gaussian(par, reporters_per_state, N)
 
 return Gaussian Distribution 
@@ -604,6 +641,27 @@ function forward_loop(a, b, p0, N, T)
     return α
 end
 
+function forward_spatial(as, ap, b, p0, Ns, Np, T)
+    α = zeros(Ns, Np, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Np
+            for k in 1:Ns
+                for j in 1:Np
+                    for i in 1:Ns
+                        α[i, j, t] += α[k, l, t-1] * as[k, i] * ap[l, j] * b[i, j, t]
+                    end
+                end
+            end
+        end
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
+end
 """
 backward_scaled(a,b)
 

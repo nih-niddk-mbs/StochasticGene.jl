@@ -1129,7 +1129,38 @@ function fix_tracefiles(path::String)
     end
 end
 
+"""
+    read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
 
+Reads trace files from a specified directory that match a given label and extracts data from them.
+
+# Arguments
+- `path::String`: The directory path to search for trace files.
+- `label::String`: The label to match in the filenames.
+- `start::Int`: The starting index for reading the trace data.
+- `stop::Int`: The stopping index for reading the trace data.
+- `col::Int`: The column index to read from each trace file (default is 3).
+
+# Returns
+- `Vector`: A vector of unique traces read from the files.
+"""
+function read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
+    traces = Vector[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            for file in files
+                if occursin(label, file) && ~occursin(".DS_Store", file)
+                    t = read_tracefile_spatial(joinpath(root, file), start, stop, col)
+                    ~isempty(t) && push!(traces, t)
+                end
+            end
+        end
+        set = sum.(traces)
+        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+    end
+end
 
 """
     readrates(infolder::String, label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, ratetype::String="median")

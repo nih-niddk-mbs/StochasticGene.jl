@@ -13,119 +13,121 @@ Computes the Kronecker delta of two integers.
 # Returns
 - `Int`: Returns 1 if `i` equals `j`, otherwise returns 0.
 """
-kronecker_delta(i, j) = i == j ? 1 : 0
+# kronecker_delta(i, j) = i == j ? 1 : 0
 
-"""
-    read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
+# """
+#     read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
 
-Reads trace files from a specified directory that match a given label and extracts data from them.
+# Reads trace files from a specified directory that match a given label and extracts data from them.
 
-# Arguments
-- `path::String`: The directory path to search for trace files.
-- `label::String`: The label to match in the filenames.
-- `start::Int`: The starting index for reading the trace data.
-- `stop::Int`: The stopping index for reading the trace data.
-- `col::Int`: The column index to read from each trace file (default is 3).
+# # Arguments
+# - `path::String`: The directory path to search for trace files.
+# - `label::String`: The label to match in the filenames.
+# - `start::Int`: The starting index for reading the trace data.
+# - `stop::Int`: The stopping index for reading the trace data.
+# - `col::Int`: The column index to read from each trace file (default is 3).
 
-# Returns
-- `Vector`: A vector of unique traces read from the files.
-"""
-function read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
-    traces = Vector[]
-    if isempty(path)
-        return traces
-    else
-        for (root, dirs, files) in walkdir(path)
-            for file in files
-                if occursin(label, file) && ~occursin(".DS_Store", file)
-                    t = read_tracefile_spatial(joinpath(root, file), start, stop, col)
-                    ~isempty(t) && push!(traces, t)
-                end
-            end
-        end
-        set = sum.(traces)
-        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
-    end
-end
+# # Returns
+# - `Vector`: A vector of unique traces read from the files.
+# """
+# function read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
+#     traces = Vector[]
+#     if isempty(path)
+#         return traces
+#     else
+#         for (root, dirs, files) in walkdir(path)
+#             for file in files
+#                 if occursin(label, file) && ~occursin(".DS_Store", file)
+#                     t = read_tracefile_spatial(joinpath(root, file), start, stop, col)
+#                     ~isempty(t) && push!(traces, t)
+#                 end
+#             end
+#         end
+#         set = sum.(traces)
+#         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+#     end
+# end
 
-"""
-    set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+# """
+#     set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
 
-Calculates the probability matrix `b` for given trace data using a specified probability function.
+# Calculates the probability matrix `b` for given trace data using a specified probability function.
 
-# Arguments
-- `trace`: The trace data.
-- `params`: Parameters for the probability function.
-- `reporters_per_state`: Number of reporters per state.
-- `probfn::Function`: The probability function to use.
-- `Ns`: Number of states.
-- `Np`: Number of positions.
+# # Arguments
+# - `trace`: The trace data.
+# - `params`: Parameters for the probability function.
+# - `reporters_per_state`: Number of reporters per state.
+# - `probfn::Function`: The probability function to use.
+# - `Ns`: Number of states.
+# - `Np`: Number of positions.
 
-# Returns
-- `Matrix`: The probability matrix `b`.
-"""
-function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
-    d = probfn(params, reporters_per_state, Ns, Np)
-    set_b_spatial(trace, d, Ns, Np)
-end
-function set_b_spatial_v(trace, d, Ns, Np)
-    b = ones(Ns, Np, length(trace))
-    t = 1
-    for obs in eachcol(trace)
-        for j in 1:Ns
-            for k in 1:Np
-                for l in eachindex(obs)
-                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
-                end
-            end
-        end
-        t += 1
-    end
-    return b
-end
+# # Returns
+# - `Matrix`: The probability matrix `b`.
+# """
+# function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+#     d = probfn(params, reporters_per_state, Ns, Np)
+#     set_b_spatial(trace, d, Ns, Np)
+# end
+# function set_b_spatial_v(trace, d, Ns, Np)
+#     b = ones(Ns, Np, length(trace))
+#     t = 1
+#     for obs in eachcol(trace)
+#         for j in 1:Ns
+#             for k in 1:Np
+#                 for l in eachindex(obs)
+#                     b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
+#                 end
+#             end
+#         end
+#         t += 1
+#     end
+#     return b
+# end
 
 
-function forward_spatial(as, ap, b, p0, Ns, Np, T)
-    α = zeros(Ns, Np, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Np
-            for k in 1:Ns
-                for j in 1:Np
-                    for i in 1:Ns
-                        α[i, j, t] += α[k, l, t-1] * as[k, i] * ap[l, j] * b[i, j, t]
-                    end
-                end
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
-    end
-    return α, C
-end
+# function forward_spatial(as, ap, b, p0, Ns, Np, T)
+#     α = zeros(Ns, Np, T)
+#     C = Vector{Float64}(undef, T)
+#     α[:, :, 1] = p0 .* b[:, :, 1]
+#     C[1] = 1 / sum(α[:, :, 1])
+#     α[:, :, 1] *= C[1]
+#     for t in 2:T
+#         for l in 1:Np
+#             for k in 1:Ns
+#                 for j in 1:Np
+#                     for i in 1:Ns
+#                         α[i, j, t] += α[k, l, t-1] * as[k, i] * ap[l, j] * b[i, j, t]
+#                     end
+#                 end
+#             end
+#         end
+#         C[t] = 1 / sum(α[:, :, t])
+#         α[:, :, t] *= C[t]
+#     end
+#     return α, C
+# end
 
-function make_aposition(param, Np)
+# function distance(i, j, Np)
+#     xi = rem(i - 1, Np)
+#     yi = div(i - 1, Np)
+#     xj = rem(j - 1, Np)
+#     yj = div(j - 1, Np)
+#     return sqrt((xi - xj)^2 + (yi - yj)^2)
+# end
+
+function make_a_position(param, Np)
     as = zeros(Np, Np)
     d = zeros(Np, Np)
     for i in 1:Np
         for j in 1:Np
-            as[i, j] = exp(-distance(i, j, div(Np, 2))^2 / (2 * param^2))
-            d[i, j] = distance(i, j, div(Np, 2))
+            as[i, j] = exp(-grid_distance(i, j, div(Np, 2))^2 / (2 * param^2))
+            d[i, j] = grid_distance(i, j, div(Np, 2))
         end
     end
     as ./ sum(as, dims=2)
 end
 
-function distance(i, j, Np)
-    xi = rem(i - 1, Np)
-    yi = div(i - 1, Np)
-    xj = rem(j - 1, Np)
-    yj = div(j - 1, Np)
-    return sqrt((xi - xj)^2 + (yi - yj)^2)
-end
+
 
 function ll_hmm_spatial(r, p, Ns, Np, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
     ap = make_aposition(p, Np)
