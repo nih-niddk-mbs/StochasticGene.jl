@@ -507,6 +507,112 @@ function datapdf(data::RNADwellTimeData)
     return v
 end
 
+"""
+    hyper_distribution(p)
+
+hyper parameter distribution for hierarchical model
+
+# Arguments
+- `p::Vector`: Vector of hyperparameters
+
+#Description
+This function returns a distribution for the hyper parameters of a hierarchical model.
+
+# Returns
+- `Distribution`: Distribution for the hierarchical model.
+"""
+function hyper_distribution(p)
+    distribution_array(p[1], sigmalognormal(p[2]))
+end
+
+"""
+    prepare_rates(param, model)
+
+Extracts and reassembles parameters for use in likelihood calculations.
+
+# Arguments
+- `param`: The model parameters.
+- `model`: The model, which can be of various types (e.g., `GRSMhierarchicalmodel`, `GRSMcoupledmodel`).
+
+# Description
+This function extracts and reassembles parameters from the provided model parameters for use in likelihood calculations. It supports hierarchical models and coupled models. The specific extraction and reassembly process depends on the type of `model` provided.
+
+# Methods
+- `prepare_rates(param, model::GRSMhierarchicalmodel)`: Extracts and reassembles parameters for a hierarchical model.
+- `prepare_rates(param, model::GRSMcoupledmodel)`: Converts MCMC parameters into a form to compute likelihood for a coupled model.
+
+# Returns
+- `Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Int}}`: For hierarchical models, returns reshaped rates, parameters, and hyperparameters.
+- `Tuple{Vector{Float64}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}}`: For coupled models, returns prepared rates and other necessary components for likelihood calculations.
+"""
+function prepare_rates(param, model::GRSMhierarchicalmodel)
+    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    h = Vector{Int}[]
+    for i in model.pool.hyperindices
+        push!(h, i)
+    end
+    r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
+    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
+    return r, p, h
+end
+
+"""
+    prepare_rates(param, model::GRSMcoupledmodel)
+
+convert MCMC params into form to compute likelihood for coupled model
+"""
+function prepare_rates(param, model::GRSMcoupledmodel)
+    rates = get_rates(param, model)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+end
+
+"""
+    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+
+convert MCMC params into form to compute likelihood for coupled model
+
+# Arguments
+- `rates`: The model rates.
+- `sourceStates`: The source states.
+- `transitions`: The transitions.
+- `G::Tuple`: The G steps.
+- `R`: The R steps.
+- `S`: The splicing indicator.
+- `insertstep`: The R step where the reporter is inserted.
+- `n_noise`: The number of noise parameters.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
+
+"""
+function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(G)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(G)
+        if sourceStates[i] > 0
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
+
+
 # Model loglikelihoods
 
 """
@@ -582,110 +688,6 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-"""
-    hyper_distribution(p)
-
-hyper parameter distribution for hierarchical model
-
-# Arguments
-- `p::Vector`: Vector of hyperparameters
-
-#Description
-This function returns a distribution for the hyper parameters of a hierarchical model.
-
-# Returns
-- `Distribution`: Distribution for the hierarchical model.
-"""
-function hyper_distribution(p)
-    distribution_array(p[1], sigmalognormal(p[2]))
-end
-
-"""
-    prepare_rates(param, model)
-
-Extracts and reassembles parameters for use in likelihood calculations.
-
-# Arguments
-- `param`: The model parameters.
-- `model`: The model, which can be of various types (e.g., `GRSMhierarchicalmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function extracts and reassembles parameters from the provided model parameters for use in likelihood calculations. It supports hierarchical models and coupled models. The specific extraction and reassembly process depends on the type of `model` provided.
-
-# Methods
-- `prepare_rates(param, model::GRSMhierarchicalmodel)`: Extracts and reassembles parameters for a hierarchical model.
-- `prepare_rates(param, model::GRSMcoupledmodel)`: Converts MCMC parameters into a form to compute likelihood for a coupled model.
-
-# Returns
-- `Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Int}}`: For hierarchical models, returns reshaped rates, parameters, and hyperparameters.
-- `Tuple{Vector{Float64}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}}`: For coupled models, returns prepared rates and other necessary components for likelihood calculations.
-"""
-function prepare_rates(param, model::GRSMhierarchicalmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    h = Vector{Int}[]
-    for i in model.pool.hyperindices
-        push!(h, i)
-    end
-    r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
-    return r, p, h
-end
-
-"""
-    prepare_rates(param, model::GRSMcoupledmodel)
-
-convert MCMC params into form to compute likelihood for coupled model
-"""
-function prepare_rates(param, model::GRSMcoupledmodel)
-    rates = get_rates(param, model)
-    n_noise = [r.n for r in model.reporter]
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    prepare_rates(rates, sourceStates,model.Gtransitions, model.G, model.R, model.S,model.insertstep, n_noise)
-end
-
-"""
-    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
-
-convert MCMC params into form to compute likelihood for coupled model
-
-# Arguments
-- `rates`: The model rates.
-- `sourceStates`: The source states.
-- `transitions`: The transitions.
-- `G::Tuple`: The G steps.
-- `R`: The R steps.
-- `S`: The splicing indicator.
-- `insertstep`: The R step where the reporter is inserted.
-- `n_noise`: The number of noise parameters.
-
-# Returns
-- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
-
-"""
-function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    j = 1
-    for i in eachindex(G)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(G)
-        if sourceStates[i] > 0
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end])
-    end
-    return r, couplingStrength, noiseparams
-end
 
 
 # Likelihood functions

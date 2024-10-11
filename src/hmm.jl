@@ -492,8 +492,8 @@ return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight par
 function prob_GaussianMixture(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] =   prob_GaussianMixture(par, reporters_per_state[i])
-       end
+        d[i] = prob_GaussianMixture(par, reporters_per_state[i])
+    end
     d
 end
 function prob_GaussianMixture(par, reporters)
@@ -894,11 +894,60 @@ function viterbi_exp(a, b, p0, N, T)
     viterbi(loga, logb, logp0, N, T)
 end
 
-
-function crosscov()
+function covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
+    r, couplingStrength, noiseparams = prepare_rates(r, coupling[2], transitions, G, R, S, insertstep, n_noise)
+    mean_intensity = Vector[]
+    for i in eachindex(params)
+        push!(mean_intensity, mean(probfn[i](noiseparams[i], num_reporters_per_state(G, R, S, insertstep, coupling[1]), components.N)))
+    end
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
 
 
 end
+
+function auto_cov(r, Nstates, components::TRGComponents, n_noise::Int, reporters_per_state, probfn, interval, trace)
+    d = probfn(r[end-n_noise+1:end], reporters_per_state, Nstates)
+
+
+end
+
+
+function crosscov_trace(a, p0, meanintensity1, meanintensity2, lags)
+    crosscov = 0.0
+    for lag in lags
+        al = a^lag
+        for i in eachindex(meanintensity1)
+            crosscov += meanintensity1[i] * meanintensity2[j] * al[i, j] * p0[i]
+        end
+    end
+    crosscov
+end
+
+function mean_trace(p0)
+
+
+end
+
+
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    ps = [r.per_state for r in reporter]
+    pf = [r.probfn for r in reporter]
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 1)
+        b = set_b_coupled(t, noiseparams, ps, pf, nT)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    offstates = [r.offstates for r in reporter]
+    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    sum(logpredictions) + lb, logpredictions
+end
+
+
 """
     predicted_statepath(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, T::Int, interval)
     predicted_statepath(r, tcomponents, reporter, T, interval)
