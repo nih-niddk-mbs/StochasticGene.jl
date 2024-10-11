@@ -1130,7 +1130,7 @@ function fix_tracefiles(path::String)
 end
 
 """
-    read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
+    read_tracefiles_grid(path::String, label::String, start::Int, stop::Int, col=3)
 
 Reads trace files from a specified directory that match a given label and extracts data from them.
 
@@ -1144,7 +1144,7 @@ Reads trace files from a specified directory that match a given label and extrac
 # Returns
 - `Vector`: A vector of unique traces read from the files.
 """
-function read_tracefiles_spatial(path::String, label::String, start::Int, stop::Int, col=3)
+function read_tracefiles_grid(path::String, label::String, start::Int, stop::Int, col=3)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -1152,7 +1152,7 @@ function read_tracefiles_spatial(path::String, label::String, start::Int, stop::
         for (root, dirs, files) in walkdir(path)
             for file in files
                 if occursin(label, file) && ~occursin(".DS_Store", file)
-                    t = read_tracefile_spatial(joinpath(root, file), start, stop, col)
+                    t = read_tracefile_grid(joinpath(root, file), start, stop, col)
                     ~isempty(t) && push!(traces, t)
                 end
             end

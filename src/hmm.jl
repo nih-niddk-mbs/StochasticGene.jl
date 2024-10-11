@@ -216,6 +216,25 @@ end
 
 
 """
+    ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
+function ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    a_grid = make_a_grid(p, Ngrid)
+    a, p0 = StochasticGene.make_ap(r, interval, components)
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, Nstate, Ngrid)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = length(t)
+        b = set_b_grid_v(t, d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions), logpredictions
+end
+
+"""
     make_ap(r, interval, components::TRGComponents)
 
 Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
@@ -268,6 +287,24 @@ function make_logap(r, interval, elementsT, N)
     a, p0 = make_ap(r, interval, elementsT, N)
     log.(max.(a, 0)), log.(max.(p0, 0))
 end
+
+"""
+    make_a_grid(param, Ngrid)
+
+TBW
+"""
+function make_a_grid(param, Ngrid)
+    as = zeros(Ngrid, Ngrid)
+    d = zeros(Ngrid, Ngrid)
+    for i in 1:Ngrid
+        for j in 1:Ngrid
+            as[i, j] = exp(-grid_distance(i, j, div(Ngrid, 2))^2 / (2 * param^2))
+            d[i, j] = grid_distance(i, j, div(Ngrid, 2))
+        end
+    end
+    as ./ sum(as, dims=2)
+end
+
 
 """
     set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
@@ -388,7 +425,7 @@ function set_logb_coupled(trace, params, reporter, N)
 end
 
 """
-    set_b_spatial(trace, params, reporters_per_state, probfn::Function, Ns, Np)
+    set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
 
 Calculates the probability matrix `b` for given trace data using a specified probability function.
 
@@ -397,23 +434,23 @@ Calculates the probability matrix `b` for given trace data using a specified pro
 - `params`: Parameters for the probability function.
 - `reporters_per_state`: Number of reporters per state.
 - `probfn::Function`: The probability function to use.
-- `Ns`: Number of states.
-- `Np`: Number of positions.
+- `Nstate`: Number of states.
+- `Ngrid`: Number of positions.
 
 # Returns
 - `Matrix`: The probability matrix `b`.
 """
-function set_b_spatial_v(trace, params, reporters_per_state, probfn::Function, Ns, Np)
-    d = probfn(params, reporters_per_state, Ns, Np)
-    set_b_spatial(trace, d, Ns, Np)
+function set_b_grid_v(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
+    d = probfn(params, reporters_per_state, Nstate, Ngrid)
+    set_b_grid(trace, d, Nstate, Ngrid)
 end
-function set_b_spatial_v(trace, d, Ns, Np)
-    b = ones(Ns, Np, length(trace))
+function set_b_grid_v(trace, d, Nstate, Ngrid)
+    b = ones(Nstate, Ngrid, length(trace))
     t = 1
     for obs in eachcol(trace)
-        for j in 1:Ns
-            for k in 1:Np
-                for l in eachindex(obs)
+        for j in 1:Nstate
+            for k in 1:Ngrid
+                for l in 1:Ngrid
                     b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
                 end
             end
@@ -480,25 +517,25 @@ function prob_GaussianMixture_6(par, reporters)
 end
 
 """
-    prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
+    prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function=kronecker_delta)
 
 Generates a 3D array of Normal distributions based on the given parameters and reporters per state.
 
 # Arguments
 - `par`: Parameters for the Gaussian distribution.
 - `reporters_per_state`: Number of reporters per state.
-- `Ns`: Number of states.
-- `Np`: Number of positions.
+- `Nstate`: Number of states.
+- `Ngrid`: Number of positions.
 - `f::Function`: Function to use for Kronecker delta (default is `kronecker_delta`).
 
 # Returns
 - `Array{Distribution{Univariate,Continuous}}`: A 3D array of Normal distributions.
 """
-function prob_Gaussian_spatial(par, reporters_per_state, Ns, Np, f::Function=kronecker_delta)
-    d = Array{Distribution{Univariate,Continuous}}(undef, Ns, Np, Np)
-    for j in 1:Ns
-        for k in 1:Np
-            for l in 1:Np
+function prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function=kronecker_delta)
+    d = Array{Distribution{Univariate,Continuous}}(undef, Nstate, Ngrid, Ngrid)
+    for j in 1:Nstate
+        for k in 1:Ngrid
+            for l in 1:Ngrid
                 σ = sqrt(par[2]^2 + reporters_per_state[j] * par[4]^2 * f(k, l))
                 d[j, k, l] = Normal(par[1] + reporters_per_state[j] * par[3] * f(k, l), σ)
             end
@@ -641,18 +678,18 @@ function forward_loop(a, b, p0, N, T)
     return α
 end
 
-function forward_spatial(as, ap, b, p0, Ns, Np, T)
-    α = zeros(Ns, Np, T)
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    α = zeros(Nstate, Ngrid, T)
     C = Vector{Float64}(undef, T)
     α[:, :, 1] = p0 .* b[:, :, 1]
     C[1] = 1 / sum(α[:, :, 1])
     α[:, :, 1] *= C[1]
     for t in 2:T
-        for l in 1:Np
-            for k in 1:Ns
-                for j in 1:Np
-                    for i in 1:Ns
-                        α[i, j, t] += α[k, l, t-1] * as[k, i] * ap[l, j] * b[i, j, t]
+        for l in 1:Ngrid
+            for k in 1:Nstate
+                for j in 1:Ngrid
+                    for i in 1:Nstate
+                        α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
                     end
                 end
             end

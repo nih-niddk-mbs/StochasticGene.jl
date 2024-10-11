@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", ap=nothing, verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -183,10 +183,10 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         end
     end
     if traceinterval > 0.0
-        if isnothing(ap)
+        if isnothing(a_grid)
             push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
         else
-            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, ap))
+            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, a_grid))
         end
         if verbose
             push!(results, tracelog)
@@ -218,10 +218,14 @@ end
 
 TBW
 """
-function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn)[1][1:end-1, 2]
+        if isnothing(a_grid)
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid)[1][1:end-1, 2]
+        else
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid)[1]
+        end
     end
     trace
 end
@@ -307,27 +311,27 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
     return trace
 end
 
-function make_trace_spatial(trace::Vector{T}, ap, d_background) where {T<:Array}
-    spatialtrace = Matrix[]
+function make_trace_grid(trace::Vector{T}, a_grid, d_background) where {T<:Array}
+    gridtrace = Matrix[]
     for t in trace
-        push!(spatialtrace, make_trace_spatial(t, ap, d_background))
+        push!(gridtrace, make_trace_grid(t, a_grid, d_background))
     end
-    spatialtrace
+    gridtrace
 end
 
-function make_trace_spatial(trace::Matrix, ap, d_background)
-    make_trace_spatial(trace[:, 2], ap, d_background)
+function make_trace_grid(trace::Matrix, a_grid, d_background)
+    make_trace_grid(trace[:, 2], a_grid, d_background)
 end
 
-function make_trace_spatial(trace::Vector{Float64}, ap, d_background)
-    Ns = size(ap, 1)
-    tracematrix = Matrix{Float64}(undef, Ns, length(trace))
-    cdf = cumsum(ap, dims=2)
-    position = rand(1:Ns)
+function make_trace_grid(trace::Vector{Float64}, a_grid, d_background)
+    Nstate = size(a_grid, 1)
+    tracematrix = Matrix{Float64}(undef, Nstate, length(trace))
+    cdf = cumsum(a_grid, dims=2)
+    position = rand(1:Nstate)
     for t in eachindex(trace)
         position = searchsortedfirst(cdf[position, :], rand())
         tracematrix[position, t] = trace[t]
-        for p in 1:Ns
+        for p in 1:Nstate
             if p != position
                 tracematrix[p, t] = rand(d_background)
             end
@@ -336,9 +340,9 @@ function make_trace_spatial(trace::Vector{Float64}, ap, d_background)
     tracematrix
 end
 
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn, ap)
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn, a_grid)
     trace = make_trace(tracelog, G, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
-    make_trace_spatial(trace, ap, probfn(par, 0))
+    make_trace_grid(trace, a_grid, probfn(par, 0))
 end
 """
     intensity(state, G, R, S, d)

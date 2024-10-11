@@ -55,7 +55,7 @@ julia> transitions = ([1,2],[2,1],[2,3],[3,1]);
 
 julia> onstates = [2,3]
 
-julia> OFFsim,ONsim,mRNAsim,OFFchem,ONchem,mRNAchem = test(r,transitions,G,20,1,onstates,collect(1.:200));
+julia> OFFsim,ONstateim,mRNAsim,OFFchem,ONchem,mRNAchem = test(r,transitions,G,20,1,onstates,collect(1.:200));
 
 
 """
