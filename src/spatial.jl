@@ -143,14 +143,28 @@ Computes the Kronecker delta of two integers.
 #     sum(logpredictions), logpredictions
 # end
 
-function test_ll_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0,ntrials=10)
+function test_ll_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0, ntrials=10)
     Nstate = num_rates(transitions, R, S, insertstep)
+    a_grid = StochasticGene.make_a_grid(p, Ngrid)
     # traces = simulator(r, transitions, G, R, S, insertstep, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=sum, a_grid=StochasticGene.make_a_grid(1.0, 4))[1]
-    traces=StochasticGene.simulate_trace_vector(r,transitions,G,R,S,insertstep,interval,totaltime,ntrials,a_grid=a_grid)
+    traces = StochasticGene.simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, a_grid=a_grid)
+    T = length(traces[1])
     components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, "")
     reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
-    StochasticGene.ll_hmm_grid(r, p, Nstate, Ngrid, components, 4, reporters_per_state, StochasticGene.prob_Gaussian_grid, interval, (traces, [], 0.0, 1000)), StochasticGene.ll_hmm(r, Nstate, components, 4, reporters_per_state, StochasticGene.prob_Gaussian, StochasticGene.off_states(G, R, S, insertstep), interval, (traces, [], 0.0, 1000))
-
+    a, p0 = StochasticGene.make_ap(r, 1.0, components)
+    params = r[end-3:end]
+    d = StochasticGene.prob_Gaussian(params, reporters_per_state, Nstate)
+    bd = StochasticGene.set_b(traces[1], d, Nstate)
+    b = StochasticGene.set_b(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian, Nstate)
+    _, C = StochasticGene.forward(a, b, p0, Nstate, T)
+    d_grid = StochasticGene.prob_Gaussian_grid(params, reporters_per_state, Nstate, Ngrid)
+    b_gridd = StochasticGene.set_b_grid_v(traces[1], d_grid, Nstate, Ngrid)
+    b_grid = StochasticGene.set_b_grid_v(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian_grid, Nstate, Ngrid)
+    _, C_grid = StochasticGene.forward_grid(a, a_grid, b_grid, p0, Nstate, Ngrid, T)
+    # return b, bd, b_grid, b_gridd, sum(log.(C)), sum(log.(C_grid))
+    ll =StochasticGene.ll_hmm(r, Nstate, components, 4, reporters_per_state, StochasticGene.prob_Gaussian, StochasticGene.off_states(G, R, S, insertstep), interval, (traces, [], 0.0, 1000))
+    llg=StochasticGene.ll_hmm_grid(r, p, Nstate, Ngrid, components, 4, reporters_per_state, StochasticGene.prob_Gaussian_grid, interval, (traces, [], 0.0, 1000))
+      ll, llg 
     # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
     # data = StochasticGene.TraceData("tracegrid", "test", interval, (trace, [], weight, nframes))
     # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())

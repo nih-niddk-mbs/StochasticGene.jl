@@ -442,7 +442,7 @@ Calculates the probability matrix `b` for given trace data using a specified pro
 """
 function set_b_grid_v(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
     d = probfn(params, reporters_per_state, Nstate, Ngrid)
-    set_b_grid(trace, d, Nstate, Ngrid)
+    set_b_grid_v(trace, d, Nstate, Ngrid)
 end
 function set_b_grid_v(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, length(trace))
@@ -895,6 +895,10 @@ function viterbi_exp(a, b, p0, N, T)
 end
 
 
+function crosscov()
+
+
+end
 """
     predicted_statepath(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, T::Int, interval)
     predicted_statepath(r, tcomponents, reporter, T, interval)
