@@ -311,7 +311,7 @@ This function returns a TcoupledComponents structure for coupled models, which i
 - `insertstep`: Insert step.
 - `splicetype`: Splice type (default is an empty string).
 - `unit_model`: Unit model.
-- `sources`: Sources.
+- `sources`: Source units for each unit.
 - `source_state`: Source state.
 - `target_transition`: Target transition.
 

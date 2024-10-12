@@ -339,9 +339,6 @@ function set_b(trace, d, N)
     return b
 end
 
-
-
-
 """
     set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
 
@@ -894,57 +891,44 @@ function viterbi_exp(a, b, p0, N, T)
     viterbi(loga, logb, logp0, N, T)
 end
 
-function covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
-    r, couplingStrength, noiseparams = prepare_rates(r, coupling[2], transitions, G, R, S, insertstep, n_noise)
+    r, couplingStrength, noiseparams = prepare_rates(rin, coupling[2], transitions, G, R, S, insertstep, [4,4])
     mean_intensity = Vector[]
     for i in eachindex(params)
-        push!(mean_intensity, mean(probfn[i](noiseparams[i], num_reporters_per_state(G, R, S, insertstep, coupling[1]), components.N)))
+        push!(mean_intensity, mean.(probfn(noiseparams[i], num_reporters_per_state(G, R, S, insertstep, coupling[1]), components.N)))
     end
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-
-
+    m1 = mean_hmm(p0, mean_intensity[1])
+    m2 = mean_hmm(p0, mean_intensity[2])
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) - m1 .* m2
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) - m1 .* m2
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) - m1.^2
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) - m2.^2
 end
 
-function auto_cov(r, Nstates, components::TRGComponents, n_noise::Int, reporters_per_state, probfn, interval, trace)
-    d = probfn(r[end-n_noise+1:end], reporters_per_state, Nstates)
-
-
+function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+    components = make_components_TRG(transitions, G, R, S, insertstep, "")
+    mean_intensity = mean.(probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT))
+    a, p0 = make_ap(r, interval, components)
+    crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity).^2
 end
 
-
-function crosscov_trace(a, p0, meanintensity1, meanintensity2, lags)
-    crosscov = 0.0
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    cc = zeros(length(lags))
     for lag in lags
         al = a^lag
         for i in eachindex(meanintensity1)
-            crosscov += meanintensity1[i] * meanintensity2[j] * al[i, j] * p0[i]
+            for j in eachindex(meanintensity2)
+                cc[lag] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
+            end
         end
     end
-    crosscov
+    cc
 end
 
-function mean_trace(p0)
-
-
-end
-
-
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
-    nT = components.N
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    ps = [r.per_state for r in reporter]
-    pf = [r.probfn for r in reporter]
-    logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
-        T = size(t, 1)
-        b = set_b_coupled(t, noiseparams, ps, pf, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    offstates = [r.offstates for r in reporter]
-    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
-    sum(logpredictions) + lb, logpredictions
+function mean_hmm(p0, meanintensity)
+    sum(p0 .* meanintensity)
 end
 
 
