@@ -372,6 +372,27 @@ struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,M
     reporter::ReporterType
 end
 
+struct GRSMspatialmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
+    transitionrates::TransitionRateType
+    noiseparams::NoiseParamType
+    gridparams::GridParamType
+    coupling::CouplingType
+    Gtransitions::Tuple
+    G::Tuple
+    R::Tuple
+    S::Tuple
+    insertstep::Tuple
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+end
 """
     print_model(model::AbstractModel)
 
