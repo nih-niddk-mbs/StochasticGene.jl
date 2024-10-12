@@ -893,31 +893,38 @@ end
 
 function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
-    r, couplingStrength, noiseparams = prepare_rates(rin, coupling[2], transitions, G, R, S, insertstep, [4,4])
+    sourceStates = [c.sourceState for c in components.modelcomponents]
+    r, couplingStrength, noiseparams = prepare_rates(rin, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
-    for i in eachindex(params)
-        push!(mean_intensity, mean.(probfn(noiseparams[i], num_reporters_per_state(G, R, S, insertstep, coupling[1]), components.N)))
+    println(noiseparams)
+    println(num_per_state)
+    println(coupling[1])
+    println(components.N)
+    for i in eachindex(noiseparams)
+        push!(mean_intensity, mean.(probfn(noiseparams[i], num_per_state[i], components.N)))
     end
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) - m1 .* m2
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) - m1 .* m2
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) - m1.^2
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) - m2.^2
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) .- m1 .* m2
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2
+    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end])
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
     components = make_components_TRG(transitions, G, R, S, insertstep, "")
     mean_intensity = mean.(probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT))
     a, p0 = make_ap(r, interval, components)
-    crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity).^2
+    crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity) .^ 2
 end
 
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
     for lag in lags
-        al = a^lag
+        al = a^(lag-1)
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
                 cc[lag] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
