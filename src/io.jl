@@ -44,7 +44,7 @@ function decompose_model(model::String)
     d = digits(m)
     l = length(d)
     if l > 4
-        reshaped_arr = reverse(reshape(d,4,div(l,4)))
+        reshaped_arr = reverse(reshape(d, 4, div(l, 4)))
         return [Tuple(reshaped_arr[i, :]) for i in 1:4]
     else
         return reverse(d)
@@ -496,7 +496,7 @@ end
 function rlabels(model::GRSMcoupledmodel)
     labels = Array{String}(undef, 1, 0)
     for i in eachindex(model.G)
-        labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i],i))
+        labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
     end
     for i in 1:model.coupling
         labels = hcat(labels, ["Coupling_$i"])
@@ -646,7 +646,7 @@ function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
     #     m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
     # end
     m = create_modelstring(G::Tuple, R, S, insertstep)
-    filename(label,gene,m,nalleles)
+    filename(label, gene, m, nalleles)
 end
 
 
@@ -824,7 +824,8 @@ TBW
 """
 function write_info(file::String, model)
     f = open(file, "w")
-    writedlm(f, rlabels(model), ',')
+    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
+    writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
     close(f)

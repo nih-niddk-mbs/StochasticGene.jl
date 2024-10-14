@@ -108,8 +108,7 @@ L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 """
 function ll_background(a, p0, offstates, poff, nframes)
     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-    l = -(1 - poff) * log(1 - p) - poff * log(p)
-    l
+    -(1 - poff) * log(1 - p) - poff * log(p)
 end
 
 p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
