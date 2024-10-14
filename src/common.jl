@@ -372,11 +372,11 @@ struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,M
     reporter::ReporterType
 end
 
-struct GRSMspatialmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    transitionrates::TransitionRateType
-    noiseparams::NoiseParamType
-    gridparams::GridParamType
+    transitionrates::UnitRange
+    noiseparams::UnitRange
+    gridparams::UnitRange
     coupling::CouplingType
     Gtransitions::Tuple
     G::Tuple
@@ -674,6 +674,12 @@ end
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
+
+
+function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_grid(r, pgrid, model.Nstate, model.Ngrid, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
