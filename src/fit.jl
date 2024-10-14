@@ -69,11 +69,11 @@ then G = (2,3).
     3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
     5. Int indicating number of coupling parameters
-- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracejoint", "tracerna"
+- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
+- `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
@@ -227,32 +227,45 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
     elseif occursin("trace", datatype)
         if datatype == "tracejoint"
-            return load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+            load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+        elseif datatype == "tracegrid"
+            load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
         else
-            if typeof(datapath) <: String
-                trace = read_tracefiles(datapath, datacond, traceinfo)
-                background = Vector[]
-            else
-                trace = read_tracefiles(datapath[1], datacond, traceinfo)
-                background = read_tracefiles(datapath[2], datacond, traceinfo)
-            end
-            (length(trace) == 0) && throw("No traces")
-            println(length(trace))
-            println(datapath)
-            println(datacond)
-            println(traceinfo)
-            # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
-            weight = 1 - traceinfo[4]
-            nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-            if datatype == "trace"
-                return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
-            elseif datatype == "tracerna"
-                len, h = read_rna(gene, datacond, datapath[3])
-                return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
-            end
+            load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
         end
     else
         throw("$datatype not included")
+    end
+end
+
+function load_data_grid(datapath, label, gene, datacond, traceinfo)
+    trace = read_tracefiles_grid(datapath, datacond, start, stop)
+    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0., nframes))
+end
+
+
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
+    if typeof(datapath) <: String
+        trace = read_tracefiles(datapath, datacond, traceinfo)
+        background = Vector[]
+    else
+        trace = read_tracefiles(datapath[1], datacond, traceinfo)
+        background = read_tracefiles(datapath[2], datacond, traceinfo)
+    end
+    (length(trace) == 0) && throw("No traces")
+    println(length(trace))
+    println(datapath)
+    println(datacond)
+    println(traceinfo)
+    # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
+    weight = 1 - traceinfo[4]
+    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    if datatype == "trace"
+        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
+    elseif datatype == "tracerna"
+        len, h = read_rna(gene, datacond, datapath[3])
+        return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
     end
 end
 
