@@ -88,10 +88,10 @@ end
 
 TBW
 """
-function ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
-    a_grid = make_a_grid(p, Ngrid)
+function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+    a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = StochasticGene.make_ap(r, interval, components)
-    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, Nstate, Ngrid)
+    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)

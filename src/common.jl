@@ -374,15 +374,15 @@ end
 
 struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    transitionrates::UnitRange
-    noiseparams::UnitRange
-    gridparams::UnitRange
+    raterange::UnitRange
+    noiserange::UnitRange
+    gridrange::UnitRange
     coupling::CouplingType
     Gtransitions::Tuple
-    G::Tuple
-    R::Tuple
-    S::Tuple
-    insertstep::Tuple
+    G::Int
+    R::Int
+    S::Int
+    insertstep::Int
     nalleles::Int
     splicetype::String
     rateprior::PriorType
@@ -633,7 +633,10 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
     return r, couplingStrength, noiseparams
 end
 
-
+function prepare_rates(param, model::GRSMgridmodel)
+    r = get_rates(param, model)
+    r[model.raterange], r[model.noiserange], r[model.gridrange]
+end
 # Model loglikelihoods
 
 """
@@ -668,7 +671,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    ll_hmm_2(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
@@ -676,10 +679,9 @@ function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-
 function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-    r, couplingStrength, noiseparams = prepare_rates(param, model)
-    ll_hmm_grid(r, pgrid, model.Nstate, model.Ngrid, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid(r, noiseparams, pgrid, model.Nstate, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
