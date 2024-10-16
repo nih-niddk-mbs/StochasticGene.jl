@@ -74,6 +74,7 @@ export
     prob_Gaussian,
     prob_GaussianMixture,
     prob_GaussianMixture_6,
+    prob_Gaussian_grid,
     make_dataframes,
     write_dataframes,
     write_dataframes_only,

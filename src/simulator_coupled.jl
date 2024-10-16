@@ -215,6 +215,7 @@ function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10
     isdir(datafolder) || mkdir(datafolder)
     trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, onstates=onstates, reporterfn=reporterfn, a_grid=a_grid)
     for i in eachindex(trace)
+        l = length(trace[i])
         if isnothing(a_grid)
             writedlm(joinpath(datafolder, "testtrace$i.trk"), [zeros(l) zeros(l) trace[i] collect(1:l)])
         else

@@ -433,6 +433,62 @@ function assemble_burst_sizes(folder, files, label, cond, model)
 end
 
 """
+    rlabels(model::String)
+
+TBW
+"""
+function rlabels(model::String)
+    G = parse(Int, model)
+    n = G - 1
+    Grates = Array{String,2}(undef, 1, 2 * n)
+    for i = 0:n-1
+        Grates[1, 2*i+1] = "Rate$i$(i+1)"
+        Grates[1, 2*i+2] = "Rate$(i+1)$i"
+    end
+    return [Grates "Eject" "Decay"]
+end
+
+"""
+    rlabels(model::String, conds::Vector)
+
+TBW
+"""
+function rlabels(model::String, conds::Vector)
+    nsets = length(conds)
+    r = rlabels(model)
+    if nsets == 1
+        return r
+    else
+        rates = r .* conds[1]
+        for i = 2:nsets
+            rates = [rates r .* conds[i]]
+        end
+        return rates
+    end
+end
+
+function rlabels(labels::Matrix, conds::Vector)
+    nsets = length(conds)
+    r = labels
+    if nsets == 1
+        return r
+    else
+        rates = r .* conds[1]
+        for i = 2:nsets
+            rates = [rates r .* reshape(conds[i], 1, length(conds))]
+        end
+        return rates
+    end
+end
+
+rlabels(model::String, conds, fittedparams) = rlabels(model, conds)[1:1, fittedparams]
+
+rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fittedparams]
+
+ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
+
+
+"""
     rlabels(model::AbstractGRSMmodel)
 
 TBW
@@ -515,8 +571,6 @@ function rlabels(model::GRSMhierarchicalmodel)
     end
     reshape(labels, 1, :)
 end
-
-
 """
     rlabels(model::AbstractGMmodel)
 
@@ -544,51 +598,9 @@ function rlabels(model::AbstractGMmodel)
     reshape(labels, 1, :)
 end
 
-function rlabels(model::String)
-    G = parse(Int, model)
-    n = G - 1
-    Grates = Array{String,2}(undef, 1, 2 * n)
-    for i = 0:n-1
-        Grates[1, 2*i+1] = "Rate$i$(i+1)"
-        Grates[1, 2*i+2] = "Rate$(i+1)$i"
-    end
-    return [Grates "Eject" "Decay"]
+function rlabels(model::GRSMgridmodel)
+    hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter),"GridProb")
 end
-
-function rlabels(model::String, conds::Vector)
-    nsets = length(conds)
-    r = rlabels(model)
-    if nsets == 1
-        return r
-    else
-        rates = r .* conds[1]
-        for i = 2:nsets
-            rates = [rates r .* conds[i]]
-        end
-        return rates
-    end
-end
-
-function rlabels(labels::Matrix, conds::Vector)
-    nsets = length(conds)
-    r = labels
-    if nsets == 1
-        return r
-    else
-        rates = r .* conds[1]
-        for i = 2:nsets
-            rates = [rates r .* reshape(conds[i], 1, length(conds))]
-        end
-        return rates
-    end
-end
-
-rlabels(model::String, conds, fittedparams) = rlabels(model, conds)[1:1, fittedparams]
-
-
-rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fittedparams]
-
-ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
 """
     statlabels(model::String, conds, fittedparams)
