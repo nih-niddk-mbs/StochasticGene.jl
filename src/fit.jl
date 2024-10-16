@@ -482,18 +482,7 @@ function set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nin
     r
 end
 
-"""
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
 
-TBW
-"""
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
-    else
-        return fittedparam
-    end
-end
 
 function num_noiseparams(datatype, noisepriors)
     if occursin("trace", lowercase(datatype))
@@ -575,6 +564,19 @@ function reset_nalleles(nalleles, coupling)
         println("Setting nalleles to 1")
     end
     return nalleles
+end
+
+"""
+    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+
+TBW
+"""
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if isempty(fittedparam)
+        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
+    else
+        return fittedparam
+    end
 end
 
 """
