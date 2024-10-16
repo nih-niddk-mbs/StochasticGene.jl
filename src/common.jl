@@ -377,6 +377,7 @@ struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,Meth
     raterange::UnitRange
     noiserange::UnitRange
     gridrange::UnitRange
+    Ngrid::Int
     coupling::CouplingType
     Gtransitions::Tuple
     G::Int
@@ -681,7 +682,7 @@ end
 
 function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
     r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid(r, noiseparams, pgrid, model.Nstate, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    ll_hmm_grid(r, noiseparams, pgrid, model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
@@ -716,8 +717,6 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     end
     return llg + sum(lhp), vcat(llgp, lhp)
 end
-
-
 
 # Likelihood functions
 

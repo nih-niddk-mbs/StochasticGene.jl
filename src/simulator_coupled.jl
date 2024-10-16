@@ -192,25 +192,34 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
             push!(results, tracelog)
         end
     end
-
     return results
-
 end
-
-
 
 """
     simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
 
 create simulated trace files in datafolder
 """
-function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
-    ~ispath(datafolder) && mkpath(datafolder)
-    for i in 1:ntrials
-        trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=reporterfn)[1][1:end-1, 2]
-        l = length(trace)
-        datapath = joinpath(datafolder, "testtrace$i.trk")
-        writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
+# function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
+#     ~ispath(datafolder) && mkpath(datafolder)
+#     for i in 1:ntrials
+#         trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=reporterfn)[1][1:end-1, 2]
+#         l = length(trace)
+#         datapath = joinpath(datafolder, "testtrace$i.trk")
+#         writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
+#     end
+# end
+
+# function simulate_trace_data(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing)
+function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 40, 20, 200, 10], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
+    isdir(datafolder) || mkdir(datafolder)
+    trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, onstates=onstates, reporterfn=reporterfn, a_grid=a_grid)
+    for i in eachindex(trace)
+        if isnothing(a_grid)
+            writedlm(joinpath(datafolder, "testtrace$i.trk"), [zeros(l) zeros(l) trace[i] collect(1:l)])
+        else
+            writedlm(joinpath(datafolder, "testtrace$i.trk"), trace[i][:, 1:end-1])
+        end
     end
 end
 """
@@ -333,7 +342,7 @@ function make_trace_grid(trace::Vector{Float64}, a_grid, d_background)
         tracematrix[position, t] = trace[t]
         for p in 1:Nstate
             if p != position
-                tracematrix[p, t] = rand(d_background)
+                tracematrix[p, t] = max(rand(d_background),0.)
             end
         end
     end

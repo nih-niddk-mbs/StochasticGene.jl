@@ -126,8 +126,6 @@ function ll_background_coupled(a, p0, offstates, weight::Vector, nframes)
     l
 end
 
-
-
 """
     ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
 
@@ -197,9 +195,6 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TR
     end
     sum(logpredictions) + lb, logpredictions
 end
-
-
-
 
 ### Obsolete
 

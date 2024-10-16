@@ -999,7 +999,7 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
             for file in files
                 if occursin(label, file) && ~occursin(".DS_Store", file)
                     t = read_tracefile(joinpath(root, file), start, stop, col)
-                    ~isempty(t) && push!(traces, t)
+                    !isempty(t) && push!(traces, t)
                 end
             end
         end
@@ -1021,6 +1021,91 @@ function read_tracefiles(path, label, traceinfo::Tuple, col=3)
     stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
     read_tracefiles(path, label, start, stop, col)
 end
+
+
+"""
+    read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+
+Args: same as read_tracefile with
+label: vector of strings for traces to be fit simultaneously
+
+read in joint trace files
+"""
+function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
+    l = length(label)
+    traces = Matrix[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            tset = Vector{Vector}(undef, l)
+            files = sort(readdir(path))
+            for file in files
+                complete = true
+                for i in eachindex(label)
+                    if occursin(label[i], file)
+                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
+                    end
+                    complete &= isassigned(tset, i)
+                end
+                if complete
+                    push!(traces, hcat(tset...))
+                    tset = Vector{Vector}(undef, length(label))
+                end
+            end
+        end
+        return traces
+    end
+end
+"""
+    read_tracefiles_grid(path::String, label::String, start::Int, stop::Int, col=3)
+
+Reads trace files from a specified directory that match a given label and extracts data from them.
+
+# Arguments
+- `path::String`: The directory path to search for trace files.
+- `label::String`: The label to match in the filenames.
+- `start::Int`: The starting index for reading the trace data.
+- `stop::Int`: The stopping index for reading the trace data.
+- `col::Int`: The column index to read from each trace file (default is 3).
+
+# Returns
+- `Vector`: A vector of unique traces read from the files.
+"""
+
+function read_tracefiles_grid(path, label, traceinfo)
+    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
+    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    read_tracefiles_grid(path, label, start, stop)
+end
+
+function read_tracefiles_grid(path::String, label::String, start::Int, stop::Int)
+    traces = Matrix[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            for file in files
+                if occursin(label, file) && ~occursin(".DS_Store", file)
+                    t = read_tracefile_grid(joinpath(root, file), start, stop)
+                    !isempty(t) && push!(traces, t)
+                end
+            end
+        end
+        set = sum.(traces)
+        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+    end
+end
+
+function read_tracefile_grid(path, start, stop)
+    t = readdlm(path)
+    if stop < 0
+        (start <= length(t)) && return t[:,start:end]
+    else
+        (stop <= length(t)) && return t[:,start:stop]
+    end
+end
+
 
 
 
@@ -1081,42 +1166,6 @@ end
 # end
 
 """
-    read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-
-Args: same as read_tracefile with
-label: vector of strings for traces to be fit simultaneously
-
-read in joint trace files
-"""
-function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
-    l = length(label)
-    traces = Matrix[]
-    if isempty(path)
-        return traces
-    else
-        for (root, dirs, files) in walkdir(path)
-            tset = Vector{Vector}(undef, l)
-            files = sort(readdir(path))
-            for file in files
-                complete = true
-                for i in eachindex(label)
-                    if occursin(label[i], file)
-                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
-                    end
-                    complete &= isassigned(tset, i)
-                end
-                if complete
-                    push!(traces, hcat(tset...))
-                    tset = Vector{Vector}(undef, length(label))
-                end
-            end
-        end
-        return traces
-    end
-end
-
-
-"""
     fix_tracefiles(path::String)
 
 reorder trace files into standard form
@@ -1128,39 +1177,6 @@ function fix_tracefiles(path::String)
             t = readdlm(target, header=true)
             writedlm(target, [t[1] t[1][:, 2]])
         end
-    end
-end
-
-"""
-    read_tracefiles_grid(path::String, label::String, start::Int, stop::Int, col=3)
-
-Reads trace files from a specified directory that match a given label and extracts data from them.
-
-# Arguments
-- `path::String`: The directory path to search for trace files.
-- `label::String`: The label to match in the filenames.
-- `start::Int`: The starting index for reading the trace data.
-- `stop::Int`: The stopping index for reading the trace data.
-- `col::Int`: The column index to read from each trace file (default is 3).
-
-# Returns
-- `Vector`: A vector of unique traces read from the files.
-"""
-function read_tracefiles_grid(path::String, label::String, start::Int, stop::Int)
-    traces = Vector[]
-    if isempty(path)
-        return traces
-    else
-        for (root, dirs, files) in walkdir(path)
-            for file in files
-                if occursin(label, file) && ~occursin(".DS_Store", file)
-                    t = read_tracefile_grid(joinpath(root, file), start, stop)
-                    ~isempty(t) && push!(traces, t)
-                end
-            end
-        end
-        set = sum.(traces)
-        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
 end
 
