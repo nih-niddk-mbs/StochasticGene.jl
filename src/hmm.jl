@@ -95,7 +95,7 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
-        b = set_b_grid_v(t, d, Nstate, Ngrid)
+        b = set_b_grid(t, d, Nstate, Ngrid)
         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
         push!(logpredictions, sum(log.(C)))
     end
@@ -434,11 +434,11 @@ Calculates the probability matrix `b` for given trace data using a specified pro
 # Returns
 - `Matrix`: The probability matrix `b`.
 """
-function set_b_grid_v(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
+function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
     d = probfn(params, reporters_per_state, Nstate, Ngrid)
-    set_b_grid_v(trace, d, Nstate, Ngrid)
+    set_b_grid(trace, d, Nstate, Ngrid)
 end
-function set_b_grid_v(trace, d, Nstate, Ngrid)
+function set_b_grid(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, length(trace))
     t = 1
     for obs in eachcol(trace)
@@ -679,13 +679,9 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     C[1] = 1 / sum(α[:, :, 1])
     α[:, :, 1] *= C[1]
     for t in 2:T
-        for l in 1:Ngrid
-            for k in 1:Nstate
-                for j in 1:Ngrid
-                    for i in 1:Nstate
-                        α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-                    end
-                end
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
             end
         end
         C[t] = 1 / sum(α[:, :, t])
@@ -853,11 +849,11 @@ function expected_a_loop(a, b, p0, N, T)
 end
 
 """
-    viterbi(loga, logb, logp0, N, T)
+    viterbi_log(loga, logb, logp0, N, T)
 
 returns maximum likelihood state path using Viterbi algorithm
 """
-function viterbi(loga, logb, logp0, N, T)
+function viterbi_log(loga, logb, logp0, N, T)
     ϕ = similar(logb)
     ψ = similar(ϕ)
     q = Vector{Int}(undef, T)
@@ -875,19 +871,50 @@ function viterbi(loga, logb, logp0, N, T)
     end
     return q
 end
-
 """
-    viterbi_exp(a, b, p0, N, T)
+    viterbi(a, b, p0, N, T)
 
 returns maximum likelihood state path using Viterbi algorithm
 """
-function viterbi_exp(a, b, p0, N, T)
+function viterbi(a, b, p0, N, T)
     loga = log.(max.(a, 0.0))
     logb = log.(max.(b, 0.0))
     logp0 = log.(max.(p0, 0.0))
-    viterbi(loga, logb, logp0, N, T)
+    viterbi_log(loga, logb, logp0, N, T)
 end
 
+function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
+    ϕ = similar(logb)
+    ψ = similar(ϕ)
+    q = Vector{Int}(undef, T)
+    ϕ[:, :, 1] = logp0 .+ logb[:, :, 1]
+    ψ[:, :, 1] .= 0
+    for t in 2:T
+        for j in 1:Ngrid, i in 1:Nstate
+            m, ψ[i, j, t] = findmax(ϕ[:, :, t-1] .+ loga[:, i] .+ loga_grid[:, j])
+            ϕ[i, j, t] = m + logb[i, j, t]
+        end
+        q[T] = argmax(ϕ[:, :, T])
+        for t in T-1:-1:1
+            q[t] = ψ[q[t+1], t+1]
+        end
+    end
+    return q
+end
+function viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    loga = log.(max.(a, 0.0))
+    loga_grid = log.(max.(a_grid, 0.0))
+    logb = log.(max.(b, 0.0))
+    logp0 = log.(max.(p0, 0.0))
+    viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
+end
+
+
+"""
+    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+
+TBW
+"""
 function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
@@ -921,7 +948,7 @@ end
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
     for lag in lags
-        al = a^(lag-1)
+        al = a^(lag - 1)
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
                 cc[lag] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
@@ -945,7 +972,7 @@ return predicted state path using Viterbi algorithm
 # function predicted_statepath(trace, interval, r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn)
 #     loga, logp0 = make_logap(r, interval, elementsT, N)
 #     logb = set_logb(trace, r[end-noiseparams+1:end], reporters_per_state, probfn)
-#     viterbi(loga, logb, logp0, N, length(trace))
+#     viterbi_log(loga, logb, logp0, N, length(trace))
 # end
 
 # function predicted_statepath(trace, interval, r, tcomponents, reporter)
@@ -960,7 +987,7 @@ return predicted state path using Viterbi algorithm
 function predicted_state(r, N, components, reporter, interval, trace)
     a, p0 = make_ap(r, interval, components)
     b = set_logb(trace, r[end-reporter.n+1:end], reporter.per_state, reporter.probfn, N)
-    viterbi_exp(a, b, p0, N, length(trace))
+    viterbi(a, b, p0, N, length(trace))
 end
 
 function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
@@ -971,7 +998,7 @@ function predicted_states(r::Vector, nT, components::TRGComponents, n_noiseparam
     for t in traces
         T = length(t)
         b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
-        spath = viterbi_exp(a, b, p0, nT, T)
+        spath = viterbi(a, b, p0, nT, T)
         push!(states, spath)
         # push!(observation_dist, [mean(d[s]) for s in spath])
         push!(observation_dist, [d[s] for s in spath])
@@ -987,7 +1014,7 @@ function predicted_states(r::Matrix, nT, components::TRGComponents, n_noiseparam
     for (i, t) in enumerate(traces)
         T = length(t)
         b = set_b(t, r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        spath = viterbi_exp(a, b, p0, nT, T)
+        spath = viterbi(a, b, p0, nT, T)
         push!(states, spath)
         d = probfn(r[end-n_noiseparams+1:end, i], reporters_per_state, nT)
         push!(observation_dist, [d[s] for s in spath])
@@ -1009,7 +1036,7 @@ function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertst
     for t in traces
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
-        push!(states, viterbi_exp(a, b, p0, nT, T))
+        push!(states, viterbi(a, b, p0, nT, T))
     end
     units = Vector[]
     observation_dist = Vector[]
@@ -1020,6 +1047,22 @@ function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertst
     units, observation_dist
 end
 
+function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    a, p0 = make_ap(r, interval, components)
+    a_grid = make_a_grid(r[end], Ngrid)
+    d = probfn(r[end-n_noiseparams:end-1], reporters_per_state, Nstates, Ngrid)
+    for t in traces
+        T = length(t)
+        b = set_b_grid(t, d, Nstates, Ngrid)
+        spath = viterbi_grid(a, a_grid, b, p0, Nstates, Ngrid, T)
+        push!(states, spath)
+        # push!(observation_dist, [mean(d[s]) for s in spath])
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
 
 # """
 #     predicted_trace(statepath, noise_dist)

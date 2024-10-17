@@ -475,7 +475,7 @@ function make_pca(file::String, npcs::Int, cond, time)
 end
 
 function make_pca(m::Matrix, npcs::Int)
-    M = fit(PCA, float.(m[:, 2:end]), maxoutdim=npcs)
+    M = MultivariateStats.fit(PCA, float.(m[:, 2:end]), maxoutdim=npcs)
     make_pca(M, m[:, 1])
 end
 
@@ -1021,6 +1021,10 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     return df
 end
 
+function make_covariance()
+
+end
+
 """
     tcomponent(model)
 
@@ -1221,19 +1225,6 @@ function make_trace_histogram(datapath, datacond, start=1, stop=-1)
     return ft, h
 end
 
-"""
-    make_correlation(interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-
-TBW
-"""
-function make_correlation(interval, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
-    tcomponents = make_components_T(transitions, G, R, S, insertstep, splicetype)
-
-    Qtr = make_mat(tcomponents.elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(sparse(Qtr'), interval, true)
-
-end
 
 # function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 #     tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
