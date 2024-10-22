@@ -388,7 +388,6 @@ function assemble_measures_model(folder::String, cond::String, gene::String)
     outfile = joinpath(folder, "measures_" * cond * "_" * gene * ".csv")
     header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
     files = get_measurefiles(folder)
-    files = files[occursin.(cond, files)]
     println(files)
     f = open(outfile, "w")
     writedlm(f, header, ',')
