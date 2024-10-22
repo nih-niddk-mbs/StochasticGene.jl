@@ -1082,7 +1082,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
             if occursin("rates", f) && ((isempty(coupling) && occursin(datacond, f)) || occursin("tracejoint", f))
-                write_traces(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
                 # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
                 # println(f)
                 # parts = fields(f)
@@ -1096,7 +1096,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
     end
 end
 
-function write_traces(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(f)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
     parts = fields(file)
@@ -1104,7 +1104,7 @@ function write_traces(file, datapath::String, datacond, interval, ratetype::Stri
     r = readrates(file, get_row(ratetype))
     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
     transitions = get_transitions(G, parts.label)
-    write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
 """
@@ -1112,7 +1112,7 @@ end
 
 
 """
-function write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
     traces = read_tracefiles(datapath, datacond, start, stop)
     df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
     CSV.write(outfile, df)

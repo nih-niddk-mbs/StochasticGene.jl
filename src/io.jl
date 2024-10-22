@@ -227,7 +227,7 @@ get_resultfiles(files::Vector) = files[occursin.(".txt", files).&occursin.("_", 
 
 function get_resultfiles(folder::String, name)
     files = get_resultfiles(readdir(folder))
-    files[occursin.("measures", files)]
+    files[occursin.(name, files)]
 end
 
 get_measurefiles(folder::String) = get_resultfiles(folder, "measures")
