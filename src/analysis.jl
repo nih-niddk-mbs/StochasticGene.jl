@@ -1046,15 +1046,16 @@ function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::
                 if occursin(d, root)
                     for f in files
                         if occursin("rates", f) && occursin(datacond, f)
-                            println(f)
-                            occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-                            parts = fields(f)
-                            G, R, S, insertstep = decompose_model(parts.model)
-                            r = readrates(joinpath(root, f), get_row(ratetype))
-                            out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-                            transitions = get_transitions(G, parts.label)
-                            datapath = joinpath(datafolder, d)
-                            write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+                            write_traces(joinpath(root, f), joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                            # println(f)
+                            # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
+                            # parts = fields(f)
+                            # G, R, S, insertstep = decompose_model(parts.model)
+                            # r = readrates(joinpath(root, f), get_row(ratetype))
+                            # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
+                            # transitions = get_transitions(G, parts.label)
+                            # datapath = joinpath(datafolder, d)
+                            # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
                         end
                     end
                 end
@@ -1081,17 +1082,29 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
             if occursin("rates", f) && ((isempty(coupling) && occursin(datacond, f)) || occursin("tracejoint", f))
-                occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-                println(f)
-                parts = fields(f)
-                G, R, S, insertstep = decompose_model(parts.model)
-                r = readrates(joinpath(root, f), get_row(ratetype))
-                out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-                transitions = get_transitions(G, parts.label)
-                write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+                write_traces(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
+                # println(f)
+                # parts = fields(f)
+                # G, R, S, insertstep = decompose_model(parts.model)
+                # r = readrates(joinpath(root, f), get_row(ratetype))
+                # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
+                # transitions = get_transitions(G, parts.label)
+                # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
             end
         end
     end
+end
+
+function write_traces(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+    println(f)
+    occursin(hlabel, file) ? hierarchical = true : hierarchical = false
+    parts = fields(file)
+    G, R, S, insertstep = decompose_model(parts.model)
+    r = readrates(file, get_row(ratetype))
+    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
+    transitions = get_transitions(G, parts.label)
+    write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
 """
@@ -1147,20 +1160,20 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
     components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, splicetype)
     ts, tp = predicted_states(rin, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
     l = maximum(length.(traces))
-    cols = Matrix(undef,length(traces),0)
+    cols = Matrix(undef, length(traces), 0)
     for k in coupling[1]
-        data = ["data$i"*"_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:,k]))] for i in eachindex(traces)]
+        data = ["data$i" * "_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
         pred = ["model_mean$i" * "_$k" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
         predstd = ["std_mean$i" * "_$k" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
         cols = hcat(cols, [data pred predstd])
         if state
             index = [[s[k] for s in t] for t in ts]
             g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
-            gs = ["Gstate$i"*"_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            gs = ["Gstate$i" * "_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            s = ["Rstate$i"*"_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            s = ["Rstate$i" * "_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            zs = ["Reporters$i"*"_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            zs = ["Reporters$i" * "_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             cols = hcat(cols, [gs s zs])
         end
     end
