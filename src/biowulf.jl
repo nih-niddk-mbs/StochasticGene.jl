@@ -62,7 +62,7 @@ function makeswarm(; gene::String="", nchains::Int=2, nthreads::Int=1, swarmfile
     sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile)
     write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-        fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+        fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 end
 
