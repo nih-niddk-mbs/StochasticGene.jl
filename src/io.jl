@@ -598,7 +598,7 @@ function rlabels(model::AbstractGMmodel)
 end
 
 function rlabels(model::GRSMgridmodel)
-    hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter),"GridProb")
+    hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter), "GridProb")
 end
 
 """
@@ -1108,12 +1108,12 @@ function read_tracefiles_grid(path::String, label::String, start::Int, stop::Int
     end
 end
 
-function read_tracefile_grid(path, start, stop)
-    t = readdlm(path)
+function read_tracefile_grid(path, start, stop, header=true)
+    t = readdlm(path, ',', header=header)[1]
     if stop < 0
-        (start <= length(t)) && return t[:,start:end]
+        (start <= length(t)) && return t[:, start:end]
     else
-        (stop <= length(t)) && return t[:,start:stop]
+        (stop <= length(t)) && return t[:, start:stop]
     end
 end
 
