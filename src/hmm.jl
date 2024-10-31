@@ -94,9 +94,10 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
-        T = length(t)
+        T = size(t,2)
         b = set_b_grid(t, d, Nstate, Ngrid)
         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+        println(sum(log.(C)))
         push!(logpredictions, sum(log.(C)))
     end
     sum(logpredictions), logpredictions
@@ -439,7 +440,7 @@ function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate
     set_b_grid(trace, d, Nstate, Ngrid)
 end
 function set_b_grid(trace, d, Nstate, Ngrid)
-    b = ones(Nstate, Ngrid, length(trace))
+    b = ones(Nstate, Ngrid, size(trace,2))
     t = 1
     for obs in eachcol(trace)
         for j in 1:Nstate
@@ -454,17 +455,10 @@ function set_b_grid(trace, d, Nstate, Ngrid)
     return b
 end
 
-
 """
     prob_Gaussian(par, reporters_per_state, N)
 
-return Gaussian Distribution 
-mean = background + number of reporters_per_state * reporter mean
-variance = sum of variances of background and reporters_per_state
-
-- `par`: 4 dimemsional vector of mean and std parameters
-- `reporters_per_state`: number of reporters per HMM state
--`N`: number of HMM states
+TBW
 """
 function prob_Gaussian(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -474,6 +468,32 @@ function prob_Gaussian(par, reporters_per_state, N)
     d
 end
 function prob_Gaussian(par, reporters)
+    if reporters > 0 
+    return Normal(reporters * par[3], sqrt(reporters) * par[4])
+    else
+        return Normal(par[1], par[2])
+    end
+end
+
+"""
+    prob_Gaussian_sum(par, reporters_per_state, N)
+
+return Gaussian Distribution 
+mean = background + number of reporters_per_state * reporter mean
+variance = sum of variances of background and reporters_per_state
+
+- `par`: 4 dimemsional vector of mean and std parameters
+- `reporters_per_state`: number of reporters per HMM state
+-`N`: number of HMM states
+"""
+function prob_Gaussian_sum(par, reporters_per_state, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_Gaussian(par, reporters_per_state[i])
+    end
+    d
+end
+function prob_Gaussian_sum(par, reporters)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
 

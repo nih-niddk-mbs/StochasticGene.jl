@@ -249,8 +249,8 @@ TBW
 """
 function load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
     trace = read_tracefiles_grid(datapath, datacond, traceinfo)
-    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, nframes))
+    # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1))
 end
 
 """
@@ -307,7 +307,7 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     if !isempty(coupling)
         load_model_coupled(r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
     elseif !isnothing(grid)
-        load_model_grid(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid)
+        load_model_grid(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, prob_Gaussian_grid, noisepriors, method, grid)
     else
         load_model(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical)
     end
@@ -320,9 +320,7 @@ function load_model_grid(data, r, rm, fittedparam, fixedeffects, transitions, G,
     noiserange = n+1:n+length(noisepriors)
     gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    if propcv < 0
-        propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root)
-    end
+    propcv < 0 &&  (propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root))
     GRSMgridmodel{typeof(r),Nothing,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, raterange, noiserange, gridrange, grid, nothing, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
