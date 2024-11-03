@@ -1097,7 +1097,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
 end
 
 function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    println(f)
+    println(file)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
     parts = fields(file)
     G, R, S, insertstep = decompose_model(parts.model)
@@ -1187,42 +1187,6 @@ function make_vector(x, n)
         return x
     end
 end
-# function make_traces(datapath, datacond, interval, rin::Vector, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="", hierarchical=false)
-#     traces = read_tracefiles(datapath, datacond, start, stop)
-#     nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-#     hierarchical && (rin = reshape(rin[2*nrates+1:end], nrates, length(traces)))
-#     tp = Vector{Float64}[]
-#     ts = Vector{Int}[]
-#     tcomponents = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-#     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-#     for (i, t) in enumerate(traces)
-#         r = hierarchical ? rin[:, i] : rin
-#         a, b = make_trace(t, interval, r, tcomponents, reporter)
-#         push!(tp, a)
-#         push!(ts, b)
-#     end
-#     return tp, ts, traces
-# end
-
-# """
-#     make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-
-# """
-# function make_trace(trace, interval::Float64, r::Vector, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-#     tcomponents = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-#     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind)
-#     make_trace(trace, interval, r::Vector, tcomponents, reporter)
-# end
-
-# """
-#     make_trace(trace, interval, r::Vector, tcomponents, probfn=prob_Gaussian, noiseparams=4, weightind=0)
-
-# TBW
-# """
-# function make_trace(trace, interval::Float64, r::Vector, tcomponents, reporter)
-#     d = reporter.probfn(r[end-reporter.n+1:end], reporter.per_state, tcomponents.nT)
-#     predicted_trace_state(trace, interval, r, tcomponents, reporter, d)
-# end
 
 
 
@@ -1237,6 +1201,84 @@ function make_trace_histogram(datapath, datacond, start=1, stop=-1)
     h = histogram(ft, normalize=true)
     return ft, h
 end
+
+
+"""
+    plot_traces(df::DataFrame; 
+               cols::Vector{Int}=collect(1:3),  # Convert UnitRange to Vector
+               with_errors::Bool=true,
+               normalize::Bool=true,
+               title::String="Traces",
+               alpha::Float64=0.3)
+
+Plot multiple traces in separate panels for data and model.
+
+# Arguments
+- `df::DataFrame`: DataFrame containing data/model columns
+- `cols::Vector{Int}`: Column numbers to plot (default: [1,2,3])
+- `with_errors::Bool`: Include error ribbons (default: true)
+- `normalize::Bool`: Normalize data (default: true)
+- `title::String`: Plot title (default: "Traces")
+- `alpha::Float64`: Transparency for ribbons (default: 0.3)
+
+# Returns
+- `Plots.Plot`: Combined plot object
+"""
+function plot_traces(df::DataFrame;
+                    cols::Vector{Int}=collect(1:2),  # Changed this line
+                    with_errors::Bool=false,
+                    normalize::Bool=false,
+                    title::String="Traces",
+                    alpha::Float64=0.3)
+    
+    n = length(cols)
+    p = plot(layout=(n,1), legend=:topleft, title=title)
+    
+    for (j, i) in enumerate(cols)
+        data_col = Symbol("data$i")
+        mean_col = Symbol("model_mean$i")
+        std_col = Symbol("model_std$i")
+        
+        # Get data, filtering out missing values
+        y_data = df[!, data_col]
+        y_model = df[!, mean_col]
+        y_std = hasproperty(df, std_col) ? df[!, std_col] : nothing
+        
+        # Filter out missing values
+        valid_indices = .!ismissing.(y_data) .& .!ismissing.(y_model)
+        y_data = y_data[valid_indices]
+        y_model = y_model[valid_indices]
+        y_std = y_std !== nothing ? y_std[valid_indices] : nothing
+        
+        # Normalize if needed
+        if normalize
+            y_data ./= maximum(y_data)
+            y_model ./= maximum(y_model)
+            y_std = y_std !== nothing ? y_std ./ maximum(y_model) : nothing
+        end
+        
+        # Plot data points in the first row
+        scatter!(p[j,1], y_data, label="Data $i", markersize=3)
+        
+        # Plot model with optional error ribbon in the second row
+        if with_errors && y_std !== nothing
+            plot!(p[j,1], y_model, err=y_std, label="Model $i", alpha=alpha)
+        else
+            plot!(p[j,1], y_model, label="Model $i")
+        end
+    end
+    
+    # xlabel!(p[1, :], "Time point")
+    # ylabel!(p[1, :], normalize ? "Normalized value" : "Value")
+    # xlabel!(p[2, :], "Time point")
+    # ylabel!(p[2, :], normalize ? "Normalized value" : "Value")
+    
+    return p
+end
+
+# Example usage:
+# plot_traces(df)  # Plot first 3 columns
+# plot_traces(df, cols=[1,4,5])  # Plot specific columns
 
 
 # function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
