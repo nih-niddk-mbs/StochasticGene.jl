@@ -1163,6 +1163,140 @@ model2_variance(ron, roff, eject, decay, nalleles) = 2 * model2_variance(ron, ro
 
 model2_variance(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay + ron * roff / (ron + roff)^2 * eject^2 / decay / (ron + roff + decay)
 
+
+
+# """
+#     multi_tau_correlation(data::Vector{Float64}, m::Int=16)
+
+# Compute the multi-tau correlation function for a given time series data.
+
+# # Arguments
+# - `data::Vector{Float64}`: Time series data.
+# - `m::Int=16`: Number of points in the first stage (default: 16).
+
+# # Returns
+# - `Vector{Float64}`: Correlation function.
+# """
+# function multi_tau_correlation(data::Vector{Float64}, m::Int=16)
+#     n = length(data)
+#     max_tau = div(n, m)
+#     g2 = zeros(Float64, max_tau)
+#     count = zeros(Int, max_tau)
+
+#     # First stage: compute correlation for the first m points
+#     for tau in 1:m
+#         for i in 1:(n - tau)
+#             g2[tau] += data[i] * data[i + tau]
+#             count[tau] += 1
+#         end
+#         g2[tau] /= count[tau]
+#     end
+
+#     # Multi-tau stages
+#     for stage in 1:floor(Int, log2(max_tau))
+#         step = 2^stage
+#         for tau in (m * step):(2 * m * step - 1)
+#             if tau >= max_tau
+#                 break
+#             end
+#             for i in 1:(n - tau)
+#                 g2[tau] += data[i] * data[i + tau]
+#                 count[tau] += 1
+#             end
+#             g2[tau] /= count[tau]
+#         end
+#     end
+
+#     return g2
+# end
+
+"""
+    multi_tau_covariance(data1::Vector{Float64}, data2::Vector{Float64}=Float64[]; 
+                         m::Int=16, max_lag::Int=length(data1))
+
+Compute auto/cross-covariance or correlation using multi-tau algorithm.
+
+# Arguments
+- `data1::Vector{Float64}`: First time series
+- `data2::Vector{Float64}`: Optional second time series for cross-correlation
+- `m::Int=16`: Points per level
+- `max_lag::Int`: Maximum lag time (default: length of data)
+- `normalize::Bool=false`: Normalize by variance to obtain correlation values (default: false)
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}}`: (lag times, correlation values)
+"""
+function multi_tau_covariance(data1::Vector{Float64}, data2::Vector{Float64}=Float64[];
+    m::Int=16, max_lag::Int=length(data1), normalize=false)
+
+    n = length(data1)
+    is_auto = isempty(data2)
+    data2 = is_auto ? data1 : data2
+
+    # Determine number of levels needed
+    max_level = floor(Int, log2(max_lag / m)) + 1
+    total_points = m * (2^max_level - 1)
+    num_lags = min(total_points, max_lag)
+
+    # Initialize output arrays
+    lags = zeros(Float64, num_lags)
+    corr = zeros(Float64, num_lags)
+    counts = zeros(Int, num_lags)
+
+    # Calculate means for normalization
+    mean1 = mean(data1)
+    mean2 = mean(data2)
+
+    # First level correlations
+    for τ in 1:min(m, num_lags)
+        lags[τ] = τ
+        for i in 1:(n-τ)
+            corr[τ] += (data1[i] - mean1) * (data2[i+τ] - mean2)
+            counts[τ] += 1
+        end
+    end
+
+    # Higher levels with increasing spacing
+    lag_idx = m + 1
+    for level in 1:max_level-1
+        spacing = 2^level
+
+        for τ in (m*spacing):(2*m*spacing-1)
+            if τ > num_lags
+                break
+            end
+
+            lags[lag_idx] = τ
+            for i in 1:(n-τ)
+                corr[lag_idx] += (data1[i] - mean1) * (data2[i+τ] - mean2)
+                counts[lag_idx] += 1
+            end
+            lag_idx += 1
+        end
+    end
+    if normalize
+        # Normalize correlations
+        var1 = var(data1)
+        var2 = is_auto ? var1 : var(data2)
+        norm_factor = sqrt(var1 * var2)
+    else
+        norm_factor = 1.0
+    end
+
+    for i in 1:num_lags
+        if counts[i] > 0
+            corr[i] /= (counts[i] * norm_factor)
+        end
+    end
+
+
+    # Remove unused lag times
+    valid_idx = counts .> 0
+    return lags[valid_idx], corr[valid_idx]
+end
+
+
+
 """
     test_steadystatemodel(model::AbstractGMmodel, nhist)
 

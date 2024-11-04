@@ -343,7 +343,7 @@ function make_trace_grid(trace::Vector{Float64}, a_grid, d_background)
         tracematrix[position, t] = trace[t]
         for p in 1:Nstate
             if p != position
-                tracematrix[p, t] = max(rand(d_background),0.)
+                tracematrix[p, t] = max(rand(d_background), 0.0)
             end
         end
     end
@@ -833,11 +833,11 @@ set_arguments(reaction, index::Int) = (reaction[index].initial, reaction[index].
 
 
 """
-    set_reactionindices(Gtransitions, R::Int, S, insertstep)
+    set_reactionindices(Gtransitions, R::Int, S)
 
 return structure of ranges for each type of transition
 """
-function set_reactionindices(Gtransitions, R::Int, S, insertstep)
+function set_reactionindices(Gtransitions, R::Int, S)
     nG = length(Gtransitions)
     g = 1:nG
     i = nG+1:nG+Int(R > 0)
@@ -868,7 +868,7 @@ TBW
 """
 function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     actions = set_actions()
-    indices = set_reactionindices(Gtransitions, R, S, insertstep)
+    indices = set_reactionindices(Gtransitions, R, S)
     reactions = Reaction[]
     nG = length(Gtransitions)
     Sstride = R - insertstep + 1
@@ -909,36 +909,17 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
         if S == 0 || i > G + S
             push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
         else
-            if insertstep == 1
+            if i < G + insertstep - 1
+                push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
+            elseif i == G + insertstep - 1
+                push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
+            elseif i > G + insertstep - 1
                 push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-            else
-                if i < G + insertstep - 1
-                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
-                elseif i == G + insertstep - 1
-                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-                elseif i > G + insertstep - 1
-                    push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-                end
             end
         end
-        # if S == 0
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
-        # end
-        # if S > 0 && insertstep == 1
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        # end
-        # if S > 0 && insertstep > 1 && i > G + insertstep - 1
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r; r + Sstride], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        # end
-        # if S > 0 && insertstep > 1 && i == G + insertstep - 1
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1; r + 1 + Sstride], i, i + 1))
-        # end
-        # if S > 0 && insertstep > 1 && i < G + insertstep - 1
-        #     push!(reactions, Reaction(actions["transitionR!"], r, Int[r], [r - 1; r + 1], i, i + 1))
-        # end
     end
     for e in indices.erange
-        if S > 0
+        if S > 0 && e + Sstride <= nG + R + S + 1 # Corrected for allowing S < R + insertstep - 1
             push!(reactions, Reaction(actions["eject!"], e, Int[e, e+Sstride], Int[e-1, indices.decay], G + R, 0))
         elseif R > 0
             push!(reactions, Reaction(actions["eject!"], e, Int[e], Int[e-1, indices.decay], G + R, 0))

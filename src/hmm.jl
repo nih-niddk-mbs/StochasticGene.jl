@@ -941,10 +941,10 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     r, couplingStrength, noiseparams = prepare_rates(rin, sourceStates, transitions, G, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
-    println(noiseparams)
-    println(num_per_state)
-    println(coupling[1])
-    println(components.N)
+    # println(noiseparams)
+    # println(num_per_state)
+    # println(coupling[1])
+    # println(components.N)
     for i in eachindex(noiseparams)
         push!(mean_intensity, mean.(probfn(noiseparams[i], num_per_state[i], components.N)))
     end
@@ -968,10 +968,10 @@ end
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
     for lag in lags
-        al = a^(lag - 1)
+        al = a^lag
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
-                cc[lag] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
+                cc[lag+1] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
             end
         end
     end

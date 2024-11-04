@@ -1479,3 +1479,60 @@ end
 #     display(plt)
 #     return h
 # end
+
+"""
+    simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_time=720.)
+
+Simulate multiple trials of a gene expression system and compare with theoretical predictions.
+
+# Arguments
+- `r`: Rate parameters vector
+- `transitions`: State transition matrix
+- `G`: Gene states matrix
+- `R`: RNA states matrix
+- `S`: Initial state vector
+- `insertstep`: Time step for trajectory recording
+- `ntrials`: Number of simulation trials
+- `trial_time`: Total simulation time (default: 720.0)
+
+# Returns
+- Tuple containing:
+    1. `(linf_norm, l2_norm)`: L-infinity and L2 norms between theory and simulation
+    2. `cc_theory`: Theoretical steady-state value
+    3. `cc_simulated`: Array of maximum values from each trial
+    4. `running_means`: Running mean of simulated values
+    5. `running_errors`: Running standard errors of the mean
+
+# Example
+```julia
+ntrials = 100
+(norms, theory, sims, means, errors) = simulate_trials(r, trans, G, R, S, 0.1, ntrials)
+plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
+"""
+
+function simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_time=720.)
+    cc_theory = calculate_theoretical_cc(r, transitions, G, R, S)
+    cc_simulated = zeros(ntrials)
+    
+    # Arrays to track convergence
+    running_means = zeros(ntrials)
+    running_errors = zeros(ntrials)
+    
+    for n in 1:ntrials
+        trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, n)
+        cc_simulated[n] = maximum(trace)
+        
+        # Update running statistics
+        running_means[n] = mean(cc_simulated[1:n])
+        running_errors[n] = std(cc_simulated[1:n]) / sqrt(n) # Standard error of mean
+    end
+    
+    linf_norm = maximum(abs.(cc_theory .- cc_simulated))
+    l2_norm = sqrt(sum((cc_theory .- cc_simulated).^2))
+    
+    return (linf_norm, l2_norm), cc_theory, cc_simulated, running_means, running_errors
+end
+
+# Usage example:
+# (norms, theory, sims, means, errors) = simulate_trials(...)
+# plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
