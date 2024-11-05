@@ -1098,7 +1098,6 @@ function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, insertstep,
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     if insertstep == 1
-        println("en:",enabled)
         state[final, allele] = 2
         if S > 0
             tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
