@@ -461,7 +461,7 @@ function set_reactions(Gtransitions, G, R, S, insertstep)
     end
     for i in indices.irange
         if S > 0 && insertstep == 1
-            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2; nG + 2 + S], G, G + 1))
+            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2; nG + 2 + R], G, G + 1))
         else
             push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2], G, G + 1))
         end

@@ -93,6 +93,7 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+        nhist = 0
     end
 
     S = reset_S(S, R, insertstep)
@@ -150,14 +151,14 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
 
         if verbose
             println("---")
+            println(steps)
             println("m:", m)
             println(state)
             println(tau)
             println("t:", t)
             println(index, " ", allele)
-            println(invactions[action], " ", allele)
+            println(invactions[action])
             println(initial, "->", final)
-            println(steps)
         end
 
         m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
@@ -898,7 +899,7 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     end
     for i in indices.irange
         if S > 0 && insertstep == 1
-            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2; nG + 2 + S], G, G + 1))
+            push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2; nG + 2 + R], G, G + 1))
         else
             push!(reactions, Reaction(actions["initiate!"], i, [], [nG + 2], G, G + 1))
         end
@@ -1097,6 +1098,7 @@ function initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, insertstep,
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
     if insertstep == 1
+        println("en:",enabled)
         state[final, allele] = 2
         if S > 0
             tau[enabled[2], allele] = -log(rand()) / (r[enabled[2]]) + t
