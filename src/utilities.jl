@@ -124,6 +124,58 @@ function var_update(vartuple, newValue)
     return count, mean, M2
 end
 
+"""
+    mean_update(mean, count, newValue)
+
+Updates the mean with a new value using Welford's online algorithm.
+
+# Arguments
+- `mean`: The current mean.
+- `count`: The current count of values.
+- `newValue`: The new value to be added to the mean calculation.
+
+# Description
+This function updates the mean with a new value using Welford's online algorithm. It returns the updated mean and count.
+
+# Returns
+- `Tuple{Float64, Int}`: The updated mean and count.
+"""
+function mean_update(mean, count, newValue)
+    # count += 1
+    delta = newValue - mean
+    mean += delta / count
+    return mean, count
+end
+
+function mean_update(mean, newValue)
+    delta = newValue - mean
+    mean += delta / count
+    return mean, count
+end
+
+"""
+    mean_update(mean::Vector{Float64}, count::Int, newValue::Vector{Float64})
+
+Updates the mean vector with a new value using Welford's online algorithm.
+
+# Arguments
+- `mean`: The current mean vector.
+- `count`: The current count of values.
+- `newValue`: The new value vector to be added to the mean calculation.
+
+# Description
+This function updates the mean vector with a new value using Welford's online algorithm. It returns the updated mean vector and count.
+
+# Returns
+- `Tuple{Vector{Float64}, Int}`: The updated mean vector and count.
+"""
+function mean_update(mean::Vector{Float64}, count::Int, newValue::Vector{Float64})
+    # count += 1
+    delta = newValue .- mean
+    mean .+= delta / count
+    return mean, count
+end
+
 
 """
     cov_update(covtuple, newValue1, newValue2)
@@ -144,10 +196,10 @@ This function updates the covariance calculation with new values using an online
 function cov_update(covtuple, newValue1, newValue2)
     count, meanx, meany, C = covtuple
     count += 1
-    dx = newx - meanx
+    dx = newValue1 - meanx
     meanx .+= dx / count
-    meany .+= (newy - meany) / count
-    C .+= dx * (newy - meany)
+    meany .+= (newValue2 - meany) / count
+    C .+= dx * (newValue2 - meany)
     return count, meanx, meany, C
 end
 
@@ -1089,7 +1141,7 @@ function burstoccupancy(n::Int, nr::Int, r::Vector)
     ssf = zeros(nr)
     asum = 0
     for w = 1:nr
-        for i = 1:n+1, z = 1:3^nr
+        for i in 1:n+1, z = 1:3^nr
             zdigits = digit_vector(z, 3, nr)
             a = i + (n + 1) * (z - 1)
             if sum(zdigits .== 2) == w

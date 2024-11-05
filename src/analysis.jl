@@ -1510,9 +1510,9 @@ ntrials = 100
 plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
-function simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_time=720.)
-    cc_theory = calculate_theoretical_cc(r, transitions, G, R, S)
-    cc_simulated = zeros(ntrials)
+function simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_time=720., maxlag=100)
+    cc_theory = (r, transitions, G, R, S)
+    c = zeros(ntrials)
     
     # Arrays to track convergence
     running_means = zeros(ntrials)
@@ -1520,15 +1520,13 @@ function simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_tim
     
     for n in 1:ntrials
         trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, n)
-        cc_simulated[n] = maximum(trace)
-        
-        # Update running statistics
-        running_means[n] = mean(cc_simulated[1:n])
-        running_errors[n] = std(cc_simulated[1:n]) / sqrt(n) # Standard error of mean
+        cc_sim = mean_update(cc_sim, n, multi_tau_covariance(trace[:, 1], trace[:, 2], m=20, max_lag=max_lag))
+
+        linf_norm = maximum(abs.(cc_theory .- cc_simulated))
+        l2_norm = sqrt(sum((cc_theory .- cc_simulated) .^ 2))
     end
     
-    linf_norm = maximum(abs.(cc_theory .- cc_simulated))
-    l2_norm = sqrt(sum((cc_theory .- cc_simulated).^2))
+
     
     return (linf_norm, l2_norm), cc_theory, cc_simulated, running_means, running_errors
 end
