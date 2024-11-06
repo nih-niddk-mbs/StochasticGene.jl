@@ -1216,52 +1216,6 @@ model2_variance(ron, roff, eject, decay, nalleles) = 2 * model2_variance(ron, ro
 model2_variance(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay + ron * roff / (ron + roff)^2 * eject^2 / decay / (ron + roff + decay)
 
 
-
-# """
-#     multi_tau_correlation(data::Vector{Float64}, m::Int=16)
-
-# Compute the multi-tau correlation function for a given time series data.
-
-# # Arguments
-# - `data::Vector{Float64}`: Time series data.
-# - `m::Int=16`: Number of points in the first stage (default: 16).
-
-# # Returns
-# - `Vector{Float64}`: Correlation function.
-# """
-# function multi_tau_correlation(data::Vector{Float64}, m::Int=16)
-#     n = length(data)
-#     max_tau = div(n, m)
-#     g2 = zeros(Float64, max_tau)
-#     count = zeros(Int, max_tau)
-
-#     # First stage: compute correlation for the first m points
-#     for tau in 1:m
-#         for i in 1:(n - tau)
-#             g2[tau] += data[i] * data[i + tau]
-#             count[tau] += 1
-#         end
-#         g2[tau] /= count[tau]
-#     end
-
-#     # Multi-tau stages
-#     for stage in 1:floor(Int, log2(max_tau))
-#         step = 2^stage
-#         for tau in (m * step):(2 * m * step - 1)
-#             if tau >= max_tau
-#                 break
-#             end
-#             for i in 1:(n - tau)
-#                 g2[tau] += data[i] * data[i + tau]
-#                 count[tau] += 1
-#             end
-#             g2[tau] /= count[tau]
-#         end
-#     end
-
-#     return g2
-# end
-
 """
     multi_tau_covariance(data1::Vector{Float64}, data2::Vector{Float64}=Float64[]; 
                          m::Int=16, max_lag::Int=length(data1))
