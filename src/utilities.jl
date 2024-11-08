@@ -100,7 +100,7 @@ normalize_histogram(hist) = hist / sum(hist)
 
 
 """
-    var_update(vartuple, newValue)
+    var_update(vartuple::Tuple, newValue)
 
 Updates the variance calculation with a new value using Welford's online algorithm.
 
@@ -114,24 +114,68 @@ This function updates the variance calculation with a new value using Welford's 
 # Returns
 - `Tuple{Int, Float64, Float64}`: The updated count, mean, and M2.
 """
-function var_update(vartuple, newValue)
+function var_update(vartuple::Tuple, newValue)
     count, mean, M2 = vartuple
     count += 1
     delta = newValue - mean
-    mean .+= delta / count
+    mean += delta / count
     delta2 = newValue - mean
-    M2 .+= delta .* delta2
+    M2 += delta * delta2
     return count, mean, M2
 end
 
+function var_update(vartuple::Tuple, newValue::Vector{Float64})
+    count, mean, M2 = vartuple
+    count += 1
+    delta = newValue .- mean
+    mean += delta ./ count
+    delta2 = newValue .- mean
+    M2 += delta .* delta2
+    return count, mean, M2
+end
+
+function test_varupdate(n)
+    a = (0, zeros(3), zeros(3))
+    for i in 1:n
+        a = var_update(a, randn(3))
+    end
+    count, mean, M2 = a
+    return mean, M2 / (count - 1)
+end
+
 """
-    mean_update(mean, count, newValue)
+    cov_update(covtuple, newValue1, newValue2)
+
+Updates the covariance calculation with new values using an online algorithm.
+
+# Arguments
+- `covtuple`: A tuple containing the current count, mean of x, mean of y, and C (sum of products of differences from the current means).
+- `newValue1`: The new value for the first variable.
+- `newValue2`: The new value for the second variable.
+
+# Description
+This function updates the covariance calculation with new values using an online algorithm. It returns the updated count, mean of x, mean of y, and C.
+
+# Returns
+- `Tuple{Int, Float64, Float64, Float64}`: The updated count, mean of x, mean of y, and C.
+"""
+function cov_update(covtuple::Tuple, newValue1, newValue2)
+    count, meanx, meany, C = covtuple
+    count += 1
+    dx = newValue1 - meanx
+    meanx .+= dx / count
+    meany .+= (newValue2 - meany) / count
+    C .+= dx * (newValue2 - meany)
+    return count, meanx, meany, C
+end
+
+"""
+    mean_update(meantuple::Tuple, newValue)
 
 Updates the mean with a new value using Welford's online algorithm.
 
 # Arguments
-- `mean`: The current mean.
-- `count`: The current count of values.
+- `meantuple`: A tuple containing the current mean and count.
 - `newValue`: The new value to be added to the mean calculation.
 
 # Description
@@ -140,18 +184,14 @@ This function updates the mean with a new value using Welford's online algorithm
 # Returns
 - `Tuple{Float64, Int}`: The updated mean and count.
 """
-function mean_update(mean, count, newValue)
-    # count += 1
+function mean_update(meantuple::Tuple, newValue)
+    mean, count = meantuple
+    count += 1
     delta = newValue - mean
     mean += delta / count
     return mean, count
 end
 
-function mean_update(mean, newValue)
-    delta = newValue - mean
-    mean += delta / count
-    return mean, count
-end
 
 """
     mean_update(mean::Vector{Float64}, count::Int, newValue::Vector{Float64})
@@ -170,38 +210,17 @@ This function updates the mean vector with a new value using Welford's online al
 - `Tuple{Vector{Float64}, Int}`: The updated mean vector and count.
 """
 function mean_update(mean::Vector{Float64}, count::Int, newValue::Vector{Float64})
-    # count += 1
     delta = newValue .- mean
     mean .+= delta / count
-    return mean, count
+    return mean
 end
 
-
-"""
-    cov_update(covtuple, newValue1, newValue2)
-
-Updates the covariance calculation with new values using an online algorithm.
-
-# Arguments
-- `covtuple`: A tuple containing the current count, mean of x, mean of y, and C (sum of products of differences from the current means).
-- `newValue1`: The new value for the first variable.
-- `newValue2`: The new value for the second variable.
-
-# Description
-This function updates the covariance calculation with new values using an online algorithm. It returns the updated count, mean of x, mean of y, and C.
-
-# Returns
-- `Tuple{Int, Float64, Float64, Float64}`: The updated count, mean of x, mean of y, and C.
-"""
-function cov_update(covtuple, newValue1, newValue2)
-    count, meanx, meany, C = covtuple
-    count += 1
-    dx = newValue1 - meanx
-    meanx .+= dx / count
-    meany .+= (newValue2 - meany) / count
-    C .+= dx * (newValue2 - meany)
-    return count, meanx, meany, C
+function mean_update(mean::Float64, count, newValue)
+    delta = newValue - mean
+    mean += delta / count
+    return mean
 end
+
 
 """
     finalize(vartuple)

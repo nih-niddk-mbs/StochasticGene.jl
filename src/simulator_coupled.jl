@@ -68,7 +68,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
     5. Int indicating number of coupling parameters
 - `nalleles`: Number of alleles, set to 1 if coupling nonempty
 - `nhist::Int`: Size of mRNA histogram
-- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON)
+- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
 - `probfn`=prob_GaussianMixture: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
 - `splicetype`::String: splice action
