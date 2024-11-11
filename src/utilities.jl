@@ -1759,29 +1759,57 @@ function grid_distance(i, j, Ngrid)
         return sqrt((xi - xj)^2 + (yi - yj)^2)
     end
 end
-#
-# function fit_rna_test(root)
-#     gene = "CENPL"
-#     cell = "HCT116"
-#     fish = false
-#     data = data_rna(gene,"MOCK","data/HCT116_testdata",fish,"scRNA_test",root)
-#     model = model_rna(gene,cell,2,fish,.01,[1,2,3],(),"scRNA_test","scRNA_test",1,".",data,.05,1.0)
-#     options = MHOptions(10000,2000,0,120.,1.,100.)
-#     fit,stats,waic = run_mh(data,model,options,1);
-#     return stats.meanparam, fit.llml
-# end
-#
 
-# function online_covariance(data1, data2)
-#     meanx = meany = C = n = 0
-#     for x in data1, y in data2
-#         n += 1
-#         dx = x - meanx
-#         meanx += dx / n
-#         meany += (y - meany) / n
-#         C += dx * (y - meany)
-#         population_covar = C / n
-#         # Bessel's correction for sample variance
-#         sample_covar = C / (n - 1)
-#     end
-# end
+"""
+    find_top_two(x::AbstractArray{T}) where T <: Number
+
+Finds the largest and second largest values in an array.
+
+# Arguments
+- `x`: An array of numbers.
+
+# Returns
+- `Tuple{T, T, Int}`: (largest value, second largest value, index of largest value)
+
+# Throws
+- `ArgumentError`: If array has fewer than 2 elements.
+"""
+function find_top_two(x::AbstractArray{T}) where T <: Number
+    length(x) < 2 && throw(ArgumentError("Array must have at least 2 elements"))
+    
+    largest = second = typemin(T)
+    largest_idx = 0
+    
+    for (i, val) in enumerate(x)
+        if val > largest
+            second = largest
+            largest = val
+            largest_idx = i
+        elseif val > second && val < largest
+            second = val
+        end
+    end
+    
+    return largest, second, largest_idx
+end
+
+"""
+    replace_outlier!(x::AbstractArray{T}) where T <: Number
+
+Replaces the largest value with second largest if it's more than double in magnitude.
+
+# Arguments
+- `x`: Array to check and potentially modify.
+
+# Returns
+- `Bool`: true if a replacement was made, false otherwise.
+"""
+function replace_outlier!(x::AbstractArray{T}) where T <: Number
+    largest, second, idx = find_top_two(x)
+    if abs(largest) > 2 * abs(second)
+        x[idx] = second
+        return true
+    end
+    return false
+end
+
