@@ -72,6 +72,7 @@ export
     run_mh,
     metropolis_hastings,
     prob_Gaussian,
+    prob_Gaussian_sum,
     prob_GaussianMixture,
     prob_GaussianMixture_6,
     prob_Gaussian_grid,

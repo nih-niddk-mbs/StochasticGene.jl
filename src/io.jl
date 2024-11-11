@@ -1109,7 +1109,8 @@ function read_tracefiles_grid(path::String, label::String, start::Int, stop::Int
 end
 
 function read_tracefile_grid(path, start, stop, header=true)
-    t = readdlm(path, ',', header=header)[1]
+    # t = readdlm(path, ',', header=header)[1]
+    t = readfile(path)
     if stop < 0
         (start <= length(t)) && return t[:, start:end]
     else
