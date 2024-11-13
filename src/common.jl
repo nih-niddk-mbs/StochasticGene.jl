@@ -249,6 +249,9 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     reporter::ReporterType
 end
 
+### To be replaced with new code
+
+
 """
     GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
 
@@ -395,6 +398,10 @@ struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,Meth
     components::ComponentType
     reporter::ReporterType
 end
+### end of to be replace code
+
+
+### Copilot added code
 
 # Define model feature types
 struct HierarchicalFeature
@@ -543,7 +550,7 @@ complex_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, sp
                           rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
                           pool=pool, coupling=coupling)
 
-# ...existing code...
+
 
 # Update functions to support the unified model
 
@@ -564,7 +571,7 @@ function loglikelihood(param, data::AbstractExperimentalData, model::GRSMModel)
     end
 end
 
-# ...existing code...
+
 
 # Example: Update prepare_rates function
 function prepare_rates(param, model::GRSMModel)
