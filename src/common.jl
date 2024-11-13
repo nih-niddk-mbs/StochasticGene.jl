@@ -288,6 +288,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
     reporter::ReporterType
 end
+
 """
     GRSMhierarchicalmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
 
@@ -394,6 +395,193 @@ struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,Meth
     components::ComponentType
     reporter::ReporterType
 end
+
+# Define model feature types
+struct HierarchicalFeature
+    pool::Pool
+end
+
+struct CoupledFeature
+    coupling::CouplingType
+end
+
+struct GridFeature
+    raterange::UnitRange
+    noiserange::UnitRange
+    gridrange::UnitRange
+    Ngrid::Int
+end
+
+# Unified GRSMModel type with optional features
+struct GRSMModel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractModel
+    rates::RateType
+    Gtransitions::Tuple
+    G::Union{Int, Tuple{Int}}
+    R::Union{Int, Tuple{Int}}
+    S::Union{Int, Tuple{Int}}
+    insertstep::Union{Int, Tuple{Int}}
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+    # Optional features
+    features::NamedTuple
+    paramranges::NamedTuple  # Add this field to store parameter ranges
+end
+
+# Constructor for standard model
+function GRSMModel(rates, Gtransitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, splicetype::String,
+                   rateprior, proposal, fittedparam, fixedeffects, method, components, reporter)
+    features = (;)
+    paramranges = (raterange = 1:length(rates),)
+    return GRSMModel{typeof(rates), typeof(rateprior), typeof(proposal), typeof(fittedparam),
+                     typeof(method), typeof(components), typeof(reporter)}(rates, Gtransitions, G, R, S,
+                     insertstep, nalleles, splicetype, rateprior, proposal, fittedparam,
+                     fixedeffects, method, components, reporter, features, paramranges)
+end
+
+# Constructor for hierarchical model
+function GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                   rateprior, proposal, fittedparam, fixedeffects, method, components, reporter, pool::Pool)
+    features = (hierarchical=HierarchicalFeature(pool),)
+    paramranges = (raterange = 1:length(rates),)
+    return GRSMModel{typeof(rates), typeof(rateprior), typeof(proposal), typeof(fittedparam),
+                     typeof(method), typeof(components), typeof(reporter)}(rates, Gtransitions, G, R, S,
+                     insertstep, nalleles, splicetype, rateprior, proposal, fittedparam,
+                     fixedeffects, method, components, reporter, features, paramranges)
+end
+
+# Constructor for coupled model
+function GRSMModel(rates, Gtransitions, G::Tuple{Int}, R::Tuple{Int}, S::Tuple{Int}, insertstep::Tuple{Int}, nalleles::Int, splicetype::String,
+                   rateprior, proposal, fittedparam, fixedeffects, method, components, reporter, coupling::CouplingType)
+    features = (coupled=CoupledFeature(coupling),)
+    n_rates = length(rates) - length(coupling)
+    paramranges = (
+        raterange = 1:n_rates,
+        couplingrange = (n_rates + 1):length(rates),
+    )
+    return GRSMModel{typeof(rates), typeof(rateprior), typeof(proposal), typeof(fittedparam),
+                     typeof(method), typeof(components), typeof(reporter)}(rates, Gtransitions, G, R, S,
+                     insertstep, nalleles, splicetype, rateprior, proposal, fittedparam,
+                     fixedeffects, method, components, reporter, features, paramranges)
+end
+
+# Constructor for grid model
+function GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                   rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
+                   raterange::UnitRange, noiserange::UnitRange, gridrange::UnitRange, Ngrid::Int)
+    grid_feature = GridFeature(raterange, noiserange, gridrange, Ngrid)
+    features = (grid=grid_feature,)
+    paramranges = (
+        raterange = raterange,
+        noiserange = noiserange,
+        gridrange = gridrange,
+    )
+    return GRSMModel{typeof(rates), typeof(rateprior), typeof(proposal), typeof(fittedparam),
+                     typeof(method), typeof(components), typeof(reporter)}(rates, Gtransitions, G, R, S,
+                     insertstep, nalleles, splicetype, rateprior, proposal, fittedparam,
+                     fixedeffects, method, components, reporter, features, paramranges)
+end
+
+# Constructor for models with multiple features
+function GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                   rateprior, proposal, fittedparam, fixedeffects, method, components, reporter;
+                   pool::Pool=nothing, coupling::CouplingType=nothing, grid_params=nothing)
+    features = NamedTuple()
+    paramranges = (raterange = 1:length(rates),)
+    if pool !== nothing
+        features = merge(features, (hierarchical=HierarchicalFeature(pool),))
+    end
+    if coupling !== nothing
+        features = merge(features, (coupled=CoupledFeature(coupling),))
+        n_rates = length(rates) - length(coupling)
+        paramranges = merge(paramranges, (couplingrange = (n_rates + 1):length(rates),))
+    end
+    if grid_params !== nothing
+        grid_feature = GridFeature(grid_params...)
+        features = merge(features, (grid=grid_feature,))
+        paramranges = merge(paramranges, (
+            raterange = grid_params[1],
+            noiserange = grid_params[2],
+            gridrange = grid_params[3],
+        ))
+    end
+    return GRSMModel{typeof(rates), typeof(rateprior), typeof(proposal), typeof(fittedparam),
+                     typeof(method), typeof(components), typeof(reporter)}(rates, Gtransitions, G, R, S,
+                     insertstep, nalleles, splicetype, rateprior, proposal, fittedparam,
+                     fixedeffects, method, components, reporter, features, paramranges)
+end
+
+# Example usage:
+
+# Standard model
+standard_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                           rateprior, proposal, fittedparam, fixedeffects, method, components, reporter)
+
+# Hierarchical model
+hierarchical_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                               rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
+                               pool=pool)
+
+# Coupled model
+coupled_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                          rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
+                          coupling=coupling)
+
+# Grid model
+grid_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                       rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
+                       raterange, noiserange, gridrange, Ngrid)
+
+# Model with multiple features
+complex_model = GRSMModel(rates, Gtransitions, G, R, S, insertstep, nalleles, splicetype,
+                          rateprior, proposal, fittedparam, fixedeffects, method, components, reporter,
+                          pool=pool, coupling=coupling)
+
+# ...existing code...
+
+# Update functions to support the unified model
+
+# Example: Update loglikelihood function
+function loglikelihood(param, data::AbstractExperimentalData, model::GRSMModel)
+    if haskey(model.features, :hierarchical)
+        # Handle hierarchical model
+        # ...code for hierarchical model...
+    elseif haskey(model.features, :coupled)
+        # Handle coupled model
+        # ...code for coupled model...
+    elseif haskey(model.features, :grid)
+        # Handle grid model
+        # ...code for grid model...
+    else
+        # Handle standard model
+        # ...code for standard model...
+    end
+end
+
+# ...existing code...
+
+# Example: Update prepare_rates function
+function prepare_rates(param, model::GRSMModel)
+    if haskey(model.features, :hierarchical)
+        # Handle hierarchical model rates preparation
+        # ...code for hierarchical model...
+    elseif haskey(model.features, :coupled)
+        # Handle coupled model rates preparation
+        # ...code for coupled model...
+    else
+        # Handle standard model rates preparation
+        # ...code for standard model...
+    end
+end
+
+# ...existing code...
+
 """
     print_model(model::AbstractModel)
 
@@ -1144,6 +1332,18 @@ function get_rates(param, model::GRSMcoupledmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
+function get_rates(param, model::GRSMModel, inverse=true)
+    r = copy(model.rates)
+    if inverse
+        transformed_param = inverse_transform_rates(param, model)
+    else
+        transformed_param = param
+    end
+    r[model.fittedparam] = transformed_param
+    # Apply fixed effects if any
+    r = fixed_rates(r, model.fixedeffects)
+    return r
+end
 
 
 """
@@ -1272,7 +1472,15 @@ This function computes the number of transition rates for the provided GRSM mode
 - `Int`: The number of transition rates.
 
 """
-num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+function num_rates(model::GRSMModel)
+    if haskey(model.features, :coupled)
+        # Handle coupled model where G, R, S, insertstep are Tuples
+        return num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+    else
+        # Handle standard model where G, R, S, insertstep are Int
+        return num_rates(model.Gtransitions, (model.R,), (model.S,), (model.insertstep,))
+    end
+end
 
 """
     num_rates(model::String)
