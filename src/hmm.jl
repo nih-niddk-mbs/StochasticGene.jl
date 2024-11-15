@@ -304,6 +304,56 @@ function make_a_grid(param, Ngrid)
 end
 
 
+function set_b(trace, d)
+    b = Array{Float64}(undef, (size(d)...,length(trace)))
+    for (t, obs) in enumerate(trace)
+        for j in CartesianIndices(d)
+            b[j, t] = pdf(d[j], obs)
+        end
+    end
+    return b
+end
+
+"""
+    set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
+    set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector , N)
+    set_b_coupled(trace, d, N)
+
+returns matrix b for coupled system
+"""
+
+function set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector, N)
+    d = Vector[]
+    for i in eachindex(params)
+        push!(d, probfn[i](params[i], rep_per_state[i], N))
+    end
+    set_b_coupled(trace, d, N)
+end
+
+function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
+    d = Vector[]
+    for i in eachindex(params)
+        rep = reporter[i]
+        push!(d, rep.probfn(params[i], rep.per_state, N))
+    end
+    set_b_coupled(trace, d, N)
+end
+
+function set_b_coupled(trace, d, N)
+    b = ones(N, size(trace, 1))
+    t = 1
+    for obs in eachrow(trace)
+        for j in 1:N
+            for i in eachindex(d)
+                b[j, t] *= pdf(d[i][j], obs[i])
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
+
 """
     set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
 
@@ -356,44 +406,7 @@ function set_logb(trace, params, reporters_per_state, probfn::Function, N)
     return logb
 end
 
-"""
-    set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
-    set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector , N)
-    set_b_coupled(trace, d, N)
 
-returns matrix b for coupled system
-"""
-
-function set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector, N)
-    d = Vector[]
-    for i in eachindex(params)
-        push!(d, probfn[i](params[i], rep_per_state[i], N))
-    end
-    set_b_coupled(trace, d, N)
-end
-
-function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
-    d = Vector[]
-    for i in eachindex(params)
-        rep = reporter[i]
-        push!(d, rep.probfn(params[i], rep.per_state, N))
-    end
-    set_b_coupled(trace, d, N)
-end
-
-function set_b_coupled(trace, d, N)
-    b = ones(N, size(trace, 1))
-    t = 1
-    for obs in eachrow(trace)
-        for j in 1:N
-            for i in eachindex(d)
-                b[j, t] *= pdf(d[i][j], obs[i])
-            end
-        end
-        t += 1
-    end
-    return b
-end
 
 """
     set_logb_coupled(trace, params, reporter, N)
