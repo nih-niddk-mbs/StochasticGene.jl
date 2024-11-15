@@ -955,7 +955,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2
-    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end])
+    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]),vcat(-reverse(lags), lags[2:end])
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
