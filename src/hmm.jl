@@ -39,7 +39,7 @@ function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporter
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
-        b = set_b(t, d, nT)
+        b = set_b(t, d)
         _, C = forward(a, b, p0, nT, T)
         push!(logpredictions, sum(log.(C)))
     end
@@ -94,7 +94,7 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
-        T = size(t,2)
+        T = size(t, 2)
         b = set_b_grid(t, d, Nstate, Ngrid)
         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
         println(sum(log.(C)))
@@ -304,8 +304,8 @@ function make_a_grid(param, Ngrid)
 end
 
 
-function set_b(trace, d)
-    b = Array{Float64}(undef, (size(d)...,length(trace)))
+function set_b(trace, d::Vector{Distribution{Univariate,Continuous}})
+    b = Array{Float64}(undef, (size(d)..., length(trace)))
     for (t, obs) in enumerate(trace)
         for j in CartesianIndices(d)
             b[j, t] = pdf(d[j], obs)
@@ -313,6 +313,38 @@ function set_b(trace, d)
     end
     return b
 end
+function set_b(trace, d::Vector{Vector{Distribution{Univariate,Continuous}}})
+    N = length(d[1])
+    b = ones(N, size(trace, 1))
+    t = 1
+    for obs in eachrow(trace)
+        for j in 1:N
+            for i in eachindex(d)
+                b[j, t] *= pdf(d[i][j], obs[i])
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
+function set_b(trace, d::Array{Distribution{Univariate,Continuous},3})
+    b = ones(Nstate, Ngrid, size(trace, 2))
+    t = 1
+    Nstate, Ngrid, _ = size(d)
+    for obs in eachcol(trace)
+        for j in 1:Nstate
+            for k in 1:Ngrid
+                for l in 1:Ngrid
+                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
+                end
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
 
 """
     set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
@@ -339,7 +371,7 @@ function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
     set_b_coupled(trace, d, N)
 end
 
-function set_b_coupled(trace, d, N)
+function set_b_coupled(trace, d::Vector{Vector}, N)
     b = ones(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
@@ -352,6 +384,7 @@ function set_b_coupled(trace, d, N)
     end
     return b
 end
+
 
 
 """
@@ -383,6 +416,43 @@ function set_b(trace, d, N)
         for j in 1:N
             b[j, t] = pdf(d[j], obs)
         end
+    end
+    return b
+end
+
+
+"""
+    set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
+
+Calculates the probability matrix `b` for given trace data using a specified probability function.
+
+# Arguments
+- `trace`: The trace data.
+- `params`: Parameters for the probability function.
+- `reporters_per_state`: Number of reporters per state.
+- `probfn::Function`: The probability function to use.
+- `Nstate`: Number of states.
+- `Ngrid`: Number of positions.
+
+# Returns
+- `Matrix`: The probability matrix `b`.
+"""
+function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
+    d = probfn(params, reporters_per_state, Nstate, Ngrid)
+    set_b_grid(trace, d, Nstate, Ngrid)
+end
+function set_b_grid(trace, d, Nstate, Ngrid)
+    b = ones(Nstate, Ngrid, size(trace, 2))
+    t = 1
+    for obs in eachcol(trace)
+        for j in 1:Nstate
+            for k in 1:Ngrid
+                for l in 1:Ngrid
+                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
+                end
+            end
+        end
+        t += 1
     end
     return b
 end
@@ -433,42 +503,6 @@ function set_logb_coupled(trace, params, reporter, N)
 end
 
 """
-    set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
-
-Calculates the probability matrix `b` for given trace data using a specified probability function.
-
-# Arguments
-- `trace`: The trace data.
-- `params`: Parameters for the probability function.
-- `reporters_per_state`: Number of reporters per state.
-- `probfn::Function`: The probability function to use.
-- `Nstate`: Number of states.
-- `Ngrid`: Number of positions.
-
-# Returns
-- `Matrix`: The probability matrix `b`.
-"""
-function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
-    d = probfn(params, reporters_per_state, Nstate, Ngrid)
-    set_b_grid(trace, d, Nstate, Ngrid)
-end
-function set_b_grid(trace, d, Nstate, Ngrid)
-    b = ones(Nstate, Ngrid, size(trace,2))
-    t = 1
-    for obs in eachcol(trace)
-        for j in 1:Nstate
-            for k in 1:Ngrid
-                for l in 1:Ngrid
-                    b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
-                end
-            end
-        end
-        t += 1
-    end
-    return b
-end
-
-"""
     prob_Gaussian(par, reporters_per_state, N)
 
 TBW
@@ -481,8 +515,8 @@ function prob_Gaussian(par, reporters_per_state, N)
     d
 end
 function prob_Gaussian(par, reporters)
-    if reporters > 0 
-    return Normal(reporters * par[3], sqrt(reporters) * par[4])
+    if reporters > 0
+        return Normal(reporters * par[3], sqrt(reporters) * par[4])
     else
         return Normal(par[1], par[2])
     end
@@ -502,7 +536,7 @@ variance = sum of variances of background and reporters_per_state
 function prob_Gaussian_sum(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = prob_Gaussian(par, reporters_per_state[i])
+        d[i] = prob_Gaussian_sum(par, reporters_per_state[i])
     end
     d
 end
@@ -644,6 +678,23 @@ function forward(a, b, p0, N, T)
     return α, C
 end
 
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    α = zeros(Nstate, Ngrid, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
+end
 function forward_mm(a, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
@@ -705,23 +756,7 @@ function forward_loop(a, b, p0, N, T)
     return α
 end
 
-function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
-    end
-    return α, C
-end
+
 """
 backward_scaled(a,b)
 
@@ -968,7 +1003,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2
-    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]),vcat(-reverse(lags), lags[2:end])
+    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]), vcat(-reverse(lags), lags[2:end])
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
