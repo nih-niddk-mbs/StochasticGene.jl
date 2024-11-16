@@ -208,6 +208,39 @@ function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TR
     sum(logpredictions) + lb, logpredictions
 end
 
+### Obsolete
+
+# function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+#     a, p0 = make_ap(r, interval, elementsT, nT)
+#     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+#     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
+#     return ll + lb, lp
+# end
+
+"""
+    ll_hmm_log(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+
+"""
+function ll_hmm_log(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    ll, lp = ll_hmm_log(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
+    return ll + lb, lp
+end
+"""
+    ll_hmm_log(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
+
+"""
+function ll_hmm_log(r, nT, noiseparams::Int, reporters_per_state, probfn, traces, loga, logp0)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in traces
+        T = length(t)
+        logb = set_logb(t, r[end-noiseparams+1:end], reporters_per_state, probfn, nT)
+        l = forward_log(loga, logb, logp0, nT, T)
+        push!(logpredictions, logsumexp(l[:, T]))
+    end
+    -sum(logpredictions), -logpredictions
+end
 
 
 """
