@@ -101,7 +101,7 @@ TBW
 """
 function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
     a_grid = make_a_grid(pgrid, Ngrid)
-    a, p0 = StochasticGene.make_ap(r, interval, components)
+    a, p0 = make_ap(r, interval, components)
     d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
@@ -172,23 +172,6 @@ function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents
     sum(logpredictions), logpredictions
 end
 
-"""
-    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-
-TBW
-"""
-function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    a, p0 = make_ap(r[:, 1], interval, elementsT, nT)
-    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions) + lb, logpredictions
-end
 
 """
     ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)

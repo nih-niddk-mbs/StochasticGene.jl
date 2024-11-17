@@ -188,6 +188,8 @@ struct HMMReporter
     offstates::Vector{Int}
 end
 
+
+
 """
     Abstract model types
 """
@@ -274,7 +276,7 @@ Structure for GRSM models.
 - `components::ComponentType`: Components of the model.
 - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
 """
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMmodel1{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -291,6 +293,26 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     components::ComponentType
     reporter::ReporterType
 end
+
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,FeatureType} <: AbstractGRSMmodel{FeatureType}
+    rates::RateType
+    Gtransitions::Tuple
+    G::Union{Int, Tuple{Int}}
+    R::Union{Int, Tuple{Int}}
+    S::Union{Int, Tuple{Int}}
+    insertstep::Union{Int, Tuple{Int}}
+    nalleles::Union{Int, Tuple{Int}}
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+    features::FeatureType
+end
+
 
 """
     GRSMhierarchicalmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
