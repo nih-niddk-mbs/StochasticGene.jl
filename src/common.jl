@@ -276,7 +276,7 @@ Structure for GRSM models.
 - `components::ComponentType`: Components of the model.
 - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
 """
-struct GRSMmodel1{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -294,24 +294,24 @@ struct GRSMmodel1{RateType,PriorType,ProposalType,ParamType,MethodType,Component
     reporter::ReporterType
 end
 
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,FeatureType} <: AbstractGRSMmodel{FeatureType}
-    rates::RateType
-    Gtransitions::Tuple
-    G::Union{Int, Tuple{Int}}
-    R::Union{Int, Tuple{Int}}
-    S::Union{Int, Tuple{Int}}
-    insertstep::Union{Int, Tuple{Int}}
-    nalleles::Union{Int, Tuple{Int}}
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-    features::FeatureType
-end
+# struct GRSMModel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,FeatureType} <: AbstractGRSMmodel{FeatureType}
+#     rates::RateType
+#     Gtransitions::Tuple
+#     G::Union{Int, Tuple{Int}}
+#     R::Union{Int, Tuple{Int}}
+#     S::Union{Int, Tuple{Int}}
+#     insertstep::Union{Int, Tuple{Int}}
+#     nalleles::Union{Int, Tuple{Int}}
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+#     features::FeatureType
+# end
 
 
 """
@@ -804,7 +804,7 @@ convert MCMC params into form to compute likelihood for coupled model
 function prepare_rates(param, model::GRSMcoupledmodel)
     rates = get_rates(param, model)
     n_noise = [r.n for r in model.reporter]
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    sourceStates = Tuple([c.sourceState for c in model.components.modelcomponents])
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
@@ -838,7 +838,7 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
         j += n
     end
     for i in eachindex(G)
-        if sourceStates[i] > 0
+        if !iszero(sourceStates[i])
             push!(couplingStrength, rates[j])
             j += 1
         else

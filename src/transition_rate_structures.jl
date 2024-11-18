@@ -132,8 +132,8 @@ struct ModelCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
-    sourceState::Int
-    targetTransition::Int
+    sourceState::Union{Int, Vector{Int}}
+    targetTransition::Union{Int, Vector{Int}}
     elementsG::Vector
     elementsGt::Vector
     elementsGs::Vector

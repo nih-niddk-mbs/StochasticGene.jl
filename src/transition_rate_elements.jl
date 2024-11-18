@@ -73,9 +73,18 @@ end
 
 
 """
-function set_elements_Gs(nS)
+function set_elements_Gs(nS::Int)
     [Element(nS, nS, 0, 1)]
 end
+
+function set_elements_Gs(nS::Vector{Int})
+    elementsGs = Vector{Element}(undef, 0)
+    for i in nS
+        push!(elementsGs, Element(i, i, 0, 1))
+    end
+    return elementsGs
+end
+
 """
     set_elements_T(transitions, G, R, S, indices::Indices, splicetype::String)
 
