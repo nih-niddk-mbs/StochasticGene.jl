@@ -69,7 +69,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `nalleles`: Number of alleles, set to 1 if coupling nonempty
 - `nhist::Int`: Size of mRNA histogram
 - `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
-- `probfn`=prob_GaussianMixture: reporter distribution
+- `probfn`=prob_Gaussian: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
 - `splicetype`::String: splice action
 - `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)

@@ -1511,7 +1511,7 @@ plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
 function simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60)
-    cc12, cc21, ac1, ac2, cc_theory = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, prob_Gaussian_sum, coupling, collect(0:lag))
+    cc12, cc21, ac1, ac2, cc_theory = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, prob_Gaussian, coupling, collect(0:lag))
     cc_mean = zeros(2*lag+1)
     cc_var = zeros(2*lag+1)
     linf_norm = Float64[]

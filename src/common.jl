@@ -294,7 +294,7 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-# struct GRSMModel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType,FeatureType} <: AbstractGRSMmodel{FeatureType}
+# struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
 #     rates::RateType
 #     Gtransitions::Tuple
 #     G::Union{Int, Tuple{Int}}
@@ -310,7 +310,6 @@ end
 #     method::MethodType
 #     components::ComponentType
 #     reporter::ReporterType
-#     features::FeatureType
 # end
 
 
@@ -804,7 +803,7 @@ convert MCMC params into form to compute likelihood for coupled model
 function prepare_rates(param, model::GRSMcoupledmodel)
     rates = get_rates(param, model)
     n_noise = [r.n for r in model.reporter]
-    sourceStates = Tuple([c.sourceState for c in model.components.modelcomponents])
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
@@ -838,7 +837,7 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
         j += n
     end
     for i in eachindex(G)
-        if !iszero(sourceStates[i])
+        if sourceStates[i] > 0
             push!(couplingStrength, rates[j])
             j += 1
         else
