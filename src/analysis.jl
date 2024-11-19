@@ -1510,12 +1510,12 @@ ntrials = 100
 plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
-function simulate_trials(r, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60)
-    _, _, _, _, cc_theory = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, prob_Gaussian, coupling, collect(0:lag))
-    simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag, prob_Gaussian)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
+    _, _, _, _, cc_theory = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
+    simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag)
 end
 
-function simulate_trials(cc_theory, r, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
+function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60)
     cc_mean = zeros(2*lag+1)
     cc_var = zeros(2*lag+1)
     linf_norm = Float64[]
