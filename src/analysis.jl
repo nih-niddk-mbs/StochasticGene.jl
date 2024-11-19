@@ -1511,24 +1511,24 @@ plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
-    _, _, _, _, cc_theory = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
-    simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag)
+    _, _, _, _, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
+    simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
 end
 
-function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60)
-    cc_mean = zeros(2*lag+1)
-    cc_var = zeros(2*lag+1)
+function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags = collect(-60:60))
+    cc_mean = zeros(length(lags))
+    cc_var = zeros(length(lags))
     linf_norm = Float64[]
     l2_norm = Float64[]
     vartuple = (0, cc_mean, cc_var)
     for n in 1:ntrials
         t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1)
-        vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], collect(-lag:lag), demean=true))
+        vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
         push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
         push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
     end
     counts, cc_mean, cc_var = vartuple
-    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var./(counts-1) ./ counts)
+    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var./(counts-1) ./ counts), lags
 end
 
 # Usage example:
