@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
  
 """
-function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
 
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
@@ -131,6 +131,19 @@ function simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nallel
         err = 0.0
         totalsteps = 0
     end
+
+    if warmupsteps > 0
+        for steps in 1:warmupsteps
+            t, index, allele = findmin_tau(tau)
+            initial, final, disabled, enabled, action = set_arguments(reactions, index)
+            m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+        end # for   
+        for taui in tau
+            taui .-= t
+        end
+        t = t0
+    end # if
+
 
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
@@ -233,9 +246,9 @@ function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, to
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
         if isnothing(a_grid)
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid)[1][1:end-1, 2]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
         else
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid)[1]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
         end
     end
     trace
@@ -244,7 +257,7 @@ end
 function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps = 100)[1]
         tr = Vector[]
         for t in t
             tr = push!(tr, t[1:end-1, 2])
@@ -259,7 +272,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime)[1][1:end-1, :]
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps = 100)[1][1:end-1, :]
 
 
 """
@@ -995,7 +1008,7 @@ function couplingG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, ena
     # unit just changed state
 
     # unit as source
-    # new state moves into a primed source state
+    # new state moves into or out of a primed source state
 
     for target in targets
         if isfinite(tau[target][ttrans[target], 1])
