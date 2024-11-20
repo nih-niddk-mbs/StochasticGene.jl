@@ -1531,6 +1531,14 @@ function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R,
     return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var./(counts-1) ./ counts), lags
 end
 
+function data_covariance(traces, lags)
+    cov = zeros(length(lags))
+    for t in traces
+       cov += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
+    end
+    cov, lags
+end
+
 # Usage example:
 # (norms, theory, sims, means, errors) = simulate_trials(...)
 # plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
