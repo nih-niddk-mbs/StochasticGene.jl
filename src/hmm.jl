@@ -10,6 +10,21 @@
 ###
 
 """
+    ll_hmm(a, p0, d, traces)
+
+TBW
+"""
+function ll_hmm(a, p0, d, traces)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in traces
+        b = set_b(t, d)
+        _, C = forward(a, b, p0)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions), logpredictions
+end
+
+"""
     ll_hmm(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
@@ -47,15 +62,7 @@ function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporter
 end
 
 
-function ll_hmm(a, p0, d, traces)
-    logpredictions = Array{Float64}(undef, 0)
-    for t in traces
-        b = set_b(t, d)
-        _, C = forward(a, b, p0)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions), logpredictions
-end
+
 
 """
     ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)

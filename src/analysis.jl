@@ -1225,54 +1225,54 @@ Plot multiple traces in separate panels for data and model.
 - `Plots.Plot`: Combined plot object
 """
 function plot_traces(df::DataFrame;
-                    cols::Vector{Int}=collect(1:2),  # Changed this line
-                    with_errors::Bool=false,
-                    normalize::Bool=false,
-                    title::String="Traces",
-                    alpha::Float64=0.3)
-    
+    cols::Vector{Int}=collect(1:2),  # Changed this line
+    with_errors::Bool=false,
+    normalize::Bool=false,
+    title::String="Traces",
+    alpha::Float64=0.3)
+
     n = length(cols)
-    p = plot(layout=(n,1), legend=:topleft, title=title)
-    
+    p = plot(layout=(n, 1), legend=:topleft, title=title)
+
     for (j, i) in enumerate(cols)
         data_col = Symbol("data$i")
         mean_col = Symbol("model_mean$i")
         std_col = Symbol("model_std$i")
-        
+
         # Get data, filtering out missing values
         y_data = df[!, data_col]
         y_model = df[!, mean_col]
         y_std = hasproperty(df, std_col) ? df[!, std_col] : nothing
-        
+
         # Filter out missing values
         valid_indices = .!ismissing.(y_data) .& .!ismissing.(y_model)
         y_data = y_data[valid_indices]
         y_model = y_model[valid_indices]
         y_std = y_std !== nothing ? y_std[valid_indices] : nothing
-        
+
         # Normalize if needed
         if normalize
             y_data ./= maximum(y_data)
             y_model ./= maximum(y_model)
             y_std = y_std !== nothing ? y_std ./ maximum(y_model) : nothing
         end
-        
+
         # Plot data points in the first row
-        scatter!(p[j,1], y_data, label="Data $i", markersize=3)
-        
+        scatter!(p[j, 1], y_data, label="Data $i", markersize=3)
+
         # Plot model with optional error ribbon in the second row
         if with_errors && y_std !== nothing
-            plot!(p[j,1], y_model, err=y_std, label="Model $i", alpha=alpha)
+            plot!(p[j, 1], y_model, err=y_std, label="Model $i", alpha=alpha)
         else
-            plot!(p[j,1], y_model, label="Model $i")
+            plot!(p[j, 1], y_model, label="Model $i")
         end
     end
-    
+
     # xlabel!(p[1, :], "Time point")
     # ylabel!(p[1, :], normalize ? "Normalized value" : "Value")
     # xlabel!(p[2, :], "Time point")
     # ylabel!(p[2, :], normalize ? "Normalized value" : "Value")
-    
+
     return p
 end
 
@@ -1515,28 +1515,42 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
 end
 
-function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags = collect(-60:60))
+function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(-60:60))
     cc_mean = zeros(length(lags))
     cc_var = zeros(length(lags))
+    ac1_mean = zeros(61)
+    ac1_var = zeros(61)
+    ac2_mean = zeros(61)
+    ac2_var = zeros(61)
     linf_norm = Float64[]
     l2_norm = Float64[]
+    ac1tuple = (0, ac1_mean, ac1_var)
+    ac2tuple = (0, ac2_mean, ac2_var)
     vartuple = (0, cc_mean, cc_var)
     for n in 1:ntrials
         t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1)
         vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
+        ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:60), demean=true))
+        ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:60), demean=true))
         push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
         push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
     end
     counts, cc_mean, cc_var = vartuple
-    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var./(counts-1) ./ counts), lags
+    counts1, ac1_mean, ac1_var = ac1tuple
+    counts2, ac2_mean, ac2_var = ac2tuple
+    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac2_mean
 end
 
 function data_covariance(traces, lags)
+    ac1 = zeros(length(lags))
+    ac2 = zeros(length(lags))
     cov = zeros(length(lags))
     for t in traces
-       cov += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
+        cov += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
+        ac1 += StatsBase.crosscov(t[:, 1],t[:,1], lags, demean=true)
+        ac2 += StatsBase.crosscov(t[:, 2], t[:,2], lags, demean=true)
     end
-    cov, lags
+    ac1 /length(traces), ac2/length(traces), cov/length(traces), lags
 end
 
 # Usage example:
