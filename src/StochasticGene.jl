@@ -136,6 +136,9 @@ include("transition_rate_elements.jl")
 include("transition_rate_functions.jl")
 include("transition_rate_make.jl")
 
+# Likelihood functions for fitting algorithms
+include("likelihoods.jl")
+
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
 
