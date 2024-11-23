@@ -132,17 +132,18 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
         totalsteps = 0
     end
 
-    if warmupsteps > 0
-        for steps in 1:warmupsteps
-            t, index, allele = findmin_tau(tau)
-            initial, final, disabled, enabled, action = set_arguments(reactions, index)
-            m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
-        end # for   
-        for taui in tau
-            taui .-= t
-        end
-        t = t0
-    end # if
+    # if warmupsteps > 0
+    #     for steps in 1:warmupsteps
+    #         t, index, allele = findmin_tau(tau)
+    #         initial, final, disabled, enabled, action = set_arguments(reactions, index)
+    #         m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+    #     end # for   
+    #     println(tau)
+    #     for taui in tau
+    #         taui .-= t
+    #     end
+    #     t = t0
+    # end # if
 
 
     while (err > tol && steps < totalsteps) || t < totaltime
