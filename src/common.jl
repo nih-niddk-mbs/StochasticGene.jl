@@ -1007,44 +1007,13 @@ This function calculates the likelihood array for RNA dwell time data using the 
 # end
 
 function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
-    M = make_mat_M(model.components.mcomponents, r)
-    histF = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
-    [histF; likelihoodDT(r, model.components.tcomponents, model)]
+    likelihoodarray(r, model.G, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
 end
 
 function likelihoodarray(r, data::DwellTimeData, model::AbstractGmodel)
-    likelihoodDT(r, model.components.tcomponents, model)
+    likelihoodarray(r, model.G, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
-function likelihoodDT(r, tcomponents::TComponents, model::AbstractGmodel)
-    G = model.G
-    onstates = model.reporter
-    elementsT = tcomponents.elementsT
-    elementsTG = tcomponents.elementsTG
-    T = make_mat(elementsT, r, tcomponents.nT)
-    pss = normalized_nullspace(T)
-    TG = make_mat(elementsTG, r, G)
-    pssG = normalized_nullspace(TG)
-    hists = Vector[]
-    for (i, Dtype) in enumerate(data.DTtypes)
-        if Dtype == "OFF"
-            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-            nonzeros = nonzero_rows(TD)
-            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
-        elseif Dtype == "ON"
-            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
-            h = ontimePDF(data.bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
-        elseif Dtype == "OFFG"
-            TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = offtimePDF(data.bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
-        elseif Dtype == "ONG"
-            TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = ontimePDF(data.bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
-        end
-        push!(hists, h)
-    end
-    return hists
-end
 
 """
     likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
@@ -1068,8 +1037,38 @@ This function calculates the likelihood array for various types of data, includi
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods.
 """
 function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
-    tcomponents = components.tcomponents
-    mcomponents = components.mcomponents
+    M = make_mat_M(components.mcomponents, r)
+    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, tcomponents::TComponents, bins, onstates, dttype)]
+
+    # tcomponents = components.tcomponents
+    # elementsT = tcomponents.elementsT
+    # T = make_mat(elementsT, r, tcomponents.nT)
+    # pss = normalized_nullspace(T)
+    # elementsTG = tcomponents.elementsTG
+    # TG = make_mat(elementsTG, r, G)
+    # pssG = normalized_nullspace(TG)
+
+    # for (i, Dtype) in enumerate(dttype)
+    #     if Dtype == "OFF"
+    #         TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+    #         nonzeros = nonzero_rows(TD)
+    #         h = offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+    #     elseif Dtype == "ON"
+    #         TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+    #         h = ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+    #     elseif Dtype == "OFFG"
+    #         TD = make_mat(tcomponents.elementsTD[i], r, G)
+    #         h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
+    #     elseif Dtype == "ONG"
+    #         TD = make_mat(tcomponents.elementsTD[i], r, G)
+    #         h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
+    #     end
+    #     push!(hists, h)
+    # end
+    # return hists
+end
+
+function likelihoodarray(r, G, tcomponents::TComponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -1077,9 +1076,6 @@ function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRN
     TG = make_mat(elementsTG, r, G)
     pssG = normalized_nullspace(TG)
     hists = Vector[]
-    M = make_mat_M(mcomponents, r)
-    histF = steady_state(M, mcomponents.nT, nalleles, nRNA)
-    push!(hists, histF)
     for (i, Dtype) in enumerate(dttype)
         if Dtype == "OFF"
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
@@ -1099,6 +1095,8 @@ function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRN
     end
     return hists
 end
+
+
 """
     transform_array(v, index, f1, f2)
     transform_array(v, index, mask, f1, f2)
