@@ -1511,11 +1511,11 @@ plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
-    _, _, _, _, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
-    simulate_trials(cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
+    _, _, ac1, ac2, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
+    simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
 end
 
-function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(-60:60))
+function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(-60:60))
     cc_mean = zeros(length(lags))
     cc_var = zeros(length(lags))
     ac1_mean = zeros(61)
@@ -1538,7 +1538,7 @@ function simulate_trials(cc_theory::Vector, r::Vector, transitions::Tuple, G, R,
     counts, cc_mean, cc_var = vartuple
     counts1, ac1_mean, ac1_var = ac1tuple
     counts2, ac2_mean, ac2_var = ac2tuple
-    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac2_mean
+    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
 end
 
 function data_covariance(traces, lags)
@@ -1547,10 +1547,10 @@ function data_covariance(traces, lags)
     cov = zeros(length(lags))
     for t in traces
         cov += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
-        ac1 += StatsBase.crosscov(t[:, 1],t[:,1], lags, demean=true)
-        ac2 += StatsBase.crosscov(t[:, 2], t[:,2], lags, demean=true)
+        ac1 += StatsBase.crosscov(t[:, 1], t[:, 1], lags, demean=true)
+        ac2 += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
     end
-    ac1 /length(traces), ac2/length(traces), cov/length(traces), lags
+    ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
 end
 
 # Usage example:
