@@ -1037,8 +1037,9 @@ This function calculates the likelihood array for various types of data, includi
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods.
 """
 function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
+    mcomponents = components.mcomponents
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, tcomponents::TComponents, bins, onstates, dttype)]
+    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, components.tcomponents, bins, onstates, dttype)]
 
     # tcomponents = components.tcomponents
     # elementsT = tcomponents.elementsT
@@ -1068,7 +1069,7 @@ function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRN
     # return hists
 end
 
-function likelihoodarray(r, G, tcomponents::TComponents, bins, onstates, dttype)
+function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
