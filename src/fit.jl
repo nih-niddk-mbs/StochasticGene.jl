@@ -229,6 +229,9 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
+    elseif datatype == "dwelltime"
+        bins, DT = read_dwelltimes(datapath)
+        return DwellTimeData(label, gene, bins, DT, dttype)
     elseif occursin("trace", datatype)
         if datatype == "tracejoint"
             load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
@@ -320,7 +323,7 @@ function load_model_grid(data, r, rm, fittedparam, fixedeffects, transitions, G,
     noiserange = n+1:n+length(noisepriors)
     gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    propcv < 0 &&  (propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root))
+    propcv < 0 && (propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root))
     GRSMgridmodel{typeof(r),Nothing,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, raterange, noiserange, gridrange, grid, nothing, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
