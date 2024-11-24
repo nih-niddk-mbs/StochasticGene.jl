@@ -913,17 +913,15 @@ This function computes the number of transition rates for the provided GRSM mode
 
 """
 
+"""
+    num_rates(model::AbstractGRSMmodel)
+
+# Description
+This function computes the number of transition rates for the provided GRSM model. It calculates the number of rates based on the model's G transitions, R steps, S splicing indicator, and insert step.
+
+"""
 num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
-# function num_rates(model::GRSMModel)
-#     if haskey(model.features, :coupled)
-#         # Handle coupled model where G, R, S, insertstep are Tuples
-#         return num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
-#     else
-#         # Handle standard model where G, R, S, insertstep are Int
-#         return num_rates(model.Gtransitions, (model.R,), (model.S,), (model.insertstep,))
-#     end
-# end
 
 """
     num_rates(model::String)
