@@ -912,6 +912,9 @@ This function computes the number of transition rates for the provided GRSM mode
 - `Int`: The number of transition rates.
 
 """
+
+num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+
 # function num_rates(model::GRSMModel)
 #     if haskey(model.features, :coupled)
 #         # Handle coupled model where G, R, S, insertstep are Tuples
