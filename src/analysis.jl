@@ -1358,11 +1358,6 @@ function plot_histogram(ratefile::String, datapath; root=".", row=2)
     return data, model
 end
 
-function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
-    simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
-end
-
-
 function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefile::String, datapath::String, root::String=".")
     fish = false
     rates = readdlm(ratefile, ',', header=true)

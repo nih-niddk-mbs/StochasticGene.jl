@@ -167,6 +167,9 @@ include("biowulf.jl")
 # functions for hidden markov models
 include("hmm.jl")
 
+# test functions
+include("test.jl")
+
 
 """
 A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.
