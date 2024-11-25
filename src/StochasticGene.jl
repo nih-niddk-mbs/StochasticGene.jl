@@ -111,7 +111,7 @@ export
     make_components_T,
     make_components_TAI,
     make_components_TRG,
-    make_components_Tcoupled,
+    make_components_TCoupled,
     likelihoodarray,
     likelihoodfn,
     loglikelihood,

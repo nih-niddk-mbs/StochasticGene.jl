@@ -157,7 +157,7 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
-    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
+    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength)
 end
 
@@ -167,7 +167,7 @@ function test_mat_Tc2(coupling, r, coupling_strength, transitions, G, R, S, inse
         c = make_components_TRG(transitions[i], G[i], R[i], S[i], insertstep[i], "")
         push!(T, make_mat_TRG(c, r[i]))
     end
-    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
+    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength), T, kron(T[1], sparse(I, size(T[2]))) + kron(sparse(I, size(T[1])), T[2])
 end
 
@@ -184,7 +184,7 @@ end
 marg(p, dims) = dropdims(sum(p, dims=dims), dims=dims)
 
 function make_test_matrices(r::Vector{Vector{type}}, coupling, transitions, G, R, S, insertstep, coupling_strength=[1.0, 1]) where {type<:Number}
-    components = StochasticGene.make_components_Tcoupled(coupling, transitions, G, R, S, insertstep)
+    components = StochasticGene.make_components_TCoupled(coupling, transitions, G, R, S, insertstep)
     Tc = StochasticGene.make_mat_TC(components, r, coupling_strength)
     T, GGv, Gt, Gs, IG, IR, IT = StochasticGene.make_matvec_C(components, r)
     GG = StochasticGene.make_mat_TC(coupling_strength, GGv, Gs, Gt, IG, components.sources, components.model)
@@ -217,7 +217,7 @@ end
 
 
 function test_distributions(r::Vector{Vector{type}}, coupling, transitions, G, R, S, insertstep, coupling_strength=[1.0, 1]) where {type<:Number}
-    components = StochasticGene.make_components_Tcoupled(coupling, transitions, G, R, S, insertstep)
+    components = StochasticGene.make_components_TCoupled(coupling, transitions, G, R, S, insertstep)
     Tc = StochasticGene.make_mat_TC(components, r, coupling_strength)
     T, GG, Gt, Gs, IG, IR, IT = StochasticGene.make_matvec_C(components, r)
     ac = StochasticGene.kolmogorov_forward(Tc', 1.0)
@@ -353,4 +353,3 @@ function conditional_distribution(joint_prob::Array, dist_index::Int, cond_indic
 
     return cond_prob
 end
-

@@ -267,12 +267,12 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
 end
 
 """
-    make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+    make_components_ModelRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
 
-Return ModelCoupledComponents structure for coupled models.
+Return ModelRGCoupledComponents structure for coupled models.
 
 # Description
-This function returns a ModelCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+This function returns a ModelRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
 
 # Arguments
 - `source_state`: Source state.
@@ -285,22 +285,22 @@ This function returns a ModelCoupledComponents structure for coupled models, whi
 - `splicetype`: Splice type (default is an empty string).
 
 # Returns
-- `ModelCoupledComponents`: The created ModelCoupledComponents structure.
+- `ModelRGCoupledComponents`: The created ModelRGCoupledComponents structure.
 """
-function make_components_ModelCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+function make_components_ModelRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    ModelCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
+    ModelRGCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
 end
 
 """
-    make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
-    make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+    make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
 
-Return TcoupledComponents structure for coupled models.
+Return TCoupledComponents structure for coupled models.
 
 # Description
-This function returns a TcoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+This function returns a TCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
 
 # Arguments
 - `coupling::Tuple`: Tuple of coupling parameters.
@@ -316,18 +316,18 @@ This function returns a TcoupledComponents structure for coupled models, which i
 - `target_transition`: Target transition.
 
 # Methods
-- `make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TcoupledComponents structure from coupling parameters and transition rates.
-- `make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TcoupledComponents structure from unit model and other parameters.
+- `make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TCoupledComponents structure from coupling parameters and transition rates.
+- `make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TCoupledComponents structure from unit model and other parameters.
 
 # Returns
-- `TcoupledComponents`: The created TcoupledComponents structure.
+- `TCoupledComponents`: The created TCoupledComponents structure.
 """
-make_components_Tcoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_Tcoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
-function make_components_Tcoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = ModelCoupledComponents[]
+function make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    comp = ModelRGCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(comp, make_components_ModelRGCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end

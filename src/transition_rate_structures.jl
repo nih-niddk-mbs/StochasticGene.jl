@@ -111,9 +111,23 @@ struct TDComponents <: AbstractTComponents
     elementsTD::Vector{Vector{Element}}
 end
 
+struct TDCoupledComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Union{Int, Vector{Int}}
+    targetTransition::Union{Int, Vector{Int}}
+    elementsG::Vector
+    elementsGt::Vector
+    elementsGs::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+    elementsTD::Vector{Vector{Element}}
+end
+
 
 """
- 	ModelCoupledComponents
+ 	ModelRGCoupledComponents
 
 fields:
     nT::Int
@@ -128,7 +142,7 @@ fields:
     elementsRG::Vector
 
 """
-struct ModelCoupledComponents <: AbstractTComponents
+struct ModelRGCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
@@ -149,13 +163,13 @@ fields:
     N::Int: total number of states
     model::Tuple: model index for each trace
     sources::Tuple: source model for each
-    modelcomponents::Vector{ModelCoupledComponents}
+    modelcomponents::Vector{ModelRGCoupledComponents}
 """
-struct TCoupledComponents
+struct TCoupledComponents{ModelType}
     N::Int
     model::Tuple
     sources::Tuple
-    modelcomponents::Vector{ModelCoupledComponents}
+    modelcomponents::Vector{ModelType}
 end
 
 

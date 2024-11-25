@@ -433,7 +433,7 @@ function load_model_coupled(r, rm, fittedparam::Vector, fixedeffects::Tuple, tra
         push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    components = make_components_Tcoupled(coupling, transitions, G, R, S, insertstep, "")
+    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, "")
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 

@@ -28,7 +28,7 @@ state_index(G::Int, g, z) = g + G * (z - 1)
 Return the inverse state for a given state index or vector of units.
 
 # Description
-This function returns the inverse state for a given state index or vector of units. It can handle different types of inputs, including integers, tuples, and vectors.
+This function returns the inverse state (G and RS indices) for a given state index or vector of units. It can handle different types of inputs, including integers, tuples, and vectors.
 
 # Arguments
 - `i::Int`: State index.
@@ -65,7 +65,7 @@ function inverse_state(i::Int, G::Tuple, R, S, insertstep, unit_model, f=sum)
     inverse_state(units, G, R, S, insertstep, f)
 end
 
-function inverse_state(units::Vector, G::Tuple, R, S, insertstep, f=sum)
+function inverse_state(units, G::Tuple, R, S, insertstep, f=sum)
     states = Tuple[]
     for i in eachindex(units)
         push!(states, inverse_state(units[i], G[i], R[i], S[i], insertstep[i], f))
@@ -178,6 +178,24 @@ function on_states(onstates::Vector, G, R, S)
     end
     o
 end
+
+function on_states(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model)
+    nT = T_dimension.(G, R, S)
+    onstates = Vector[]
+    for m in unit_model
+        o = on_states(G[m], R[m], S[m], insertstep[m])
+        println(o)
+        nbefore = prod(nT[1:m-1])
+        nafter = prod(nT[m+1:end])
+        enlarged_indices = [(j - 1) * nbefore + 1:j * nbefore for j in o]
+        enlarged_indices = vcat(enlarged_indices...)  # Flatten again into a single vector
+        enlarged_indices = [i + (j-1)*nafter for i in enlarged_indices, j in 1:nafter]
+        enlarged_indices = vcat(enlarged_indices...)  # Flatten into a single vector
+        push!(onstates, enlarged_indices)
+    end
+    onstates
+end
+
 """
     on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 
