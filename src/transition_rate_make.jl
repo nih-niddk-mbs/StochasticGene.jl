@@ -267,12 +267,12 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
 end
 
 """
-    make_components_ModelRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+    make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
 
-Return ModelRGCoupledComponents structure for coupled models.
+Return TRGCoupledComponents structure for coupled models.
 
 # Description
-This function returns a ModelRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+This function returns a TRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
 
 # Arguments
 - `source_state`: Source state.
@@ -285,12 +285,12 @@ This function returns a ModelRGCoupledComponents structure for coupled models, w
 - `splicetype`: Splice type (default is an empty string).
 
 # Returns
-- `ModelRGCoupledComponents`: The created ModelRGCoupledComponents structure.
+- `TRGCoupledComponents`: The created TRGCoupledComponents structure.
 """
-function make_components_ModelRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+function make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    ModelRGCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
+    TRGCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
 end
 
 """
@@ -325,11 +325,11 @@ This function returns a TCoupledComponents structure for coupled models, which i
 make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
 function make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = ModelRGCoupledComponents[]
+    comp = TRGCoupledComponents[]
     for i in eachindex(G)
-        push!(comp, make_components_ModelRGCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(comp, make_components_TRGCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
-    TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
 
 

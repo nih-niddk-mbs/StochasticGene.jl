@@ -127,7 +127,7 @@ end
 
 
 """
- 	ModelRGCoupledComponents
+ 	TRGCoupledComponents
 
 fields:
     nT::Int
@@ -142,7 +142,7 @@ fields:
     elementsRG::Vector
 
 """
-struct ModelRGCoupledComponents <: AbstractTComponents
+struct TRGCoupledComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
@@ -163,13 +163,13 @@ fields:
     N::Int: total number of states
     model::Tuple: model index for each trace
     sources::Tuple: source model for each
-    modelcomponents::Vector{ModelRGCoupledComponents}
+    modelcomponents::Vector{TRGCoupledComponents}
 """
 struct TCoupledComponents{ModelType}
     N::Int
     model::Tuple
     sources::Tuple
-    modelcomponents::Vector{ModelType}
+    modelcomponents::ModelType
 end
 
 
