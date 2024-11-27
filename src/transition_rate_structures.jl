@@ -111,21 +111,6 @@ struct TDComponents <: AbstractTComponents
     elementsTD::Vector{Vector{Element}}
 end
 
-struct TDCoupledComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    sourceState::Union{Int, Vector{Int}}
-    targetTransition::Union{Int, Vector{Int}}
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
-    elementsTD::Vector{Vector{Element}}
-end
-
-
 """
  	TRGCoupledComponents
 
@@ -133,29 +118,42 @@ fields:
     nT::Int
     nG::Int
     nR::Int
-    sourceState::Int
-    targetTransition::Int
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
+    sourceState::Union{Int, Vector{Int}}
+    targetTransition::Union{Int, Vector{Int}}
+    elementsG::Vector{Element}
+    elementsGt::Vector{Element}
+    elementsGs::Vector{Element}
+    elementsRGbar::Vector{Element}
+    elementsRG::Vector{Element}
 
 """
-struct TRGCoupledComponents <: AbstractTComponents
+struct TRGCoupledUnitComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
     sourceState::Union{Int, Vector{Int}}
     targetTransition::Union{Int, Vector{Int}}
-    elementsG::Vector
-    elementsGt::Vector
-    elementsGs::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
+    elementsG::Vector{Element}
+    elementsGt::Vector{Element}
+    elementsGs::Vector{Element}
+    elementsRGbar::Vector{Element}
+    elementsRG::Vector{Element}
 end
 
-
+struct TDRGCoupledUnitComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Union{Int, Vector{Int}}
+    targetTransition::Union{Int, Vector{Int}}
+    elementsG::Vector{Element}
+    elementsGt::Vector{Element}
+    elementsGs::Vector{Element}
+    elementsRGbar::Vector{Element}
+    elementsRG::Vector{Element}
+    elementsGD::Vector{Vector{Element}}
+    elementsRD::Vector{Vector{Element}}
+end
 """
  	TCoupledComponents
 

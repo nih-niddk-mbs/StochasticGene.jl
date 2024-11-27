@@ -104,7 +104,31 @@ This function creates an MTD structure for GRS models, which is used for various
 # Returns
 - `MTDComponents`: The created MTD structure.
 """
+# function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
+#     indices = set_indices(length(transitions), R, S, insertstep)
+#     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+#     elementsTG = set_elements_T(transitions, indices.gamma)
+#     c = Vector{Element}[]
+#     for i in eachindex(onstates)
+#         if dttype[i] == "ON"
+#             push!(c, set_elements_TA(elementsT, onstates[i]))
+#         elseif dttype[i] == "OFF"
+#             push!(c, set_elements_TI(elementsT, onstates[i]))
+#         elseif dttype[i] == "ONG"
+#             push!(c, set_elements_TA(elementsTG, onstates[i]))
+#         elseif dttype[i] == "OFFG"
+#             push!(c, set_elements_TI(elementsTG, onstates[i]))
+#         end
+#         # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
+#     end
+#     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
+# end
+
 function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
+    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
+end
+
+function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsTG = set_elements_T(transitions, indices.gamma)
@@ -119,9 +143,8 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
         elseif dttype[i] == "OFFG"
             push!(c, set_elements_TI(elementsTG, onstates[i]))
         end
-        # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
-    end
-    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
+     end
+    TDComponents(nT, elementsT, elementsTG, c)
 end
 
 """
@@ -287,10 +310,16 @@ This function returns a TRGCoupledComponents structure for coupled models, which
 # Returns
 - `TRGCoupledComponents`: The created TRGCoupledComponents structure.
 """
-function make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+function make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    TRGCoupledComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
+    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    TRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
+end
+
+function make_components_TDRG(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD, nR, nT = set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    TDRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD)
 end
 
 """
@@ -322,16 +351,17 @@ This function returns a TCoupledComponents structure for coupled models, which i
 # Returns
 - `TCoupledComponents`: The created TCoupledComponents structure.
 """
-make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
-
-function make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = TRGCoupledComponents[]
+m
+function make_components_TCoupled(f, comp, unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     for i in eachindex(G)
-        push!(comp, make_components_TRGCoupled(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(comp, f(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
 
+make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TRGCoupledUnit, TRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
+make_components_TDRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TDRGCoupledUnit, TDRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
 """
     make_mat!(T::AbstractMatrix, elements::Vector, rates::Vector)

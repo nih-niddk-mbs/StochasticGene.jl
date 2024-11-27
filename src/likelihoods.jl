@@ -444,23 +444,6 @@ This function calculates the likelihood array for RNA dwell time data using the 
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods for the dwell times.
 
 """
-
-function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
-    components = model.components
-    for i in eachindex(data.DTtypes)
-        if data.DTtypes[i] == "OFF"
-            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
-            nonzeros = nonzero_rows(TD)
-            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(model.reporter.offstates[i], nonzeros), init_SI(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD), nonzeros))
-        elseif data.DTtypes[i] == "ON"
-            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
-            h = ontimePDF(data.bins[i], TD, off_states(components.tcomponents.nT, model.reporter.offstates[i]), init_SA(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD)))
-        end
-        push!(hists, h)
-    end
-
-end
-
 function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
     likelihoodarray(r, model.G, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
 end
@@ -525,6 +508,24 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     return hists
 end
 
+function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
+    
+    for components in model.modelcomponents
+        make_mat_TC(components, r, couplingStrength)
+    end
+    for i in eachindex(data.DTtypes)
+        if data.DTtypes[i] == "OFF"
+            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
+            nonzeros = nonzero_rows(TD)
+            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(model.reporter.offstates[i], nonzeros), init_SI(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD), nonzeros))
+        elseif data.DTtypes[i] == "ON"
+            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
+            h = ontimePDF(data.bins[i], TD, off_states(components.tcomponents.nT, model.reporter.offstates[i]), init_SA(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD)))
+        end
+        push!(hists, h)
+    end
+
+end
 
 """
     transform_array(v, index, f1, f2)

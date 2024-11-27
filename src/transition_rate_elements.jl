@@ -205,31 +205,6 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
     end
 end
 
-"""
-    set_elements_TA(elementsT,onstates)
-
-set onstate elements
-"""
-set_elements_TA(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TA!)
-"""
-    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
-
-in place set onstate elements
-"""
-set_elements_TA!(elementsTA, elementsT, onstates) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
-
-"""
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-
-set off state elements
-"""
-set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TI!)
-"""
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
-
-in place set off state elements
-"""
-set_elements_TI!(elementsTI, elementsT, onstates) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
 
 """
     set_elements_TX(elementsT, onstates::Vector{Int},f!)
@@ -269,6 +244,33 @@ function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
         end
     end
 end
+
+"""
+    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+
+in place set onstate elements
+"""
+set_elements_TA!(elementsTA, elementsT, onstates) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
+
+"""
+    set_elements_TA(elementsT,onstates)
+
+set onstate elements
+"""
+set_elements_TA(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TA!)
+"""
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+
+in place set off state elements
+"""
+set_elements_TI!(elementsTI, elementsT, onstates) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
+
+"""
+    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+
+set off state elements
+"""
+set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TI!)
 
 
 """
@@ -442,23 +444,31 @@ end
 
 
 """
-function set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    if R > 0
-        elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-        elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
-        elementsGs = set_elements_Gs(source_state)
-        return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
-    else
-        return elementsG, elementsGt, G
-    end
+function set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
+    elementsGs = set_elements_Gs(source_state)
+    return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
 end
 
-function set_elements_TCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-        elementsT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-        elementsV = set_elements_V(transitions, target_transition, indices.gamma)
-        elementsU = set_elements_U(source_state)
-        return elementsT, elementsV, elementsU
+function set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
+    elementsGs = set_elements_Gs(source_state)
+    elementsRD = set_elements_RD()
+    elementsGD = set_elements_GD()
+
+    return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
 end
+
+function set_elements_TUVCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsV = set_elements_V(transitions, target_transition, indices.gamma)
+    elementsU = set_elements_U(source_state)
+    return elementsT, elementsV, elementsU
+end
+
+
 
 function set_elements_V!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
