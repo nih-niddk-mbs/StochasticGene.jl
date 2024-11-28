@@ -759,6 +759,20 @@ function make_matvec_C(components, rates)
     return T, G, Gt, Gs, IG, IR, IT
 end
 
+function make_matvec_DC(components, rates)
+    n = length(components.model)
+    T = Vector{SparseMatrixCSC}(undef, n)
+    G = Vector{SparseMatrixCSC}(undef, n)
+    Gt = Vector{SparseMatrixCSC}(undef, n)
+    Gs = Vector{SparseMatrixCSC}(undef, n)
+    IG = Vector{SparseMatrixCSC}(undef, n)
+    IR = Vector{SparseMatrixCSC}(undef, n)
+    IT = Vector{SparseMatrixCSC}(undef, n)
+    for i in eachindex(components.model)
+        T[i], G[i], Gt[i], Gs[i], IG[i], IR[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
+    end
+    return T, G, Gt, Gs, IG, IR, IT
+end
 
 
 """
@@ -825,3 +839,11 @@ function make_mat_TC(components, rates, coupling_strength)
     T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
 end
+
+
+function make_mat_TD(components::TCoupledComponents{Vector{TDRGCoupledUnitComponents}}, rates, coupling_strength)
+    T, G, Gt, Gs, IG, IR, IT = make_mat_C(components, rates)
+    make_mat_TA
+    make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
+end
+

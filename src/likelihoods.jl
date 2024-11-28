@@ -511,7 +511,7 @@ end
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     
     for components in model.modelcomponents
-        make_mat_TC(components, r, couplingStrength)
+        TD = make_mat_TC(components, r, couplingStrength)
     end
     for i in eachindex(data.DTtypes)
         if data.DTtypes[i] == "OFF"
