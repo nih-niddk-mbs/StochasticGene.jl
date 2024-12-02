@@ -509,22 +509,12 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
 end
 
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
-    
+    hists = Vector[]
     for components in model.modelcomponents
-        TD = make_mat_TC(components, r, couplingStrength)
+        h = likelihoodarray(r, model.G, components, data.bins, model.reporter, data.DTtypes)
+        push(hists, h)
     end
-    for i in eachindex(data.DTtypes)
-        if data.DTtypes[i] == "OFF"
-            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
-            nonzeros = nonzero_rows(TD)
-            h = offtimePDF(data.bins[i], TD[nonzeros, nonzeros], nonzero_states(model.reporter.offstates[i], nonzeros), init_SI(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD), nonzeros))
-        elseif data.DTtypes[i] == "ON"
-            TD = make_mat(components.tcomponents.elementsTD[i], r, components.tcomponents.nT)
-            h = ontimePDF(data.bins[i], TD, off_states(components.tcomponents.nT, model.reporter.offstates[i]), init_SA(r, model.reporter.offstates[i], components.tcomponents.elementsT, normalized_nullspace(TD)))
-        end
-        push!(hists, h)
-    end
-
+    return hists
 end
 
 """
