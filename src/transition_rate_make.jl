@@ -52,6 +52,79 @@ function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
 end
 
+function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsTG = set_elements_T(transitions, indices.gamma)
+    c = Vector{Element}[]
+    for i in eachindex(onstates)
+        if dttype[i] == "ON"
+            push!(c, set_elements_TA(elementsT, onstates[i]))
+        elseif dttype[i] == "OFF"
+            push!(c, set_elements_TI(elementsT, onstates[i]))
+        elseif dttype[i] == "ONG"
+            push!(c, set_elements_TA(elementsTG, onstates[i]))
+        elseif dttype[i] == "OFFG"
+            push!(c, set_elements_TI(elementsTG, onstates[i]))
+        end
+    end
+    TDComponents(nT, elementsT, elementsTG, c)
+end
+"""
+    make_components_M(transitions, G, R, nhist, decay, splicetype)
+
+Return MComponents structure for fitting mRNA histograms.
+
+# Description
+This function returns an MComponents structure, which includes matrix components for fitting mRNA histograms.
+
+# Arguments
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `nhist`: Number of histograms.
+- `decay`: Decay rates.
+- `splicetype`: Splice type.
+
+# Returns
+- `MComponents`: The created MComponents structure.
+"""
+function make_components_M(transitions, G, R, nhist, decay, splicetype)
+    indices = set_indices(length(transitions), R)
+    elementsT, nT = set_elements_T(transitions, G, R, 0, 1, indices, splicetype)
+    elementsB = set_elements_B(G, R, indices.nu[R+1])
+    U, Um, Up = make_mat_U(nhist, decay)
+    return MComponents(elementsT, elementsB, nT, U, Um, Up)
+end
+
+"""
+    make_components_MRG(transitions, G, R, nhist, decay)
+
+Return MRGComponents structure for GRS models.
+
+# Description
+This function returns an MRGComponents structure for GRS models, which includes matrix components for fitting mRNA histograms and reporter gene data.
+
+# Arguments
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `nhist`: Number of histograms.
+- `decay`: Decay rates.
+
+# Returns
+- `MRGComponents`: The created MRGComponents structure.
+"""
+function make_components_MRG(transitions, G, R, nhist, decay)
+    indices = set_indices(length(transitions), R)
+    elementsG, elementsRGbar, elementsRG, nR = set_elements_GRS(transitions, G, R, 0, 1, indices, "")
+    elementsB = set_elements_BRG(G, R, indices.nu[R+1])
+    U, Um, Up = make_mat_U(nhist, decay)
+    MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
+end
+
+
+
 """
     make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
 
@@ -128,24 +201,7 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
 end
 
-function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsTG = set_elements_T(transitions, indices.gamma)
-    c = Vector{Element}[]
-    for i in eachindex(onstates)
-        if dttype[i] == "ON"
-            push!(c, set_elements_TA(elementsT, onstates[i]))
-        elseif dttype[i] == "OFF"
-            push!(c, set_elements_TI(elementsT, onstates[i]))
-        elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsTG, onstates[i]))
-        elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TI(elementsTG, onstates[i]))
-        end
-     end
-    TDComponents(nT, elementsT, elementsTG, c)
-end
+
 
 """
     make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
@@ -192,59 +248,6 @@ This function returns an MTRGComponents structure for GRS models, which is used 
 - `MTRGComponents`: The created MTRGComponents structure.
 """
 make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(make_components_MRG(transitions, G, R, nhist, decay), make_components_TRG(transitions, G, R, S, insertstep, splicetype))
-
-"""
-    make_components_M(transitions, G, R, nhist, decay, splicetype)
-
-Return MComponents structure for fitting mRNA histograms.
-
-# Description
-This function returns an MComponents structure, which includes matrix components for fitting mRNA histograms.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `nhist`: Number of histograms.
-- `decay`: Decay rates.
-- `splicetype`: Splice type.
-
-# Returns
-- `MComponents`: The created MComponents structure.
-"""
-function make_components_M(transitions, G, R, nhist, decay, splicetype)
-    indices = set_indices(length(transitions), R)
-    elementsT, nT = set_elements_T(transitions, G, R, 0, 1, indices, splicetype)
-    elementsB = set_elements_B(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
-    return MComponents(elementsT, elementsB, nT, U, Um, Up)
-end
-
-"""
-    make_components_MRG(transitions, G, R, nhist, decay)
-
-Return MRGComponents structure for GRS models.
-
-# Description
-This function returns an MRGComponents structure for GRS models, which includes matrix components for fitting mRNA histograms and reporter gene data.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `nhist`: Number of histograms.
-- `decay`: Decay rates.
-
-# Returns
-- `MRGComponents`: The created MRGComponents structure.
-"""
-function make_components_MRG(transitions, G, R, nhist, decay)
-    indices = set_indices(length(transitions), R)
-    elementsG, elementsRGbar, elementsRG, nR = set_elements_GRS(transitions, G, R, 0, 1, indices, "")
-    elementsB = set_elements_BRG(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
-    MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
-end
 
 
 
@@ -729,6 +732,25 @@ function make_mat_C(components, rates)
     return T, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
+function make_mat_TDC(components, rates, onstates)
+    nT = components.nT
+    nG = components.nG
+    nR = components.nR
+    GR = make_mat_GR(nG)
+    G = make_mat(components.elementsG, rates, nG)
+    RGbar = make_mat(components.elementsRGbar, rates, nR)
+    RG = make_mat(components.elementsRG, rates, nR)
+    T = make_mat_TRG(G, GR, RGbar, RG, nG, nR)
+    Gt = make_mat(components.elementsGt, rates, nG)
+    if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
+        Gs = spzeros(0)
+    else
+        # Gs = make_mat_GC(nS, nS, couplingStrength)
+        Gs = make_mat_Gs(components.elementsGs, nG)
+    end
+    return TD
+end
+
 """
     make_matvec_C(components, rates)
 
@@ -883,9 +905,10 @@ function make_mat_TC(components, rates, coupling_strength)
 end
 
 
-function make_mat_TD(components::TCoupledComponents{Vector{TDRGCoupledUnitComponents}}, rates, coupling_strength)
+function make_mat_TCD(components::TCoupledComponents{Vector{TDRGCoupledUnitComponents}}, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, IT = make_mat_C(components, rates)
     make_mat_TA
-    make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
+    make_mat_TCD(coupling_strength, T, G, Gs, V, IG, IT, components.sources, components.model)
+
 end
 
