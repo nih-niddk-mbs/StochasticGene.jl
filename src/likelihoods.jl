@@ -484,8 +484,8 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
-    elementsTG = tcomponents.elementsTG
-    TG = make_mat(elementsTG, r, G)
+    elementsG = tcomponents.elementsG
+    TG = make_mat(elementsG, r, G)
     pssG = normalized_nullspace(TG)
     hists = Vector[]
     for (i, Dtype) in enumerate(dttype)
@@ -498,10 +498,10 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
             h = ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
         elseif Dtype == "OFFG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsTG, pssG, collect(1:G)))
+            h = offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)))
         elseif Dtype == "ONG"
             TD = make_mat(tcomponents.elementsTD[i], r, G)
-            h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsTG, pssG))
+            h = ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG))
         end
         push!(hists, h)
     end

@@ -107,7 +107,7 @@ nT, elementsT, elementsTD:: Vector{Vector{Element}}
 struct TDComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
-    elementsTG::Vector{Element}
+    elementsG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
 end
 
@@ -115,12 +115,10 @@ struct TDRGComponents <: AbstractTComponents
     nT::Int
     nG::Int
     nR::Int
-    elementsG::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
-    elementsGD::Vector
-    elementsRGD::Vector
-    elementsRGbarD::Vector
+    elementsG::Vector{Element}
+    elementsRGbar::Vector{Element}
+    elementsRG::Vector{Element}
+    elementsTD::Vector{Vector{Element}}
 end
 """
  	TRGCoupledComponents

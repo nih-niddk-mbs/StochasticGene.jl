@@ -102,7 +102,7 @@ TBW
 function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsTG = set_elements_G(transitions, indices.gamma)
+    elementsG = set_elements_G(transitions, indices.gamma)
     c = Vector{Element}[]
     for i in eachindex(onstates)
         if dttype[i] == "ON"
@@ -110,31 +110,32 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
         elseif dttype[i] == "OFF"
             push!(c, set_elements_TI(elementsT, onstates[i]))
         elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsTG, onstates[i]))
+            push!(c, set_elements_TA(elementsG, onstates[i]))
         elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TI(elementsTG, onstates[i]))
+            push!(c, set_elements_TI(elementsG, onstates[i]))
         end
     end
-    TDComponents(nT, elementsT, elementsTG, c)
+    TDComponents(nT, elementsT, elementsG, c)
 end
 
-function make_components_TDRG(source_state, target_transition, transitions, G::Int, R, S, insertstep, onstates, dttype, splicetype="")
+function make_components_TDRG(transitions, G::Int, R, S, insertstep, onstates, dttype, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD, nR, nT = set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
     c = Vector{Element}[]
     for i in eachindex(onstates)
         if dttype[i] == "ON"
-            push!(c, set_elements_TRGA(elementsT, onstates[i]))
+            push!(c, set_elements_TA(elementsRG, onstates[i]))
+            push!(c, set_elements_TA(elementsRGbar, onstates[i]))
         elseif dttype[i] == "OFF"
-            push!(c, set_elements_TRGI(elementsT, onstates[i]))
+            push!(c, set_elements_TI(elementsRG, onstates[i]))
+            push!(c, set_elements_TI(elementsRGbar, onstates[i]))
         elseif dttype[i] == "ONG"
-            push!(c, set_elements_TRGA(elementsTG, onstates[i]))
+            push!(c, set_elements_TA(elementsG, onstates[i]))
         elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TRGI(elementsTG, onstates[i]))
+            push!(c, set_elements_TI(elementsG, onstates[i]))
         end
     end
-    TDComponents(nT, elementsT, elementsTG, c)
-    TDRGComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD)
+    TDRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG, c)
 end
 
 """
