@@ -510,8 +510,8 @@ end
 
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     hists = Vector[]
-    for components in model.modelcomponents
-        h = likelihoodarray(r, model.G, components, data.bins, model.reporter, data.DTtypes)
+    for i in eachindex(model.modelcomponents)
+        h = likelihoodarray(r, model.G, model.modelcomponents[i], data.bins[i], model.reporter[i], data.DTtypes[i])
         push(hists, h)
     end
     return hists

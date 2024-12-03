@@ -111,6 +111,17 @@ struct TDComponents <: AbstractTComponents
     elementsTD::Vector{Vector{Element}}
 end
 
+struct TDRGComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    elementsG::Vector
+    elementsRGbar::Vector
+    elementsRG::Vector
+    elementsGD::Vector
+    elementsRGD::Vector
+    elementsRGbarD::Vector
+end
 """
  	TRGCoupledComponents
 

@@ -52,10 +52,57 @@ function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
 end
 
+
+"""
+    make_components_TAI(elementsT, nT::Int, onstates::Vector)
+    make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
+
+Return TAIComponents structure.
+
+# Description
+This function returns a TAIComponents structure, which includes matrix components for fitting traces and creating TA and TI matrix components.
+
+# Arguments
+- `elementsT`: Transition elements.
+- `nT::Int`: Number of transition elements.
+- `onstates::Vector`: Vector of on states.
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type (default is an empty string).
+
+# Methods
+- `make_components_TAI(elementsT, nT::Int, onstates::Vector)`: Creates a TAIComponents structure from transition elements.
+- `make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")`: Creates a TAIComponents structure from transition rates and other parameters.
+
+# Returns
+- `TAIComponents`: The created TAIComponents structure.
+"""
+function make_components_TAI(elementsT, nT::Int, onstates::Vector)
+    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
+end
+
+# function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
+#     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
+# end
+
+function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    make_components_TAI(elementsT, nT, onstates)
+end
+
+"""
+    make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+
+TBW
+"""
 function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsTG = set_elements_T(transitions, indices.gamma)
+    elementsTG = set_elements_G(transitions, indices.gamma)
     c = Vector{Element}[]
     for i in eachindex(onstates)
         if dttype[i] == "ON"
@@ -70,6 +117,96 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     end
     TDComponents(nT, elementsT, elementsTG, c)
 end
+
+function make_components_TDRG(source_state, target_transition, transitions, G::Int, R, S, insertstep, onstates, dttype, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD, nR, nT = set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    c = Vector{Element}[]
+    for i in eachindex(onstates)
+        if dttype[i] == "ON"
+            push!(c, set_elements_TRGA(elementsT, onstates[i]))
+        elseif dttype[i] == "OFF"
+            push!(c, set_elements_TRGI(elementsT, onstates[i]))
+        elseif dttype[i] == "ONG"
+            push!(c, set_elements_TRGA(elementsTG, onstates[i]))
+        elseif dttype[i] == "OFFG"
+            push!(c, set_elements_TRGI(elementsTG, onstates[i]))
+        end
+    end
+    TDComponents(nT, elementsT, elementsTG, c)
+    TDRGComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD)
+end
+
+"""
+    make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
+
+Return TRGCoupledComponents structure for coupled models.
+
+# Description
+This function returns a TRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+
+# Arguments
+- `source_state`: Source state.
+- `target_transition`: Target transition.
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type (default is an empty string).
+
+# Returns
+- `TRGCoupledComponents`: The created TRGCoupledComponents structure.
+"""
+function make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    TRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
+end
+
+
+
+"""
+    make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+    make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+
+Return TCoupledComponents structure for coupled models.
+
+# Description
+This function returns a TCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+
+# Arguments
+- `coupling::Tuple`: Tuple of coupling parameters.
+- `transitions::Tuple`: Tuple of transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type (default is an empty string).
+- `unit_model`: Unit model.
+- `sources`: Source units for each unit.
+- `source_state`: Source state.
+- `target_transition`: Target transition.
+
+# Methods
+- `make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TCoupledComponents structure from coupling parameters and transition rates.
+- `make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TCoupledComponents structure from unit model and other parameters.
+
+# Returns
+- `TCoupledComponents`: The created TCoupledComponents structure.
+"""
+m
+function make_components_TCoupled(f, comp, unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    for i in eachindex(G)
+        push!(comp, f(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+    end
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+end
+
+make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TRGCoupledUnit, TRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
+make_components_TDRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TDRGCoupledUnit, TDRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
 """
     make_components_M(transitions, G, R, nhist, decay, splicetype)
 
@@ -177,25 +314,6 @@ This function creates an MTD structure for GRS models, which is used for various
 # Returns
 - `MTDComponents`: The created MTD structure.
 """
-# function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
-#     indices = set_indices(length(transitions), R, S, insertstep)
-#     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-#     elementsTG = set_elements_T(transitions, indices.gamma)
-#     c = Vector{Element}[]
-#     for i in eachindex(onstates)
-#         if dttype[i] == "ON"
-#             push!(c, set_elements_TA(elementsT, onstates[i]))
-#         elseif dttype[i] == "OFF"
-#             push!(c, set_elements_TI(elementsT, onstates[i]))
-#         elseif dttype[i] == "ONG"
-#             push!(c, set_elements_TA(elementsTG, onstates[i]))
-#         elseif dttype[i] == "OFFG"
-#             push!(c, set_elements_TI(elementsTG, onstates[i]))
-#         end
-#         # dttype[i] == "ON" ? push!(c, set_elements_TA(elementsT, onstates[i])) : push!(c, set_elements_TI(elementsT, onstates[i]))
-#     end
-#     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(nT, elementsT, elementsTG, c))
-# end
 
 function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
@@ -251,120 +369,6 @@ make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype=
 
 
 
-"""
-    make_components_TAI(elementsT, nT::Int, onstates::Vector)
-    make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
-
-Return TAIComponents structure.
-
-# Description
-This function returns a TAIComponents structure, which includes matrix components for fitting traces and creating TA and TI matrix components.
-
-# Arguments
-- `elementsT`: Transition elements.
-- `nT::Int`: Number of transition elements.
-- `onstates::Vector`: Vector of on states.
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type (default is an empty string).
-
-# Methods
-- `make_components_TAI(elementsT, nT::Int, onstates::Vector)`: Creates a TAIComponents structure from transition elements.
-- `make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")`: Creates a TAIComponents structure from transition rates and other parameters.
-
-# Returns
-- `TAIComponents`: The created TAIComponents structure.
-"""
-function make_components_TAI(elementsT, nT::Int, onstates::Vector)
-    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
-end
-
-# function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
-#     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
-# end
-
-function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    make_components_TAI(elementsT, nT, onstates)
-end
-
-"""
-    make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
-
-Return TRGCoupledComponents structure for coupled models.
-
-# Description
-This function returns a TRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
-
-# Arguments
-- `source_state`: Source state.
-- `target_transition`: Target transition.
-- `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type (default is an empty string).
-
-# Returns
-- `TRGCoupledComponents`: The created TRGCoupledComponents structure.
-"""
-function make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT = set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    TRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
-end
-
-function make_components_TDRG(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD, nR, nT = set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    TDRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, elementsGD, elementsRD)
-end
-
-"""
-    make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
-    make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-
-Return TCoupledComponents structure for coupled models.
-
-# Description
-This function returns a TCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
-
-# Arguments
-- `coupling::Tuple`: Tuple of coupling parameters.
-- `transitions::Tuple`: Tuple of transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type (default is an empty string).
-- `unit_model`: Unit model.
-- `sources`: Source units for each unit.
-- `source_state`: Source state.
-- `target_transition`: Target transition.
-
-# Methods
-- `make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TCoupledComponents structure from coupling parameters and transition rates.
-- `make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TCoupledComponents structure from unit model and other parameters.
-
-# Returns
-- `TCoupledComponents`: The created TCoupledComponents structure.
-"""
-m
-function make_components_TCoupled(f, comp, unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    for i in eachindex(G)
-        push!(comp, f(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
-    end
-    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
-end
-
-make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TRGCoupledUnit, TRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
-
-make_components_TDRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TDRGCoupledUnit, TDRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
 """
     make_mat!(T::AbstractMatrix, elements::Vector, rates::Vector)
@@ -738,9 +742,14 @@ function make_mat_TDC(components, rates, onstates)
     nR = components.nR
     GR = make_mat_GR(nG)
     G = make_mat(components.elementsG, rates, nG)
+    GD = make_mat(components.elementsGD, rates, nG)
     RGbar = make_mat(components.elementsRGbar, rates, nR)
+    RDGbar = make_mat(components.elementsRGbar, rates, nR)
     RG = make_mat(components.elementsRG, rates, nR)
+    RDG = make_mat(components.elementsRG, rates, nR)
+    RD = make_mat(tcomponents.elementsRD[i], r, tcomponents.nT)
     T = make_mat_TRG(G, GR, RGbar, RG, nG, nR)
+    T = make_mat_TRG(G, GR, RDGbar, RDG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
     if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
         Gs = spzeros(0)
