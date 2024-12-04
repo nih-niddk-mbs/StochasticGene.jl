@@ -188,6 +188,28 @@ function set_elements_GRS(transitions, G, R, S, insertstep, indices::Indices, sp
     end
 end
 
+function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
+    elements = []
+    for e in elementsG
+        for j in 0:G:nT-1
+            push!(elements, Element(e.a + j, e.b + j, e.index, e.pm))
+        end
+    end
+    for e in elementsRGbar
+        for j in 1:G
+            push!(elements, Element(j + G * (e.a - 1), j + G * (e.b - 1), e.index, e.pm))
+        end
+    end
+    for e in elementsRG
+        push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
+    end
+    elements, nT
+end
+
+function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Indices, splicetype::String)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    set_elements_TGRS(elementsG, elementsRGbar, elementsRG, G, nT)
+end
 """
     set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
@@ -302,6 +324,10 @@ function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, spli
         return set_elements_G(transitions, indices.gamma), G
     end
 end
+
+
+
+
 
 # function set_elements_T(transitions, gamma::Vector)
 #     elementsT = Vector{Element}(undef, 0)

@@ -140,6 +140,13 @@ function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int
     end
 end
 
+function test_mat_T(r, transitions, G, R, S, insertstep)
+    components1 = StochasticGene.make_components_T(transitions, G, R, S, insertstep, "")
+    components2 = StochasticGene.make_components_TGRS(transitions, G, R, S, insertstep, "")
+    T1 = StochasticGene.make_mat_T(components1, r)
+    T2 = StochasticGene.make_mat_T(components2, r)
+    return T1, T2
+end
 
 function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
     components = StochasticGene.make_components_MTRG(transitions, G, R, S, insertstep, nhist, 1.01, "")

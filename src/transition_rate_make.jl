@@ -27,6 +27,12 @@ function make_components_T(transitions, G, R, S, insertstep, splicetype)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     TComponents(nT, elementsT)
 end
+
+function make_components_TGRS(transitions, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
+    TComponents(nT, elementsT)
+end
 """
     make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 
@@ -51,6 +57,7 @@ function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
     TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
 end
+
 
 
 """
