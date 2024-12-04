@@ -156,8 +156,6 @@ function make_components_TRGCoupledUnit(source_state, target_transition, transit
     TRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
 end
 
-
-
 """
     make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
     make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
@@ -188,16 +186,16 @@ This function returns a TCoupledComponents structure for coupled models, which i
 - `TCoupledComponents`: The created TCoupledComponents structure.
 """
 m
-function make_components_TCoupled(f, comp, unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+function make_components_TRGCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    comp = TRGCoupledUnitComponents[] 
     for i in eachindex(G)
-        push!(comp, f(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(TRGCoupledUnitComponents, make_components_TRGCoupledUnit(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
 
-make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TRGCoupledUnit, TRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
-make_components_TDRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TCoupled(make_components_TDRGCoupledUnit, TDRGCoupledUnitComponents[], coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
 """
     make_components_M(transitions, G, R, nhist, decay, splicetype)
@@ -720,29 +718,7 @@ function make_mat_C(components, rates)
     return T, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
-function make_mat_TDC(components, rates, onstates)
-    nT = components.nT
-    nG = components.nG
-    nR = components.nR
-    GR = make_mat_GR(nG)
-    G = make_mat(components.elementsG, rates, nG)
-    GD = make_mat(components.elementsGD, rates, nG)
-    RGbar = make_mat(components.elementsRGbar, rates, nR)
-    RDGbar = make_mat(components.elementsRGbar, rates, nR)
-    RG = make_mat(components.elementsRG, rates, nR)
-    RDG = make_mat(components.elementsRG, rates, nR)
-    RD = make_mat(tcomponents.elementsRD[i], r, tcomponents.nT)
-    T = make_mat_TRG(G, GR, RGbar, RG, nG, nR)
-    T = make_mat_TRG(G, GR, RDGbar, RDG, nG, nR)
-    Gt = make_mat(components.elementsGt, rates, nG)
-    if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
-        Gs = spzeros(0)
-    else
-        # Gs = make_mat_GC(nS, nS, couplingStrength)
-        Gs = make_mat_Gs(components.elementsGs, nG)
-    end
-    return TD
-end
+
 
 """
     make_matvec_C(components, rates)
@@ -774,22 +750,6 @@ function make_matvec_C(components, rates)
     return T, G, Gt, Gs, IG, IR, IT
 end
 
-function make_matvec_DC(components, rates)
-    n = length(components.model)
-    T = Vector{SparseMatrixCSC}(undef, n)
-    G = Vector{SparseMatrixCSC}(undef, n)
-    Gt = Vector{SparseMatrixCSC}(undef, n)
-    Gs = Vector{SparseMatrixCSC}(undef, n)
-    IG = Vector{SparseMatrixCSC}(undef, n)
-    IR = Vector{SparseMatrixCSC}(undef, n)
-    IT = Vector{SparseMatrixCSC}(undef, n)
-    for i in eachindex(components.model)
-        T[i], G[i], Gt[i], Gs[i], IG[i], IR[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
-    end
-    return T, G, Gt, Gs, IG, IR, IT
-end
-
-
 """
     make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     make_mat_TC(components, rates, coupling_strength)
@@ -802,8 +762,8 @@ This function returns the TC matrix used to compute the steady state RNA distrib
 # Arguments
 - `coupling_strength`: Strength of the coupling.
 - `T`: Initial matrix.
-- `U`: Matrix U.
-- `V`: Matrix V.
+- `U`: Source matrix U.
+- `V`: Target matrix V.
 - `IT`: Identity matrix for T.
 - `sources`: Vector of source indices.
 - `unit_model`: Vector of unit model indices.
@@ -850,58 +810,54 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     return Tc
 end
 
-function make_mat_TCD(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
-    n = length(model)
-    Tc = SparseMatrixCSC[]
-    for α in 1:n
-        Tα = T[model[α]]
-        Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
-        Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
-        for β in 1:α-1
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, n)
-                Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, β + 1)
-                Gβ = kron(G[model[β]], Gβ)
-                Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
-                Vβ = V[model[α]]
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
-                Vβ = kron(Gs[model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        for β in α+1:n
-            if β ∈ sources[α]
-                Gβ = IT[model[α]]
-                Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, 1)
-                Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
-                Gβ = kron(Gβ, G[model[β]])
-                Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
-                Vβ = V[model[α]]
-                Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-                Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
-                Vβ = kron(Vβ, Gs[model[β]])
-                Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
-                Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-            end
-        end
-        push!(Tc, Tα)
-    end
-    return Tc
-end
-
 function make_mat_TC(components, rates, coupling_strength)
     T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
 end
 
+# function make_mat_TCD(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
+#     n = length(model)
+#     Tc = SparseMatrixCSC[]
+#     for α in 1:n
+#         Tα = T[model[α]]
+#         Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
+#         Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
+#         for β in 1:α-1
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, n)
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, β + 1)
+#                 Gβ = kron(G[model[β]], Gβ)
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
+#                 Vβ = kron(Gs[model[β]], Vβ)
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         for β in α+1:n
+#             if β ∈ sources[α]
+#                 Gβ = IT[model[α]]
+#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, 1)
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
+#                 Gβ = kron(Gβ, G[model[β]])
+#                 Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
+#                 Vβ = V[model[α]]
+#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
+#                 Vβ = kron(Vβ, Gs[model[β]])
+#                 Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
+#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
+#             end
+#         end
+#         push!(Tc, Tα)
+#     end
+#     return Tc
+# end
 
-function make_mat_TCD(components::TCoupledComponents{Vector{TDRGCoupledUnitComponents}}, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, IT = make_mat_C(components, rates)
-    make_mat_TA
-    make_mat_TCD(coupling_strength, T, G, Gs, V, IG, IT, components.sources, components.model)
 
-end
+
+
 

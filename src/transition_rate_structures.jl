@@ -111,15 +111,6 @@ struct TDComponents <: AbstractTComponents
     elementsTD::Vector{Vector{Element}}
 end
 
-struct TDRGComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector{Element}
-    elementsRGbar::Vector{Element}
-    elementsRG::Vector{Element}
-    elementsTD::Vector{Vector{Element}}
-end
 """
  	TRGCoupledComponents
 
@@ -147,6 +138,17 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
     elementsGs::Vector{Element}
     elementsRGbar::Vector{Element}
     elementsRG::Vector{Element}
+end
+
+struct TCoupledUnitComponents <: AbstractTComponents
+    nT::Int
+    nG::Int
+    nR::Int
+    sourceState::Union{Int,Vector{Int}}
+    targetTransition::Union{Int,Vector{Int}}
+    elementsT::Vector{Element}
+    elementsSource::Vector{Element}
+    elementsTarget::Vector{Element}
 end
 
 struct TDRGCoupledUnitComponents <: AbstractTComponents

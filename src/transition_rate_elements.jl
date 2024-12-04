@@ -35,49 +35,6 @@ function set_elements_G(transitions, gamma::Vector)
     set_elements_G!(elementsT, transitions, gamma)
     elementsT
 end
-"""
-    set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
-
-
-"""
-function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        if i == target_transition
-            push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        end
-        i += 1
-    end
-end
-
-"""
-    set_elements_Gt(transitions, target_transition, gamma)
-
-
-"""
-function set_elements_Gt(transitions, target_transition, gamma)
-    elementsGt = Vector{Element}(undef, 0)
-    set_elements_Gt!(elementsGt, transitions, target_transition, gamma)
-    return elementsGt
-end
-
-"""
-    set_elements_Gs(nS)
-
-
-"""
-function set_elements_Gs(nS::Int)
-    [Element(nS, nS, 0, 1)]
-end
-
-function set_elements_Gs(nS::Vector{Int})
-    elementsGs = Vector{Element}(undef, 0)
-    for i in nS
-        push!(elementsGs, Element(i, i, 0, 1))
-    end
-    return elementsGs
-end
 
 """
     set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
@@ -202,6 +159,29 @@ function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
         push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
     end
     elements, nT
+end
+
+function promote_elements_G!(elements, elementsG, G, nT)
+    for e in elementsG
+        for j in 0:G:nT-1
+            push!(elements, Element(e.a + j, e.b + j, e.index, e.pm))
+        end
+    end
+
+end
+
+function promote_elements_R!(elements, elementsR, rangeG::UnitRange{Int64})
+    for e in elementsR
+        for j in rangeG
+            push!(elements, Element(j + G * (e.a - 1), j + G * (e.b - 1), e.index, e.pm))
+        end
+    end
+end
+
+function promote_elements_R!(elements, elementsR, G::Int)
+    for e in elementsR
+            push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
+    end
 end
 
 function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Indices, splicetype::String)
@@ -460,6 +440,49 @@ function set_elements_BRG(G, R, ejectindex, base=2)
     end
 end
 
+"""
+    set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+
+
+"""
+function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+    i = 1
+    for t in transitions
+        if i == target_transition
+            push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
+            push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
+        end
+        i += 1
+    end
+end
+
+"""
+    set_elements_Gt(transitions, target_transition, gamma)
+
+
+"""
+function set_elements_Gt(transitions, target_transition, gamma)
+    elementsGt = Vector{Element}(undef, 0)
+    set_elements_Gt!(elementsGt, transitions, target_transition, gamma)
+    return elementsGt
+end
+
+"""
+    set_elements_Gs(nS)
+
+
+"""
+function set_elements_Gs(nS::Int)
+    [Element(nS, nS, 0, 1)]
+end
+
+function set_elements_Gs(nS::Vector{Int})
+    elementsGs = Vector{Element}(undef, 0)
+    for i in nS
+        push!(elementsGs, Element(i, i, 0, 1))
+    end
+    return elementsGs
+end
 
 """
     set_elements_Coupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
@@ -512,15 +535,6 @@ function set_elements_U(nS::Vector{Int})
     return elementsU
 end
 
-function set_elements_TDRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsGt = set_elements_Gt(transitions, target_transition, indices.gamma)
-    elementsGs = set_elements_Gs(source_state)
-    elementsRD = set_elements_RD()
-    elementsGD = set_elements_GD()
-
-    return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
-end
 
 function set_elements_TUVCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
