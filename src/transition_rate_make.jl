@@ -3,6 +3,9 @@
 # transition_rate_make.jl
 #
 
+
+### Component constructors
+
 """
     make_components_T(transitions, G, R, S, insertstep, splicetype)
 
@@ -125,25 +128,6 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     TDComponents(nT, elementsT, elementsG, c)
 end
 
-function make_components_TDRG(transitions, G::Int, R, S, insertstep, onstates, dttype, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-    c = Vector{Element}[]
-    for i in eachindex(onstates)
-        if dttype[i] == "ON"
-            push!(c, set_elements_TA(elementsRG, onstates[i]))
-            push!(c, set_elements_TA(elementsRGbar, onstates[i]))
-        elseif dttype[i] == "OFF"
-            push!(c, set_elements_TI(elementsRG, onstates[i]))
-            push!(c, set_elements_TI(elementsRGbar, onstates[i]))
-        elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsG, onstates[i]))
-        elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TI(elementsG, onstates[i]))
-        end
-    end
-    TDRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG, c)
-end
 
 """
     make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
@@ -267,9 +251,6 @@ function make_components_MRG(transitions, G, R, nhist, decay)
     U, Um, Up = make_mat_U(nhist, decay)
     MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
 end
-
-
-
 """
     make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
 
@@ -297,8 +278,6 @@ function make_components_MTAI(transitions, G, R, S, insertstep, onstates, nhist,
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     MTAIComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TAI(elementsT, nT, onstates))
 end
-
-
 """
     make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
 
@@ -326,8 +305,6 @@ This function creates an MTD structure for GRS models, which is used for various
 function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
     MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
 end
-
-
 
 """
     make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
@@ -375,8 +352,7 @@ This function returns an MTRGComponents structure for GRS models, which is used 
 """
 make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(make_components_MRG(transitions, G, R, nhist, decay), make_components_TRG(transitions, G, R, S, insertstep, splicetype))
 
-
-
+### matrix constructors
 
 """
     make_mat!(T::AbstractMatrix, elements::Vector, rates::Vector)

@@ -79,8 +79,6 @@ function set_elements_Gs(nS::Vector{Int})
     return elementsGs
 end
 
-
-
 """
     set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
@@ -207,8 +205,12 @@ function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
 end
 
 function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Indices, splicetype::String)
-    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
-    set_elements_TGRS(elementsG, elementsRGbar, elementsRG, G, nT)
+    if R > 0
+        elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+        return set_elements_TGRS(elementsG, elementsRGbar, elementsRG, G, nT)
+    else
+        return set_elements_G(transitions, indices.gamma), G
+    end
 end
 """
     set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
@@ -324,10 +326,6 @@ function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, spli
         return set_elements_G(transitions, indices.gamma), G
     end
 end
-
-
-
-
 
 # function set_elements_T(transitions, gamma::Vector)
 #     elementsT = Vector{Element}(undef, 0)

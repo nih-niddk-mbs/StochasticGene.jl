@@ -3,6 +3,8 @@
 # test.jl
 
 
+### functions used in runtest
+
 function test_sim(r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol)
     simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
@@ -100,6 +102,7 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
+### end of functions used in runtest
 
 
 function test_init(r, transitions, G, R, S, insertstep)
@@ -164,7 +167,7 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
-    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, "")
+    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength)
 end
 
