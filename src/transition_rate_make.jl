@@ -783,25 +783,25 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     Tc = spzeros(N, N)
     for α in 1:n
         Tα = T[unit_model[α]]
-        Tα = kron_backward(Tα, IT, unit_model, α - 1, 1)
-        Tα = kron_forward(Tα, IT, unit_model, α + 1, n)
+        Tα = kron_left(Tα, IT, unit_model, α - 1, 1)
+        Tα = kron_right(Tα, IT, unit_model, α + 1, n)
         for β in 1:α-1
             if β ∈ sources[α]
                 Vβ = V[unit_model[α]]
-                Vβ = kron_forward(Vβ, IT, unit_model, α + 1, n)
-                Vβ = kron_backward(Vβ, IT, unit_model, α - 1, β + 1)
+                Vβ = kron_right(Vβ, IT, unit_model, α + 1, n)
+                Vβ = kron_left(Vβ, IT, unit_model, α - 1, β + 1)
                 Vβ = kron(U[unit_model[β]], Vβ)
-                Vβ = kron_backward(Vβ, IT, unit_model, β - 1, 1)
+                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
                 Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
         for β in α+1:n
             if β ∈ sources[α]
                 Vβ = V[unit_model[α]]
-                Vβ = kron_backward(Vβ, IT, unit_model, β - 1, 1)
-                Vβ = kron_forward(Vβ, IT, unit_model, α + 1, β - 1)
+                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
+                Vβ = kron_right(Vβ, IT, unit_model, α + 1, β - 1)
                 Vβ = kron(U[unit_model[β]], Vβ)
-                Vβ = kron_forward(Vβ, IT, unit_model, β + 1, n)
+                Vβ = kron_right(Vβ, IT, unit_model, β + 1, n)
                 Tα += coupling_strength[sources[α][β]] * Vβ
             end
         end
@@ -820,35 +820,35 @@ end
 #     Tc = SparseMatrixCSC[]
 #     for α in 1:n
 #         Tα = T[model[α]]
-#         Tα = kron_backward(Tα, IG, sources[α], model, α - 1, 1)
-#         Tα = kron_forward(Tα, IG, sources[α], model, α + 1, n)
+#         Tα = kron_left(Tα, IG, sources[α], model, α - 1, 1)
+#         Tα = kron_right(Tα, IG, sources[α], model, α + 1, n)
 #         for β in 1:α-1
 #             if β ∈ sources[α]
 #                 Gβ = IT[model[α]]
-#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, n)
-#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, β + 1)
+#                 Gβ = kron_right(Gβ, IG, sources[α], model, α + 1, n)
+#                 Gβ = kron_left(Gβ, IG, sources[α], model, α - 1, β + 1)
 #                 Gβ = kron(G[model[β]], Gβ)
-#                 Gβ = kron_backward(Gβ, IG, sources[α], model, β - 1, 1)
+#                 Gβ = kron_left(Gβ, IG, sources[α], model, β - 1, 1)
 #                 Vβ = V[model[α]]
-#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, n)
-#                 Vβ = kron_backward(Vβ, IG, sources[α], model, α - 1, β + 1)
+#                 Vβ = kron_right(Vβ, IG, sources[α], model, α + 1, n)
+#                 Vβ = kron_left(Vβ, IG, sources[α], model, α - 1, β + 1)
 #                 Vβ = kron(Gs[model[β]], Vβ)
-#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = kron_left(Vβ, IG, sources[α], model, β - 1, 1)
 #                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
 #             end
 #         end
 #         for β in α+1:n
 #             if β ∈ sources[α]
 #                 Gβ = IT[model[α]]
-#                 Gβ = kron_backward(Gβ, IG, sources[α], model, α - 1, 1)
-#                 Gβ = kron_forward(Gβ, IG, sources[α], model, α + 1, β - 1)
+#                 Gβ = kron_left(Gβ, IG, sources[α], model, α - 1, 1)
+#                 Gβ = kron_right(Gβ, IG, sources[α], model, α + 1, β - 1)
 #                 Gβ = kron(Gβ, G[model[β]])
-#                 Gβ = kron_forward(Gβ, IG, sources[α], model, β + 1, n)
+#                 Gβ = kron_right(Gβ, IG, sources[α], model, β + 1, n)
 #                 Vβ = V[model[α]]
-#                 Vβ = kron_backward(Vβ, IG, sources[α], model, β - 1, 1)
-#                 Vβ = kron_forward(Vβ, IG, sources[α], model, α + 1, β - 1)
+#                 Vβ = kron_left(Vβ, IG, sources[α], model, β - 1, 1)
+#                 Vβ = kron_right(Vβ, IG, sources[α], model, α + 1, β - 1)
 #                 Vβ = kron(Vβ, Gs[model[β]])
-#                 Vβ = kron_forward(Vβ, IG, sources[α], model, β + 1, n)
+#                 Vβ = kron_right(Vβ, IG, sources[α], model, β + 1, n)
 #                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
 #             end
 #         end

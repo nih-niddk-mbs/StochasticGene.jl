@@ -465,8 +465,8 @@ function set_indices(ntransitions, R, S, insertstep, offset)
 end
 
 """
-    kron_forward(T, I, sources, unit_model, first, last)
-    kron_forward(T, I, unit_model, first, last)
+    kron_right(T, I, sources, unit_model, first, last)
+    kron_right(T, I, unit_model, first, last)
 
 Perform Kronecker product forward operation.
 
@@ -482,13 +482,13 @@ This function performs a forward Kronecker product operation on the matrix `T` u
 - `last`: Ending index for the operation.
 
 # Methods
-- `kron_forward(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
-- `kron_forward(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+- `kron_right(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_right(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
 
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_forward(T, I, sources, unit_model, first, last)
+function kron_right(T, I, sources, unit_model, first, last)
     for j in first:last
         if j ∈ sources
             T = kron(T, I[unit_model[j]])
@@ -497,7 +497,7 @@ function kron_forward(T, I, sources, unit_model, first, last)
     T
 end
 
-function kron_forward(T, I, unit_model, first, last)
+function kron_right(T, I, unit_model, first, last)
     for j in first:last
         T = kron(T, I[unit_model[j]])
     end
@@ -505,8 +505,8 @@ function kron_forward(T, I, unit_model, first, last)
 end
 
 """
-    kron_backward(T, I, sources, unit_model, first, last)
-    kron_backward(T, I, unit_model, first, last)
+    kron_left(T, I, sources, unit_model, first, last)
+    kron_left(T, I, unit_model, first, last)
 
 Perform Kronecker product backward operation.
 
@@ -522,13 +522,13 @@ This function performs a backward Kronecker product operation on the matrix `T` 
 - `last`: Ending index for the operation.
 
 # Methods
-- `kron_backward(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
-- `kron_backward(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+- `kron_left(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_left(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
 
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_backward(T, I, sources, unit_model, first, last)
+function kron_left(T, I, sources, unit_model, first, last)
     for j in first:-1:last
         if j ∈ sources
             T = kron(I[unit_model[j]], T)
@@ -537,7 +537,7 @@ function kron_backward(T, I, sources, unit_model, first, last)
     T
 end
 
-function kron_backward(T, I, unit_model, first, last)
+function kron_left(T, I, unit_model, first, last)
     for j in first:-1:last
         T = kron(I[unit_model[j]], T)
     end
