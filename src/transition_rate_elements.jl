@@ -176,7 +176,7 @@ end
 
 function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
-        elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+        elementsG, elementsRGbar, elementsRG, _, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
         return set_elements_TGRS(elementsG, elementsRGbar, elementsRG, G, nT)
     else
         return set_elements_G(transitions, indices.gamma), G

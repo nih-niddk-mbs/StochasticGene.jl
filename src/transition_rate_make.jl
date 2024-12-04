@@ -36,6 +36,29 @@ function make_components_TGRS(transitions, G, R, S, insertstep, splicetype)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     TComponents(nT, elementsT)
 end
+
+"""
+    TComponents(transitions, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
+
+Constructor for TComponents structure
+
+# Arguments
+- `transitions`: Transition rates.
+- `G`: Total number of genes.
+- `R`: Number of reporters.
+- `S`: Number of states.
+- `insertstep`: Insert step.
+- `splicetype`: Splice type.
+
+# Returns
+- `TComponents`: The created TComponents structure.
+
+"""
+function TComponents(transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
+    TComponents(nT, elementsT)
+end
 """
     make_components_TRG(transitions, G, R, S, insertstep, splicetype)
 
@@ -61,7 +84,16 @@ function make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
 end
 
+"""
+    TRGComponents(transitions, G, R, S, insertstep, splicetype)
 
+TBW
+"""
+function TRGComponents(transitions::Tuple, G, R, S, insertstep, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
+    TRGComponents(nT, G, nR, elementsG, elementsRGbar, elementsRG)
+end
 
 """
     make_components_TAI(elementsT, nT::Int, onstates::Vector)
@@ -94,6 +126,10 @@ function make_components_TAI(elementsT, nT::Int, onstates::Vector)
     TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
 end
 
+function TAIComponents(elementsT::Vector, nT::Int, onstates::Vector)
+    TAIComponents{Element}(nT, elementsT, set_elements_TA(elementsT, onstates), set_elements_TI(elementsT, onstates))
+end
+
 # function make_components_TAI(elementsT, G::Int, R::Int, base::Int)
 #     TAIComponents{typeof(elementsT)}(nT, elementsT, set_elements_TA(elementsT, G, R, base), set_elements_TI(elementsT, G, R, base))
 # end
@@ -102,6 +138,12 @@ function make_components_TAI(transitions, G, R, S, insertstep, onstates, splicet
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     make_components_TAI(elementsT, nT, onstates)
+end
+
+function TAIComponents(transitions::Tuple, G, R, S, insertstep, onstates, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    TAIComponents(elementsT, nT, onstates)
 end
 
 """
@@ -129,13 +171,32 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     TDComponents(nT, elementsT, elementsG, c)
 end
 
-function make_components_TDCunit(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+function TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsG = set_elements_G(transitions, indices.gamma)
+    c = set_elements_TDvec(elementsT, onstates, dttype)
+    TDComponents(nT, elementsT, elementsG, c)
+end
+
+function TDCoupledUnitComponents(source_state, target_transition, transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
     c = set_elements_TDvec(elementsT, onstates, dttype)
-    TDCComponents(nT, elementsT, elementsG, c)
+    TDCoupledUnitComponents(nT, nG, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD)
 end
+
+function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, onstates, dttype, splicetype)
+    comp = TCoupledUnitComponents[]
+    for i in eachindex(G)
+        push!(TCoupledUnitComponents, make_components_TDCoupledUnit(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], onstates[i], dttype[i], splicetype))
+    end
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+end
+
+TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype="") = TDCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, onstates, dttype, splicetype)
+
 """
     make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
 
@@ -192,9 +253,9 @@ This function returns a TCoupledComponents structure for coupled models, which i
 # Returns
 - `TCoupledComponents`: The created TCoupledComponents structure.
 """
-m
+
 function make_components_TRGCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
-    comp = TRGCoupledUnitComponents[] 
+    comp = TRGCoupledUnitComponents[]
     for i in eachindex(G)
         push!(TRGCoupledUnitComponents, make_components_TRGCoupledUnit(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
@@ -834,11 +895,11 @@ function make_mat_TCD(components, rates, coupling_strength)
     for i in 1:eachindex(G)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
         T_modified = copy(G)
-        T_modified[i] = make_mat(components.modelcomponents[i].elementsTD, rates[i], components.modelcomponents[i].nT) 
+        T_modified[i] = make_mat(components.modelcomponents[i].elementsTD, rates[i], components.modelcomponents[i].nT)
         # Compute the resulting matrix using make_mat_TC
         TCD[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IG, components.sources, components.model)
     end
-    
+
     return TCD
 end
 
