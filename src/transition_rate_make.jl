@@ -113,22 +113,29 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    c = Vector{Element}[]
-    for i in eachindex(onstates)
-        if dttype[i] == "ON"
-            push!(c, set_elements_TA(elementsT, onstates[i]))
-        elseif dttype[i] == "OFF"
-            push!(c, set_elements_TI(elementsT, onstates[i]))
-        elseif dttype[i] == "ONG"
-            push!(c, set_elements_TA(elementsG, onstates[i]))
-        elseif dttype[i] == "OFFG"
-            push!(c, set_elements_TI(elementsG, onstates[i]))
-        end
-    end
+    c = set_elements_TDvec(elementsT, onstates, dttype)
+    # c = Vector{Element}[]
+    # for i in eachindex(onstates)
+    #     if dttype[i] == "ON"
+    #         push!(c, set_elements_TA(elementsT, onstates[i]))
+    #     elseif dttype[i] == "OFF"
+    #         push!(c, set_elements_TI(elementsT, onstates[i]))
+    #     elseif dttype[i] == "ONG"
+    #         push!(c, set_elements_TA(elementsG, onstates[i]))
+    #     elseif dttype[i] == "OFFG"
+    #         push!(c, set_elements_TI(elementsG, onstates[i]))
+    #     end
+    # end
     TDComponents(nT, elementsT, elementsG, c)
 end
 
-
+function make_components_TDCunit(transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsG = set_elements_G(transitions, indices.gamma)
+    c = set_elements_TDvec(elementsT, onstates, dttype)
+    TDCComponents(nT, elementsT, elementsG, c)
+end
 """
     make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
 
@@ -815,49 +822,23 @@ function make_mat_TC(components, rates, coupling_strength)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
 end
 
-# function make_mat_TCD(coupling_strength, T, G, Gs, V, IG, IT, sources, model)
-#     n = length(model)
-#     Tc = SparseMatrixCSC[]
-#     for α in 1:n
-#         Tα = T[model[α]]
-#         Tα = kron_left(Tα, IG, sources[α], model, α - 1, 1)
-#         Tα = kron_right(Tα, IG, sources[α], model, α + 1, n)
-#         for β in 1:α-1
-#             if β ∈ sources[α]
-#                 Gβ = IT[model[α]]
-#                 Gβ = kron_right(Gβ, IG, sources[α], model, α + 1, n)
-#                 Gβ = kron_left(Gβ, IG, sources[α], model, α - 1, β + 1)
-#                 Gβ = kron(G[model[β]], Gβ)
-#                 Gβ = kron_left(Gβ, IG, sources[α], model, β - 1, 1)
-#                 Vβ = V[model[α]]
-#                 Vβ = kron_right(Vβ, IG, sources[α], model, α + 1, n)
-#                 Vβ = kron_left(Vβ, IG, sources[α], model, α - 1, β + 1)
-#                 Vβ = kron(Gs[model[β]], Vβ)
-#                 Vβ = kron_left(Vβ, IG, sources[α], model, β - 1, 1)
-#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-#             end
-#         end
-#         for β in α+1:n
-#             if β ∈ sources[α]
-#                 Gβ = IT[model[α]]
-#                 Gβ = kron_left(Gβ, IG, sources[α], model, α - 1, 1)
-#                 Gβ = kron_right(Gβ, IG, sources[α], model, α + 1, β - 1)
-#                 Gβ = kron(Gβ, G[model[β]])
-#                 Gβ = kron_right(Gβ, IG, sources[α], model, β + 1, n)
-#                 Vβ = V[model[α]]
-#                 Vβ = kron_left(Vβ, IG, sources[α], model, β - 1, 1)
-#                 Vβ = kron_right(Vβ, IG, sources[α], model, α + 1, β - 1)
-#                 Vβ = kron(Vβ, Gs[model[β]])
-#                 Vβ = kron_right(Vβ, IG, sources[α], model, β + 1, n)
-#                 Tα += Gβ + coupling_strength[sources[α][β]] * Vβ
-#             end
-#         end
-#         push!(Tc, Tα)
-#     end
-#     return Tc
-# end
 
+"""
+    make_mat_TCD(components, rates, coupling_strength)
 
-
-
+TBW
+"""
+function make_mat_TCD(components, rates, coupling_strength)
+    T, G, Gt, Gs, IG, IR, _ = make_matvec_C(components, rates)
+    TCD = Vector{SparseMatrixCSC}(undef, length(G))
+    for i in 1:eachindex(G)
+        # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
+        T_modified = copy(G)
+        T_modified[i] = make_mat(components.modelcomponents[i].elementsTD, rates[i], components.modelcomponents[i].nT) 
+        # Compute the resulting matrix using make_mat_TC
+        TCD[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IG, components.sources, components.model)
+    end
+    
+    return TCD
+end
 

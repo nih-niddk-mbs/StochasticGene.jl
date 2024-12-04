@@ -465,13 +465,13 @@ function set_indices(ntransitions, R, S, insertstep, offset)
 end
 
 """
-    kron_right(T, M, sources, unit_model, first, last)
-    kron_right(T, M, unit_model, first, last)
+    kron_right(T, M::Vector, sources, unit_model, first, last)
+    kron_right(T, M::Vector, unit_model, first, last)
 
-Perform Kronecker product forward operation.
+Perform Kronecker right product operations.
 
 # Description
-This function performs a forward Kronecker product operation on the matrix `T` using the identity matrices `I` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
+This function performs a right Kronecker product operation on the matrix `T` using the identity matrices `I` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
 
 # Arguments
 - `T`: Initial matrix to be transformed.
@@ -488,7 +488,7 @@ This function performs a forward Kronecker product operation on the matrix `T` u
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_right(T, M, sources, unit_model, first, last)
+function kron_right(T, M::Vector, sources, unit_model, first, last)
     for j in first:last
         if j ∈ sources
             T = kron(T, M[unit_model[j]])
@@ -497,7 +497,7 @@ function kron_right(T, M, sources, unit_model, first, last)
     T
 end
 
-function kron_right(T, M, unit_model, first, last)
+function kron_right(T, M::Vector, unit_model, first, last)
     for j in first:last
         T = kron(T, M[unit_model[j]])
     end
@@ -505,13 +505,13 @@ function kron_right(T, M, unit_model, first, last)
 end
 
 """
-    kron_left(T, M, sources, unit_model, first, last)
-    kron_left(T, M, unit_model, first, last)
+    kron_left(T, M::Vector, sources, unit_model, first, last)
+    kron_left(T, M::Vectort unit_model, first, last)
 
-Perform Kronecker product backward operation.
+Perform Kronecker left product operations.
 
 # Description
-This function performs a backward Kronecker product operation on the matrix `T` using the identity matrices `M` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
+This function performs a left Kronecker product operation on the matrix `T` using the identity matrices `M` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
 
 # Arguments
 - `T`: Initial matrix to be transformed.
@@ -528,7 +528,7 @@ This function performs a backward Kronecker product operation on the matrix `T` 
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_left(T, M, sources, unit_model, first, last)
+function kron_left(T, M::Vector, sources, unit_model, first, last)
     for j in first:-1:last
         if j ∈ sources
             T = kron(M[unit_model[j]], T)
@@ -537,7 +537,7 @@ function kron_left(T, M, sources, unit_model, first, last)
     T
 end
 
-function kron_left(T, M, unit_model, first, last)
+function kron_left(T, M::Vector, unit_model, first, last)
     for j in first:-1:last
         T = kron(M[unit_model[j]], T)
     end
