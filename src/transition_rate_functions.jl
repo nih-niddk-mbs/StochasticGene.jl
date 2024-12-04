@@ -465,8 +465,8 @@ function set_indices(ntransitions, R, S, insertstep, offset)
 end
 
 """
-    kron_right(T, I, sources, unit_model, first, last)
-    kron_right(T, I, unit_model, first, last)
+    kron_right(T, M, sources, unit_model, first, last)
+    kron_right(T, M, unit_model, first, last)
 
 Perform Kronecker product forward operation.
 
@@ -475,71 +475,88 @@ This function performs a forward Kronecker product operation on the matrix `T` u
 
 # Arguments
 - `T`: Initial matrix to be transformed.
-- `I`: Vector of identity matrices.
+- `M`: Vector of identity matrices.
 - `sources`: Vector of source indices (optional).
 - `unit_model`: Vector of unit model indices.
 - `first`: Starting index for the operation.
 - `last`: Ending index for the operation.
 
 # Methods
-- `kron_right(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
-- `kron_right(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+- `kron_right(T, M, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_right(T, M, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
 
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_right(T, I, sources, unit_model, first, last)
+function kron_right(T, M, sources, unit_model, first, last)
     for j in first:last
         if j ∈ sources
-            T = kron(T, I[unit_model[j]])
+            T = kron(T, M[unit_model[j]])
         end
     end
     T
 end
 
-function kron_right(T, I, unit_model, first, last)
+function kron_right(T, M, unit_model, first, last)
     for j in first:last
-        T = kron(T, I[unit_model[j]])
+        T = kron(T, M[unit_model[j]])
     end
     T
 end
 
 """
-    kron_left(T, I, sources, unit_model, first, last)
-    kron_left(T, I, unit_model, first, last)
+    kron_left(T, M, sources, unit_model, first, last)
+    kron_left(T, M, unit_model, first, last)
 
 Perform Kronecker product backward operation.
 
 # Description
-This function performs a backward Kronecker product operation on the matrix `T` using the identity matrices `I` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
+This function performs a backward Kronecker product operation on the matrix `T` using the identity matrices `M` and the `unit_model` indices. It can either include a `sources` vector to selectively apply the Kronecker product or apply it to all indices in the specified range.
 
 # Arguments
 - `T`: Initial matrix to be transformed.
-- `I`: Vector of identity matrices.
+- `M`: Vector of identity matrices.
 - `sources`: Vector of source indices (optional).
 - `unit_model`: Vector of unit model indices.
 - `first`: Starting index for the operation.
 - `last`: Ending index for the operation.
 
 # Methods
-- `kron_left(T, I, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
-- `kron_left(T, I, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
+- `kron_left(T, M, sources, unit_model, first, last)`: Applies the Kronecker product selectively based on the `sources` vector.
+- `kron_left(T, M, unit_model, first, last)`: Applies the Kronecker product to all indices in the specified range.
 
 # Returns
 - `T`: The transformed matrix after applying the Kronecker product.
 """
-function kron_left(T, I, sources, unit_model, first, last)
+function kron_left(T, M, sources, unit_model, first, last)
     for j in first:-1:last
         if j ∈ sources
-            T = kron(I[unit_model[j]], T)
+            T = kron(M[unit_model[j]], T)
         end
     end
     T
 end
 
-function kron_left(T, I, unit_model, first, last)
+function kron_left(T, M, unit_model, first, last)
     for j in first:-1:last
-        T = kron(I[unit_model[j]], T)
+        T = kron(M[unit_model[j]], T)
     end
     T
+end
+
+function indices_kron_right(index, dimension , right_dimension)
+    indices = Int[]
+    total = dimension * right_dimension
+    for i in 0:dimension:total-1
+        push!(indices, index + i)
+    end
+    indices
+end
+
+function indices_kron_left(index, dimension)
+    indices = Int[]
+    for i in 1:dimension
+        push!(indices, i + dimension *(index-1))
+    end
+    indices
 end

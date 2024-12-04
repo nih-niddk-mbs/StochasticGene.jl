@@ -143,44 +143,52 @@ function set_elements_GRS(transitions, G, R, S, insertstep, indices::Indices, sp
     end
 end
 
+# function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
+#     elements = []
+#     for e in elementsG
+#         for j in 0:G:nT-1
+#             push!(elements, Element(e.a + j, e.b + j, e.index, e.pm))
+#         end
+#     end
+#     for e in elementsRGbar
+#         for j in 1:G
+#             push!(elements, Element(j + G * (e.a - 1), j + G * (e.b - 1), e.index, e.pm))
+#         end
+#     end
+#     for e in elementsRG
+#         push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
+#     end
+#     elements, nT
+# end
+
 function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
     elements = []
+    elements_TG!(elements, elementsG, G, nT)
+    elements_TR!(elements, elementsRGbar, G)
+    elements_RG!(elements, elementsRG, G)
+    elements, nT
+end
+
+function elements_TG!(elements, elementsG, G, nT)
     for e in elementsG
         for j in 0:G:nT-1
             push!(elements, Element(e.a + j, e.b + j, e.index, e.pm))
         end
     end
-    for e in elementsRGbar
+
+end
+
+function elements_TR!(elements, elementsR, G::Int)
+    for e in elementsR
         for j in 1:G
             push!(elements, Element(j + G * (e.a - 1), j + G * (e.b - 1), e.index, e.pm))
         end
     end
-    for e in elementsRG
+end
+
+function elements_RG!(elements, elementsR, G::Int)
+    for e in elementsR
         push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
-    end
-    elements, nT
-end
-
-function promote_elements_G!(elements, elementsG, G, nT)
-    for e in elementsG
-        for j in 0:G:nT-1
-            push!(elements, Element(e.a + j, e.b + j, e.index, e.pm))
-        end
-    end
-
-end
-
-function promote_elements_R!(elements, elementsR, rangeG::UnitRange{Int64})
-    for e in elementsR
-        for j in rangeG
-            push!(elements, Element(j + G * (e.a - 1), j + G * (e.b - 1), e.index, e.pm))
-        end
-    end
-end
-
-function promote_elements_R!(elements, elementsR, G::Int)
-    for e in elementsR
-            push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
     end
 end
 
