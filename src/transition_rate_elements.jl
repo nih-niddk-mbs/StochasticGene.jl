@@ -373,7 +373,7 @@ set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_
 
 TBW
 """
-function set_elements_TDvec(elementsT, onstates, dttype)
+function set_elements_TDvec(elementsT, elementsG, onstates, dttype)
     c = Vector{Element}[]
     for i in eachindex(onstates)
         if dttype[i] == "ON"

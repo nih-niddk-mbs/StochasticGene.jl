@@ -166,6 +166,11 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
+function test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
+    components = TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype)
+    return make_mat_TCD(components, r, coupling_strength)
+end
+
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
     return make_mat_TC(components, r, coupling_strength)
