@@ -478,7 +478,7 @@ This function calculates the likelihood array for various types of data, includi
 function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
     mcomponents = components.mcomponents
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, components.tcomponents, bins, onstates, dttype)]
+    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, components.tcomponents, bins, onstates, dttype)...]
 end
 
 function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
@@ -509,14 +509,14 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     return hists
 end
 
-function likelihoodarray(r, G, components, bins, sojourn_states)
-    T = make_mat_T(components, r)
-    TD = make_mat_TD(components, r)
-    for i in eachindex(sojourn_states)
-        push!(hists, dewlltimePDF(bins[i], TD[i], T[i], sojourn_states[i]))
-    end
-    hists
-end
+# function likelihoodarray(r, G, components, bins, sojourn_states, dttype)
+#     T = make_mat_T(components, r)
+#     TD = make_mat_TD(components, r)
+#     for i in eachindex(sojourn_states)
+#         push!(hists, dewlltimePDF(bins[i], TD[i], T[i], sojourn_states[i]))
+#     end
+#     hists
+# end
 
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     hists = Vector[]

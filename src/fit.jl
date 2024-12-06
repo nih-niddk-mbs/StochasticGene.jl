@@ -301,12 +301,11 @@ function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
 end
 
+"""
+    GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid)
 
-
-
-
-
-
+TBW
+"""
 function GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     n = num_rates(transitions, R, S, insertstep)
@@ -471,41 +470,52 @@ function make_reporter_components(data::AbstractTraceHistogramData, transitions,
     return reporter, components
 end
 
-function make_reporter_onstates(onstates, G::Int, R, S, insertstep)
-    on = copy(onstates)
+function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
+    sojourn = copy(onstates)
     if isempty(onstates)
-        on = on_states(G, R, S, insertstep)
-    else
-        for i in eachindex(onstates)
-            if isempty(onstates[i])
-                on[i] = on_states(G, R, S, insertstep)
-            end
-            on[i] = Int64.(on[i])
-        end
+        sojourn = on_states(G, R, S, insertstep)
     end
-    on
+    if occursin("ON", dttype)
+        sojourn = off_states(T_dimension(G, R, S, insertstep), sojourn)
+    end
+    Int.(sojourn)
 end
 
-function make_reporter_onstates(onstates, G::Tuple, R, S, insertstep)
-    on = copy(onstates)
-    for i in eachindex(G)
-       on[i] = make_reporter_onstates(onstates[i], G[i], R[i], S[i], insertstep[i])
+function sojourn_states(onstates::Vector{Vector}, G::Int, R, S, insertstep, dttypes)
+    sojourn = copy(onstates)
+    for i in eachindex(on_states)
+        sojourn[i] = sojourn_states(onstates[i], G, R, S, insertstep, dttypes[i])
     end
-    on
+    sojourn
+end
+
+function sojourn_states(onstates::Vector{Vector{Vector}}, G::Tuple, R, S, insertstep, dttypes)
+    sojourn = copy(onstates)
+    for i in eachindex(on_states)
+        sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttypes[i])
+    end
+    sojourn
+end
+
+function nonzero_rows(components::TDComponents)
+    nz = Vector{Int}[]
+    for e in components.elementsTD
+        push!(nz, nonzero_rows(e))
+    end
 end
 
 function make_reporter_components(data::AbstractHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    # if isempty(onstates)
-    #     onstates = on_states(G, R, S, insertstep)
-    # else
-    #     for i in eachindex(onstates)
-    #         if isempty(onstates[i])
-    #             onstates[i] = on_states(G, R, S, insertstep)
-    #         end
-    #         onstates[i] = Int64.(onstates[i])
-    #     end
-    # end
-    reporter = make_reporter_onstates(onstates, G, R, S, insertstep)
+    if isempty(onstates)
+        onstates = on_states(G, R, S, insertstep)
+    else
+        for i in eachindex(onstates)
+            if isempty(onstates[i])
+                onstates[i] = on_states(G, R, S, insertstep)
+            end
+            onstates[i] = Int64.(onstates[i])
+        end
+    end
+    reporter = onstates
     if typeof(data) == RNADwellTimeData
         if length(onstates) == length(data.DTtypes)
             components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
@@ -516,6 +526,31 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
         components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
     end
     return reporter, components
+end
+
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    # if isempty(onstates)
+    #     onstates = on_states(G, R, S, insertstep)
+    # else
+    #     for i in eachindex(onstates)
+    #         if isempty(onstates[i])
+    #             onstates[i] = on_states(G, R, S, insertstep)
+    #         end
+    #         onstates[i] = Int64.(onstates[i])
+    #     end
+    # end
+    if typeof(data) == RNADwellTimeData
+        if length(onstates) == length(data.DTtypes)
+            components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
+        else
+            throw("length of onstates and data.DTtypes not the same")
+        end
+    else
+        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
+    end
+    reporter = sojourn_states(onstates, G, R, S, insertstep, data.DTtypes)
+    nonzeros = nonzero_rows(components)
+    return (reporter, nonzeros), components
 end
 
 function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
