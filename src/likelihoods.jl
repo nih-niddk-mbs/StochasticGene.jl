@@ -509,6 +509,11 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     return hists
 end
 
+function likelihoodarray(r, G, components, bins, onstates, dttype)
+    T = make_mat_T(components, r)
+    TD = make_mat_TD(components, r)
+end
+
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     hists = Vector[]
     for i in eachindex(model.modelcomponents)

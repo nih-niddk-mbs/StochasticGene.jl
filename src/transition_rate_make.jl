@@ -739,6 +739,14 @@ make_mat_TI(components::TAIComponents, rates) = make_mat(components.elementsTI, 
 
 make_mat_TI(elementsTI, rates, nT) = make_mat(elementsTI, rates, nT)
 
+function make_mat_TD(components, r)
+    TD = SparseMatrixCSC[]
+    for e in components.elementsTD
+        push!(TD, make_mat(e, r, components.nT))
+    end
+    TD
+end
+
 """
     make_mat_GR(components, rates)
     make_mat_GR(G)
@@ -848,7 +856,7 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     else
         Gs = make_mat_Gs(components.elementsSource, nG)
     end
-        Gt = make_mat(components.elementsTarget, rates, nG)
+    Gt = make_mat(components.elementsTarget, rates, nG)
     return T, TD, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 

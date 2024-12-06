@@ -166,10 +166,16 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
     T, M, components
 end
 
+function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
+    onstates = make_reporter_onstates(onstates, G, R, S, insertstep)
+    components = TDComponents(transitions, G, R, S, insertstep, onstates, dttype)
+    make_mat_TD(components, r)
+end
+
 function test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
     onstates = make_reporter_onstates(onstates, G, R, S, insertstep)
-    components = TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype)
-    r,cs,_=prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0,0])
+    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, onstates, dttype)
+    r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     return make_mat_TCD(components, r, cs)
 end
 
@@ -261,18 +267,18 @@ function recursive_sum(matrix, result, indices1, indices2, depth, max_depth)
     if depth == max_depth
         i, j, k, l = indices1
         i1, j1, k1, l1 = indices2
-        idx1 = i + 2*j + 4*k + 8*l + 1
-        idx2 = i1 + 2*j1 + 4*k1 + 8*l1 + 1
-        result[i + 2*k + 1, i1 + 2*k1 + 1] += matrix[idx1, idx2]
+        idx1 = i + 2 * j + 4 * k + 8 * l + 1
+        idx2 = i1 + 2 * j1 + 4 * k1 + 8 * l1 + 1
+        result[i+2*k+1, i1+2*k1+1] += matrix[idx1, idx2]
     else
         for x in 0:1
             if depth < 4
                 new_indices1 = copy(indices1)
-                new_indices1[depth + 1] = x
+                new_indices1[depth+1] = x
                 recursive_sum(matrix, result, new_indices1, indices2, depth + 1, max_depth)
             else
                 new_indices2 = copy(indices2)
-                new_indices2[depth - 4 + 1] = x
+                new_indices2[depth-4+1] = x
                 recursive_sum(matrix, result, indices1, new_indices2, depth + 1, max_depth)
             end
         end
@@ -305,21 +311,21 @@ function sum_overR(matrix)
             end
         end
     end
-    result/4
+    result / 4
 end
 
 function recursive_sum3(matrix, result, indices1, indices2, depth, max_depth, ranges)
     if depth == max_depth
         idx1 = sum(indices1[i] * prod(ranges[1:i-1]) for i in 1:length(indices1)) + 1
         idx2 = sum(indices2[i] * prod(ranges[1:i-1]) for i in 1:length(indices2)) + 1
-        result[indices1[1] + 2 * indices1[3] + 1, indices2[1] + 2 * indices2[3] + 1] += matrix[idx1, idx2]
+        result[indices1[1]+2*indices1[3]+1, indices2[1]+2*indices2[3]+1] += matrix[idx1, idx2]
     else
-        for x in 0:ranges[depth + 1] - 1
+        for x in 0:ranges[depth+1]-1
             if depth < length(indices1)
-                indices1[depth + 1] = x
+                indices1[depth+1] = x
                 recursive_sum3(matrix, result, indices1, indices2, depth + 1, max_depth, ranges)
             else
-                indices2[depth - length(indices1) + 1] = x
+                indices2[depth-length(indices1)+1] = x
                 recursive_sum3(matrix, result, indices1, indices2, depth + 1, max_depth, ranges)
             end
         end
