@@ -303,6 +303,18 @@ end
 #     elementsT
 # end
 
+function set_elements_TD!(elements_TD, elementsT, sojourn::Vector)
+    for e in elementsT
+        if e.b ∈ sojourn
+            push!(elements_TD, e)
+        end
+    end
+end
+function set_elements_TD(elementsT, sojourn::Vector)
+    elementsTD = Vector{Element}(undef, 0)
+    set_elements_TD!(elementsTD, elementsT, sojourn::Vector)
+    elementsTD
+end
 """
     set_elements_TX!(elementsTX, elementsT, onstates::Vector,f)
 
