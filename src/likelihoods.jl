@@ -137,6 +137,49 @@ function hyper_distribution(p)
 end
 
 """
+    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+
+convert MCMC params into form to compute likelihood for coupled model
+
+# Arguments
+- `rates`: The model rates.
+- `sourceStates`: The source states.
+- `transitions`: The transitions.
+- `G::Tuple`: The G steps.
+- `R`: The R steps.
+- `S`: The splicing indicator.
+- `insertstep`: The R step where the reporter is inserted.
+- `n_noise`: The number of noise parameters.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
+
+"""
+function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(G)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(G)
+        if sourceStates[i] > 0
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
+
+"""
     prepare_rates(param, model)
 
 Extracts and reassembles parameters for use in likelihood calculations.
@@ -180,48 +223,6 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
-"""
-    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
-
-convert MCMC params into form to compute likelihood for coupled model
-
-# Arguments
-- `rates`: The model rates.
-- `sourceStates`: The source states.
-- `transitions`: The transitions.
-- `G::Tuple`: The G steps.
-- `R`: The R steps.
-- `S`: The splicing indicator.
-- `insertstep`: The R step where the reporter is inserted.
-- `n_noise`: The number of noise parameters.
-
-# Returns
-- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
-
-"""
-function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    j = 1
-    for i in eachindex(G)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(G)
-        if sourceStates[i] > 0
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end])
-    end
-    return r, couplingStrength, noiseparams
-end
 
 function prepare_rates(param, model::GRSMgridmodel)
     r = get_rates(param, model)

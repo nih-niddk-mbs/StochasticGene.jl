@@ -168,7 +168,8 @@ end
 
 function test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
     components = TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype)
-    return make_mat_TCD(components, r, coupling_strength)
+    r,cs,_=prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0,0])
+    return make_mat_TCD(components, r, cs)
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)

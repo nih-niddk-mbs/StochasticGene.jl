@@ -179,12 +179,14 @@ function TDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype,
     TDComponents(nT, elementsT, elementsG, c)
 end
 
-function TDCoupledUnitComponents(source_state, target_transition, transitions, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
     elementsTD = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
-    TDCoupledUnitComponents(nT, nG, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD)
+    elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
+    elementsSource = set_elements_Gs(source_state)
+    TDCoupledUnitComponents(nT, G, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD)
 end
 
 function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, onstates, dttype, splicetype)
@@ -833,20 +835,20 @@ end
 function make_mat_C(components::TDCoupledUnitComponents, rates)
     nT = components.nT
     nG = components.nG
-    nR = components.nR
+    nR = div(nT, nG)
     T = make_mat(components.elementsT, rates, nT)
     TD = SparseMatrixCSC[]
     for c in components.elementsTD
         push!(TD, make_mat(c, rates, components.nT))
     end
     G = make_mat(components.elementsG, rates, nG)
-    Gt = make_mat(components.elementsGt, rates, nG)
-    if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
+    Gt = make_mat(components.elementsTarget, rates, nG)
+    if components.elementsSource[1].a < 1 || components.elementsSource[1].b < 1
         Gs = spzeros(0)
     else
-        Gs = make_mat_Gs(components.elementsGs, nG)
+        Gs = make_mat_Gs(components.elementsSource, nG)
     end
-        Gt = make_mat(components.elementsGt, rates, nG)
+        Gt = make_mat(components.elementsTarget, rates, nG)
     return T, TD, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
@@ -891,8 +893,8 @@ function make_matvec_C(components::TCoupledComponents{Vector{TDCoupledUnitCompon
     IG = Vector{SparseMatrixCSC}(undef, n)
     IR = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
-    for i in eachindex(components.model)
-        T[i], G[i], TD[i] = make_mat_C(components.modelcomponents[i], rates[i])
+    for i in eachindex(rates)
+        T[i], TD[i], G[i], Gt[i], Gs[i], IG[i], IR[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
     end
     return T, TD, G, Gt, Gs, IG, IR, IT
 end
@@ -972,14 +974,14 @@ function make_mat_TCD(components, rates, coupling_strength)
     T, G, Gt, Gs, IG, IR, TD = make_matvec_C(components, rates)
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(G))
     TC = Vector{SparseMatrixCSC}(undef, length(G))
-    for i in 1:eachindex(T)
+    for i in eachindex(T)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
         T_modified = copy(G)
         T_modified[i] = T[i]
         # Compute the resulting matrix using make_mat_TC
         TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IG, components.sources, components.model)
     end
-    for i in 1:eachindex(T)
+    for i in eachindex(T)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
         for t in TD[i]
             T_modified = copy(G)

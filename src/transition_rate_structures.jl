@@ -142,7 +142,6 @@ end
 struct TDCoupledUnitComponents <: AbstractTComponents
     nT::Int
     nG::Int
-    nR::Int
     sourceState::Union{Int, Vector{Int}}
     targetTransition::Union{Int, Vector{Int}}
     elementsG::Vector{Element}
