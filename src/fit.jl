@@ -472,24 +472,26 @@ function make_reporter_components(data::AbstractTraceHistogramData, transitions,
 end
 
 function make_reporter_onstates(onstates, G::Int, R, S, insertstep)
+    on = copy(onstates)
     if isempty(onstates)
-        onstates = on_states(G, R, S, insertstep)
+        on = on_states(G, R, S, insertstep)
     else
         for i in eachindex(onstates)
             if isempty(onstates[i])
-                onstates[i] = on_states(G, R, S, insertstep)
+                on[i] = on_states(G, R, S, insertstep)
             end
-            onstates[i] = Int64.(onstates[i])
+            on[i] = Int64.(on[i])
         end
     end
-    onstates
+    on
 end
 
 function make_reporter_onstates(onstates, G::Tuple, R, S, insertstep)
+    on = copy(onstates)
     for i in eachindex(G)
-       onstates[i] = make_reporter_onstates(onstates[i], G[i], R[i], S[i], insertstep[i])
+       on[i] = make_reporter_onstates(onstates[i], G[i], R[i], S[i], insertstep[i])
     end
-    onstates
+    on
 end
 
 function make_reporter_components(data::AbstractHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)

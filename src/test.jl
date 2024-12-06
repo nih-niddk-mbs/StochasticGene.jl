@@ -167,9 +167,15 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
 end
 
 function test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
+    onstates = make_reporter_onstates(onstates, G, R, S, insertstep)
     components = TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype)
     r,cs,_=prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0,0])
     return make_mat_TCD(components, r, cs)
+end
+
+function test_DTtime(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
+    TC, TCD, Gm = test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
+    
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)

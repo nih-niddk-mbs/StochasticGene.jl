@@ -155,7 +155,7 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    c = set_elements_TDvec(elementsT, onstates, dttype)
+    c = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
     # c = Vector{Element}[]
     # for i in eachindex(onstates)
     #     if dttype[i] == "ON"
@@ -984,13 +984,12 @@ function make_mat_TCD(components, rates, coupling_strength)
         TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model)
     end
     for i in eachindex(TCD)
-        # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
+        TCD[i] = Vector{SparseMatrixCSC}(undef, 0)
+        IT_modified = copy(IG)
+        IT_modified[i] = IT[i]
         for t in TD[i]
             T_modified = copy(Gm)
-            IT_modified = copy(IG)
             T_modified[i] = t
-            IT_modified[i] = IT[i]
-            # Compute the resulting matrix using make_mat_TC
             push!(TCD[i], make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model))
         end
     end
