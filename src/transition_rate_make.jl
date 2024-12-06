@@ -175,7 +175,7 @@ function TDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype,
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    c = set_elements_TDvec(elementsT, onstates, dttype)
+    c = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
     TDComponents(nT, elementsT, elementsG, c)
 end
 
@@ -971,25 +971,29 @@ end
 TBW
 """
 function make_mat_TCD(components, rates, coupling_strength)
-    T, G, Gt, Gs, IG, IR, TD = make_matvec_C(components, rates)
-    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(G))
-    TC = Vector{SparseMatrixCSC}(undef, length(G))
-    for i in eachindex(T)
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+    TC = Vector{SparseMatrixCSC}(undef, length(Gm))
+    for i in eachindex(TC)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
-        T_modified = copy(G)
+        T_modified = copy(Gm)
+        IT_modified = copy(IG)
         T_modified[i] = T[i]
+        IT_modified[i] = IT[i]
         # Compute the resulting matrix using make_mat_TC
-        TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IG, components.sources, components.model)
+        TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model)
     end
-    for i in eachindex(T)
+    for i in eachindex(TCD)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
         for t in TD[i]
-            T_modified = copy(G)
-            T_modified[i] = t[i]
+            T_modified = copy(Gm)
+            IT_modified = copy(IG)
+            T_modified[i] = t
+            IT_modified[i] = IT[i]
             # Compute the resulting matrix using make_mat_TC
-            push!(TCD[i], make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IG, components.sources, components.model))
+            push!(TCD[i], make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model))
         end
     end
-    return TC, TCD, G
+    return TC, TCD, Gm
 end
 
