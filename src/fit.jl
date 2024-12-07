@@ -475,8 +475,10 @@ function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
     if isempty(onstates)
         sojourn = on_states(G, R, S, insertstep)
     end
-    if occursin("OFF", dttype)
+    if dttype == "OFF"
         sojourn = off_states(T_dimension(G, R, S), sojourn)
+    elseif dttype == "OFFG"
+        sojourn = off_states(G, sojourn)
     end
     Int.(sojourn)
 end

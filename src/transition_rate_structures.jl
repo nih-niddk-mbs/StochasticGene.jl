@@ -106,6 +106,7 @@ nT, elementsT, elementsTD:: Vector{Vector{Element}}
 """
 struct TDComponents <: AbstractTComponents
     nT::Int
+    nG::Int
     elementsT::Vector{Element}
     elementsG::Vector{Element}
     elementsTD::Vector{Vector{Element}}

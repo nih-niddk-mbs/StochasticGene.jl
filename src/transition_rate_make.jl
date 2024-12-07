@@ -168,7 +168,7 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     #         push!(c, set_elements_TI(elementsG, onstates[i]))
     #     end
     # end
-    TDComponents(nT, elementsT, elementsG, c)
+    TDComponents(nT, G, elementsT, elementsG, c)
 end
 
 function TDComponents1(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype::String="")
@@ -176,7 +176,7 @@ function TDComponents1(transitions::Tuple, G, R, S, insertstep, onstates, dttype
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
     c = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
-    TDComponents(nT, elementsT, elementsG, c)
+    TDComponents(nT, G, elementsT, elementsG, c)
 end
 
 
@@ -185,7 +185,7 @@ function TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, 
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
     c = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype)
-    TDComponents(nT, elementsT, elementsG, c)
+    TDComponents(nT, G, elementsT, elementsG, c)
 end
 
 function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype::String="")
@@ -639,6 +639,9 @@ function make_mat_B2(components, rates)
     nG = components.nG
     kron(RB, sparse(I, nG, nG))
 end
+
+make_mat_G(components, rates) = make_mat(components.elementsG, rates, components.nG)
+
 
 """
     make_mat_T(components::AbstractTComponents, rates)

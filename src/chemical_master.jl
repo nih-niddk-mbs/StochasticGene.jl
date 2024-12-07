@@ -105,6 +105,19 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss)
     end
     Sinit / sum(Sinit)
 end
+
+function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
+    Sinit = zeros(length(pss))
+    for e in elements
+        if e.b != e.a && (e.a ∈ sojourn && e.b ∉ sojourn)
+            Sinit[e.a] += pss[e.b] * r[e.index]
+        end
+    end
+    Sinit = Sinit[nonzeros]
+    Sinit / sum(Sinit)
+end
+
+
 """
 init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector)
 
