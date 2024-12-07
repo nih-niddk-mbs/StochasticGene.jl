@@ -401,6 +401,18 @@ function set_elements_TDvec(elementsT, elementsG, onstates::Vector{Vector{Int}},
     c
 end
 
+function set_elements_TDvecsojourn(elementsT, elementsG, sojourn::Vector{Vector{Int}}, dttype)
+    c = Vector{Element}[]
+    for i in eachindex(sojourn)
+        if occursin("G", dttype[i])
+            push!(c, set_elements_TA(elementsG, sojourn[i]))
+        else
+            push!(c, set_elements_TD(elementsT, sojourn[i]))
+        end
+    end
+    c
+end
+
 """
     set_elements_B(G, ejectindex)
 

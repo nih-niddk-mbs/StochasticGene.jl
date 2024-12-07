@@ -475,24 +475,24 @@ function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
     if isempty(onstates)
         sojourn = on_states(G, R, S, insertstep)
     end
-    if occursin("ON", dttype)
-        sojourn = off_states(T_dimension(G, R, S, insertstep), sojourn)
+    if occursin("OFF", dttype)
+        sojourn = off_states(T_dimension(G, R, S), sojourn)
     end
     Int.(sojourn)
 end
 
-function sojourn_states(onstates::Vector{Vector}, G::Int, R, S, insertstep, dttypes)
+function sojourn_states(onstates::Vector{Vector{Int}}, G::Int, R, S, insertstep, dttype)
     sojourn = copy(onstates)
-    for i in eachindex(on_states)
-        sojourn[i] = sojourn_states(onstates[i], G, R, S, insertstep, dttypes[i])
+    for i in eachindex(onstates)
+        sojourn[i] = sojourn_states(onstates[i], G, R, S, insertstep, dttype[i])
     end
     sojourn
 end
 
-function sojourn_states(onstates::Vector{Vector{Vector}}, G::Tuple, R, S, insertstep, dttypes)
-    sojourn = copy(onstates)
-    for i in eachindex(on_states)
-        sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttypes[i])
+function sojourn_states(onstates::Vector{Vector{Vector}}, G::Tuple, R, S, insertstep, dttype)
+    sojourn = similar(onstates)
+    for i in eachindex(onstates)
+        sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
     end
     sojourn
 end
@@ -502,6 +502,14 @@ function nonzero_rows(components::TDComponents)
     for e in components.elementsTD
         push!(nz, nonzero_rows(e))
     end
+    nz
+end
+
+function make_reporter_components(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype)
+    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    components = TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype)
+    nonzeros = nonzero_rows(components)
+    return (sojourn, nonzeros), components
 end
 
 function make_reporter_components(data::AbstractHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
@@ -529,11 +537,10 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
 end
 
 function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
-    components = TDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype)
-     reporter = sojourn_states(onstates, G, R, S, insertstep, data.DTtypes)
-    nonzeros = nonzero_rows(components)
-    return (reporter, nonzeros), components
+    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
 end
+
+
 
 function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
     println(coupling)

@@ -509,14 +509,16 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     return hists
 end
 
-# function likelihoodarray(r, G, components, bins, sojourn_states, dttype)
-#     T = make_mat_T(components, r)
-#     TD = make_mat_TD(components, r)
-#     for i in eachindex(sojourn_states)
-#         push!(hists, dewlltimePDF(bins[i], TD[i], T[i], sojourn_states[i]))
-#     end
-#     hists
-# end
+function likelihoodarray(r, G, components, reporter)
+    sojourn = reporter[1]
+    nonzeros = reporter[2]
+    T = make_mat_T(components, r)
+    TD = make_mat_TD(components, r, reporter[2])
+    for i in eachindex(sojourn_states)
+        push!(hists, dewlltimePDF(bins[i], TD[i], T[i], reporter[1][i], reporter[2][i]))
+    end
+    hists
+end
 
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     hists = Vector[]
