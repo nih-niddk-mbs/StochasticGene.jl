@@ -464,7 +464,7 @@ function make_reporter_components(data::AbstractTraceData, transitions, G, R, S,
     return reporter, components
 end
 
-function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+function make_reporter_components(data::TraceRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
     components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     return reporter, components
@@ -528,27 +528,9 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
     return reporter, components
 end
 
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    # if isempty(onstates)
-    #     onstates = on_states(G, R, S, insertstep)
-    # else
-    #     for i in eachindex(onstates)
-    #         if isempty(onstates[i])
-    #             onstates[i] = on_states(G, R, S, insertstep)
-    #         end
-    #         onstates[i] = Int64.(onstates[i])
-    #     end
-    # end
-    if typeof(data) == RNADwellTimeData
-        if length(onstates) == length(data.DTtypes)
-            components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
-        else
-            throw("length of onstates and data.DTtypes not the same")
-        end
-    else
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
-    end
-    reporter = sojourn_states(onstates, G, R, S, insertstep, data.DTtypes)
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
+    components = TDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype)
+     reporter = sojourn_states(onstates, G, R, S, insertstep, data.DTtypes)
     nonzeros = nonzero_rows(components)
     return (reporter, nonzeros), components
 end
