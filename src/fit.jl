@@ -528,7 +528,7 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
     reporter = onstates
     if typeof(data) == RNADwellTimeData
         if length(onstates) == length(data.DTtypes)
-            components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
+            components = MTDComponents(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
         else
             throw("length of onstates and data.DTtypes not the same")
         end

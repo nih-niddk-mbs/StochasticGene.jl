@@ -529,10 +529,10 @@ function likelihoodarray(r, components, bins, reporter, dttype)
     hists = Vector[]
     for i in eachindex(sojourn)
         if dt[i]
-            TD = make_mat(components.elementsTD[i], r, components.nG)
+            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
             push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
         else
-            TD = make_mat(components.elementsTD[i], r, components.nT)
+            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
             push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
         end
     end

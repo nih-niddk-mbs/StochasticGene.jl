@@ -46,6 +46,9 @@ abstract type for components of transition matrices
 """
 abstract type AbstractTComponents end
 
+
+abstract type AbstractTDComponents <: AbstractTComponents end
+
 """
 	struct TComponents
 
@@ -104,12 +107,13 @@ fields:
 nT, elementsT, elementsTD:: Vector{Vector{Element}}
 
 """
-struct TDComponents <: AbstractTComponents
+struct TDComponents <: AbstractTDComponents
     nT::Int
     nG::Int
     elementsT::Vector{Element}
     elementsG::Vector{Element}
     elementsTD::Vector{Vector{Element}}
+    TDdims::Vector{Int}
 end
 
 """
@@ -140,16 +144,23 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
     elementsRGbar::Vector{Element}
     elementsRG::Vector{Element}
 end
-struct TDCoupledUnitComponents <: AbstractTComponents
+struct TDCoupledUnitComponents1 <: AbstractTDComponents
     nT::Int
     nG::Int
     sourceState::Union{Int, Vector{Int}}
-    targetTransition::Union{Int, Vector{Int}}
-    elementsG::Vector{Element}
     elementsTarget::Vector{Element}
     elementsSource::Vector{Element}
+    targetTransition::Union{Int, Vector{Int}}
+    elementsG::Vector{Element}
     elementsT::Vector{Element}
     elementsTD::Vector{Vector{Element}}
+    TDdims::Vector{Int}
+end
+
+struct TDCoupledUnitComponents{TDtype} <: AbstractTDComponents
+    TDcomps::TDtype
+    elementsSource::Vector{Element}
+    elementsTarget::Vector{Element}
 end
 """
  	TCoupledComponents

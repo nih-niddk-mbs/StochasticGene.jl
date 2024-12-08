@@ -16,7 +16,7 @@ function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.0002
         end
         onstates[i] = Int64.(onstates[i])
     end
-    components = make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
+    components = MTDComponents(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
     likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 end
 

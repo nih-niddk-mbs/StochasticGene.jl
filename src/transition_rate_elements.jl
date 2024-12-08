@@ -403,10 +403,10 @@ end
 
 function set_elements_TDvec(elementsT, elementsG, sojourn::Vector{Vector{Int}}, dttype, nT, nG)
     c = Vector{Element}[]
-    d = Vector{Int}[]
+    d = Int[]
     for i in eachindex(sojourn)
         if occursin("G", dttype[i])
-            push!(c, set_elements_TA(elementsG, sojourn[i]))
+            push!(c, set_elements_TD(elementsG, sojourn[i]))
             push!(d, nG)
         else
             push!(c, set_elements_TD(elementsT, sojourn[i]))

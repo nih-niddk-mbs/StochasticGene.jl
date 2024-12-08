@@ -168,15 +168,7 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     #         push!(c, set_elements_TI(elementsG, onstates[i]))
     #     end
     # end
-    TDComponents(nT, G, elementsT, elementsG, c)
-end
-
-function TDComponents1(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsG = set_elements_G(transitions, indices.gamma)
-    c = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
-    TDComponents(nT, G, elementsT, elementsG, c)
+    TDComponents(nT, G, elementsT, elementsG, c,[])
 end
 
 
@@ -184,18 +176,25 @@ function TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, 
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    elementsTD = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype)
-    TDComponents(nT, G, elementsT, elementsG, elementsTD)
+    elementsTD, TDdims = set_elements_TDvec(elementsT, elementsG, sojourn, dttype, nT, G)
+    TDComponents(nT, G, elementsT, elementsG, elementsTD, TDdims)
 end
 
+# function TDCoupledUnitComponents1(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype::String="")
+#     indices = set_indices(length(transitions), R, S, insertstep)
+#     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+#     elementsG = set_elements_G(transitions, indices.gamma)
+#     elementsTD, TDdims = set_elements_TDvec(elementsT, elementsG, sojourn, dttype, nT, G)
+#     elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
+#     elementsSource = set_elements_Gs(source_state)
+#     TDCoupledUnitComponents(nT, G, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD, TDdims)
+# end
+
 function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype::String="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsG = set_elements_G(transitions, indices.gamma)
-    elementsTD, TDdims = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype, nT, G)
-    elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
+    TDcomps=TDComponents(transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     elementsSource = set_elements_Gs(source_state)
-    TDCoupledUnitComponents(nT, G, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD, TDdims)
+    elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
+    TDCoupledUnitComponents{typeof(TDcomps)}(TDcomps, elementsSource, elementsTarget)
 end
 
 function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sojourn, dttype, splicetype)
@@ -203,7 +202,7 @@ function TDCoupledComponents(unit_model, sources, source_state, target_transitio
     for i in eachindex(G)
         push!(comp, TDCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], sojourn[i], dttype[i], splicetype))
     end
-    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+    TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
 
 TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype="") = TDCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
@@ -861,7 +860,7 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     else
         Gs = make_mat_Gs(components.elementsSource, nG)
     end
-        Gt = make_mat(components.elementsTarget, rates, nG)
+    Gt = make_mat(components.elementsTarget, rates, nG)
     return T, TD, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
