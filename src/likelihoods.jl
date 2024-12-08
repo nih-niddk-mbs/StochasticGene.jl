@@ -509,12 +509,9 @@ function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
     return hists
 end
 
-function likelihoodarray(r, components, bins, reporter, dttype)
-    sojourn = reporter[1]
-    nonzeros = reporter[2]
-    dt = occursin.("G", dttype)
-    pss = 0
-    pssG = 0
+function steady_state_dist(r, components, dt)
+    pss = nothing
+    pssG = nothing
     for b in union(dt)
         if b
             pssG = normalized_nullspace(make_mat_G(components, r))
@@ -522,17 +519,21 @@ function likelihoodarray(r, components, bins, reporter, dttype)
             pss = normalized_nullspace(make_mat_T(components, r))
         end
     end
+    return (pss=pss, pssG=pssG, dt=dt)
+end
+
+function likelihoodarray(r, components, bins, reporter, dttype)
+    sojourn, nonzeros = reporter
+    dt = occursin.("G", dttype)
+    p = steady_state_dist(r, components, dt)
     hists = Vector[]
     for i in eachindex(sojourn)
-        println(sojourn[i])
-        println(nonzeros[i])
         if dt[i]
             TD = make_mat(components.elementsTD[i], r, components.nG)
-            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, pssG)))
+            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
         else
             TD = make_mat(components.elementsTD[i], r, components.nT)
-            println(size(TD))
-            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, pss, nonzeros[i])))
+            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
         end
     end
     hists

@@ -173,21 +173,15 @@ function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
 end
 
 function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
-    onstates = make_reporter_onstates(onstates, G, R, S, insertstep)
-    components = TDComponents(transitions, G, R, S, insertstep, onstates, dttype)
+    _, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
     make_mat_TD(components, r)
 end
 
-function test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
-    onstates = make_reporter_onstates(onstates, G, R, S, insertstep)
-    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, onstates, dttype)
+function test_mat_TCD(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2],Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["OFFG", "OFF"]])
+    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
     r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
-    return make_mat_TCD(components, r, cs)
-end
-
-function test_DTtime(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
-    TC, TCD, Gm = test_mat_TCD(r, transitions, G, R, S, insertstep, coupling, onstates, dttype)
-
+    return make_mat_TCD(components, r, cs)..., components, sojourn
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)

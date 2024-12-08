@@ -184,29 +184,29 @@ function TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, 
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    c = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype)
-    TDComponents(nT, G, elementsT, elementsG, c)
+    elementsTD = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype)
+    TDComponents(nT, G, elementsT, elementsG, elementsTD)
 end
 
-function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype::String="")
+function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype::String="")
     indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
     elementsG = set_elements_G(transitions, indices.gamma)
-    elementsTD = set_elements_TDvec(elementsT, elementsG, onstates, dttype)
+    elementsTD = set_elements_TDvecsojourn(elementsT, elementsG, sojourn, dttype)
     elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
     elementsSource = set_elements_Gs(source_state)
     TDCoupledUnitComponents(nT, G, source_state, target_transition, elementsG, elementsTarget, elementsSource, elementsT, elementsTD)
 end
 
-function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, onstates, dttype, splicetype)
+function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sojourn, dttype, splicetype)
     comp = TDCoupledUnitComponents[]
     for i in eachindex(G)
-        push!(comp, TDCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], onstates[i], dttype[i], splicetype))
+        push!(comp, TDCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], sojourn[i], dttype[i], splicetype))
     end
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
 
-TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype="") = TDCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, onstates, dttype, splicetype)
+TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype="") = TDCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
 
 """
     make_components_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, splicetype="")
@@ -851,6 +851,7 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     T = make_mat(components.elementsT, rates, nT)
     TD = SparseMatrixCSC[]
     for c in components.elementsTD
+        # Need to fix.  Need to account for nG vs nT depending on G or R coupling
         push!(TD, make_mat(c, rates, components.nT))
     end
     G = make_mat(components.elementsG, rates, nG)
@@ -982,10 +983,45 @@ end
 
 TBW
 """
+# function make_mat_TCD(components, rates, coupling_strength)
+#     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+#     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+#     TC = Vector{SparseMatrixCSC}(undef, length(Gm))
+#     for i in eachindex(TC)
+#         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
+#         T_modified = copy(Gm)
+#         IT_modified = copy(IG)
+#         T_modified[i] = T[i]
+#         IT_modified[i] = IT[i]
+#         # Compute the resulting matrix using make_mat_TC
+#         TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model)
+#     end
+#     for i in eachindex(TCD)
+#         TCD[i] = Vector{SparseMatrixCSC}(undef, 0)
+#         IT_modified = copy(IG)
+#         IT_modified[i] = IT[i]
+#         for t in TD[i]
+#             T_modified = copy(Gm)
+#             T_modified[i] = t
+#             push!(TCD[i], make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model))
+#         end
+#     end
+#     return TC, TCD, Gm
+# end
+
+"""
+    make_mat_TCD(components, rates, coupling_strength)
+
+TBW
+"""
 function make_mat_TCD(components, rates, coupling_strength)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     TC = Vector{SparseMatrixCSC}(undef, length(Gm))
+    U = Gs
+    V = kron.(IR, Gt)
+    TCF = make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
+    GC = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, components.sources, components.model)
     for i in eachindex(TC)
         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
         T_modified = copy(Gm)
@@ -993,7 +1029,7 @@ function make_mat_TCD(components, rates, coupling_strength)
         T_modified[i] = T[i]
         IT_modified[i] = IT[i]
         # Compute the resulting matrix using make_mat_TC
-        TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model)
+        TC[i] = make_mat_TC(coupling_strength, T_modified, U, V, IT_modified, components.sources, components.model)
     end
     for i in eachindex(TCD)
         TCD[i] = Vector{SparseMatrixCSC}(undef, 0)
@@ -1002,9 +1038,9 @@ function make_mat_TCD(components, rates, coupling_strength)
         for t in TD[i]
             T_modified = copy(Gm)
             T_modified[i] = t
-            push!(TCD[i], make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model))
+            push!(TCD[i], make_mat_TC(coupling_strength, T_modified, U, V, IT_modified, components.sources, components.model))
         end
     end
-    return TC, TCD, Gm
+    return TC, TCD, TCF, GC
 end
 

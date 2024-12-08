@@ -491,7 +491,7 @@ function sojourn_states(onstates::Vector{Vector{Int}}, G::Int, R, S, insertstep,
     sojourn
 end
 
-function sojourn_states(onstates::Vector{Vector{Vector}}, G::Tuple, R, S, insertstep, dttype)
+function sojourn_states(onstates::Vector{Vector{Vector{Int}}}, G::Tuple, R, S, insertstep, dttype)
     sojourn = similar(onstates)
     for i in eachindex(onstates)
         sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
