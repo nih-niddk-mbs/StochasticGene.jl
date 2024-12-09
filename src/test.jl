@@ -183,7 +183,7 @@ function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
 end
 
 function test_mat_TCD(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2],Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["OFFG", "OFF"]])
-    sojourn, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
+    sojourn, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
     # r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     # return make_mat_TCD(components, r, cs)..., components, sojourn
     

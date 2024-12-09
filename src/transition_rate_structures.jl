@@ -157,10 +157,16 @@ struct TDCoupledUnitComponents1 <: AbstractTDComponents
     TDdims::Vector{Int}
 end
 
-struct TDCoupledUnitComponents{TDtype} <: AbstractTDComponents
-    TDcomps::TDtype
+struct TDCoupledUnitComponents <: AbstractTDComponents
+    nT::Int
+    nG::Int
     elementsSource::Vector{Element}
     elementsTarget::Vector{Element}
+    elementsT::Vector{Element}
+    elementsG::Vector{Element}
+    elementsTD::Vector{Vector{Element}}
+    TDdims::Vector{Int}
+
 end
 """
  	TCoupledComponents

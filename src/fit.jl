@@ -501,7 +501,7 @@ end
 
 nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
 
-function nonzero_rows(components::TDComponents)
+function nonzero_rows(components::AbstractTDComponents)
     [nonzero_rows(e) for e in components.elementsTD]
 end
 

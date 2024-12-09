@@ -54,7 +54,7 @@ This function returns an array of row indices that have at least one nonzero ele
 # Returns
 - `Vector{Int}`: An array of row indices with at least one nonzero element.
 """
-function nonzero_rows(T)
+function nonzero_rows(T::AbstractMatrix)
     n = size(T)[2]
     nonzeros = Array{Int}(undef, 0)
     for a in 1:size(T)[1]

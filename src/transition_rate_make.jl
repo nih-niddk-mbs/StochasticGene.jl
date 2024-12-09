@@ -191,10 +191,13 @@ end
 # end
 
 function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype::String="")
-    TDcomps = TDComponents(transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+    indices = set_indices(length(transitions), R, S, insertstep)
     elementsSource = set_elements_Gs(source_state)
     elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
-    TDCoupledUnitComponents{typeof(TDcomps)}(TDcomps, elementsSource, elementsTarget)
+    elementsT, nT = set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
+    elementsG = set_elements_G(transitions, indices.gamma)
+    elementsTD, TDdims = set_elements_TDvec(elementsT, elementsG, sojourn, dttype, nT, G)
+    TDCoupledUnitComponents(nT, G, elementsSource, elementsTarget, elementsT, elementsG, elementsTD, TDdims)
 end
 
 function TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sojourn, dttype, splicetype)
