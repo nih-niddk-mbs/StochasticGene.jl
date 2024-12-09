@@ -555,12 +555,12 @@ function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dtty
     hists
 end
 
-function steady_state_dist(r, i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+function steady_state_dist(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pss = nothing
     pssG = nothing
     for b in union(dt)
         if b
-            pssG = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
+            pssG = normalized_nullspace(make_mat_TC(couplingStrength, Gm, Gs, Gt, IG, sources, model))
         else
             pss = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
         end
@@ -577,18 +577,16 @@ function likelihoodarray(r, components::TCoupledComponents{TDCoupledUnitComponen
     sources = components.sources
     model = components.model
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(model.components, r)
-    p = normalized_nullspace(make_mat_TC(r, i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
+    p = steady_state_dist(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     hists = Vector[]
     for α in eachindex(model.modelcomponents)
         dt = occursin.("G", dttype[α])
-        GC = make_mat_TC(couplingStrength, Gm, Gs, Gt, IG, sources, model)
         for i in eachindex(sojourn[α])
             TCD = make_mat_TC(TD[α][i], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
             if dt[i]
                 push!(hists, dwelltimePDF(bins[i], TCD, sojourn[α][i], init_S(r, sojourn[α][i], components.elementsG, p.pssG)))
             else
-                pss = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
-                push!(hists, dwelltimePDF(bins[i], TCD[nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r, sojourn[α][i], components.elementsT, p.pss, nonzeros[α][i])))
+               push!(hists, dwelltimePDF(bins[i], TCD[nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r, sojourn[α][i], components.elementsT, p.pss[α], nonzeros[α][i])))
             end
         end
 
