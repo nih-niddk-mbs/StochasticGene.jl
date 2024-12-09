@@ -545,20 +545,53 @@ function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dtty
     p = steady_state_dist(r, components, dt)
     hists = Vector[]
     for i in eachindex(sojourn)
+        TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
         if dt[i]
-            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
             push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
         else
-            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
             push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
         end
     end
     hists
 end
+
+function steady_state_dist(r, i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+    pss = nothing
+    pssG = nothing
+    for b in union(dt)
+        if b
+            pssG = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
+        else
+            pss = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
+        end
+    end
+    return (pss=pss, pssG=pssG, dt=dt)
+end
+
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
+end
+
+function likelihoodarray(r, components::TCoupledComponents{TDCoupledUnitComponents}, bins, reporter, dttype)
+    r, couplingStrength, _ = prepare_rates(r, model)
+    sojourn, nonzeros = model.reporter
+    sources = components.sources
+    model = components.model
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(model.components, r)
+    p = normalized_nullspace(make_mat_TC(r, i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
     hists = Vector[]
-    for i in eachindex(model.modelcomponents)
-        h = likelihoodarray(r, model.modelcomponents[i], data.bins[i], model.reporter[i], data.DTtypes[i])
+    for α in eachindex(model.modelcomponents)
+        dt = occursin.("G", dttype[α])
+        GC = make_mat_TC(couplingStrength, Gm, Gs, Gt, IG, sources, model)
+        for i in eachindex(sojourn[α])
+            TCD = make_mat_TC(TD[α][i], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+            if dt[i]
+                push!(hists, dwelltimePDF(bins[i], TCD, sojourn[α][i], init_S(r, sojourn[α][i], components.elementsG, p.pssG)))
+            else
+                pss = normalized_nullspace(make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
+                push!(hists, dwelltimePDF(bins[i], TCD[nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r, sojourn[α][i], components.elementsT, p.pss, nonzeros[α][i])))
+            end
+        end
+
         push(hists, h)
     end
     return hists
