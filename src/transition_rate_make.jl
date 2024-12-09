@@ -980,90 +980,41 @@ function make_mat_TC(components::TCoupledComponents{Vector{TRGCoupledUnitCompone
 end
 
 
-"""
-    make_mat_TCD(components, rates, coupling_strength)
-
-TBW
-"""
-function make_mat_TCD(components, rates, coupling_strength)
-    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-    TC = Vector{SparseMatrixCSC}(undef, length(Gm))
-    for i in eachindex(TC)
-        # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
-        T_modified = copy(Gm)
-        IT_modified = copy(IG)
-        T_modified[i] = T[i]
-        IT_modified[i] = IT[i]
-        # Compute the resulting matrix using make_mat_TC
-        TC[i] = make_mat_TC(coupling_strength, T_modified, Gs, kron.(IR, Gt), IT_modified, components.sources, components.model)
+function make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+    U = copy(Gs)
+    V = copy(Gt)
+    ITC = copy(IG)
+    T = copy(Gm)
+    T[i] = TD[i]
+    if size(T[i]) == size(IT[i])
+        ITC[i] = IT[i]
+        U[i] = kron(IR[i], Gs[i])
+        V[i] = kron(IR[i], Gt[i])
     end
-    for i in eachindex(TCD)
-        TDdims = components.modelcomponents[i].TDdims
-        TCD[i] = Vector{SparseMatrixCSC}(undef, 0)
-        IT_modified = copy(IG)
-        IT_modified[i] = IT[i]
-        for t in TD[i]
-            T_modified = copy(Gm)
-            T_modified[i] = t
-            push!(TCD[i], make_mat_TCD(TD[i], TDdims, Gm, Gs, Gt, ITin, IG, IR, coupling_strength, sources, model))
-        end
-    end
-    return TC, TCD, Gm
+    make_mat_TC(coupling_strength, T, U, V, ITC, sources, model)
 end
 
-
-function make_mat_TCD(TD, TDdims, Gm, Gs, Gt, ITin, IG, IR, coupling_strength, sources, model)
+function make_mat_TC(TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     TCD = Vector{SparseMatrixCSC}(undef, length(TD))
     for i in eachindex(TD)
-        U = copy(Gs)
-        V = copy(Gt)
-        IT = copy(IG)
-        T = copy(Gm)
-        T[i] = TD[i]
-        if TDdims[i] == 4
-        IT[i] = ITin[i]
-        U[i] = kron(IR[i], Gs[i])
-        V[i] = kron(IR[i], Gt[i]) 
-        end
-        TCD[i] = make_mat_TC(coupling_strength, T, U, V, IT, sources, model)
-        println(TCD[i])
+        TCD[i] = make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     end
     return TCD
 end
 
-"""
-#     make_mat_TCD(components, rates, coupling_strength)
-
-# TBW
-# """
-# function make_mat_TCDs(components, rates, coupling_strength)
-#     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
-#     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-#     TC = Vector{SparseMatrixCSC}(undef, length(Gm))
-#     U = Gs
-#     V = kron.(IR, Gt)
-#     TCF = make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
-#     GC = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, components.sources, components.model)
-#     for i in eachindex(TC)
-#         # Create a copy of T and replace the i-th matrix with the corresponding matrix in G
-#         T_modified = copy(Gm)
-#         IT_modified = copy(IG)
-#         T_modified[i] = T[i]
-#         IT_modified[i] = IT[i]
-#         # Compute the resulting matrix using make_mat_TC
-#         TC[i] = make_mat_TC(coupling_strength, T_modified, U, V, IT_modified, components.sources, components.model)
-#     end
-#     for i in eachindex(TCD)
-#         TCD[i] = Vector{SparseMatrixCSC}(undef, 0)
-#         IT_modified = copy(IG)
-#         IT_modified[i] = IT[i]
-#         for t in TD[i]
-#             T_modified = copy(Gm)
-#             T_modified[i] = t
-#             push!(TCD[i], make_mat_TC(coupling_strength, T_modified, U, V, IT_modified, components.sources, components.model))
-#         end
-#     end
-#     return TC, TCD, TCF, GC
-# end
+function make_mat_TC(components::TCoupledComponents{Vector{StochasticGene.TDCoupledUnitComponents}}, rates, coupling_strength)
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
+    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+    TC = Vector{SparseMatrixCSC}(undef, length(Gm))
+    GC = Vector{SparseMatrixCSC}(undef, length(Gm))
+    model = components.model
+    sources = components.sources
+    for i in eachindex(TC)
+        TDdims = components.modelcomponents[i].TDdims
+        TCD[i] = make_mat_TC(TD[i], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        TC[i] = make_mat_TC(i, T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        GC[i] = make_mat_TC(i, Gm, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+    end
+    return TCD, TC, GC
+end
 

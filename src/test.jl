@@ -186,7 +186,7 @@ function test_mat_TCD(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1],
     reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
     r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     # return make_mat_TCD(components, r, cs)..., components, sojourn
-    return reporter, components, r, cs, onstates
+    return reporter, components, r, cs
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
