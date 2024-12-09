@@ -446,11 +446,11 @@ This function calculates the likelihood array for RNA dwell time data using the 
 
 """
 function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
-    likelihoodarray(r, model.G, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
+    likelihoodarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
 end
 
 function likelihoodarray(r, data::DwellTimeData, model::AbstractGmodel)
-    likelihoodarray(r, model.G, model.components, data.bins, model.reporter, data.DTtypes)
+    likelihoodarray(r, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
 
@@ -475,10 +475,9 @@ This function calculates the likelihood array for various types of data, includi
 # Returns
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods.
 """
-function likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
-    mcomponents = components.mcomponents
+function likelihoodarray(r, components, bins, reporter, dttype, nalleles, nRNA)
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, mcomponents.nT, nalleles, nRNA); likelihoodarray(r, G, components.tcomponents, bins, onstates, dttype)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
 
 function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
@@ -522,7 +521,7 @@ function steady_state_dist(r, components, dt)
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function likelihoodarray(r, components, bins, reporter, dttype)
+function likelihoodarray(r, components::TDComponents, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt)
@@ -539,10 +538,27 @@ function likelihoodarray(r, components, bins, reporter, dttype)
     hists
 end
 
+
+function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
+    sojourn, nonzeros = reporter
+    dt = occursin.("G", dttype)
+    p = steady_state_dist(r, components, dt)
+    hists = Vector[]
+    for i in eachindex(sojourn)
+        if dt[i]
+            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
+            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
+        else
+            TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
+            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
+        end
+    end
+    hists
+end
 function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     hists = Vector[]
     for i in eachindex(model.modelcomponents)
-        h = likelihoodarray(r, model.G, model.modelcomponents[i], data.bins[i], model.reporter[i], data.DTtypes[i])
+        h = likelihoodarray(r, model.modelcomponents[i], data.bins[i], model.reporter[i], data.DTtypes[i])
         push(hists, h)
     end
     return hists

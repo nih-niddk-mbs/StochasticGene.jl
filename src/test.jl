@@ -9,15 +9,20 @@ function test_sim(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000
     simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
 
-function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2,  onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
-    for i in eachindex(onstates)
-        if isempty(onstates[i])
-            onstates[i] = on_states(G, R, S, insertstep)
-        end
-        onstates[i] = Int64.(onstates[i])
-    end
-    components = MTDComponents(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
-    likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
+# function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2,  onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
+#     for i in eachindex(onstates)
+#         if isempty(onstates[i])
+#             onstates[i] = on_states(G, R, S, insertstep)
+#         end
+#         onstates[i] = Int64.(onstates[i])
+#     end
+#     components = MTDComponents(transitions, G, R, S, insertstep, onstates, dttype, nRNA, r[num_rates(transitions, R, S, insertstep)], "")
+#     likelihoodarray(r, components, bins, onstates, dttype, nalleles, nRNA)
+# end
+function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
+    components = MTDComponents(MComponents(transitions, G, R, nRNA, r[num_rates(transitions, R, S, insertstep)], ""), tcomponents)
+    likelihoodarray(r, components, bins, reporter, dttype, nalleles, nRNA)
 end
 
 function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
@@ -178,10 +183,10 @@ function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
 end
 
 function test_mat_TCD(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2],Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["OFFG", "OFF"]])
-    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
-    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
-    r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
-    return make_mat_TCD(components, r, cs)..., components, sojourn
+    sojourn, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
+    # r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
+    # return make_mat_TCD(components, r, cs)..., components, sojourn
+    
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)

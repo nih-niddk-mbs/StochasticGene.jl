@@ -366,8 +366,8 @@ function GRSMcoupledmodel(data::AbstractTraceData, r, rm, fittedparam::Vector, f
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
-function GRSMcoupledmodel(data::AbstractHistogramData, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
-    reporter, components = make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
+function GRSMcoupledmodel(data::DwellTimeData, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
+    reporter, components = make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, data.DTtype, splicetype, coupling)
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
@@ -499,19 +499,49 @@ function sojourn_states(onstates::Vector{Vector{Vector{Int}}}, G::Tuple, R, S, i
     sojourn
 end
 
+nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
+
 function nonzero_rows(components::TDComponents)
-    nz = Vector{Int}[]
-    for e in components.elementsTD
-        push!(nz, nonzero_rows(e))
-    end
-    nz
+    [nonzero_rows(e) for e in components.elementsTD]
 end
 
-function make_reporter_components(transitions::Tuple, G, R, S, insertstep, onstates, dttype, splicetype)
+function nonzero_rows(components::TCoupledComponents)
+    [nonzero_rows(c) for c in components.modelcomponents]
+end
+
+# nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
+# function nonzero_rows(components::TDComponents)
+#     nz = Vector{Int}[]
+#     for e in components.elementsTD
+#         push!(nz, nonzero_rows(e))
+#     end
+#     nz
+# end
+
+# function nonzero_rows(components::TCoupledComponents)
+#     nz = Vector{Vector{Int}}[]
+#     for c in components.modelcomponents
+#         push!(nz, nonzero_rows(c))
+#     end
+#     nz
+# end
+
+function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     components = TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype)
     nonzeros = nonzero_rows(components)
     return (sojourn, nonzeros), components
+end
+
+function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
+    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+    nonzeros = nonzero_rows(components)
+    return (sojourn, nonzeros), components
+end
+
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
+    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
 end
 
 function make_reporter_components(data::AbstractHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
@@ -537,12 +567,6 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
     end
     return reporter, components
 end
-
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
-    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
-end
-
-
 
 function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
     println(coupling)
@@ -887,10 +911,11 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = fill(priorcv, length(rm))
         s = 0
         for i in eachindex(R)
+            lnp = isempty(noisepriors) ? 0 : length(noisepriors[i])
             n = num_rates(transitions[i], R[i], S[i], insertstep[i])
             rcv[s+n] = 0.1
-            rcv[s+n+1:s+n+length(noisepriors[i])] ./= factor
-            s += n + length(noisepriors[i])
+            rcv[s+n+1:s+n+lnp] ./= factor
+            s += n + lnp
         end
     else
         rcv = priorcv
@@ -901,6 +926,8 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         throw("priorcv not the same length as prior mean")
     end
 end
+
+
 
 """
 lossfn(x,data,model)

@@ -168,7 +168,7 @@ function make_components_TD(transitions, G, R, S, insertstep, onstates, dttype, 
     #         push!(c, set_elements_TI(elementsG, onstates[i]))
     #     end
     # end
-    TDComponents(nT, G, elementsT, elementsG, c,[])
+    TDComponents(nT, G, elementsT, elementsG, c, [])
 end
 
 
@@ -191,7 +191,7 @@ end
 # end
 
 function TDCoupledUnitComponents(source_state, target_transition, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype::String="")
-    TDcomps=TDComponents(transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+    TDcomps = TDComponents(transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     elementsSource = set_elements_Gs(source_state)
     elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
     TDCoupledUnitComponents{typeof(TDcomps)}(TDcomps, elementsSource, elementsTarget)
@@ -419,7 +419,7 @@ function make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype,
 end
 
 function MTDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
-    MTDComponents(make_components_M(transitions, G, R, nhist, decay, splicetype), TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
+    MTDComponents(MComponents(transitions, G, R, nhist, decay, splicetype), TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
 end
 
 """
@@ -849,9 +849,9 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     nR = div(nT, nG)
     T = make_mat(components.elementsT, rates, nT)
     TD = SparseMatrixCSC[]
-    for c in components.elementsTD
+    for i in eachindex(components.elementsTD)
         # Need to fix.  Need to account for nG vs nT depending on G or R coupling
-        push!(TD, make_mat(c, rates, components.nT))
+        push!(TD, make_mat(components.elementsTD[i], rates, components.TDdims[i]))
     end
     G = make_mat(components.elementsG, rates, nG)
     Gt = make_mat(components.elementsTarget, rates, nG)
@@ -1013,7 +1013,7 @@ TBW
 
 TBW
 """
-function make_mat_TCD(components, rates, coupling_strength)
+function make_mat_TCDs(components, rates, coupling_strength)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, rates)
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     TC = Vector{SparseMatrixCSC}(undef, length(Gm))
@@ -1043,3 +1043,15 @@ function make_mat_TCD(components, rates, coupling_strength)
     return TC, TCD, TCF, GC
 end
 
+
+
+function make_mat_TCD(i, TD, TDdims, U, V, IG, coupling_strength, sources, model)
+    IT = copy(IG)
+    IT[i] = sparse(I, TDdims[i], TDdims[i])
+    for t in TD[i]
+        T_modified = copy(Gm)
+        T_modified[i] = t
+        push!(TCD[i], make_mat_TC(coupling_strength, T_modified, U, V, IT, sources, model))
+    end
+    return TCD
+end

@@ -65,8 +65,6 @@ function nonzero_rows(T)
     return nonzeros
 end
 
-nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
-
 """
     nonzero_states(states, nonzeros)
 
