@@ -572,19 +572,23 @@ function steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength,
             pss[i] = normalized_nullspace(make_mat_TC(i, T, TDdims[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
         end
     end
-    return (pss=pss, pssG=pssG, dt=dt)
+    return (pss=pss, pssG=pssG)
 end
 
 function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
+    println(sojourn)
     sources = components.sources
     model = components.model
     TDdims = get_TDdims(components)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+    println(TD)
     p = steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dttype)
-    hists = Vector[]
+    println(p)
+    hists = Vector{Vector}[]
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     for α in eachindex(components.modelcomponents)
+        α = 1
         h = Vector[]
         modelcomponents = components.modelcomponents[α]
         TCD[α] = make_mat_TC(TD[α], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)

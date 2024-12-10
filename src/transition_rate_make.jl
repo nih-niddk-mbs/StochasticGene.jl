@@ -853,7 +853,6 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     T = make_mat(components.elementsT, rates, nT)
     TD = SparseMatrixCSC[]
     for i in eachindex(components.elementsTD)
-        # Need to fix.  Need to account for nG vs nT depending on G or R coupling
         push!(TD, make_mat(components.elementsTD[i], rates, components.TDdims[i]))
     end
     G = make_mat(components.elementsG, rates, nG)
