@@ -560,3 +560,61 @@ function indices_kron_left(index, dimension)
     end
     indices
 end
+
+"""
+    expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Vector{Int}, 
+                         nT::Vector{Int}, dttype::String, G::Int, R::Int, S::Int)
+
+Expand sojourn states for a single unit to the full coupled system dimensions.
+"""
+function expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Vector{Int}, 
+                             nT::Vector{Int}, dttype::String, G::Int, R::Int, S::Int)
+    expanded = copy(sojourn)
+    current_dim = nT[unit_model[unit_index]]
+    
+    # Right Kronecker expansion
+    for j in unit_index+1:length(unit_model)
+        right_dim = !occursin("G", dttype) ? G : nT[unit_model[j]]
+        expanded = vcat([indices_kron_right(i, current_dim, right_dim) for i in expanded]...)
+        current_dim *= right_dim
+    end
+    
+    # Left Kronecker expansion
+    current_dim = nT[unit_model[unit_index]]
+    for j in unit_index-1:-1:1
+        left_dim = !occursin("G", dttype) ? G : nT[unit_model[j]]
+        expanded = vcat([indices_kron_left(i, left_dim) for i in expanded]...)
+        current_dim *= left_dim
+    end
+    
+    sort!(expanded)
+    return expanded
+end
+
+"""
+    expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
+                                unit_model::Vector{Int}, nT::Vector{Int}, 
+                                dttype::Vector{Vector{String}}, 
+                                G::Tuple, R::Tuple, S::Tuple)
+
+Expand sojourn states for all units in a coupled system.
+"""
+function expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
+                                     unit_model::Vector{Int}, nT::Vector{Int}, 
+                                     dttype::Vector{Vector{String}}, 
+                                     G::Tuple, R::Tuple, S::Tuple)
+    expanded_sojourns = Vector{Vector{Int}}[]
+    
+    for (unit_idx, unit_sojourns) in enumerate(base_sojourns)
+        unit_expanded = Vector{Int}[]
+        for (state_idx, sojourn) in enumerate(unit_sojourns)
+            expanded = expand_sojourn_states(sojourn, unit_idx, unit_model, nT,
+                                          dttype[unit_idx][state_idx],
+                                          G[unit_idx], R[unit_idx], S[unit_idx])
+            push!(unit_expanded, expanded)
+        end
+        push!(expanded_sojourns, unit_expanded)
+    end
+    
+    return expanded_sojourns
+end
