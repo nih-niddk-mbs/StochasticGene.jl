@@ -544,78 +544,20 @@ function kron_left(T, M::Vector, unit_model, first, last)
     T
 end
 
-function indices_kron_right(index, dimension , right_dimension)
+function indices_kron_right(index::Vector, dimension::Int , right_dimension::Int)
     indices = Int[]
     total = dimension * right_dimension
     for i in 0:dimension:total-1
-        push!(indices, index + i)
+        append!(indices, index .+ i)
     end
     indices
 end
 
-function indices_kron_left(index, dimension)
+function indices_kron_left(index::Vector, dimension::Int)
     indices = Int[]
     for i in 1:dimension
-        push!(indices, i + dimension *(index-1))
+        append!(indices, i .+ dimension .*(index .- 1))
     end
     indices
 end
 
-"""
-    expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Tuple, 
-                         nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
-
-Expand sojourn states for a single unit to the full coupled system dimensions.
-"""
-function expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Tuple, 
-                             nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
-    expanded = copy(sojourn)
-    current_dim = nT[unit_model[unit_index]]
-    
-    # Right Kronecker expansion
-    for j in unit_index+1:length(unit_model)
-        right_dim = !occursin("G", dttype) ? G : nT[unit_model[j]]
-        expanded = vcat([indices_kron_right(i, current_dim, right_dim) for i in expanded]...)
-        current_dim *= right_dim
-    end
-    
-    # Left Kronecker expansion
-    current_dim = nT[unit_model[unit_index]]
-    for j in unit_index-1:-1:1
-        left_dim = !occursin("G", dttype) ? G : nT[unit_model[j]]
-        expanded = vcat([indices_kron_left(i, left_dim) for i in expanded]...)
-        current_dim *= left_dim
-    end
-    
-    sort!(expanded)
-    return expanded
-end
-
-"""
-    expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                coupling::Tuple, nT::Union{Vector,Tuple}, 
-                                dttype::Vector{Vector{String}}, 
-                                G::Tuple, R::Tuple, S::Tuple)
-
-Expand sojourn states for all units in a coupled system.
-"""
-function expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                     coupling::Tuple, nT::Union{Vector,Tuple}, 
-                                     dttype::Vector{Vector{String}}, 
-                                     G::Tuple, R::Tuple, S::Tuple)
-    unit_model = coupling[1]  # Extract unit model from coupling tuple
-    expanded_sojourns = Vector{Vector{Int}}[]
-    
-    for (unit_idx, unit_sojourns) in enumerate(base_sojourns)
-        unit_expanded = Vector{Int}[]
-        for (state_idx, sojourn) in enumerate(unit_sojourns)
-            expanded = expand_sojourn_states(sojourn, unit_idx, unit_model, nT,
-                                          dttype[unit_idx][state_idx],
-                                          G[unit_idx], R[unit_idx], S[unit_idx])
-            push!(unit_expanded, expanded)
-        end
-        push!(expanded_sojourns, unit_expanded)
-    end
-    
-    return expanded_sojourns
-end

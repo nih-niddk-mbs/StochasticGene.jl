@@ -575,30 +575,28 @@ function steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength,
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-
-
 function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
-    TDdims = [comp.TDdims for comp in components.modelcomponents]
+    TDdims = get_TDdims(components)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
     p = steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dttype)
-    println(p)
     hists = Vector[]
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     for α in eachindex(components.modelcomponents)
-        components = components.modelcomponents[α]
+        h = Vector[]
+        modelcomponents = components.modelcomponents[α]
         TCD[α] = make_mat_TC(TD[α], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         dt = occursin.("G", dttype[α])
         for i in eachindex(sojourn[α])
             if dt[i]
-                push!(hists, dwelltimePDF(bins[i], TCD[α][i], sojourn[α][i], init_S(r, sojourn[α][i], components.elementsG, p.pssG)))
+                push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(r[α], sojourn[α][i], modelcomponents.elementsG, p.pssG)))
             else
-               push!(hists, dwelltimePDF(bins[i], TCD[nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r, sojourn[α][i], components.elementsT, p.pss[α], nonzeros[α][i])))
+               push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss[α], nonzeros[α][i])))
             end
         end
-        push(hists, h)
+        push!(hists, h)
     end
     return hists
 end
