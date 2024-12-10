@@ -562,13 +562,13 @@ function indices_kron_left(index, dimension)
 end
 
 """
-    expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Vector{Int}, 
-                         nT::Vector{Int}, dttype::String, G::Int, R::Int, S::Int)
+    expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Tuple, 
+                         nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
 
 Expand sojourn states for a single unit to the full coupled system dimensions.
 """
-function expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Vector{Int}, 
-                             nT::Vector{Int}, dttype::String, G::Int, R::Int, S::Int)
+function expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Tuple, 
+                             nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
     expanded = copy(sojourn)
     current_dim = nT[unit_model[unit_index]]
     
@@ -593,16 +593,17 @@ end
 
 """
     expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                unit_model::Vector{Int}, nT::Vector{Int}, 
+                                coupling::Tuple, nT::Union{Vector,Tuple}, 
                                 dttype::Vector{Vector{String}}, 
                                 G::Tuple, R::Tuple, S::Tuple)
 
 Expand sojourn states for all units in a coupled system.
 """
 function expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                     unit_model::Vector{Int}, nT::Vector{Int}, 
+                                     coupling::Tuple, nT::Union{Vector,Tuple}, 
                                      dttype::Vector{Vector{String}}, 
                                      G::Tuple, R::Tuple, S::Tuple)
+    unit_model = coupling[1]  # Extract unit model from coupling tuple
     expanded_sojourns = Vector{Vector{Int}}[]
     
     for (unit_idx, unit_sojourns) in enumerate(base_sojourns)

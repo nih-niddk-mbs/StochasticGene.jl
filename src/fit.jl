@@ -541,32 +541,6 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep
     return (sojourn, nonzeros), components
 end
 
-function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, 
-    onstates, dttype, splicetype, coupling)
-# Extract coupling information
-unit_model, sources = coupling[1], coupling[2]
-
-# Calculate dimensions for each unit
-nT = T_dimension.(G, R, S)
-
-# Get base sojourn states for each unit
-base_sojourns = Vector{Vector{Int}}[]
-for i in eachindex(G)
-unit_sojourns = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
-push!(base_sojourns, unit_sojourns)
-end
-
-# Expand sojourn states using the new function
-expanded_sojourns = expand_coupled_sojourn_states(base_sojourns, unit_model, nT, 
-                        dttype, G, R, S)
-
-# Create components using TDCoupledComponents
-components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, 
-       expanded_sojourns, dttype, splicetype)
-
-return (expanded_sojourns, nonzero_rows(components)), components
-end
-
 function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
     make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
 end
@@ -608,8 +582,6 @@ function make_reporter_components(data::AbstractTraceData, transitions, G, R, S,
     components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
     return reporter, components
 end
-
-
 
 """
     checklength(r, transitions, R, S, insertstep, reporter)
@@ -1213,4 +1185,28 @@ function alleles(gene::String, path::String; nalleles::Int=2, col::Int=3)
         a = in[ind, col]
         return isnothing(a) ? nalleles : Int(a)
     end
+end
+
+function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, 
+                                insertstep::Tuple, onstates::Vector, dttype::Vector, 
+                                splicetype::String, coupling::Tuple)
+    # Calculate dimensions for each unit
+    nT = T_dimension.(G, R, S)  # This returns a Vector
+    
+    # Get base sojourn states for each unit
+    base_sojourns = Vector{Vector{Vector{Int}}}()
+    for i in eachindex(G)
+        unit_sojourns = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
+        push!(base_sojourns, unit_sojourns)
+    end
+    
+    # Expand sojourn states using the new function
+    expanded_sojourns = expand_coupled_sojourn_states(base_sojourns, coupling, nT, 
+                                                    dttype, G, R, S)
+    
+    # Create components using TDCoupledComponents
+    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, 
+                                   expanded_sojourns, dttype, splicetype)
+    
+    return (expanded_sojourns, nonzero_rows(components)), components
 end
