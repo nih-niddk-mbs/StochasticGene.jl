@@ -31,6 +31,13 @@ function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.0002
     likelihoodarray(r, components, bins, reporter, dttype)
 end
 
+function test_CDT(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
+    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
+    r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
+    likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+    # return reporter, components, r, cs
+end
+
 function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
     h = test_cm(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins)
@@ -182,12 +189,7 @@ function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
     make_mat_TD(components, r)
 end
 
-function test_mat_TCD(r=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2],Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
-    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
-    r, cs, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
-    # return make_mat_TCD(components, r, cs)..., components, sojourn
-    return reporter, components, r, cs
-end
+
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
     components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")

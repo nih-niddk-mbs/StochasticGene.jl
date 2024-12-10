@@ -995,8 +995,8 @@ function make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, s
 end
 
 function make_mat_TC(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-    TC = Vector{SparseMatrixCSC}(undef, length(TD))
-    for i in eachindex(TD)
+    TC = Vector{SparseMatrixCSC}(undef, length(T))
+    for i in eachindex(T)
         TC[i] = make_mat_TC(i, T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     end
     return TC
@@ -1010,7 +1010,6 @@ function make_mat_TC(components::TCoupledComponents{Vector{StochasticGene.TDCoup
     model = components.model
     sources = components.sources
     for i in eachindex(TC)
-        TDdims = components.modelcomponents[i].TDdims
         TCD[i] = make_mat_TC(TD[i], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         TC[i] = make_mat_TC(i, T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         GC[i] = make_mat_TC(i, Gm, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
