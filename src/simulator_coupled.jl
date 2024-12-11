@@ -192,9 +192,15 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
     results = []
     nhist > 0 && push!(results, prune_mhist(mhist, nhist))
     if onoff
-        for i in eachindex(histontdd)
-            push!(results, histontdd[i])
-            push!(results, histofftdd[i])
+        if !isempty(coupling)
+            for i in eachindex(histontdd)
+                push!(results, vcat([[histontdd[i][j], histofftdd[i][j]] for j in eachindex(histontdd[i])]...))
+            end
+        else
+            for i in eachindex(histontdd)
+                push!(results, histontdd[i])
+                push!(results, histofftdd[i])
+            end
         end
     end
     if traceinterval > 0.0
@@ -258,7 +264,7 @@ end
 function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps = 100)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
         tr = Vector[]
         for t in t
             tr = push!(tr, t[1:end-1, 2])
@@ -273,7 +279,7 @@ end
 
 simulate a trace
 """
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps = 100)[1][1:end-1, :]
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps=100)[1][1:end-1, :]
 
 
 """
