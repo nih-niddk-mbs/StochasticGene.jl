@@ -1020,7 +1020,7 @@ function couplingG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, ena
     for target in targets
         if isfinite(tau[target][ttrans[target], 1])
             if initial != sstate[unit] && final == sstate[unit]
-                tau[target][ttrans[target], 1] = 1 / (1 + r[end][models[unit]]) * (tau[target][ttrans[target], 1] - t) + t
+                tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             elseif initial == sstate[unit] && final != sstate[unit]
                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
