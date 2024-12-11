@@ -114,9 +114,33 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
         end
     end
     Sinit = Sinit[nonzeros]
+    # Sinit / sum(Sinit)
+end
+
+function init_S(sojourn::Vector, T::SparseMatrixCSC, pss)
+    Sinit = zeros(length(pss))
+    rows, cols, vals = findnz(T)
+    for i in eachindex(rows)
+        if cols[i] != rows[i] && (rows[i] ∈ sojourn && cols[i] ∉ sojourn)
+            Sinit[rows[i]] += pss[cols[i]] * vals[i]
+        end
+    end
+    # Sinit = Sinit[nonzeros]
     Sinit / sum(Sinit)
 end
 
+
+function init_S(sojourn::Vector, T::SparseMatrixCSC, pss, nonzeros)
+    Sinit = zeros(length(pss))
+    rows, cols, vals = findnz(T)
+    for i in eachindex(rows)
+        if cols[i] != rows[i] && (rows[i] ∈ sojourn && cols[i] ∉ sojourn)
+            Sinit[rows[i]] += pss[cols[i]] * vals[i]
+        end
+    end
+    Sinit = Sinit[nonzeros]
+    Sinit / sum(Sinit)
+end
 
 """
 init_SA(r::Vector,onstates::Vector,elements::Vector,pss::Vector)

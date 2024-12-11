@@ -562,9 +562,18 @@ end
 function steady_state_dist(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
     pss = nothing
-    any(dt) && (pssG = normalized_nullspace(make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)))
-    any(.!dt) && (pss = normalized_nullspace(make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)))
-    return (pss=pss, pssG=pssG)
+    TC = nothing
+    GC = nothing
+    for b in union(dt)
+        if b
+            GC = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
+            pssG = normalized_nullspace(GC)
+        else
+            TC = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+            pss = normalized_nullspace(TC)
+        end
+    end
+    return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
 function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
@@ -576,23 +585,15 @@ function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Ve
     hists = Vector{Vector}[]
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     for α in eachindex(components.modelcomponents)
-        println(α)
         dt = occursin.("G", dttype[α])
         p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
         h = Vector[]
-        modelcomponents = components.modelcomponents[α]
         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         for i in eachindex(sojourn[α])
-            println(i)
             if dt[i]
-                push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(r[α], sojourn[α][i], modelcomponents.elementsG, p.pssG)))
+                push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
             else
-                println(sojourn[α][i])
-                println(modelcomponents.elementsT)
-                println(p.pss)
-                println(nonzeros[α][i])
-                println(init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss, nonzeros[α][i]))
-                push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss, nonzeros[α][i])))
+                push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i])))
             end
         end
         push!(hists, h)
