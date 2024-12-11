@@ -414,43 +414,6 @@ end
 
 TBW
 """
-# function make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-#     noiseparams = length(noisepriors)
-#     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + noiseparams : 0
-#     if typeof(data) <: AbstractRNAData
-#         reporter = onstates
-#         components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-#     elseif typeof(data) <: AbstractTraceData
-#         reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-#         # components = make_components_T(transitions, G, R, S, insertstep, splicetype)
-#         components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-#     elseif typeof(data) <: AbstractTraceHistogramData
-#         reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-#         components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-#     elseif typeof(data) <: AbstractHistogramData
-#         if isempty(onstates)
-#             onstates = on_states(G, R, S, insertstep)
-#         else
-#             for i in eachindex(onstates)
-#                 if isempty(onstates[i])
-#                     onstates[i] = on_states(G, R, S, insertstep)
-#                 end
-#                 onstates[i] = Int64.(onstates[i])
-#             end
-#         end
-#         reporter = onstates
-#         if typeof(data) == RNADwellTimeData
-#             if length(onstates) == length(data.DTtypes)
-#                 components = make_components_MTD(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
-#             else
-#                 throw("length of onstates and data.DTtypes not the same")
-#             end
-#         else
-#             components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
-#         end
-#     end
-#     return reporter, components
-# end
 
 function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     reporter = onstates
@@ -470,99 +433,7 @@ function make_reporter_components(data::TraceRNAData, transitions, G, R, S, inse
     return reporter, components
 end
 
-function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
-    sojourn = copy(onstates)
-    if isempty(onstates)
-        sojourn = on_states(G, R, S, insertstep)
-    end
-    if dttype == "OFF"
-        sojourn = off_states(T_dimension(G, R, S), sojourn)
-    elseif dttype == "OFFG"
-        sojourn = off_states(G, sojourn)
-    end
-    Int.(sojourn)
-end
 
-function sojourn_states(onstates::Vector{Vector{Int}}, G::Int, R, S, insertstep, dttype)
-    sojourn = copy(onstates)
-    for i in eachindex(onstates)
-        sojourn[i] = sojourn_states(onstates[i], G, R, S, insertstep, dttype[i])
-    end
-    sojourn
-end
-
-function sojourn_states(onstates::Vector{Vector{Vector{Int}}}, G::Tuple, R, S, insertstep, dttype)
-    sojourn = similar(onstates)
-    for i in eachindex(onstates)
-        sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
-    end
-    sojourn
-end
-
-"""
-    expand_sojourn_states(sojourn::Vector{Int}, unit_index::Int, unit_model::Tuple, 
-                         nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
-
-Expand sojourn states for a single unit to the full coupled system dimensions.
-"""
-
-function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
-
-    right_dim = prod(G[unit_model[unit_index+1:end]], init=1)
-    left_dim = prod(G[unit_model[unit_index-1:-1:1]], init=1)
-    expanded = indices_kron_right(sojourn, right_dim)
-    sort(indices_kron_left(expanded, TDdim * right_dim, left_dim))
-end
-
-
-get_TDdims(components) = [comp.TDdims for comp in components.modelcomponents]
-
-"""
-    expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                coupling::Tuple, nT::Union{Vector,Tuple}, 
-                                dttype::Vector{Vector{String}}, 
-                                G::Tuple, R::Tuple, S::Tuple)
-
-Expand sojourn states for all units in a coupled system.
-"""
-function coupled_states(sojourn, coupling, components, G)
-    TDdims = get_TDdims(components)
-    coupled = deepcopy(sojourn)
-    for i in eachindex(TDdims)
-        for j in eachindex(TDdims[i])
-            coupled[i][j] = coupled_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], G)
-        end
-    end
-    coupled
-
-end
-
-nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
-
-function nonzero_rows(components::AbstractTDComponents)
-    [nonzero_rows(e) for e in components.elementsTD]
-end
-
-function nonzero_rows(components::TCoupledComponents)
-    [nonzero_rows(c) for c in components.modelcomponents]
-end
-
-# nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
-# function nonzero_rows(components::TDComponents)
-#     nz = Vector{Int}[]
-#     for e in components.elementsTD
-#         push!(nz, nonzero_rows(e))
-#     end
-#     nz
-# end
-
-# function nonzero_rows(components::TCoupledComponents)
-#     nz = Vector{Vector{Int}}[]
-#     for c in components.modelcomponents
-#         push!(nz, nonzero_rows(c))
-#     end
-#     nz
-# end
 
 function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)

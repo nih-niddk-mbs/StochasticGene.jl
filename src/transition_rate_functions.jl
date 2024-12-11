@@ -267,6 +267,40 @@ function off_states(reporters)
 end
 
 """
+    sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
+
+TBW
+"""
+function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
+    sojourn = copy(onstates)
+    if isempty(onstates)
+        sojourn = on_states(G, R, S, insertstep)
+    end
+    if dttype == "OFF"
+        sojourn = off_states(T_dimension(G, R, S), sojourn)
+    elseif dttype == "OFFG"
+        sojourn = off_states(G, sojourn)
+    end
+    Int.(sojourn)
+end
+
+function sojourn_states(onstates::Vector{Vector{Int}}, G::Int, R, S, insertstep, dttype)
+    sojourn = copy(onstates)
+    for i in eachindex(onstates)
+        sojourn[i] = sojourn_states(onstates[i], G, R, S, insertstep, dttype[i])
+    end
+    sojourn
+end
+
+function sojourn_states(onstates::Vector{Vector{Vector{Int}}}, G::Tuple, R, S, insertstep, dttype)
+    sojourn = similar(onstates)
+    for i in eachindex(onstates)
+        sojourn[i] = sojourn_states(onstates[i], G[i], R[i], S[i], insertstep[i], dttype[i])
+    end
+    sojourn
+end
+
+"""
     T_dimension(G, R, S)
     T_dimension(G::Tuple, R::Tuple, S::Tuple)
     T_dimension(G::Int, R::Int, S::Int)
@@ -308,6 +342,61 @@ function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)
         push!(nT, T_dimension(G[m], R[m], S[m]))
     end
     nT
+end
+
+"""
+    get_TDdims(components)
+
+TBW
+"""
+get_TDdims(components) = [comp.TDdims for comp in components.modelcomponents]
+
+
+"""
+    coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
+                         nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
+
+Expand sojourn states for a single unit to the full coupled system dimensions.
+"""
+function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
+
+    right_dim = prod(G[unit_model[unit_index+1:end]], init=1)
+    left_dim = prod(G[unit_model[unit_index-1:-1:1]], init=1)
+    expanded = indices_kron_right(sojourn, right_dim)
+    sort(indices_kron_left(expanded, TDdim * right_dim, left_dim))
+end
+"""
+    expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
+                                coupling::Tuple, nT::Union{Vector,Tuple}, 
+                                dttype::Vector{Vector{String}}, 
+                                G::Tuple, R::Tuple, S::Tuple)
+
+Expand sojourn states for all units in a coupled system.
+"""
+function coupled_states(sojourn, coupling, components, G)
+    TDdims = get_TDdims(components)
+    coupled = deepcopy(sojourn)
+    for i in eachindex(TDdims)
+        for j in eachindex(TDdims[i])
+            coupled[i][j] = coupled_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], G)
+        end
+    end
+    coupled
+end
+
+"""
+    nonzero_rows(elements::Vector{Element})
+
+TBW
+"""
+nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
+
+function nonzero_rows(components::AbstractTDComponents)
+    [nonzero_rows(e) for e in components.elementsTD]
+end
+
+function nonzero_rows(components::TCoupledComponents)
+    [nonzero_rows(c) for c in components.modelcomponents]
 end
 
 """
