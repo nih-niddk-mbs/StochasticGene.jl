@@ -979,26 +979,47 @@ function make_mat_TC(components::TCoupledComponents{Vector{TRGCoupledUnitCompone
 end
 
 
-function make_mat_TC(i, TD, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+function make_mat_TC(unit::Int, TD::SparseMatrixCSC, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     U = copy(Gs)
     V = copy(Gt)
     ITC = copy(IG)
     T = copy(Gm)
-    T[i] = TD[i]
-    if size(T[i]) == size(IT[i])
-        ITC[i] = IT[i]
-        U[i] = kron(IR[i], Gs[i])
-        V[i] = kron(IR[i], Gt[i])
+    T[unit] = TD
+    if size(T[unit]) == size(IT[unit])
+        ITC[unit] = IT[unit]
+        U[unit] = kron(IR[unit], Gs[unit])
+        V[unit] = kron(IR[unit], Gt[unit])
     end
     make_mat_TC(coupling_strength, T, U, V, ITC, sources, model)
 end
 
-function make_mat_TC(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-    TC = Vector{SparseMatrixCSC}(undef, length(T))
-    for i in eachindex(T)
-        TC[i] = make_mat_TC(i, T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+    TCD = Vector{SparseMatrixCSC}(undef, length(TD))
+    for i in eachindex(TD)
+        TCD[i] = make_mat_TC(unit, TD[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     end
-    return TC
+    return TCD
+end
+
+function make_mat_TC(unit::Int, TDdims::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        if TDdims == size(T[unit])[1]
+            TC = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        else
+            TC = make_mat_TC(unit, Gm[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        end
+    TC
+end
+
+function make_mat_TC(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+    TC = Vector{SparseMatrixCSC}(undef, length(TDdims))
+    for i in eachindex(TDdims)
+        if TDdims[i] == size(T[i])[1]
+            TC[i] = make_mat_TC(unit, T[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        else
+            TC[i] = make_mat_TC(unit, Gm[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        end
+    end
+    TC
 end
 
 function make_mat_TC(components::TCoupledComponents{Vector{StochasticGene.TDCoupledUnitComponents}}, rates, coupling_strength)

@@ -559,45 +559,40 @@ function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dtty
     hists
 end
 
-function steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dttype)
+function steady_state_dist(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
-    dt = occursin.("G", vcat(dttype...))
-    if any(dt)
-        pssG = normalized_nullspace(make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model))
-    end
-    pss = Vector{Array{Float64,1}}(undef, length(dttype))
-    for i in eachindex(dttype)
-        dt = occursin.("G", vcat(dttype[i]...))
-        if any(.!dt)
-            pss[i] = normalized_nullspace(make_mat_TC(i, T, TDdims[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model))
-        end
-    end
+    pss = nothing
+    any(dt) && (pssG = normalized_nullspace(make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)))
+    any(.!dt) && (pss = normalized_nullspace(make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)))
     return (pss=pss, pssG=pssG)
 end
 
 function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
-    println(sojourn)
     sources = components.sources
     model = components.model
     TDdims = get_TDdims(components)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    println(TD)
-    p = steady_state_dist(T, TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dttype)
-    println(p)
     hists = Vector{Vector}[]
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     for α in eachindex(components.modelcomponents)
-        α = 1
+        println(α)
+        dt = occursin.("G", dttype[α])
+        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
         h = Vector[]
         modelcomponents = components.modelcomponents[α]
-        TCD[α] = make_mat_TC(TD[α], TDdims, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-        dt = occursin.("G", dttype[α])
+        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         for i in eachindex(sojourn[α])
+            println(i)
             if dt[i]
                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(r[α], sojourn[α][i], modelcomponents.elementsG, p.pssG)))
             else
-               push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss[α], nonzeros[α][i])))
+                println(sojourn[α][i])
+                println(modelcomponents.elementsT)
+                println(p.pss)
+                println(nonzeros[α][i])
+                println(init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss, nonzeros[α][i]))
+                push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(r[α], sojourn[α][i], modelcomponents.elementsT, p.pss, nonzeros[α][i])))
             end
         end
         push!(hists, h)

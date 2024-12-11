@@ -506,7 +506,7 @@ end
 Expand sojourn states for a single unit to the full coupled system dimensions.
 """
 
-function expand_sojourn_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
+function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
 
     right_dim = prod(G[unit_model[unit_index+1:end]], init=1)
     left_dim = prod(G[unit_model[unit_index-1:-1:1]], init=1)
@@ -525,15 +525,15 @@ get_TDdims(components) = [comp.TDdims for comp in components.modelcomponents]
 
 Expand sojourn states for all units in a coupled system.
 """
-function coupled_sojourn_states(sojourn, coupling, components, G)
+function coupled_states(sojourn, coupling, components, G)
     TDdims = get_TDdims(components)
-    coupled_sojourn = deepcopy(sojourn)
+    coupled = deepcopy(sojourn)
     for i in eachindex(TDdims)
         for j in eachindex(TDdims[i])
-            coupled_sojourn[i][j] = expand_sojourn_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], G)
+            coupled[i][j] = coupled_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], G)
         end
     end
-    coupled_sojourn
+    coupled
 
 end
 
@@ -574,8 +574,8 @@ end
 function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
-    sojourn = coupled_sojourn_states(sojourn, coupling, components, G)
-    nonzeros = nonzero_rows(components)
+    sojourn = coupled_states(sojourn, coupling, components, G)
+    nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
     return (sojourn, nonzeros), components
 end
 
