@@ -510,8 +510,8 @@ function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TD
 
     right_dim = prod(G[unit_model[unit_index+1:end]], init=1)
     left_dim = prod(G[unit_model[unit_index-1:-1:1]], init=1)
-    expanded = indices_kron_left(sojourn, left_dim)
-    sort(indices_kron_right(expanded, TDdim * left_dim, right_dim))
+    expanded = indices_kron_right(sojourn, right_dim)
+    sort(indices_kron_left(expanded, TDdim * right_dim, left_dim))
 end
 
 

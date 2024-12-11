@@ -544,7 +544,7 @@ function kron_left(T, M::Vector, unit_model, first, last)
     T
 end
 
-function indices_kron_right(index::Vector, dimension::Int , right_dimension::Int)
+function indices_kron_left(index::Vector, dimension::Int , right_dimension::Int)
     indices = Int[]
     total = dimension * right_dimension
     for i in 0:dimension:total-1
@@ -553,7 +553,7 @@ function indices_kron_right(index::Vector, dimension::Int , right_dimension::Int
     indices
 end
 
-function indices_kron_left(index::Vector, dimension::Int)
+function indices_kron_right(index::Vector, dimension::Int)
     indices = Int[]
     for i in 1:dimension
         append!(indices, i .+ dimension .*(index .- 1))

@@ -31,16 +31,17 @@ function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.0002
     likelihoodarray(r, components, bins, reporter, dttype)
 end
 
-function test_CDT(r=[.1, .1, .3, .01, .1, 0.2, 0.2, .2, .3, .02, 0.], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["OFFG", "OFF"]])
+function test_CDT(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 0.0], transitions=(([1, 2], [2, 1], [2, 3], [3, 1]), ([1, 2], [2, 1], [2, 3], [3, 1])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [2, 3], [2, 3]], [Int[], Int[], [2, 3], [2, 3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:230), collect(1.0:30)],[collect(1:30), collect(1:30), collect(1.0:230), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1))
+    # function test_CDT(r=[.1, .1, .3, .01, .1, 0.2, 0.2, .2, .3, .02, 0.], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["OFFG", "OFF"]])
     r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
-    hists=likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+    hists = likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     hists1 = test_DT(r[1], transitions[1], G[1], R[1], S[1], insertstep[1], onstates[1], dttype[1], bins[1])
     hists2 = test_DT(r[2], transitions[2], G[2], R[2], S[2], insertstep[2], onstates[2], dttype[2], bins[2])
     return hists, hists1, hists2
 end
 
-function test_C(r=[.1, .1, .1, .1, .1, .1, .1, .1, .1, .1, .1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
+function test_C(r=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
     reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
     r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
