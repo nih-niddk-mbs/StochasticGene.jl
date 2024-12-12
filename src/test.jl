@@ -5,11 +5,11 @@
 
 ### functions used in runtest
 
-function test_sim(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nhist=150, nalleles=2, onstates=[Int[], [2, 3]], bins=[collect(5/3:5/3:200), collect(0.1:0.1:20)], total=10000000, tol=1e-6)
+function test_sim(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nhist=150, nalleles=2, onstates=[Int[], [2, 3]], bins=[collect(5/3:5/3:200), collect(0.1:0.1:20)], total=10000000, tol=1e-6)
     simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol)
 end
 
-function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
+function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
     reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
     components = MTDComponents(MComponents(transitions, G, R, nRNA, r[num_rates(transitions, R, S, insertstep)], ""), tcomponents)
     likelihoodarray(r, components, bins, reporter, dttype, nalleles, nRNA)
@@ -20,19 +20,46 @@ function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.0002
     likelihoodarray(r, components, bins, reporter, dttype)
 end
 
-function test_CDT(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 1]), ([1, 2], [2, 1], [2, 3], [3, 1])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
+function test_CDT(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
     r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
     reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
     likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
 end
 
+function test_Cparts(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
+    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
+    r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
+    sojourn, nonzeros = reporter
+    sources = components.sources
+    model = components.model
+    TDdims = get_TDdims(components)
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+    hists = Vector{Vector}[]
+    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+    for α in eachindex(components.modelcomponents)
+        dt = occursin.("G", dttype[α])
+        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+        h = Vector[]
+        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        for i in eachindex(sojourn[α])
+            if dt[i]
+                push!(h, init_S(sojourn[α][i], p.GC, p.pssG))
+            else
+                push!(h, init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i]))
+            end
+        end
+        push!(hists, h)
+    end
+    return hists, reporter, components, r, coupling_strength, TCD
+end
+
 simDT_convert(v) = [[s[1], s[3]] for s in v]
 
-function test_sim_coupled(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 0., 0.2, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 0., -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 1]), ([1, 2], [2, 1], [2, 3], [3, 1])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 1], 1), total=10000000, tol=1e-6, verbose=false)
+function test_sim_coupled(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 0., 0.2, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 0., -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [2], [2]], [Int[], Int[], [2], [2]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 2], 1), total=10000000, tol=1e-6, verbose=false)
     simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol, verbose=verbose)
 end
 
-function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 2.9], transitions=(([1, 2], [2, 1], [2, 3], [3, 1]), ([1, 2], [2, 1], [2, 3], [3, 1])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [3, 0], [0, 4], 1), total=10000000, tol=1e-6)
+function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 2.9], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [3, 0], [0, 4], 1), total=10000000, tol=1e-6)
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
     h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
     for i in eachindex(hs)
@@ -42,7 +69,7 @@ function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 
 end
 
 
-function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
+function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
     h = test_cm(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins)
     hs = StochasticGene.normalize_histogram.(hs)
@@ -79,7 +106,7 @@ function test_fit_rnaonoff(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insert
     h, StochasticGene.datapdf(data)
 end
 
-function test_fit_rnadwelltime(; rtarget=[0.038, 2.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, nRNA=150, nsamples=100000, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:10), collect(0.1:0.1:10)], dttype=["ON", "OFF", "ONG", "OFFG"], fittedparam=collect(1:length(rtarget)-1), propcv=0.01, priorcv=10.0, splicetype="")
+function test_fit_rnadwelltime(; rtarget=[0.038, 2.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nsamples=100000, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:10), collect(0.1:0.1:10)], dttype=["ON", "OFF", "ONG", "OFFG"], fittedparam=collect(1:length(rtarget)-1), propcv=0.01, priorcv=10.0, splicetype="")
     h = test_sim(rtarget, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], 300000, 1e-6)
     data = RNADwellTimeData("test", "test", nRNA, h[1], bins, h[2:end], dttype)
     rinit = StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], [], mean_elongationtime(rtarget, transitions, R))
@@ -196,8 +223,28 @@ end
 function test_C(r=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
     reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
     r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
+    sojourn, nonzeros = reporter
+    sources = components.sources
+    model = components.model
+    TDdims = get_TDdims(components)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    return reporter, components, r, coupling_strength
+    hists = Vector{Vector}[]
+    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+    for α in eachindex(components.modelcomponents)
+        dt = occursin.("G", dttype[α])
+        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+        h = Vector[]
+        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        for i in eachindex(sojourn[α])
+            if dt[i]
+                push!(h, init_S(sojourn[α][i], p.GC, p.pssG))
+            else
+                push!(h, init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i]))
+            end
+        end
+        push!(hists, h)
+    end
+    return hists, reporter, components, r, coupling_strength, TCD
 end
 
 function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
