@@ -1031,7 +1031,7 @@ function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_st
         TCD[i] = make_mat_TC(unit, TD[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         set_elements_TCD!(TCD[i], sojourn[i])
     end
-    return TCD
+    return dropzeros.(TCD)
 end
 
 function make_mat_TC(unit::Int, TDdims::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
