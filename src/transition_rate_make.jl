@@ -1001,6 +1001,39 @@ function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_st
     return TCD
 end
 
+# unction set_elements_TD!(elements_TD, elementsT, sojourn::Vector)
+#     for e in elementsT
+#         if e.b ∈ sojourn
+#             push!(elements_TD, e)
+#         end
+#     end
+# end
+# function set_elements_TD(elementsT, sojourn::Vector)
+#     elementsTD = Vector{Element}(undef, 0)
+#     set_elements_TD!(elementsTD, elementsT, sojourn::Vector)
+#     elementsTD
+# end
+
+function set_elements_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
+    rows, cols, vals = findnz(TCD)
+    for i in eachindex(cols)
+        a = rows[i]
+        b = cols[i]
+        if b ∉ sojourn
+            TCD[a, b] = 0
+        end
+    end
+end
+
+function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
+    TCD = Vector{SparseMatrixCSC}(undef, length(TD))
+    for i in eachindex(TD)
+        TCD[i] = make_mat_TC(unit, TD[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        set_elements_TCD!(TCD[i], sojourn[i])
+    end
+    return TCD
+end
+
 function make_mat_TC(unit::Int, TDdims::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         if TDdims == size(T[unit])[1]
             TC = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
