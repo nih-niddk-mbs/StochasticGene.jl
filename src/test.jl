@@ -41,12 +41,9 @@ function test_Cparts(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.
     for α in eachindex(components.modelcomponents)
         dt = occursin.("G", dttype[α])
         p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-        h = Vector[]
         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-        TCDnew[α], pnew = make_TCD_p(α, TDdims[α], T[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α], dt)
-
     end
-    return TCD, TCDnew, p, pnew
+    return TCD, p
 end
 
 simDT_convert(v) = [[s[1], s[3]] for s in v]

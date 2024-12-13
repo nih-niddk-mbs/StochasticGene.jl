@@ -993,18 +993,6 @@ function make_mat_TC(unit::Int, Tin::SparseMatrixCSC, Gm, Gs, Gt, IT, IG, IR, co
     make_mat_TC(coupling_strength, T, U, V, ITC, sources, model)
 end
 
-function make_mat_TC(unit::Int, Tin::Vector{SparseMatrixCSC}, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-    make_mat_TC(unit, Tin[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-end
-
-# function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     TCD = Vector{SparseMatrixCSC}(undef, length(TD))
-#     for i in eachindex(TD)
-#         TCD[i] = make_mat_TC(unit, TD[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     end
-#     return TCD
-# end
-
 function make_mat_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
     rows, cols, vals = findnz(TCD)
     for i in eachindex(cols)
@@ -1016,6 +1004,12 @@ function make_mat_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
     end
 end
 
+function make_mat_TCD(TC::SparseMatrixCSC, sojourn::Vector{Int})
+    TCD = copy(TC)
+    make_mat_TCD!(TCD, sojourn)
+    return dropzeros(TCD)
+end
+
 function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
     TCD = Vector{SparseMatrixCSC}(undef, length(TD))
     for i in eachindex(TD)
@@ -1023,60 +1017,4 @@ function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_st
         make_mat_TCD!(TCD[i], sojourn[i])
     end
     return dropzeros.(TCD)
-end
-
-# function make_mat_TC(unit::Int, TDdim::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     if TDdim == size(T[unit])[1]
-#         TC = make_mat_TC(unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     else
-#         TC = make_mat_TC(unit, Gm, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     end
-#     TC
-# end
-
-# function make_mat_TC(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     TC = Vector{SparseMatrixCSC}(undef, length(TDdims))
-#     for i in eachindex(TDdims)
-#         TC[i] = make_mat_TC(unit, TDdims[i], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     end
-#     TC
-# end
-
-# function make_TCD_p(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt)
-#     TCD = make_mat_TC(unit, TDdims, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-#     pss = nothing
-#     pssG = nothing
-#     TC = nothing
-#     GC = nothing
-#     for i in eachindex(TCD)
-#         if isnothing(pssG) && dt[i]
-#             pssG = normalized_nullspace(TCD[i])
-#             GC = TCD[i]
-#         elseif isnothing(pss) && !dt[i]
-#             pss = normalized_nullspace(TCD[i])
-#             TC = TCD[i]
-#         end
-#         make_mat_TCD!(TCD[i], sojourn[i])
-#     end
-#     dropzeros.(TCD), (pss=pss, pssG = pssG, TC = TC, GC = GC)
-# end
-
-function make_TCD_p(unit, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}}, dt)
-    TCD = Vector{SparseMatrixCSC}(undef, length(TDdims))
-    pss = nothing
-    pssG = nothing
-    GC = nothing
-    TC = nothing
-    for i in eachindex(TDdims)
-        TCD[i] = make_mat_TC(unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-        if isnothing(pssG) && dt[i]
-            pssG = normalized_nullspace(TCD[i])
-            GC = TCD[i]
-        elseif isnothing(pss) && !dt[i]
-            pss = normalized_nullspace(TCD[i])
-            TC = TCD[i]
-        end
-        make_mat_TCD!(TCD[i], sojourn[i])
-    end
-    return dropzeros.(TCD), (pss=pss, pssG = pssG, TC = TC, GC = GC)
 end

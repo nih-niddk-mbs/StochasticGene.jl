@@ -39,6 +39,11 @@ struct Indices
     decay::Int
 end
 
+mutable struct CoupledDTCache
+    TC::Dict
+    pss::Dict
+end
+
 """
 	AbstractTComponents
 

@@ -576,22 +576,7 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
-function steady_state_dist(TCv, dt)
-    pssG = nothing
-    pss = nothing
-    TC = nothing
-    GC = nothing
-    for i in eachindex(dt)
-        if dt[i] && isnothing(pssG)
-            pssG = normalized_nullspace(TCv[i])
-        elseif isnothing(pss)
-            pss = normalized_nullspace(TCv[i])
-        end
-    end
-    return (pss=pss, pssG=pssG, TC=TC, GC=GC)
-end
-
-function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -603,7 +588,6 @@ function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Ve
         dt = occursin.("G", dttype[α])
         p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-        # TCD[α], p = make_TCD_p(α, TDdims[α], T[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α], dt)
         h = Vector[]
         for i in eachindex(sojourn[α])
             if dt[i]
@@ -613,6 +597,51 @@ function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Ve
             end
         end
         push!(hists, h)
+    end
+    return hists
+end
+
+function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
+    if dt
+        if !haskey(cache.TC, dt)
+            cache.TC[dt] = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
+            cache.pss[dt] = normalized_nullspace(cache.TC[dt])
+        end
+        TCD = make_mat_TCD(cache.TC[dt], sojourn)
+        return dwelltimePDF(bins, TCD, sojourn, init_S(sojourn, cache.TC[dt], cache.pss[dt]))
+    else
+        if !haskey(cache.TC, dt)
+            cache.TC[dt] = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+            cache.pss[dt] = normalized_nullspace(cache.TC[dt])
+        end
+        TCD = make_mat_TCD(cache.TC[dt], sojourn)
+        return dwelltimePDF(bins, TCD[nonzeros, nonzeros], nonzero_states(sojourn, nonzeros), init_S(sojourn, cache.TC[dt], cache.pss[dt], nonzeros))
+    end
+end
+
+function empty_cache!(cache)
+    if haskey(cache.TC, false)
+        delete!(cache.TC, false)
+        delete!(cache.pss, false)
+    end
+end
+
+function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+    sojourn, nonzeros = reporter
+    sources = components.sources
+    model = components.model
+    cache = CoupledDTCache(Dict(),Dict())
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+    hists = Vector{Vector}[]
+    for α in eachindex(components.modelcomponents)
+        dt = occursin.("G", dttype[α])
+        h = Vector[]
+        for i in eachindex(sojourn[α])
+            hdt = compute_dwelltime!(cache, α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α][i], dt[i], nonzeros[α][i], bins[α][i])
+            push!(h, hdt)
+        end
+        push!(hists, h)
+        empty_cache!(cache)
     end
     return hists
 end
