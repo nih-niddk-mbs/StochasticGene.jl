@@ -34,27 +34,19 @@ function test_Cparts(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.
     model = components.model
     TDdims = get_TDdims(components)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    hists = Vector{Vector}[]
-    ph = []
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     TCDnew = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+    p = nothing
+    pnew = nothing
     for α in eachindex(components.modelcomponents)
         dt = occursin.("G", dttype[α])
-        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+        p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
         h = Vector[]
-        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-        TCDnew[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-        push!(ph, p)
-        for i in eachindex(sojourn[α])
-            if dt[i]
-                push!(h, init_S(sojourn[α][i], p.GC, p.pssG))
-            else
-                push!(h, init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i]))
-            end
-        end
-        push!(hists, h)
+        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
+        TCDnew[α], pnew = make_TCD_p(α, TDdims[α], T[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α], dt)
+
     end
-    return hists, reporter, components, r, coupling_strength, TCD, TCDnew, ph
+    return TCD, TCDnew, p, pnew
 end
 
 simDT_convert(v) = [[s[1], s[3]] for s in v]

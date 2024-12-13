@@ -559,7 +559,7 @@ function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dtty
     hists
 end
 
-function steady_state_dist(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
     pss = nothing
     TC = nothing
@@ -576,6 +576,21 @@ function steady_state_dist(unit::Int, TDdims::Vector, T, Gm, Gs, Gt, IT, IG, IR,
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
+function steady_state_dist(TCv, dt)
+    pssG = nothing
+    pss = nothing
+    TC = nothing
+    GC = nothing
+    for i in eachindex(dt)
+        if dt[i] && isnothing(pssG)
+            pssG = normalized_nullspace(TCv[i])
+        elseif isnothing(pss)
+            pss = normalized_nullspace(TCv[i])
+        end
+    end
+    return (pss=pss, pssG=pssG, TC=TC, GC=GC)
+end
+
 function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
@@ -586,10 +601,10 @@ function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Ve
     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
     for α in eachindex(components.modelcomponents)
         dt = occursin.("G", dttype[α])
-        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-        h = Vector[]
-        # TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
+        # TCD[α], p = make_TCD_p(α, TDdims[α], T[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α], dt)
+        h = Vector[]
         for i in eachindex(sojourn[α])
             if dt[i]
                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
