@@ -534,7 +534,7 @@ function prob_Gaussian(par, reporters)
 end
 
 """
-    prob_Gaussian_sum(par, reporters_per_state, N)
+    prob_Gaussian(par, reporters_per_state, N)
 
 return Gaussian Distribution 
 mean = background + number of reporters_per_state * reporter mean
@@ -544,14 +544,14 @@ variance = sum of variances of background and reporters_per_state
 - `reporters_per_state`: number of reporters per HMM state
 -`N`: number of HMM states
 """
-function prob_Gaussian_sum(par, reporters_per_state, N)
+function prob_Gaussian(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
-        d[i] = prob_Gaussian_sum(par, reporters_per_state[i])
+        d[i] = prob_Gaussian(par, reporters_per_state[i])
     end
     d
 end
-function prob_Gaussian_sum(par, reporters)
+function prob_Gaussian(par, reporters)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
 

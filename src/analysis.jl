@@ -1034,11 +1034,11 @@ tcomponent(model) = typeof(model.components) == TComponents ? model.components :
 
 
 """
-    write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; state=true, coupling=tuple())
+    write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, coupling=tuple())
 
 TBW
 """
-function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1064,7 +1064,7 @@ function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::
     end
 end
 
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     datafolders = readdir(datafolder)
     for d in datafolders
         if ~occursin(".DS_Store", d)
@@ -1074,10 +1074,10 @@ function write_traces_folder(folder, datafolder, datacond, interval, ratetype::S
 end
 
 """
-    write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+    write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
 
 """
-function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     for (root, dirs, files) in walkdir(folder)
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
@@ -1096,7 +1096,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
     end
 end
 
-function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
     parts = fields(file)
@@ -1108,22 +1108,22 @@ function write_trace_dataframe(file, datapath::String, datacond, interval, ratet
 end
 
 """
-    write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+    write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
 
 
 """
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
     traces = read_tracefiles(datapath, datacond, start, stop)
     df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
     CSV.write(outfile, df)
 end
 
 """
-    make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+    make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 
 TBW
 """
-function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
     if hierarchical
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
@@ -1150,11 +1150,11 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S,
 end
 
 """
-    make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian_sum, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+    make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
 
 TBW
 """
-function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian_sum, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
     probfn = make_vector(probfn, length(G))
     noiseparams = make_vector(noiseparams, length(G))
     components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
@@ -1281,7 +1281,7 @@ end
 # plot_traces(df, cols=[1,4,5])  # Plot specific columns
 
 
-# function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian_sum, noiseparams=4, weightind=0, splicetype="")
+# function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 #     tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
 
 
@@ -1292,7 +1292,7 @@ end
 
 
 # """
-# function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian_sum, noiseparams=4, weightind=0, splicetype="")
+# function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
 #     tp, ts = make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
 #     plt = plot(trace)
 #     plt = plot!(tp)
@@ -1546,6 +1546,15 @@ function data_covariance(traces, lags)
         ac2 += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
     end
     ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
+end
+
+function reset_noise!(r,transitions,G::Tuple,R,S,insertstep,num_noiseparams)
+    n=0
+    for i in eachindex(G)
+        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
+        r[n+1:n+num_noiseparams] .= [20,.1,80,.1]
+        n += num_noiseparams
+    end
 end
 
 # Usage example:
