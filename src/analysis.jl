@@ -1557,6 +1557,15 @@ function reset_noise!(r,transitions,G::Tuple,R,S,insertstep,num_noiseparams)
     end
 end
 
+function delete_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
+    n = 0
+    for i in eachindex(G)
+        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
+        deleteat!(r,n+1:n+num_noiseparams)
+        # n += num_noiseparams
+    end
+end
+
 # Usage example:
 # (norms, theory, sims, means, errors) = simulate_trials(...)
 # plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")

@@ -361,7 +361,7 @@ function GRSMcoupledmodel(r::Vector, rm::Vector, fittedparam::Vector, fixedeffec
 end
 
 function GRSMcoupledmodel(data::AbstractTraceData, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
-    reporter, components = make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
+    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end

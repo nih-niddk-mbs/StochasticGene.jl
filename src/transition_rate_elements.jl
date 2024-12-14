@@ -74,7 +74,7 @@ function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vecto
             if abs(sB) == 1
                 push!(elementsRGbar, Element(a, b, nu[R+1], sB))
             end
-            if S > 0
+            if S == R
                 if S > insertstep - 1 && abs(sC) == 1
                     push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
                 end
@@ -102,7 +102,7 @@ function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vecto
                     push!(elementsRGbar, Element(a, b, nu[j+1], s))
                 end
                 # if S > 0 && j > insertstep - 1
-                if S > 0 && S > j > insertstep - 1
+                if S >= j && j > insertstep - 1
                     s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                     if abs(s) == 1
                         push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
@@ -229,7 +229,7 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
                 # if S > 0 && abs(sC) == 1
                 #     push!(elementsT, Element(a, b, eta[R-insertstep+1], sC))
                 # end
-                if S > 0
+                if S == R
                     if S > insertstep - 1 && abs(sC) == 1
                         push!(elementsT, Element(a, b, eta[S-insertstep+1], sC))
                     end
@@ -257,7 +257,7 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
                         push!(elementsT, Element(a, b, nu[j+1], s))
                     end
                     # if S > 0 && j > insertstep - 1
-                    if S > 0 && S > j > insertstep - 1
+                    if S >= j && j > insertstep - 1
                         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
                         if abs(s) == 1
                             push!(elementsT, Element(a, b, eta[j-insertstep+1], s))
@@ -580,4 +580,149 @@ function set_elements_TUVCoupled(source_state, target_transition, transitions, G
     elementsV = set_elements_V(transitions, target_transition, indices.gamma)
     elementsU = set_elements_U(source_state)
     return elementsT, elementsV, elementsU
+end
+
+
+
+
+#### Experimental
+
+"""
+    add_transition_element!(elements, state_a, state_b, rate, sign)
+
+Helper to add transition elements when condition is met.
+"""
+function add_transition_element!(elements, state_a, state_b, rate, sign)
+    if abs(sign) == 1
+        push!(elements, Element(state_a, state_b, rate, sign))
+    end
+end
+
+"""
+    process_state_transitions!(elements, G, R, S, insertstep, nu, eta, base, splicetype)
+
+Core state transition processing for both T and RS matrices.
+"""
+function process_state_transitions!(elements, G, R, S, insertstep, nu, eta, base, splicetype)
+    for w = 1:base^R, z = 1:base^R
+        zdigits = digit_vector(z, base, R)
+        wdigits = digit_vector(w, base, R)
+
+        # Process each state
+        for i = 1:G
+            state_a = state_index(G, i, z)
+            state_b = state_index(G, i, w)
+
+            # Process RNA transitions
+            process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, R, nu)
+
+            # Process splicing transitions if needed
+            if S > 0 || splicetype == "offeject"
+                process_splicing!(elements, zdigits, wdigits, state_a, state_b,
+                    S, insertstep, eta, splicetype)
+            end
+        end
+    end
+end
+
+function add_transition_element!(elements, state_a, state_b, rate, sign)
+    if abs(sign) == 1
+        push!(elements, Element(state_a, state_b, rate, sign))
+    end
+end
+
+function calculate_state_indices(zdigits, wdigits, R)
+    zbar1 = zdigits[2:R]
+    wbar1 = wdigits[2:R]
+    zbarr = zdigits[1:R-1]
+    wbarr = wdigits[1:R-1]
+    z1 = zdigits[1]
+    w1 = wdigits[1]
+    zr = zdigits[R]
+    wr = wdigits[R]
+    return zbar1, wbar1, zbarr, wbarr, z1, w1, zr, wr
+end
+
+function process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, R, nu)
+    zbar1, wbar1, zbarr, wbarr, z1, w1, zr, wr = calculate_state_indices(zdigits, wdigits, R)
+    
+    # End transitions
+    sB = 0
+    for l in 1:2
+        sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+    end
+    add_transition_element!(elements, state_a, state_b, nu[R+1], sB)
+    
+    # Internal transitions
+    for j = 1:R-1
+        zbarj = zdigits[[1:j-1; j+2:R]]
+        wbarj = wdigits[[1:j-1; j+2:R]]
+        zj = zdigits[j]
+        zj1 = zdigits[j+1]
+        wj = wdigits[j]
+        wj1 = wdigits[j+1]
+        
+        s = 0
+        for l in 1:2
+            s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+        end
+        add_transition_element!(elements, state_a, state_b, nu[j+1], s)
+    end
+end
+
+function process_splicing!(elements, zdigits, wdigits, state_a, state_b, S, insertstep, eta, splicetype)
+    zbarr = zdigits[1:R-1]
+    wbarr = wdigits[1:R-1]
+    zr = zdigits[R]
+    wr = wdigits[R]
+    
+    if splicetype == "offeject"
+        s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+        add_transition_element!(elements, state_a, state_b, eta[R-insertstep+1], s)
+    else
+        sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+        if S > insertstep - 1
+            add_transition_element!(elements, state_a, state_b, eta[S-insertstep+1], sC)
+        end
+    end
+end
+
+function process_state_transitions!(elements, G, R, S, insertstep, nu, eta, base, splicetype)
+    for w = 1:base^R, z = 1:base^R
+        zdigits = digit_vector(z, base, R)
+        wdigits = digit_vector(w, base, R)
+        
+        for i = 1:G
+            state_a = state_index(G, i, z)
+            state_b = state_index(G, i, w)
+            
+            process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, R, nu)
+            
+            if S > 0 || splicetype == "offeject"
+                process_splicing!(elements, zdigits, wdigits, state_a, state_b, S, insertstep, eta, splicetype)
+            end
+        end
+    end
+end
+
+
+
+"""
+    set_elements_RS!(elementsRS, G, R, S, insertstep, nu, eta, splicetype="")
+"""
+function set_elements_RS2!(elementsRS, G, R, S, insertstep, nu, eta, splicetype="")
+    if R > 0
+        base = (splicetype == "offeject") ? 2 : 3
+        process_state_transitions!(elementsRS, G, R, S, insertstep, nu, eta, base, splicetype)
+    end
+end
+
+"""
+    set_elements_T!(elementsT, G, R, S, insertstep, nu, eta, splicetype="")
+"""
+function set_elements_T2!(elementsT, G, R, S, insertstep, nu, eta, splicetype="")
+    if R > 0
+        base = (splicetype == "offeject") ? 2 : 3
+        process_state_transitions!(elementsT, G, R, S, insertstep, nu, eta, base, splicetype)
+    end
 end
