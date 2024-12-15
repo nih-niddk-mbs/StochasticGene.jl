@@ -122,13 +122,46 @@ export
     folder_path,
     get_rates,
     new_FISHfolder,
-    ModelArgs
+    ModelArgs,
+    # Composable types
+    ComposableModel,
+    ComposableData,
+    ComposableOptions,
+    # Model traits
+    ModelTrait,
+    GRSMTrait,
+    CouplingTrait,
+    HierarchicalTrait,
+    GridTrait,
+    # Data traits
+    DataTrait,
+    RNATrait,
+    OnOffTrait,
+    DwellTimeTrait,
+    TraceTrait,
+    # Option traits
+    OptionTrait,
+    MCMCTrait,
+    TimingTrait,
+    # Helper functions
+    create_model,
+    create_data,
+    create_options,
+    has_trait,
+    get_trait,
+    has_data_trait,
+    get_data_trait,
+    has_option_trait,
+    get_option_trait
     
 
 ### Source files
 
 # Type system and common functions
 include("common.jl")
+
+# Composable type system
+include("composable.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")
