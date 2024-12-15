@@ -162,6 +162,9 @@ include("common.jl")
 
 # Composable type system
 include("composable.jl")
+include("likelihoods_composable.jl")
+include("hmm_composable.jl")
+include("io_composable.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")
