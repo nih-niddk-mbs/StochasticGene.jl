@@ -152,10 +152,10 @@ function test_trace_background(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.5, 1))
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], noisepriors, mean_elongationtime(rtarget, transitions, R)), fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
-    ll, lv, lb = ll_hmm_3(rtarget, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    ll, lv = ll_hmm(rtarget, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     # fits, stats, measures = run_mh(data, model, options)
     # StochasticGene.get_rates(fits.parml, model), rtarget
-    return ll, lb, trace
+    return ll, trace
 end
 
 
