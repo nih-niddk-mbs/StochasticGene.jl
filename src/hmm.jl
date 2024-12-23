@@ -9,6 +9,70 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
+function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+    b = Array{Float64}(undef, size(d))
+        for j in CartesianIndices(d)
+            b[j] = pdf(d[j], obs)
+        end
+    return b
+end
+
+function ll_background(a::Matrix, b::Vector, p0, N, T)
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                α[j, t] += α[i, t-1] * a[i, j] * b[j]
+            end
+        end
+        C[t] = 1 / sum(α[:, t])
+        α[:, t] *= C[t]
+    end
+    return α, C
+end
+
+function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
+    _, C = ll_background(a::Matrix, set_b_background(obs, d), p0, nstates, nframes)
+    sum(log.(C))
+end
+
+"""
+    ll_background(a, p0, offstates, weight, n)
+
+L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
+"""
+function ll_background(a, p0, offstates, poff, nframes)
+    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+    -(1 - poff) * log(1 - p) - poff * log(p)
+end
+
+p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+
+"""
+    ll_background_coupled(a, p0, offstates, weight, n)
+
+TBW
+"""
+function ll_background_coupled(a, p0, offstates, weight::Vector, nframes)
+    l = 0
+    for i in eachindex(weight)
+        l += ll_background(a, p0, offstates[i], weight[i], nframes)
+    end
+    l
+end
+
+function ll_background_coupled(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
+    l = 0
+    for i in eachindex(weight)
+        l += ll_background(obs, d, a, p0, nstates, nframes)
+    end
+    l
+end
+
 """
     ll_hmm(a, p0, d, traces)
 
@@ -29,14 +93,14 @@ end
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_hmm(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
+function ll_hmm1(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
     return ll + lb, lp
 end
 
-function ll_hmm(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, a, p0)
+function ll_hmm1(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, a, p0)
     logpredictions = Array{Float64}(undef, 0)
     for t in traces
         T = length(t)
@@ -61,7 +125,19 @@ function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporter
     sum(logpredictions) + lb, logpredictions
 end
 
-
+function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, length(trace[1][1])) : 0.0
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = length(t)
+        b = set_b(t, d)
+        _, C = forward(a, b, p0, nstates, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    (1-trace[3])*sum(logpredictions) + trace[3]*lb, logpredictions
+end
 
 
 """
@@ -119,30 +195,6 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
         push!(logpredictions, sum(log.(C)))
     end
     sum(logpredictions), logpredictions
-end
-"""
-    ll_background(a, p0, offstates, weight, n)
-
-L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
-"""
-function ll_background(a, p0, offstates, poff, nframes)
-    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-    -(1 - poff) * log(1 - p) - poff * log(p)
-end
-
-p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-
-"""
-    ll_background_coupled(a, p0, offstates, weight, n)
-
-TBW
-"""
-function ll_background_coupled(a, p0, offstates, weight::Vector, nframes)
-    l = 0
-    for i in eachindex(weight)
-        l += ll_background(a, p0, offstates[i], weight[i], nframes)
-    end
-    l
 end
 
 """
@@ -702,7 +754,7 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     end
     return α, C
 end
-function forward_mm(a, b, p0, N, T)
+function forward_matrixmult(a, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
     α[:, 1] = p0 .* b[:, 1]

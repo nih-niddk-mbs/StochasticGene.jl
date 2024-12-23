@@ -421,17 +421,20 @@ function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, i
     return reporter, components
 end
 
-function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+function make_reporter_components(data::Union{AbstractTraceData, AbstractTraceHistogramData}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    nnoise = length(noisepriors)
+    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
     components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
 
-function make_reporter_components(data::TraceRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    reporter = HMMReporter(noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-    return reporter, components
-end
+# function make_reporter_components(data::TraceRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+#     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
+#     reporter = HMMReporter(length(noise_priors), num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+#     components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
+#     return reporter, components
+# end
 
 
 

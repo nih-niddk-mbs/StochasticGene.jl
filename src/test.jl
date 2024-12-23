@@ -147,6 +147,18 @@ end
 ### end of functions used in runtest
 
 
+function test_trace_background(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70])
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.5, 1))
+    model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], noisepriors, mean_elongationtime(rtarget, transitions, R)), fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), nothing)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
+    ll, lv, lb = ll_hmm_3(rtarget, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    # fits, stats, measures = run_mh(data, model, options)
+    # StochasticGene.get_rates(fits.parml, model), rtarget
+    return ll, lb, trace
+end
+
+
 function test_init(r, transitions, G, R, S, insertstep)
     onstates = on_states(G, R, S, insertstep)
     indices = set_indices(length(transitions), R, S, insertstep)

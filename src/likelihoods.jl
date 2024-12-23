@@ -262,7 +262,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm_2(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
@@ -278,7 +278,7 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
