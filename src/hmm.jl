@@ -274,11 +274,12 @@ function set_b_coupled(trace, d::Vector{Vector}, N)
 end
 
 
-function set_b_coupled(trace, params, rep_per_state::Vector, probfn::Vector, N)
-    d = Vector[]
-    for i in eachindex(params)
-        push!(d, probfn[i](params[i], rep_per_state[i], N))
-    end
+function set_b_coupled(trace, params, reporters_per_state::Vector, probfn::Vector, N)
+    # d = Vector[]
+    # for i in eachindex(params)
+    #     push!(d, probfn[i](params[i], rep_per_state[i], N))
+    # end
+    d = set_d(params, reporters_per_state, probfn, N)
     set_b_coupled(trace, d, N)
 end
 
@@ -292,21 +293,22 @@ function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
 end
 
 
-function set_b_coupled_background(trace, d::Vector{Vector}, N)
-    b = ones(N, size(trace, 1))
-    t = 1
-    for obs in eachrow(trace)
-        for j in 1:N
-            for i in eachindex(d)
-                b[j, t] *= pdf(d[i][j], obs[i])
-            end
-        end
-        t += 1
+function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+    b = Array{Float64}(undef, size(d))
+    for j in CartesianIndices(d)
+        b[j] = pdf(d[j], obs)
     end
     return b
 end
 
 
+function set_b_coupled_background(obs, k, d::Vector{Vector}, N)
+    b = ones(N)
+    for j in 1:N
+        b[j] *= pdf(d[k][j], obs)
+    end
+    return b
+end
 
 """
     set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
@@ -389,13 +391,6 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
-function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
-    b = Array{Float64}(undef, size(d))
-        for j in CartesianIndices(d)
-            b[j] = pdf(d[j], obs)
-        end
-    return b
-end
 
 
 
@@ -873,6 +868,16 @@ function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuou
     sum(log.(C))
 end
 
+function ll_background_coupled(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes, weight)
+    l = 0
+    b = set_b_background(obs, d)
+    for i in eachindex(obs)
+        b = set_b_coupled_background(obs[i], i, d, nstates)
+        l += weight[i] * ll_background(a, b[i], p0, nstates, nframes)
+    end
+    l
+end
+
 """
     ll_background(a, p0, offstates, weight, n)
 
@@ -898,13 +903,7 @@ function ll_background_coupled(a, p0, offstates, weight::Vector, nframes)
     l
 end
 
-function ll_background_coupled(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
-    l = 0
-    for i in eachindex(weight)
-        l += ll_background(obs, d, a, p0, nstates, nframes)
-    end
-    l
-end
+
 
 """
     ll_hmm(a, p0, d, traces)
@@ -969,7 +968,7 @@ function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, repor
         _, C = forward(a, b, p0, nstates, T)
         push!(logpredictions, sum(log.(C)))
     end
-    (1-trace[3])*sum(logpredictions) + trace[3]*lb, logpredictions
+    (1 - trace[3]) * sum(logpredictions) + trace[3] * lb, logpredictions
 end
 
 
@@ -1103,15 +1102,15 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
         mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
         mmax = maximum(mi)
         push!(max_intensity, mmax)
-        push!(mean_intensity, mi/mmax)  
+        push!(mean_intensity, mi / mmax)
     end
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
     cc12 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
     cc21 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
-    ac1 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2) * max_intensity[1] ^ 2
-    ac2 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2) * max_intensity[2] ^ 2
+    ac1 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2) * max_intensity[1]^2
+    ac2 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2) * max_intensity[2]^2
     cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]), vcat(-reverse(lags), lags[2:end])
 end
 
