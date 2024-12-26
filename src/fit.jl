@@ -453,11 +453,17 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep
     return (sojourn, nonzeros), components
 end
 
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, onstates, splicetype)
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
 end
 
-function make_reporter_components(data::AbstractHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    mcomponents = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
+    return reporter, MTDComponents(mcomponents, tcomponents)
+end
+
+function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     else
@@ -481,7 +487,7 @@ function make_reporter_components(data::AbstractHistogramData, transitions, G, R
     return reporter, components
 end
 
-function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
+function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple, R, S, insertstep, probfn, noisepriors, coupling::Tuple)
     println(coupling)
     reporter = HMMReporter[]
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))

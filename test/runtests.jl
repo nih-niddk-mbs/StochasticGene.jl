@@ -105,6 +105,9 @@ using Test
     h1, h2 = StochasticGene.test_compare()
     @test isapprox(h1, h2, rtol=0.2)
 
+    h1, h2 = StochasticGene.test_compare_coupling()
+    @test isapprox(h1, h2, rtol=0.2)
+
     h1, h2 = StochasticGene.test_fit_simrna()
     @test isapprox(h1, h2, rtol=0.05)
 
