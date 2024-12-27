@@ -163,6 +163,78 @@ function prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function
 end
 
 
+
+"""
+    make_ap(r, interval, components::TRGComponents)
+
+Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
+a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GRSM model
+p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
+
+Arguments:
+- `r`: transition rates
+- `interval`: time interval between intensity observations (frame interval)
+- `components`: TRG matrix components
+
+Qtr is the transpose of the Markov process transition rate matrix Q
+
+"""
+function make_ap(r, interval, components::TRGComponents)
+    Qtr = make_mat_TRG(components, r) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+end
+
+"""
+    make_ap_coupled(r, couplingStrength, interval, components)
+
+
+"""
+function make_ap_coupled(r, couplingStrength, interval, components)
+    Qtr = make_mat_TC(components, r, couplingStrength)
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+end
+
+"""
+    make_ap(r, interval, elementsT::Vector, N)
+
+Arguments:
+- `r`: transition rates
+- `interval`: time interval between intensity observations (frame interval)
+- `elementsT`: vector of T matrix elements
+- `N`: number of HMM states
+
+"""
+function make_ap(r, interval, elementsT::Vector, N)
+    Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+end
+"""
+    make_logap(r, transitions, interval, G)
+
+return log of a and p0
+"""
+function make_logap(r, interval, elementsT, N)
+    a, p0 = make_ap(r, interval, elementsT, N)
+    log.(max.(a, 0)), log.(max.(p0, 0))
+end
+
+"""
+    make_a_grid(param, Ngrid)
+
+TBW
+"""
+function make_a_grid(param, Ngrid)
+    as = zeros(Ngrid, Ngrid)
+    d = zeros(Ngrid, Ngrid)
+    for i in 1:Ngrid
+        for j in 1:Ngrid
+            as[i, j] = exp(-grid_distance(i, j, div(Ngrid, 2))^2 / (2 * param^2))
+            d[i, j] = grid_distance(i, j, div(Ngrid, 2))
+        end
+    end
+    as ./ sum(as, dims=2)
+end
+
 """
     set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector, N::Int)
 
@@ -268,9 +340,6 @@ end
 
 returns matrix b for coupled system
 """
-
-
-
 function set_b_coupled(trace, d::Vector{Vector}, N)
     b = ones(N, size(trace, 1))
     t = 1
@@ -287,10 +356,6 @@ end
 
 
 function set_b_coupled(trace, params, reporters_per_state::Vector, probfn::Vector, N)
-    # d = Vector[]
-    # for i in eachindex(params)
-    #     push!(d, probfn[i](params[i], rep_per_state[i], N))
-    # end
     d = set_d(params, reporters_per_state, probfn, N)
     set_b_coupled(trace, d, N)
 end
@@ -305,21 +370,7 @@ function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
 end
 
 
-function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
-    b = Array{Float64}(undef, size(d))
-    for j in CartesianIndices(d)
-        b[j] = pdf(d[j], obs)
-    end
-    return b
-end
 
-function set_b_background_coupled(obs, k, d::Vector{Vector}, N)
-    b = ones(N)
-    for j in 1:N
-        b[j] *= pdf(d[k][j], obs)
-    end
-    return b
-end
 """
     set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
 
@@ -401,80 +452,27 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
+function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+    b = Array{Float64}(undef, size(d))
+    for j in CartesianIndices(d)
+        b[j] = pdf(d[j], obs)
+    end
+    return b
+end
 
-
-
-"""
-    make_ap(r, interval, components::TRGComponents)
-
-Return computed discrete HMM transition probability matrix a and equilibrium state probability p0
-a is computed by numerically integrating Kolmogorov Forward equation for the underlying stochastic continuous time Markov process behind the GRSM model
-p0 is left nullspace of transition rate matrix Q (right nullspace of Q')
-
-Arguments:
-- `r`: transition rates
-- `interval`: time interval between intensity observations (frame interval)
-- `components`: TRG matrix components
-
-Qtr is the transpose of the Markov process transition rate matrix Q
-
-"""
-function make_ap(r, interval, components::TRGComponents)
-    Qtr = make_mat_TRG(components, r) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+function set_b_background(obs, d::Vector{Vector}, k::Int, N)
+    b = ones(N)
+    for j in 1:N
+        b[j] *= pdf(d[k][j], obs)
+    end
+    return b
 end
 
 """
-    make_ap_coupled(r, couplingStrength, interval, components)
-
-
-"""
-function make_ap_coupled(r, couplingStrength, interval, components)
-    Qtr = make_mat_TC(components, r, couplingStrength)
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
-end
-
-"""
-    make_ap(r, interval, elementsT::Vector, N)
-
-Arguments:
-- `r`: transition rates
-- `interval`: time interval between intensity observations (frame interval)
-- `elementsT`: vector of T matrix elements
-- `N`: number of HMM states
-
-"""
-function make_ap(r, interval, elementsT::Vector, N)
-    Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
-end
-"""
-    make_logap(r, transitions, interval, G)
-
-return log of a and p0
-"""
-function make_logap(r, interval, elementsT, N)
-    a, p0 = make_ap(r, interval, elementsT, N)
-    log.(max.(a, 0)), log.(max.(p0, 0))
-end
-
-"""
-    make_a_grid(param, Ngrid)
+    forward_inner_operation!(α, a, b::Vector, i, j, t)
 
 TBW
 """
-function make_a_grid(param, Ngrid)
-    as = zeros(Ngrid, Ngrid)
-    d = zeros(Ngrid, Ngrid)
-    for i in 1:Ngrid
-        for j in 1:Ngrid
-            as[i, j] = exp(-grid_distance(i, j, div(Ngrid, 2))^2 / (2 * param^2))
-            d[i, j] = grid_distance(i, j, div(Ngrid, 2))
-        end
-    end
-    as ./ sum(as, dims=2)
-end
-
 function forward_inner_operation!(α, a, b::Vector, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j]
 end
@@ -483,6 +481,14 @@ function forward_inner_operation!(α, a, b::Matrix, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
 end
 
+"""
+forward(a, b, p0, N, T)
+
+returns forward variable α, and scaling parameter array C using scaled forward algorithm
+α[i,t] = P(O1,...,OT,qT=Si,λ)
+Ct = Prod_t 1/∑_i α[i,t]
+
+"""
 function forward(a::Matrix, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
@@ -500,57 +506,11 @@ function forward(a::Matrix, b, p0, N, T)
     end
     return α, C
 end
-"""
-forward(a, b, p0, N, T)
-
-returns forward variable α, and scaling parameter array C using scaled forward algorithm
-α[i,t] = P(O1,...,OT,qT=Si,λ)
-Ct = Prod_t 1/∑_i α[i,t]
-
-"""
-# function forward(a::Matrix, b, p0, N, T)
-#     α = zeros(N, T)
-#     C = Vector{Float64}(undef, T)
-#     α[:, 1] = p0 .* b[:, 1]
-#     C[1] = 1 / sum(α[:, 1])
-#     α[:, 1] *= C[1]
-#     for t in 2:T
-#         for j in 1:N
-#             for i in 1:N
-#                 α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
-#             end
-#         end
-#         C[t] = 1 / sum(α[:, t])
-#         α[:, t] *= C[t]
-#     end
-#     return α, C
-# end
 
 function forward(a::Matrix, b, p0)
     N, T = size(b)
     forward(a, b, p0, N, T)
 end
-
-# function forward(a::Matrix, b::Matrix, p0)
-#     N, T = size(b)
-#     α = zeros(N, T)
-#     C = Vector{Float64}(undef, T)
-#     α[:, 1] = p0 .* b[:, 1]
-#     C[1] = 1 / sum(α[:, 1])
-#     α[:, 1] *= C[1]
-#     for t in 2:T
-#         for j in 1:N
-#             for i in 1:N
-#                 α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
-#             end
-#         end
-#         C[t] = 1 / sum(α[:, t])
-#         α[:, t] *= C[t]
-#     end
-#     return α, C
-# end
-
-
 
 function forward(atuple::Tuple, b::Array, p0)
     a, a_grid = atuple
@@ -641,26 +601,6 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
-"""
-forward_loop(a, b, p0, N, T)
-
-return α using unscaled forward algorithm
-(numerically unstable for large T)
-
-"""
-function forward_loop(a, b, p0, N, T)
-    α = zeros(N, T)
-    α[:, 1] = p0 .* b[:, 1]
-    for t in 2:T
-        for j in 1:N
-            for i in 1:N
-                α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
-            end
-        end
-    end
-    return α
-end
-
 
 """
 backward_scaled(a,b)
@@ -707,24 +647,247 @@ function backward_log(a, b, N, T)
 end
 
 """
-backward_loop(a, b, N, T)
+    ll_background(a::Matrix, b::Vector, p0, N, T)
 
-returns β using unscaled backward algorithm
-(numerically unstable for large T)
+TBW
 """
-function backward_loop(a, b, N, T)
-    β = zeros(N, T)
-    β[:, T] = [1.0, 1.0]
-    for t in T-1:-1:1
-        for i in 1:N
-            for j in 1:N
-                β[i, t] += a[i, j] * b[j, t+1] * β[j, t+1]
-            end
-        end
-    end
-    return β
+
+
+function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
+    _, C = forward(a::Matrix, set_b_background(obs, d), p0, nstates, nframes)
+    sum(log.(C))
 end
 
+
+function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, nstates, nframes, weight)
+    l = 0
+    for i in eachindex(obs)
+        b = set_b_background(obs[i], d, i, nstates)
+        _, C = forward(a, b, p0, nstates, nframes)
+        l += weight[i] * sum(log.(C))
+    end
+    l
+end
+
+
+p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+
+"""
+    ll_off(a, p0, offstates, poff, nframes)
+
+L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
+"""
+function ll_off(a, p0, offstates, poff, nframes)
+    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+    -(1 - poff) * log(1 - p) - poff * log(p)
+end
+"""
+    ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+
+TBW
+"""
+function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+    l = 0
+    for i in eachindex(weight)
+        l += ll_off(a, p0, offstates[i], weight[i], nframes)
+    end
+    l
+end
+
+
+
+"""
+    ll_hmm(a, p0, d, traces)
+
+TBW
+"""
+# function ll_hmm(a, p0, d, traces)
+#     logpredictions = Array{Float64}(undef, 0)
+#     for t in traces
+#         b = set_b(t, d)
+#         _, C = forward(a, b, p0)
+#         push!(logpredictions, sum(log.(C)))
+#     end
+#     sum(logpredictions), logpredictions
+# end
+
+function ll_hmm(a, p0, d, traces, nT)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        _, C = forward(a, set_b_coupled(traces[i], d, nT), p0, nT, size(traces[i], 1))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+"""
+    ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+
+return total loglikelihood of traces with reporter noise and loglikelihood of each trace
+"""
+function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    a, p0 = make_ap(r, interval, components)
+    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(a, p0, d, trace[1], nstates)
+    (1 - trace[3]) * ll + trace[3] * lb, logpredictions
+end
+
+"""
+    ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
+
+TBW
+"""
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    d = set_d(noiseparams, reporter, nT)
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nT, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(a, p0, d, trace[1], nT)
+    (1 - mean(trace[3])) * ll + lb, logpredictions
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+    r, p, hyper = prepare_rates(param, model)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    d = hyper_distribution(hyper)
+    lhp = Float64[]
+    for pc in eachcol(p)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function ll_hmm_hyper(p, hyper)
+    d = hyper_distribution(hyper)
+    lhp = Float64[]
+    for pc in eachcol(p)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+
+end
+
+"""
+    ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
+function ll_hmm_hierarchical(r::Matrix, p, hyper, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    a, p0 = make_ap(r[:, 1], interval, components)
+    d = set_d(r[end-n_noiseparams+1, 1], reporters_per_state, probfn, nT)
+    lb = trace[3] > 0 ? ll_background(hyper[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    lhp = ll_hmm_hyper(p, hyper)
+    logpredictions = Array{Float64}(undef, 0)
+    for (i, t) in enumerate(trace[1])
+        T = length(t)
+        a, p0 = make_ap(r[:, i], interval, components)
+        b = set_b(t, r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+
+    sum(logpredictions) + sum(lh) + lb, vcat(logpredictions, lhp)
+end
+
+"""
+    ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+
+TBW
+"""
+function ll_hmm_hierarchical_rateshared(r::Matrix, p, hyper, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    a, p0 = make_ap(r[:, 1], interval, components)
+    d = set_d(r[end-n_noiseparams+1, 1], reporters_per_state, probfn, nT)
+    lb = trace[3] > 0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0 ? ll_background(hyper[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    lhp = ll_hmm_hyper(p, hyper)
+    logpredictions = Array{Float64}(undef, 0)
+    for (i, t) in enumerate(trace[1])
+        T = length(t)
+        b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        _, C = forward(a, b, p0, nT, T)
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions) + lb, logpredictions
+end
+
+"""
+    ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+
+TBW
+"""
+function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+    a_grid = make_a_grid(pgrid, Ngrid)
+    a, p0 = make_ap(r, interval, components)
+    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 2)
+        b = set_b_grid(t, d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+        println(sum(log.(C)))
+        push!(logpredictions, sum(log.(C)))
+    end
+    sum(logpredictions), logpredictions
+end
+
+# """
+#     ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+
+# TBW
+# """
+# function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
+#     logpredictions = Array{Float64}(undef, 0)
+#     a, p0 = make_ap(r[:, 1], interval, components)
+#     for (i, t) in enumerate(trace[1])
+#         T = length(t)
+#         b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
+#         _, C = forward(a, b, p0, nT, T)
+#         push!(logpredictions, sum(log.(C)))
+#     end
+#     sum(logpredictions), logpredictions
+# end
+# function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+#     a, p0 = make_ap(r, interval, components)
+#     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
+#     lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, trace[4]) : 0.0
+#     logpredictions = Array{Float64}(undef, 0)
+#     for t in trace[1]
+#         T = length(t)
+#         b = set_b(t, d)
+#         _, C = forward(a, b, p0, nstates, T)
+#         push!(logpredictions, sum(log.(C)))
+#     end
+#     (1 - trace[3]) * sum(logpredictions) + trace[3] * lb, logpredictions
+# end
+# function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+#     nT = components.N
+#     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+#     ps = [r.per_state for r in reporter]
+#     pf = [r.probfn for r in reporter]
+#     d = set_d(noiseparams, ps, pf, nT)
+#     logpredictions = Array{Float64}(undef, 0)
+#     for t in trace[1]
+#         T = size(t, 1)
+#         b = set_b_coupled(t, d, nT)
+#         _, C = forward(a, b, p0, nT, T)
+#         push!(logpredictions, sum(log.(C)))
+#     end
+#     obs = [n[1] for n in noiseparams]
+#     lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(obs, d, a, p0, nT, trace[4], trace[3]) : 0.0
+#     sum(logpredictions) + lb, logpredictions
+# end
 """
 expected_transitions(α, a, b, β, N, T)
 
@@ -882,250 +1045,6 @@ function viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
 end
 
-"""
-    ll_background(a::Matrix, b::Vector, p0, N, T)
-
-TBW
-"""
-# function ll_background(a::Matrix, b::Vector, p0, N, T)
-#     α = zeros(N, T)
-#     C = Vector{Float64}(undef, T)
-#     α[:, 1] = p0 .* b
-#     C[1] = 1 / sum(α[:, 1])
-#     α[:, 1] *= C[1]
-#     for t in 2:T
-#         for j in 1:N
-#             for i in 1:N
-#                 α[j, t] += α[i, t-1] * a[i, j] * b[j]
-#             end
-#         end
-#         C[t] = 1 / sum(α[:, t])
-#         α[:, t] *= C[t]
-#     end
-#     return α, C
-# end
-
-function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
-    _, C = forward(a::Matrix, set_b_background(obs, d), p0, nstates, nframes)
-    sum(log.(C))
-end
-
-
-function ll_background_coupled(obs::Vector, d::Vector{Vector}, a::Matrix, p0, nstates, nframes, weight)
-    l = 0
-    for i in eachindex(obs)
-        b = set_b_background_coupled(obs[i], i, d, nstates)
-        _, C = forward(a, b, p0, nstates, nframes)
-        l += weight[i] * sum(log.(C))
-    end
-    l
-end
-
-"""
-    ll_off(a, p0, offstates, poff, nframes)
-
-L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
-"""
-function ll_off(a, p0, offstates, poff, nframes)
-    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-    -(1 - poff) * log(1 - p) - poff * log(p)
-end
-
-p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-
-"""
-    ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
-
-TBW
-"""
-function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
-    l = 0
-    for i in eachindex(weight)
-        l += ll_off(a, p0, offstates[i], weight[i], nframes)
-    end
-    l
-end
-
-
-
-"""
-    ll_hmm(a, p0, d, traces)
-
-TBW
-"""
-function ll_hmm(a, p0, d, traces)
-    logpredictions = Array{Float64}(undef, 0)
-    for t in traces
-        b = set_b(t, d)
-        _, C = forward(a, b, p0)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions), logpredictions
-end
-
-"""
-    ll_hmm(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-
-return total loglikelihood of traces with reporter noise and loglikelihood of each trace
-"""
-# function ll_hmm1(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
-#     a, p0 = make_ap(r, interval, components)
-#     lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
-#     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
-#     return ll + lb, lp
-# end
-
-# function ll_hmm1(r, nT, n_noiseparams::Int, reporters_per_state, probfn, traces, a, p0)
-#     logpredictions = Array{Float64}(undef, 0)
-#     for t in traces
-#         b = set_b(t, r[end-n_noiseparams+1:end], reporters_per_state, probfn, nT)
-#         T = length(t)
-#         _, C = forward(a, b, p0, nT, T)
-#         push!(logpredictions, sum(log.(C)))
-#     end
-#     sum(logpredictions), logpredictions
-# end
-
-# function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
-#     a, p0 = make_ap(r, interval, components)
-#     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
-#     lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
-#     logpredictions = Array{Float64}(undef, 0)
-#     for t in trace[1]
-#         T = length(t)
-#         b = set_b(t, d)
-#         _, C = forward(a, b, p0, nT, T)
-#         push!(logpredictions, sum(log.(C)))
-#     end
-#     sum(logpredictions) + lb, logpredictions
-# end
-
-function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
-    a, p0 = make_ap(r, interval, components)
-    d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
-    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, trace[4]) : 0.0
-    logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
-        T = length(t)
-        b = set_b(t, d)
-        _, C = forward(a, b, p0, nstates, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    (1 - trace[3]) * sum(logpredictions) + trace[3] * lb, logpredictions
-end
-
-
-"""
-    ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
-
-TBW
-"""
-# function ll_hmm_coupled_2(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
-#     nT = components.N
-#     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-#     logpredictions = Array{Float64}(undef, 0)
-#     for t in trace[1]
-#         T = size(t, 1)
-#         b = set_b_coupled(t, noiseparams, reporter, nT)
-#         _, C = forward(a, b, p0, nT, T)
-#         push!(logpredictions, sum(log.(C)))
-#     end
-#     offstates = [r.offstates for r in reporter]
-#     lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_off_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
-#     sum(logpredictions) + lb, logpredictions
-# end
-
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
-    nT = components.N
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    ps = [r.per_state for r in reporter]
-    pf = [r.probfn for r in reporter]
-    d = set_d(noiseparams, ps, pf, nT)
-    logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
-        T = size(t, 1)
-        b = set_b_coupled(t, d, nT)
-        # b = set_b_coupled(t, noiseparams, ps, pf, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    obs = [n[1] for n in noiseparams]
-    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(obs, d, a, p0, nT, trace[4], trace[3]) : 0.0
-    sum(logpredictions) + lb, logpredictions
-end
-
-"""
-    ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
-
-TBW
-"""
-function ll_hmm_hierarchical(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        a, p0 = make_ap(r[:, i], interval, components)
-        b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions), logpredictions
-end
-
-"""
-    ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
-
-TBW
-"""
-function ll_hmm_hierarchical_rateshared(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    a, p0 = make_ap(r[:, 1], interval, components)
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions), logpredictions
-end
-
-
-"""
-    ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-
-TBW
-"""
-function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
-    logpredictions = Array{Float64}(undef, 0)
-    a, p0 = make_ap(r[:, 1], interval, components)
-    lb = trace[3] > 0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions) + lb, logpredictions
-end
-
-"""
-    ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
-
-TBW
-"""
-function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
-    a_grid = make_a_grid(pgrid, Ngrid)
-    a, p0 = make_ap(r, interval, components)
-    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
-    logpredictions = Array{Float64}(undef, 0)
-    for t in trace[1]
-        T = size(t, 2)
-        b = set_b_grid(t, d, Nstate, Ngrid)
-        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-        println(sum(log.(C)))
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions), logpredictions
-end
 
 """
     covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)

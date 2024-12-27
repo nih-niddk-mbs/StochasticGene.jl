@@ -178,39 +178,6 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
     end
     return r, couplingStrength, noiseparams
 end
-
-"""
-    prepare_rates(param, model)
-
-Extracts and reassembles parameters for use in likelihood calculations.
-
-# Arguments
-- `param`: The model parameters.
-- `model`: The model, which can be of various types (e.g., `GRSMhierarchicalmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function extracts and reassembles parameters from the provided model parameters for use in likelihood calculations. It supports hierarchical models and coupled models. The specific extraction and reassembly process depends on the type of `model` provided.
-
-# Methods
-- `prepare_rates(param, model::GRSMhierarchicalmodel)`: Extracts and reassembles parameters for a hierarchical model.
-- `prepare_rates(param, model::GRSMcoupledmodel)`: Converts MCMC parameters into a form to compute likelihood for a coupled model.
-
-# Returns
-- `Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Int}}`: For hierarchical models, returns reshaped rates, parameters, and hyperparameters.
-- `Tuple{Vector{Float64}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}, Vector{Int}}`: For coupled models, returns prepared rates and other necessary components for likelihood calculations.
-"""
-function prepare_rates(param, model::GRSMhierarchicalmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    h = Vector{Int}[]
-    for i in model.pool.hyperindices
-        push!(h, i)
-    end
-    r = reshape(get_rates(param, model)[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
-    return r, p, h
-end
-
 """
     prepare_rates(param, model::GRSMcoupledmodel)
 
@@ -224,6 +191,54 @@ function prepare_rates(param, model::GRSMcoupledmodel)
 end
 
 
+"""
+    prepare_rates(param, model::GRSMhierarchicalmodel)
+
+Prepare rates and parameters for hierarchical model calculations by reshaping vectors into matrices.
+
+# Arguments
+- `param`: Vector of parameters including both rates and hyperparameters
+- `model::GRSMhierarchicalmodel`: The hierarchical model specification
+
+# Returns
+- `r`: Matrix of rates (nrates × nindividuals)
+- `p`: Matrix of parameters (nparams × nindividuals)  
+- `h`: Vector of vectors containing hyperparameter indices
+
+# Description
+Reshapes input vectors into matrices where:
+- Columns correspond to individuals
+- Rows correspond to rates/parameters
+- Shared parameters are treated as hyperparameters without variance
+
+# Example
+```julia
+param = [1.0, 2.0, 3.0, 4.0]
+model = GRSMhierarchicalmodel(...)
+r, p, h = prepare_rates(param, model)
+```
+"""
+function prepare_rates(param, model::GRSMhierarchicalmodel)
+    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    h = Vector{Float64}[]
+    r = get_rates(param, model)
+    for i in model.pool.hyperindices
+        push!(h, r[i])
+    end
+    r = reshape(r[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
+    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
+    return r, p, h
+end
+
+
+
+
+"""
+    prepare_rates(param, model::GRSMgridmodel)
+
+TBW
+"""
 function prepare_rates(param, model::GRSMgridmodel)
     r = get_rates(param, model)
     r[model.raterange], r[model.noiserange], r[model.gridrange]
@@ -288,14 +303,10 @@ end
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     r, p, hyper = prepare_rates(param, model)
     if model.method[2]
-        # llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-        base = model.S > 0 ? 3 : 2
-        nT = model.G * base^model.R
         llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     else
         llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end
-    # d = distribution_array(pm, psig)
     d = hyper_distribution(hyper)
     lhp = Float64[]
     for pc in eachcol(p)
@@ -306,6 +317,19 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
         push!(lhp, lhpc)
     end
     return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function ll_hmm_pool(p, hyper)
+    d = hyper_distribution(hyper)
+    lhp = Float64[]
+    for pc in eachcol(p)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+
 end
 
 # Likelihood functions

@@ -79,7 +79,7 @@ then G = (2,3).
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pool.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
@@ -275,8 +275,9 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     println(datacond)
     println(traceinfo)
     # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
+    # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
     weight = 1 - traceinfo[4]
-    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    nframes = round(Int,mean(length.(trace)))  #mean number of frames of all traces
     if datatype == "trace"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
@@ -335,8 +336,8 @@ function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedpara
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhyper*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    pool = Pool(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-    GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pool, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    pop = Population(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 """
@@ -714,7 +715,7 @@ function make_fitted(fittedshared, nhyper, fittedindividual, nrates, nindividual
 end
 
 """
-    make_fixed(fixedpool, fixedindividual, nrates, nindividuals)
+    make_fixed(fixedpop, fixedindividual, nrates, nindividuals)
 
 make fixed effects tuple for hierarchical model
 """
