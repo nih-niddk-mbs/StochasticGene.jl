@@ -732,7 +732,7 @@ function ll_hmm(a, p0, d, traces, nT)
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm(r, a, p0, n_noiseparams, reporters_per_state, probfn, traces, nT)
+function ll_hmm(r, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
@@ -742,7 +742,7 @@ function ll_hmm(r, a, p0, n_noiseparams, reporters_per_state, probfn, traces, nT
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm(r, interval, components, n_noiseparams, reporters_per_state, probfn, traces, nT)
+function ll_hmm(r, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         a, p0 = make_ap(r[:, i], interval, components)
@@ -758,7 +758,7 @@ end
 
 return total loglikelihood of traces with reporter noise and loglikelihood of each trace
 """
-function ll_hmm(r, nstates, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+function ll_hmm(r::Vector, nstates::Int, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
     lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
@@ -789,15 +789,16 @@ function ll_hmm_hierarchical(rglobal, rindividual::Matrix, nT, components::TRGCo
     a, p0 = make_ap(rglobal[:, 1], interval, components)
     d = probfn(rglobal[end-n_noiseparams+1:end], reporters_per_state, nT)
     lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
-    logpredictions = Array{Float64}(undef, 0)
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        a, p0 = make_ap(rindividual[:, i], interval, components)
-        b = set_b(t, rindividual[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions) + lb, vcat(logpredictions, lhp)
+    ll, logpredictions = ll_hmm(rindividual, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
+    # logpredictions = Array{Float64}(undef, 0)
+    # for (i, t) in enumerate(trace[1])
+    #     T = length(t)
+    #     a, p0 = make_ap(rindividual[:, i], interval, components)
+    #     b = set_b(t, rindividual[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+    #     _, C = forward(a, b, p0, nT, T)
+    #     push!(logpredictions, sum(log.(C)))
+    # end
+    return (1 - trace[3]) * ll + lb, vcat(logpredictions, lhp)
 end
 
 
@@ -811,14 +812,15 @@ function ll_hmm_hierarchical_rateshared(rglobal, rindividual::Matrix, nT, compon
     a, p0 = make_ap(rglobal[:, 1], interval, components)
     d = probfn(rglobal[end-n_noiseparams+1:end], reporters_per_state, nT)
     lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
-    logpredictions = Array{Float64}(undef, 0)
-    for (i, t) in enumerate(trace[1])
-        T = length(t)
-        b = set_b(t, rindividual[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
-        _, C = forward(a, b, p0, nT, T)
-        push!(logpredictions, sum(log.(C)))
-    end
-    sum(logpredictions) + lb, logpredictions
+    ll, logpredictions = ll_hmm(rindividual, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
+    # logpredictions = Array{Float64}(undef, 0)
+    # for (i, t) in enumerate(trace[1])
+    #     T = length(t)
+    #     b = set_b(t, rindividual[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+    #     _, C = forward(a, b, p0, nT, T)
+    #     push!(logpredictions, sum(log.(C)))
+    # end
+    (1 - trace[3]) * ll + lb, logpredictions
 end
 
 """
