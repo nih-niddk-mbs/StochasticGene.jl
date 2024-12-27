@@ -801,8 +801,6 @@ function ll_hmm_hierarchical(rglobal, rindividual::Matrix, nT, components::TRGCo
     return (1 - trace[3]) * ll + lb, vcat(logpredictions, lhp)
 end
 
-
-
 """
     ll_hmm_hierarchical_rateshared(rglobal, r::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
