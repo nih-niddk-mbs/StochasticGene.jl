@@ -562,10 +562,10 @@ end
 function rlabels(model::GRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
-    for i in 1:model.pool.nhyper
+    for i in 1:model.hierarchy.nhyper
         append!(labels, "pool_" .* l)
     end
-    for i in 1:model.pool.nindividuals
+    for i in 1:model.hierarchy.nindividuals
         append!(labels, l)
     end
     reshape(labels, 1, :)
@@ -706,7 +706,7 @@ end
 
 function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
     name = filename(data, model)
-    write_pool(joinpath(path, "pool" * name), fits, stats, model)
+    write_hierarchy(joinpath(path, "pool" * name), fits, stats, model)
     if ~isdir(path)
         mkpath(path)
     end
@@ -714,7 +714,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhi
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_pool(joinpath(path, "pool" * name), fits, stats, model)
+    write_hierarchy(joinpath(path, "pool" * name), fits, stats, model)
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -755,17 +755,17 @@ end
 
 
 """
-    write_pool(file::String, fits::Fit, stats, model)
+    write_hierarchy(file::String, fits::Fit, stats, model)
 
-write pool parameters into a file for hierarchichal models
+write hierarchy parameters into a file for hierarchichal models
 """
-function write_pool(file::String, fits::Fit, stats, model)
+function write_hierarchy(file::String, fits::Fit, stats, model)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, 1:model.pool.nrates], ',')  # labels
-    writedlm(f, [get_rates(fits.parml, model)[1:model.pool.nrates]], ',')  # max posterior
-    writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.pool.nrates]], ',')  # mean posterior
-    writedlm(f, [get_rates(stats.medparam, model, false)[1:model.pool.nrates]], ',')  # median posterior
-    writedlm(f, [get_rates(fits.param[:, end], model)[1:model.pool.nrates]], ',')  # last sample
+    writedlm(f, rlabels(model)[1:1, 1:model.hierarchy.nrates], ',')  # labels
+    writedlm(f, [get_rates(fits.parml, model)[1:model.hierarchy.nrates]], ',')  # max posterior
+    writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.hierarchy.nrates]], ',')  # mean posterior
+    writedlm(f, [get_rates(stats.medparam, model, false)[1:model.hierarchy.nrates]], ',')  # median posterior
+    writedlm(f, [get_rates(fits.param[:, end], model)[1:model.hierarchy.nrates]], ',')  # last sample
     close(f)
 end
 

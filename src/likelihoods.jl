@@ -223,11 +223,11 @@ function prepare_rates(param, model::GRSMhierarchicalmodel)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     h = Vector{Float64}[]
     r = get_rates(param, model)
-    for i in model.pool.hyperindices
+    for i in model.hierarchy.hyperindices
         push!(h, r[i])
     end
-    r = reshape(r[model.pool.ratestart:end], model.pool.nrates, model.pool.nindividuals)
-    p = reshape(param[model.pool.paramstart:end], model.pool.nparams, model.pool.nindividuals)
+    r = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+    p = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return r, p, h
 end
 
@@ -319,7 +319,7 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-function ll_hmm_pool(p, hyper)
+function ll_hmm_hierarchy(p, hyper)
     d = hyper_distribution(hyper)
     lhp = Float64[]
     for pc in eachcol(p)

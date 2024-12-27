@@ -44,10 +44,10 @@ end
 Trait for hierarchical models that share parameters across different levels.
 
 # Fields
-- `pool::Pool`: Pool of models for hierarchical modeling
+- `hierarchy::Hierarchy`: Hierarchy of models for hierarchical modeling
 """
 struct HierarchicalTrait <: ModelTrait
-    pool::Pool
+    hierarchy::Hierarchy
 end
 
 """
@@ -305,7 +305,7 @@ end
 coupling(; source_models, source_units, source_states, target_transitions, n_coupling_params) =
     CouplingTrait(source_models, source_units, source_states, target_transitions, n_coupling_params)
 
-hierarchical(; pool) = HierarchicalTrait(pool)
+hierarchical(; hierarchy) = HierarchicalTrait(hierarchy)
 
 grid(; rate_range, noise_range, grid_range, n_grid) = 
     GridTrait(rate_range, noise_range, grid_range, n_grid)

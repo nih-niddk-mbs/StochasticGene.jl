@@ -123,14 +123,14 @@ function save_model(model::ComposableModel, outpath::String)
         hier = get_trait(model, HierarchicalTrait)
         push!(model_info["traits"], "hierarchical")
         model_info["parameters"]["hierarchical"] = Dict(
-            "pool" => Dict(
-                "nhyper" => hier.pool.nhyper,
-                "nrates" => hier.pool.nrates,
-                "nparams" => hier.pool.nparams,
-                "nindividuals" => hier.pool.nindividuals,
-                "ratestart" => hier.pool.ratestart,
-                "paramstart" => hier.pool.paramstart,
-                "hyperindices" => hier.pool.hyperindices
+            "hierarchy" => Dict(
+                "nhyper" => hier.hierarchy.nhyper,
+                "nrates" => hier.hierarchy.nrates,
+                "nparams" => hier.hierarchy.nparams,
+                "nindividuals" => hier.hierarchy.nindividuals,
+                "ratestart" => hier.hierarchy.ratestart,
+                "paramstart" => hier.hierarchy.paramstart,
+                "hyperindices" => hier.hierarchy.hyperindices
             )
         )
     end
@@ -195,8 +195,8 @@ function load_model(filepath::String)
     end
     
     if "hierarchical" in model_info["traits"]
-        hp = model_info["parameters"]["hierarchical"]["pool"]
-        pool = Pool(
+        hp = model_info["parameters"]["hierarchical"]["hierarchy"]
+        hierarchy = Hierarchy(
             hp["nhyper"],
             hp["nrates"],
             hp["nparams"],
@@ -205,7 +205,7 @@ function load_model(filepath::String)
             hp["paramstart"],
             hp["hyperindices"]
         )
-        push!(traits, HierarchicalTrait(pool))
+        push!(traits, HierarchicalTrait(hierarchy))
     end
     
     # Get base parameters

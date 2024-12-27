@@ -81,7 +81,7 @@ Create HMM components for hierarchical models.
 """
 function make_hierarchical_hmm(model::ComposableModel, hier_trait::HierarchicalTrait)
     Dict(
-        :pool_matrices => make_pool_matrices(model, hier_trait),
+        :hierarchy_matrices => make_hierarchy_matrices(model, hier_trait),
         :hyper_parameters => make_hyper_parameters(model, hier_trait),
         :individual_parameters => make_individual_parameters(model, hier_trait)
     )

@@ -160,7 +160,7 @@ end
 # Model structures
 
 """
-    Pool
+    Hierarchy
 
 Structure for hierarchical model
 
@@ -171,7 +171,7 @@ Structure for hierarchical model
 - `nindividualparams::Int`: number of fitted params per individual
 - `nindividuals::Int`: number of individuals (traces)
 """
-struct Pool
+struct Hierarchy
     nhyper::Int
     nrates::Int
     nparams::Int
@@ -313,12 +313,12 @@ end
 Structure for GRSM hierarchical models.
 
 # Fields
-- `pool::Pool`: Pool of rates for hierarchical modeling.
+- `hierarchy::Hierarchy`: Hierarchy of rates for hierarchical modeling.
 - as in GRSMmodel
 """
 struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    pool::Pool
+    hierarchy::Hierarchy
     Gtransitions::Tuple
     G::Int
     R::Int
@@ -387,7 +387,7 @@ end
 
 struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    pool::Pool
+    hierarchy::Hierarchy
     raterange::UnitRange
     noiserange::UnitRange
     gridrange::UnitRange
@@ -443,11 +443,11 @@ end
 Structure for GRSM coupled hierarchical models.
 
 # Fields
-- `pool::Pool`: Pool of models.
+- `hierarchy::Hierarchy`: Hierarchy of models.
 - `coupling::CouplingType`: Coupling type.
 """
 struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    pool::Pool
+    hierarchy::Hierarchy
     coupling::CouplingType
     raterange::UnitRange
     noiserange::UnitRange
@@ -475,11 +475,11 @@ end
 Structure for GRSM coupled grid hierarchical models.
 
 # Fields
-- `pool::Pool`: Pool of models.
+- `hierarchy::Hierarchy`: Hierarchy of models.
 - `coupling::CouplingType`: Coupling type.
 """
 struct GRSMcoupledgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    pool::Pool
+    hierarchy::Hierarchy
     coupling::CouplingType
     raterange::UnitRange
     noiserange::UnitRange
