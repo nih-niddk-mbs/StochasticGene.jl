@@ -124,7 +124,7 @@ using Test
     @test isapprox(h1, h2, rtol=0.05)
 
     h1, h2 = StochasticGene.test_fit_trace_hierarchical()
-    @test isapprox(h1, h2, rtol=0.4)
+    @test isapprox(h1, h2, rtol=0.1)
 
     h1, h2 = StochasticGene.test_fit_tracejoint()
     @test isapprox(h1, h2, rtol=0.4)

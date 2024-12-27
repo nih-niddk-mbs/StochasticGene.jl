@@ -563,7 +563,7 @@ function rlabels(model::GRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
     for i in 1:model.hierarchy.nhyper
-        append!(labels, "pool_" .* l)
+        append!(labels, "shared_" .* l)
     end
     for i in 1:model.hierarchy.nindividuals
         append!(labels, l)
@@ -706,7 +706,7 @@ end
 
 function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
     name = filename(data, model)
-    write_hierarchy(joinpath(path, "pool" * name), fits, stats, model)
+    write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
     if ~isdir(path)
         mkpath(path)
     end
@@ -714,7 +714,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhi
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_hierarchy(joinpath(path, "pool" * name), fits, stats, model)
+    write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end

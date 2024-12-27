@@ -336,7 +336,7 @@ function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedpara
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhyper*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    pop = Population(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    pop = Hierarchy(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 

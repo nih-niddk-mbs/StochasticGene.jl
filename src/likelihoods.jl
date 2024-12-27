@@ -119,24 +119,6 @@ function datapdf(data::RNADwellTimeData)
 end
 
 """
-    hyper_distribution(p)
-
-hyper parameter distribution for hierarchical model
-
-# Arguments
-- `p::Vector`: Vector of hyperparameters
-
-#Description
-This function returns a distribution for the hyper parameters of a hierarchical model.
-
-# Returns
-- `Distribution`: Distribution for the hierarchical model.
-"""
-function hyper_distribution(p)
-    distribution_array(p[1], sigmalognormal(p[2]))
-end
-
-"""
     prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
 
 convert MCMC params into form to compute likelihood for coupled model
@@ -221,14 +203,15 @@ r, p, h = prepare_rates(param, model)
 function prepare_rates(param, model::GRSMhierarchicalmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    h = Vector{Float64}[]
     r = get_rates(param, model)
+    hyperparams = Vector{Float64}[]
     for i in model.hierarchy.hyperindices
-        push!(h, r[i])
+        push!(hyperparams, r[i])
     end
-    r = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    p = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-    return r, p, h
+    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+    rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhyper)
+    pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+    return rglobal, rindividual, pindividual, hyperparams
 end
 
 
@@ -300,37 +283,31 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    r, p, hyper = prepare_rates(param, model)
-    if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared_background(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    else
-        llg, llgp = ll_hmm_hierarchical(r, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    end
-    d = hyper_distribution(hyper)
+function ll_hierarchy(pindividual, rhyper)
+    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
     lhp = Float64[]
-    for pc in eachcol(p)
+    for pc in eachcol(pindividual)
         lhpc = 0
         for i in eachindex(pc)
             lhpc -= logpdf(d[i], pc[i])
         end
         push!(lhp, lhpc)
     end
+    lhp
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+    rglobal, rindividual, pindividual, rhyper = prepare_rates(param, model)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared(rglobal, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(rglobal, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    lhp = ll_hierarchy(pindividual, rhyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-function ll_hmm_hierarchy(p, hyper)
-    d = hyper_distribution(hyper)
-    lhp = Float64[]
-    for pc in eachcol(p)
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc -= logpdf(d[i], pc[i])
-        end
-        push!(lhp, lhpc)
-    end
 
-end
 
 # Likelihood functions
 
