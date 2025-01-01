@@ -45,6 +45,7 @@ using LinearAlgebra
 # using Plots
 using SparseArrays
 using OrdinaryDiffEq
+using LSODA
 using DataFrames
 using FFTW
 using Downloads

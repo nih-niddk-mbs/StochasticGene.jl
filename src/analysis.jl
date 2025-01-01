@@ -659,7 +659,7 @@ end
 
 meanofftime(gene::String, infile, n, method, root) = sum(1 .- offtime(gene, infile, n, method, root))
 
-function meanofftime(r::Vector, n::Int, method::Int)
+function meanofftime(r::Vector, n::Int, method)
     if n == 1
         return 1 / r[1]
     else
@@ -667,7 +667,7 @@ function meanofftime(r::Vector, n::Int, method::Int)
     end
 end
 
-function offtime(r::Vector, n::Int, method::Int)
+function offtime(r::Vector, n::Int, method)
     _, _, TI = mat_G_DT(r, n)
     vals, _ = eig_decompose(TI)
     minval = min(minimum(abs.(vals[vals.!=0])), 0.2)

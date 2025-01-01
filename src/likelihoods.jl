@@ -417,18 +417,7 @@ function likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
     modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
     return [modelOFF, modelON, histF]
 end
-"""
-    likelihoodarray(rin,data::RNAOnOffData,model::AbstractGRSMmodel)
 
-"""
-
-# function likelihoodarray(rin, data::RNAOnOffData, model::AbstractGRSMmodel)
-#     r = copy(rin)
-#     if model.splicetype == "offdecay"
-#         r[end-1] *= survival_fraction(nu, eta, model.R)
-#     end
-#     likelihoodarray(r, data, model)
-# end
 
 """
     likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
@@ -480,12 +469,9 @@ This function calculates the likelihood array for various types of data, includi
 # Returns
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods.
 """
-function likelihoodarray(r, components, bins, reporter, dttype, nalleles, nRNA)
-    M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
-end
 
-function likelihoodarray(r, G, tcomponents, bins, onstates, dttype)
+
+function likelihoodarray(r, G::Int, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -543,22 +529,27 @@ function likelihoodarray(r, components::TDComponents, bins, reporter, dttype)
     hists
 end
 
-
-function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
-    sojourn, nonzeros = reporter
-    dt = occursin.("G", dttype)
-    p = steady_state_dist(r, components, dt)
-    hists = Vector[]
-    for i in eachindex(sojourn)
-        TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
-        if dt[i]
-            push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
-        else
-            push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
-        end
-    end
-    hists
+function likelihoodarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
+    M = make_mat_M(components.mcomponents, r)
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
+
+
+# function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
+#     sojourn, nonzeros = reporter
+#     dt = occursin.("G", dttype)
+#     p = steady_state_dist(r, components, dt)
+#     hists = Vector[]
+#     for i in eachindex(sojourn)
+#         TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
+#         if dt[i]
+#             push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
+#         else
+#             push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
+#         end
+#     end
+#     hists
+# end
 
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
@@ -577,30 +568,30 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
-function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
-    sojourn, nonzeros = reporter
-    sources = components.sources
-    model = components.model
-    TDdims = get_TDdims(components)
-    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    hists = Vector{Vector}[]
-    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-    for α in eachindex(components.modelcomponents)
-        dt = occursin.("G", dttype[α])
-        p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-        h = Vector[]
-        for i in eachindex(sojourn[α])
-            if dt[i]
-                push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
-            else
-                push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i])))
-            end
-        end
-        push!(hists, h)
-    end
-    return hists
-end
+# function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+#     sojourn, nonzeros = reporter
+#     sources = components.sources
+#     model = components.model
+#     TDdims = get_TDdims(components)
+#     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+#     hists = Vector{Vector}[]
+#     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+#     for α in eachindex(components.modelcomponents)
+#         dt = occursin.("G", dttype[α])
+#         p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+#         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
+#         h = Vector[]
+#         for i in eachindex(sojourn[α])
+#             if dt[i]
+#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
+#             else
+#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i])))
+#             end
+#         end
+#         push!(hists, h)
+#     end
+#     return hists
+# end
 
 function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
     if dt
