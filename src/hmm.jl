@@ -36,7 +36,7 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, save=false, method=Tsit5())
+function kolmogorov_forward(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
@@ -50,7 +50,7 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_backward(Q, interval, save=false, method=Tsit5())
+function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
@@ -179,9 +179,9 @@ Arguments:
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(r, interval, components::TRGComponents)
+function make_ap(r, interval, components::TRGComponents, method=Tsit5())
     Qtr = make_mat_TRG(components, r) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
 """
@@ -189,9 +189,9 @@ end
 
 
 """
-function make_ap_coupled(r, couplingStrength, interval, components)
+function make_ap_coupled(r, couplingStrength, interval, components, method=Tsit5())
     Qtr = make_mat_TC(components, r, couplingStrength)
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
 """
@@ -206,7 +206,7 @@ Arguments:
 """
 function make_ap(r, interval, elementsT::Vector, N)
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 """
     make_logap(r, transitions, interval, G)
@@ -504,7 +504,7 @@ Ct = Prod_t 1/∑_i α[i,t]
 function forward(a::Matrix, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:,1]
+    α[:, 1] = p0 .* b[:, 1]
     C[1] = 1 / sum(α[:, 1])
     α[:, 1] *= C[1]
     for t in 2:T
