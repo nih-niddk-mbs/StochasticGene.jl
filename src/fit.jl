@@ -51,6 +51,14 @@ function get_transitions(G::Tuple, TransitionType)
     Tuple([get_transitions(G, TransitionType) for G in G])
 end
 
+function make_coupling(source::UnitRange{Int64}=1:3,target::UnitRange{Int64}=1:3)
+    coupling = []
+    for s in source, t in target
+        push!(coupling, ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+      end
+      return coupling
+end
+
 """
     fit(; <keyword arguments> )
 

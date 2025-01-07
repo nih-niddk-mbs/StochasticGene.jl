@@ -116,7 +116,7 @@ export
     write_dataframes_only,
     write_histograms,
     write_traces,
-    write_traces,
+    write_traces_coupling,
     write_winners
     
 

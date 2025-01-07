@@ -1033,89 +1033,12 @@ return tcomponent of model
 tcomponent(model) = typeof(model.components) == TComponents ? model.components : model.components.tcomponents
 
 
-"""
-    write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, coupling=tuple())
-
-TBW
-"""
-function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    datafolders = readdir(datafolder)
-    for d in datafolders
-        if ~occursin(".DS_Store", d)
-            for (root, dirs, files) in walkdir(folder)
-                if occursin(d, root)
-                    for f in files
-                        if occursin("rates", f) && occursin(datacond, f)
-                            write_traces(joinpath(root, f), joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-                            # println(f)
-                            # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-                            # parts = fields(f)
-                            # G, R, S, insertstep = decompose_model(parts.model)
-                            # r = readrates(joinpath(root, f), get_row(ratetype))
-                            # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-                            # transitions = get_transitions(G, parts.label)
-                            # datapath = joinpath(datafolder, d)
-                            # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
-                        end
-                    end
-                end
-            end
-        end
+function make_vector(x, n)
+    if !(typeof(x) <: Vector)
+        return fill(x, n)
+    else
+        return x
     end
-end
-
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    datafolders = readdir(datafolder)
-    for d in datafolders
-        if ~occursin(".DS_Store", d)
-            write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-        end
-    end
-end
-
-"""
-    write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-
-"""
-function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-            if occursin("rates", f) && ((isempty(coupling) && occursin(datacond, f)) || occursin("tracejoint", f))
-                write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-                # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-                # println(f)
-                # parts = fields(f)
-                # G, R, S, insertstep = decompose_model(parts.model)
-                # r = readrates(joinpath(root, f), get_row(ratetype))
-                # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-                # transitions = get_transitions(G, parts.label)
-                # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
-            end
-        end
-    end
-end
-
-function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    println(file)
-    occursin(hlabel, file) ? hierarchical = true : hierarchical = false
-    parts = fields(file)
-    G, R, S, insertstep = decompose_model(parts.model)
-    r = readrates(file, get_row(ratetype))
-    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
-    transitions = get_transitions(G, parts.label)
-    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
-end
-
-"""
-    write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
-
-
-"""
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
-    CSV.write(outfile, df)
 end
 
 """
@@ -1180,16 +1103,99 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
-function make_vector(x, n)
-    if !(typeof(x) <: Vector)
-        return fill(x, n)
-    else
-        return x
+
+function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+    println(file)
+    occursin(hlabel, file) ? hierarchical = true : hierarchical = false
+    parts = fields(file)
+    G, R, S, insertstep = decompose_model(parts.model)
+    r = readrates(file, get_row(ratetype))
+    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
+    transitions = get_transitions(G, parts.label)
+    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+end
+
+"""
+    write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+
+
+"""
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
+    CSV.write(outfile, df)
+end
+"""
+    write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+
+"""
+function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+            if occursin("rates", f) && ((isempty(coupling) && occursin(datacond, f)) || occursin("tracejoint", f))
+                write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
+                # println(f)
+                # parts = fields(f)
+                # G, R, S, insertstep = decompose_model(parts.model)
+                # r = readrates(joinpath(root, f), get_row(ratetype))
+                # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
+                # transitions = get_transitions(G, parts.label)
+                # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+            end
+        end
+    end
+end
+"""
+    write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, coupling=tuple())
+
+TBW
+"""
+# function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+#     datafolders = readdir(datafolder)
+#     for d in datafolders
+#         if ~occursin(".DS_Store", d)
+#             for (root, dirs, files) in walkdir(folder)
+#                 if occursin(d, root)
+#                     for f in files
+#                         if occursin("rates", f) && occursin(datacond, f)
+#                             write_traces(joinpath(root, f), joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+#                             # println(f)
+#                             # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
+#                             # parts = fields(f)
+#                             # G, R, S, insertstep = decompose_model(parts.model)
+#                             # r = readrates(joinpath(root, f), get_row(ratetype))
+#                             # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
+#                             # transitions = get_transitions(G, parts.label)
+#                             # datapath = joinpath(datafolder, d)
+#                             # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+#                         end
+#                     end
+#                 end
+#             end
+#         end
+#     end
+# end
+
+function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+    datafolders = readdir(datafolder)
+    for d in datafolders
+        if ~occursin(".DS_Store", d)
+            write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+        end
     end
 end
 
+function write_traces_coupling(folder, datafolder, datacond, interval, sources=1:3, targets=1:3, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true)
+    datafolders = readdir(datafolder)
+    for s in sources, t in targets
+        if ~occursin(".DS_Store", d)
+            write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+        end
+    end
 
-
+end
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
 
