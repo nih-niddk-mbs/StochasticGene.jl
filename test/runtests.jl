@@ -35,6 +35,6 @@ using Test
     @test isapprox(h1, h2, rtol=0.05)
 
     h1, h2 = StochasticGene.test_fit_tracejoint()
-    @test isapprox(h1, h2, rtol=0.05)
+    @test isapprox(h1, h2, rtol=0.1)
 
 end

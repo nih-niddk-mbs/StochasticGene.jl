@@ -57,6 +57,9 @@ function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
 end
 
 
+function prob_Gaussian(par, reporters)
+    Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
+end
 """
     prob_Gaussian(par, reporters_per_state, N)
 
@@ -74,9 +77,6 @@ function prob_Gaussian(par, reporters_per_state, N)
         d[i] = prob_Gaussian(par, reporters_per_state[i])
     end
     d
-end
-function prob_Gaussian(par, reporters)
-    Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
 
 """
@@ -1070,7 +1070,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     cc21 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
     ac1 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2) * max_intensity[1]^2
     ac2 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2) * max_intensity[2]^2
-    cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]), vcat(-reverse(lags), lags[2:end])
+    m1, m2, cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]), vcat(-reverse(lags), lags[2:end])
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
@@ -1082,13 +1082,16 @@ end
 
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
-    for lag in lags
-        al = a^lag
+    m1 = meanintensity1 .* p0
+    al = a^lags[1]
+    as = a^(lags[2]-lags[1])
+    for l in eachindex(lags)
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
-                cc[lag+1] += meanintensity1[i] * p0[i] * al[i, j] * meanintensity2[j]
+                cc[l] += m1[i] * al[i, j] * meanintensity2[j]
             end
         end
+        al *= as
     end
     cc
 end

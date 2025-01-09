@@ -1080,7 +1080,8 @@ TBW
 function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
     probfn = make_vector(probfn, length(G))
     noiseparams = make_vector(noiseparams, length(G))
-    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
+    # components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
+    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
     ts, tp = predicted_states(rin, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
     l = maximum(length.(traces))
     cols = Matrix(undef, length(traces), 0)
@@ -1133,7 +1134,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
     for (root, dirs, files) in walkdir(folder)
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-            if occursin("rates", f) && ((isempty(coupling) && occursin(datacond, f)) || occursin("tracejoint", f))
+            if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
                 write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
                 # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
                 # println(f)
@@ -1178,23 +1179,19 @@ TBW
 #     end
 # end
 
-function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-    datafolders = readdir(datafolder)
-    for d in datafolders
-        if ~occursin(".DS_Store", d)
-            write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-        end
-    end
-end
+# function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+#     datafolders = readdir(datafolder)
+#     for d in datafolders
+#         if ~occursin(".DS_Store", d)
+#             write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+#         end
+#     end
+# end
 
 function write_traces_coupling(folder, datafolder, datacond, interval, sources=1:3, targets=1:3, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true)
-    datafolders = readdir(datafolder)
-    for s in sources, t in targets
-        if ~occursin(".DS_Store", d)
-            write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
-        end
+    for source in sources, target in targets
+        write_traces(folder, datafolder, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
     end
-
 end
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
@@ -1554,11 +1551,11 @@ function data_covariance(traces, lags)
     ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
 end
 
-function reset_noise!(r,transitions,G::Tuple,R,S,insertstep,num_noiseparams)
-    n=0
+function reset_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
+    n = 0
     for i in eachindex(G)
         n += num_rates(transitions[i], R[i], S[i], insertstep[i])
-        r[n+1:n+num_noiseparams] .= [20,.1,80,.1]
+        r[n+1:n+num_noiseparams] .= [20, 0.1, 80, 0.1]
         n += num_noiseparams
     end
 end
@@ -1567,7 +1564,7 @@ function delete_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noisepara
     n = 0
     for i in eachindex(G)
         n += num_rates(transitions[i], R[i], S[i], insertstep[i])
-        deleteat!(r,n+1:n+num_noiseparams)
+        deleteat!(r, n+1:n+num_noiseparams)
         # n += num_noiseparams
     end
 end
