@@ -681,6 +681,7 @@ function default_fitted(datatype::String, transitions, R::Int, S, insertstep, no
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)
         if isnothing(grid)
+            isempty(noiseparams) && throw("noisepriors cannot be empty for trace data")
             fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
         else
             fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))
