@@ -484,9 +484,9 @@ This function sets up the necessary folder structure for RNA data processing, in
 """
 function rna_setup(root=".")
     folder_setup(root)
-    alleles = joinpath(data, "alleles")
-    halflives = joinpath(data, "halflives")
-    testdata = joinpath(data, "HCT116_testdata")
+    alleles = joinpath("data", "alleles")
+    halflives = joinpath("data", "halflives")
+    testdata = joinpath("data", "HCT116_testdata")
 
     if ~ispath(alleles)
         mkpath(alleles)
