@@ -214,9 +214,6 @@ function prepare_rates(param, model::GRSMhierarchicalmodel)
     return rglobal, rindividual, pindividual, hyperparams
 end
 
-
-
-
 """
     prepare_rates(param, model::GRSMgridmodel)
 
@@ -226,6 +223,22 @@ function prepare_rates(param, model::GRSMgridmodel)
     r = get_rates(param, model)
     r[model.raterange], r[model.noiserange], r[model.gridrange]
 end
+
+function prepare_rates(param, model::GRSMgridhierarchicalmodel)
+    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    r = get_rates(param, model)
+    hyperparams = Vector{Float64}[]
+    for i in model.hierarchy.hyperindices
+        push!(hyperparams, r[i])
+    end
+    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+    rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhyper)
+    pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+    return rglobal, rindividual, pindividual, hyperparams
+end
+
+
 # Model loglikelihoods
 
 """
