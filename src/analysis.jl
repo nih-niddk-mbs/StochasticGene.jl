@@ -1136,14 +1136,6 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
             if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
                 write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-                # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-                # println(f)
-                # parts = fields(f)
-                # G, R, S, insertstep = decompose_model(parts.model)
-                # r = readrates(joinpath(root, f), get_row(ratetype))
-                # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-                # transitions = get_transitions(G, parts.label)
-                # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
             end
         end
     end
@@ -1153,41 +1145,6 @@ end
 
 TBW
 """
-# function write_traces_folder1(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-#     datafolders = readdir(datafolder)
-#     for d in datafolders
-#         if ~occursin(".DS_Store", d)
-#             for (root, dirs, files) in walkdir(folder)
-#                 if occursin(d, root)
-#                     for f in files
-#                         if occursin("rates", f) && occursin(datacond, f)
-#                             write_traces(joinpath(root, f), joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-#                             # println(f)
-#                             # occursin(hlabel, f) ? hierarchical = true : hierarchical = false
-#                             # parts = fields(f)
-#                             # G, R, S, insertstep = decompose_model(parts.model)
-#                             # r = readrates(joinpath(root, f), get_row(ratetype))
-#                             # out = joinpath(root, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
-#                             # transitions = get_transitions(G, parts.label)
-#                             # datapath = joinpath(datafolder, d)
-#                             # write_traces(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
-#                         end
-#                     end
-#                 end
-#             end
-#         end
-#     end
-# end
-
-# function write_traces_folder(folder, datafolder, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-#     datafolders = readdir(datafolder)
-#     for d in datafolders
-#         if ~occursin(".DS_Store", d)
-#             write_traces(folder, joinpath(datafolder, d), datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
-#         end
-#     end
-# end
-
 function write_traces_coupling(folder, datafolder, datacond, interval, sources=1:3, targets=1:3, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true)
     for source in sources, target in targets
         write_traces(folder, datafolder, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
@@ -1206,277 +1163,8 @@ function make_trace_histogram(datapath, datacond, start=1, stop=-1)
 end
 
 
-"""
-    plot_traces(df::DataFrame; 
-               cols::Vector{Int}=collect(1:3),  # Convert UnitRange to Vector
-               with_errors::Bool=true,
-               normalize::Bool=true,
-               title::String="Traces",
-               alpha::Float64=0.3)
-
-Plot multiple traces in separate panels for data and model.
-
-# Arguments
-- `df::DataFrame`: DataFrame containing data/model columns
-- `cols::Vector{Int}`: Column numbers to plot (default: [1,2,3])
-- `with_errors::Bool`: Include error ribbons (default: true)
-- `normalize::Bool`: Normalize data (default: true)
-- `title::String`: Plot title (default: "Traces")
-- `alpha::Float64`: Transparency for ribbons (default: 0.3)
-
-# Returns
-- `Plots.Plot`: Combined plot object
-"""
-function plot_traces(df::DataFrame;
-    cols::Vector{Int}=collect(1:2),  # Changed this line
-    with_errors::Bool=false,
-    normalize::Bool=false,
-    title::String="Traces",
-    alpha::Float64=0.3)
-
-    n = length(cols)
-    p = plot(layout=(n, 1), legend=:topleft, title=title)
-
-    for (j, i) in enumerate(cols)
-        data_col = Symbol("data$i")
-        mean_col = Symbol("model_mean$i")
-        std_col = Symbol("model_std$i")
-
-        # Get data, filtering out missing values
-        y_data = df[!, data_col]
-        y_model = df[!, mean_col]
-        y_std = hasproperty(df, std_col) ? df[!, std_col] : nothing
-
-        # Filter out missing values
-        valid_indices = .!ismissing.(y_data) .& .!ismissing.(y_model)
-        y_data = y_data[valid_indices]
-        y_model = y_model[valid_indices]
-        y_std = y_std !== nothing ? y_std[valid_indices] : nothing
-
-        # Normalize if needed
-        if normalize
-            y_data ./= maximum(y_data)
-            y_model ./= maximum(y_model)
-            y_std = y_std !== nothing ? y_std ./ maximum(y_model) : nothing
-        end
-
-        # Plot data points in the first row
-        scatter!(p[j, 1], y_data, label="Data $i", markersize=3)
-
-        # Plot model with optional error ribbon in the second row
-        if with_errors && y_std !== nothing
-            plot!(p[j, 1], y_model, err=y_std, label="Model $i", alpha=alpha)
-        else
-            plot!(p[j, 1], y_model, label="Model $i")
-        end
-    end
-
-    # xlabel!(p[1, :], "Time point")
-    # ylabel!(p[1, :], normalize ? "Normalized value" : "Value")
-    # xlabel!(p[2, :], "Time point")
-    # ylabel!(p[2, :], normalize ? "Normalized value" : "Value")
-
-    return p
-end
-
-# Example usage:
-# plot_traces(df)  # Plot first 3 columns
-# plot_traces(df, cols=[1,4,5])  # Plot specific columns
 
 
-# function plot_traces(datapath, datacond, interval, r, transitions, G, R, S, insertstep, start=1.0, stop=-1, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-#     tp, ts, traces = make_traces(datapath, datacond, interval, r::Vector, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, weightind, splicetype)
-
-
-# end
-
-# """
-#     plot_traces(fits, stats, data, model, ratetype="median")
-
-
-# """
-# function plot_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, weightind=0, splicetype="")
-#     tp, ts = make_trace(trace, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, weightind, splicetype)
-#     plt = plot(trace)
-#     plt = plot!(tp)
-#     display(plt)
-#     return tp, ts
-# end
-
-
-# function plot_traces(fits, stats, data, model, index=1, ratetype="median")
-#     r = get_rates(fits, stats, model, ratetype)
-#     plot_traces(r, data, model, index)
-# end
-
-# function plot_traces(data::AbstractTraceData, model::AbstractGRSMmodel, index=1)
-
-#     tp, ts = predicted_traces(data, model)
-#     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-#     # hist = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
-
-#     # plt = Plots.Plot[]
-#     # for t in data.trace[1]
-#     #     push!(plt, plot(collect(1:length(t)),t))
-#     # end
-#     # push!(plt, scatter(collect(1:length(data.nRNA),data.histRNA / data.nRNA))
-#     # push!(plt, plot(hist))
-#     plt1 = scatter(data.trace[1][index])
-#     plt1 = plot!(tp[index])
-#     # plt2 = scatter(data.trace[1][10])
-#     # plt2 = plot!(tp[10])
-#     # plt3 = scatter(data.trace[1][20])
-#     # plt3 = plot!(tp[20])
-#     # plt4 = scatter(data.histRNA/data.nRNA)
-#     # plt4 = plot!(hist)
-
-#     # x = collect(1:length(tp[2]))
-#     # plt2 = plot(x, tp[1:2], layout=(2, 1), legend=false)
-#     display(plt1)
-#     return tp, ts
-# end
-
-
-"""
-    plot_histogram(ratefile::String, datapath; root=".", row=2)
-
-    plot_histogram()
-    plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
-    
-    functions to plot data and model predicted histograms
-    
-"""
-function plot_histogram(ratefile::String, datapath; root=".", row=2)
-    fish = false
-    r = readrow(ratefile, row)
-    println(r)
-    parts = fields(ratefile)
-    label = parts.label
-    cond = parts.cond
-    G = parts.model
-    data = data_rna(parts.gene, parts.cond, datapath, fish, parts.label, root)
-    model = model_rna(r, r, parse(Int, parts.model), parse(Int, parts.nalleles), 0.01, [], (), 0)
-    # model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
-    plot_histogram(data, model)
-    return data, model
-end
-
-function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefile::String, datapath::String, root::String=".")
-    fish = false
-    rates = readdlm(ratefile, ',', header=true)
-    r = rates[1][findfirst(rates[1][:, 1] .== gene)[1], 2:end]
-    data = data_rna(gene, cond, datapath, fish, "label", root)
-    nalleles = alleles(gene, cell, root)
-    model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
-    println(typeof(model))
-    println(typeof(data))
-    m = plot_histogram(data, model)
-    return m, data, model
-end
-
-function plot_histogram(gene::String, cell::String, G::String, cond::String, label::String, ratefolder::String, datapath::String, nsets::Int, root::String, fittedparam=[1], verbose=false)
-    fish = false
-    data = data_rna(gene, cond, datapath, fish, label, root)
-    model = model_rna(gene, cell, G, fish, 0.01, fittedparam, (), label, ratefolder, nsets, root, data, verbose)
-    m = plot_histogram(data, model)
-    return m, data, model
-end
-
-
-function plot_histogram(data::AbstractRNAData{Array{Array,1}}, model)
-    h = likelihoodarray(model.rates, data, model)
-    figure(data.gene)
-    for i in eachindex(h)
-        plot(h[i])
-        plot(normalize_histogram(data.histRNA[i]))
-        savefig(string(i))
-    end
-    return h
-end
-function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
-    h = likelihoodfn(get_param(model), data, model)
-    plt = plot(h)
-    plot!(plt, normalize_histogram(data.histRNA))
-    display(plt)
-    return h
-end
-
-function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
-    h = likelihoodarray(model.rates, data, model)
-    plt1 = plot(data.bins, h[1])
-    plot!(plt1, data.bins, normalize_histogram(data.OFF))
-    plt2 = plot(data.bins, h[2])
-    plot!(plt2, data.bins, normalize_histogram(data.ON))
-    plt3 = plot(h[3])
-    plot!(plt3, normalize_histogram(data.histRNA))
-    plt = plot(plt1, plt2, plt3, layout=(3, 1))
-    display(plt)
-    if ~isempty(filename)
-        savefig(filename)
-    end
-    return h
-end
-
-function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
-    M = make_mat_M(model.components.mcomponents, model.rates)
-    h = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
-    plt = plot(h)
-    plot!(plt, normalize_histogram(data.histRNA))
-    display(plt)
-    if ~isempty(filename)
-        savefig(filename)
-    end
-    return h
-end
-
-# function plot_histogram(data::TransientRNAData,model::AbstractGMmodel)
-#     h=likelihoodarray(model.rates,data,model)
-#     for i in eachindex(h)
-#         figure(data.gene *":T" * "$(data.time[i])")
-#         plot(h[i])
-#         plot(normalize_histogram(data.histRNA[i]))
-#     end
-#     return h
-# end
-
-function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false) where {T1<:Array,T2<:Array}
-    m = likelihoodarray(model.rates, data, model)
-    println("*")
-    for i in eachindex(m)
-        plt = plot(m[i])
-        plot!(normalize_histogram(data.histRNA[i]), show=true)
-        if save
-            savefig()
-        else
-            display(plt)
-        end
-    end
-    println(deviance(data, model))
-    println(loglikelihood(get_param(model), data, model)[1])
-    return m
-end
-
-function plot_histogram(data::RNAData, model::AbstractGMmodel)
-    h = likelihoodfn(get_param(model), data, model)
-    plt = plot(h)
-    plot!(normalize_histogram(data.histRNA))
-    display(plt)
-    return h
-end
-
-# function plot_model(r,n,nhist,nalleles,yield)
-#     h= steady_state(r[1:2*n+2],yield,n,nhist,nalleles)
-#     plt = plot(h)
-#     display(plt)
-#     return h
-# end
-
-# function plot_model(r,n,nhist,nalleles)
-#     h= steady_state(r[1:2*n+2],n,nhist,nalleles)
-#     plt = plot(h)
-#     display(plt)
-#     return h
-# end
 
 """
     simulate_trials(r, transitions, G, R, S, insertstep, ntrials, trial_time=720.)
@@ -1568,6 +1256,197 @@ function delete_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noisepara
         # n += num_noiseparams
     end
 end
+
+"""
+    plot_traces(df::DataFrame; 
+               cols::Vector{Int}=collect(1:3),  # Convert UnitRange to Vector
+               with_errors::Bool=true,
+               normalize::Bool=true,
+               title::String="Traces",
+               alpha::Float64=0.3)
+
+Plot multiple traces in separate panels for data and model.
+
+# Arguments
+- `df::DataFrame`: DataFrame containing data/model columns
+- `cols::Vector{Int}`: Column numbers to plot (default: [1,2,3])
+- `with_errors::Bool`: Include error ribbons (default: true)
+- `normalize::Bool`: Normalize data (default: true)
+- `title::String`: Plot title (default: "Traces")
+- `alpha::Float64`: Transparency for ribbons (default: 0.3)
+
+# Returns
+- `Plots.Plot`: Combined plot object
+"""
+function plot_traces(df::DataFrame;
+    cols::Vector{Int}=collect(1:2),  # Changed this line
+    with_errors::Bool=false,
+    normalize::Bool=false,
+    title::String="Traces",
+    alpha::Float64=0.3)
+
+    n = length(cols)
+    p = plot(layout=(n, 1), legend=:topleft, title=title)
+
+    for (j, i) in enumerate(cols)
+        data_col = Symbol("data$i")
+        mean_col = Symbol("model_mean$i")
+        std_col = Symbol("model_std$i")
+
+        # Get data, filtering out missing values
+        y_data = df[!, data_col]
+        y_model = df[!, mean_col]
+        y_std = hasproperty(df, std_col) ? df[!, std_col] : nothing
+
+        # Filter out missing values
+        valid_indices = .!ismissing.(y_data) .& .!ismissing.(y_model)
+        y_data = y_data[valid_indices]
+        y_model = y_model[valid_indices]
+        y_std = y_std !== nothing ? y_std[valid_indices] : nothing
+
+        # Normalize if needed
+        if normalize
+            y_data ./= maximum(y_data)
+            y_model ./= maximum(y_model)
+            y_std = y_std !== nothing ? y_std ./ maximum(y_model) : nothing
+        end
+
+        # Plot data points in the first row
+        scatter!(p[j, 1], y_data, label="Data $i", markersize=3)
+
+        # Plot model with optional error ribbon in the second row
+        if with_errors && y_std !== nothing
+            plot!(p[j, 1], y_model, err=y_std, label="Model $i", alpha=alpha)
+        else
+            plot!(p[j, 1], y_model, label="Model $i")
+        end
+    end
+
+    # xlabel!(p[1, :], "Time point")
+    # ylabel!(p[1, :], normalize ? "Normalized value" : "Value")
+    # xlabel!(p[2, :], "Time point")
+    # ylabel!(p[2, :], normalize ? "Normalized value" : "Value")
+
+    return p
+end
+
+
+"""
+    plot_histogram(ratefile::String, datapath; root=".", row=2)
+
+    plot_histogram()
+    plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
+    
+    functions to plot data and model predicted histograms
+    
+"""
+function plot_histogram(ratefile::String, datapath; root=".", row=2)
+    fish = false
+    r = readrow(ratefile, row)
+    println(r)
+    parts = fields(ratefile)
+    label = parts.label
+    cond = parts.cond
+    G = parts.model
+    data = data_rna(parts.gene, parts.cond, datapath, fish, parts.label, root)
+    model = model_rna(r, r, parse(Int, parts.model), parse(Int, parts.nalleles), 0.01, [], (), 0)
+    # model_rna(r,[rateprior[i]],G,nalleles,cv,[fittedparam[i]],fixedeffects,0)
+    plot_histogram(data, model)
+    return data, model
+end
+
+function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefile::String, datapath::String, root::String=".")
+    fish = false
+    rates = readdlm(ratefile, ',', header=true)
+    r = rates[1][findfirst(rates[1][:, 1] .== gene)[1], 2:end]
+    data = data_rna(gene, cond, datapath, fish, "label", root)
+    nalleles = alleles(gene, cell, root)
+    model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
+    println(typeof(model))
+    println(typeof(data))
+    m = plot_histogram(data, model)
+    return m, data, model
+end
+
+function plot_histogram(gene::String, cell::String, G::String, cond::String, label::String, ratefolder::String, datapath::String, nsets::Int, root::String, fittedparam=[1], verbose=false)
+    fish = false
+    data = data_rna(gene, cond, datapath, fish, label, root)
+    model = model_rna(gene, cell, G, fish, 0.01, fittedparam, (), label, ratefolder, nsets, root, data, verbose)
+    m = plot_histogram(data, model)
+    return m, data, model
+end
+
+function plot_histogram(data::AbstractRNAData{Array{Array,1}}, model)
+    h = likelihoodarray(model.rates, data, model)
+    figure(data.gene)
+    for i in eachindex(h)
+        plot(h[i])
+        plot(normalize_histogram(data.histRNA[i]))
+        savefig(string(i))
+    end
+    return h
+end
+function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
+    h = likelihoodfn(get_param(model), data, model)
+    plt = plot(h)
+    plot!(plt, normalize_histogram(data.histRNA))
+    display(plt)
+    return h
+end
+
+function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
+    h = likelihoodarray(model.rates, data, model)
+    plt1 = plot(data.bins, h[1])
+    plot!(plt1, data.bins, normalize_histogram(data.OFF))
+    plt2 = plot(data.bins, h[2])
+    plot!(plt2, data.bins, normalize_histogram(data.ON))
+    plt3 = plot(h[3])
+    plot!(plt3, normalize_histogram(data.histRNA))
+    plt = plot(plt1, plt2, plt3, layout=(3, 1))
+    display(plt)
+    if ~isempty(filename)
+        savefig(filename)
+    end
+    return h
+end
+
+function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
+    M = make_mat_M(model.components.mcomponents, model.rates)
+    h = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
+    plt = plot(h)
+    plot!(plt, normalize_histogram(data.histRNA))
+    display(plt)
+    if ~isempty(filename)
+        savefig(filename)
+    end
+    return h
+end
+
+function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false) where {T1<:Array,T2<:Array}
+    m = likelihoodarray(model.rates, data, model)
+    println("*")
+    for i in eachindex(m)
+        plt = plot(m[i])
+        plot!(normalize_histogram(data.histRNA[i]), show=true)
+        if save
+            savefig()
+        else
+            display(plt)
+        end
+    end
+    println(deviance(data, model))
+    println(loglikelihood(get_param(model), data, model)[1])
+    return m
+end
+
+function plot_histogram(data::RNAData, model::AbstractGMmodel)
+    h = likelihoodfn(get_param(model), data, model)
+    plt = plot(h)
+    plot!(normalize_histogram(data.histRNA))
+    display(plt)
+    return h
+end
+
 
 # Usage example:
 # (norms, theory, sims, means, errors) = simulate_trials(...)
