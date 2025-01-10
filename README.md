@@ -193,24 +193,32 @@ which generates 10 mock trk files in folder "data/testraces". See API below for 
 
 ```
 
-julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, datapath="data/testtraces", gene="test", datacond="", decayrate=1., noisepriors=[40,20,200,10]);
-2023-10-28T15:39:16.955
-Gene: test G R S insertstep: 3221
+julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, datapath="data/testtraces", gene="test", datacond="", decayrate=1.,noisepriors=[40., 20., 200., 10.]);
+HCT116_test not found
+./results/HCT116_test/rates_trace-HCT116-nstate__test_3221_1.txt does not exist
+2025-01-10T11:24:23.788
+Gene: testLabel:  G R S insertstep: 3221
+data: data/testtraces
 in: HCT116_test out: HCT116_test
 maxtime: 60.0
-./results/HCT116_test/rates_trace-HCT116__test_3221_2.txt does not exist
-[0.01, 0.01, 0.01, 0.01, 0.1, 0.1, 0.1, 0.1, 0.1, 1.0, 100.0, 100.0, 100.0, 100.0, 0.9]
-initial ll: 59437.54504442659
-final max ll: 52085.58823772918
-median ll: 55631.823149864926
-Median fitted rates: [0.010164892707601266, 0.010415494521142342, 0.009888467865883247, 0.010565680996634689, 0.1051981476344431, 0.09544095249917071, 0.09473989790249088, 0.10045726361481444, 0.10418638776390472, 63.19680508738758, 56.794573780192, 119.72050615415071, 97.22874914820788, 0.9031904231186259]
-ML rates: [0.008648315183072212, 0.01105818085890487, 0.01104728099474845, 0.011437834075767405, 0.09527550344438158, 0.11007539741898248, 0.08145019422061348, 0.09898368400856507, 0.1051451404740429, 37.71078406511133, 29.49680612047366, 171.40544543928038, 100.94919964017241, 0.9036456980377264]
-Acceptance: 770/1525
-rhat: 2.9216933196063533
-2023-10-28T15:40:18.448
+10
+data/testtraces
+
+(1.0, 1, -1, 1.0)
+No rate file, set rate to prior
+[0.01, 0.01, 0.01, 0.01, 0.1, 0.3333333333333333, 0.3333333333333333, 0.1, 0.1, 1.0, 40.0, 20.0, 200.0, 10.0]
+initial ll: 80283.84924591208
+final max ll: 52072.877782295
+median ll: 59649.5738579672
+Median fitted rates: [0.010990214988614367, 0.007759982708079304, 0.009675101244773334, 0.00647827439174417, 0.35238021798551666, 1.8043372460110718, 1.7175355401214196, 0.1628658491792051, 0.10206281750564142, 32.161628025595455, 51.33142446945536, 209.43545981757265, 14.817798527873652]
+ML rates: [0.010501832166699481, 0.005916260295568495, 0.011746187235209794, 0.00465431537381948, 1.0946492144589024, 4.509832072463753, 2.2247620219458835, 0.20626061166543908, 0.10502518236340562, 3.011698651381525, 4.642095991085645, 156.64978288985006, 96.59297507554737]
+Acceptance: 4424/9279
+rhat: 2.541388750409241
+2025-01-10T11:25:42.925
+
 
 ```
-In this run, `rhat` is close to 3 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
+In this run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
 
 Note that transitions is a tuple of vectors where each vector indicates a transition to be included. For example [1,2] means that there exists a transition from G state 1 to G state 2._
 
