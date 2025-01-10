@@ -193,7 +193,7 @@ which generates 10 mock trk files in folder "data/testraces". See API below for 
 
 ```
 
-julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, datapath="data/testtraces", gene="test", datacond="", decayrate=1.);
+julia> fits, stats, measures, data, model, options = fit(datatype="trace",nchains=4,transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, datapath="data/testtraces", gene="test", datacond="", decayrate=1., noisepriors=[40,20,200,10]);
 2023-10-28T15:39:16.955
 Gene: test G R S insertstep: 3221
 in: HCT116_test out: HCT116_test
