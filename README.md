@@ -218,7 +218,7 @@ rhat: 2.541388750409241
 
 
 ```
-In this run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
+In this run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. Either `maxtime` or `samplesteps` needs to be increased.
 
 Note that transitions is a tuple of vectors where each vector indicates a transition to be included. For example [1,2] means that there exists a transition from G state 1 to G state 2._
 
