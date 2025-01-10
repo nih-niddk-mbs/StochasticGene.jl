@@ -299,51 +299,7 @@ function set_b(trace::Matrix, d::Vector{Vector}, N)
     end
     return b
 end
-"""
-    set_b(trace, d::Vector{Distribution{Univariate,Continuous}})
 
-TBW
-# """
-# function set_b(trace, d::Vector{Distribution{Univariate,Continuous}})
-#     b = Array{Float64}(undef, (size(d)..., length(trace)))
-#     for (t, obs) in enumerate(trace)
-#         for j in CartesianIndices(d)
-#             b[j, t] = pdf(d[j], obs)
-#         end
-#     end
-#     return b
-# end
-# function set_b(trace, d::Vector{Vector{Distribution{Univariate,Continuous}}})
-#     N = length(d[1])
-#     b = ones(N, size(trace, 1))
-#     t = 1
-#     for obs in eachrow(trace)
-#         for j in 1:N
-#             for i in eachindex(d)
-#                 b[j, t] *= pdf(d[i][j], obs[i])
-#             end
-#         end
-#         t += 1
-#     end
-#     return b
-# end
-
-# function set_b(trace, d::Array{Distribution{Univariate,Continuous},3})
-#     b = ones(Nstate, Ngrid, size(trace, 2))
-#     t = 1
-#     Nstate, Ngrid, _ = size(d)
-#     for obs in eachcol(trace)
-#         for j in 1:Nstate
-#             for k in 1:Ngrid
-#                 for l in 1:Ngrid
-#                     b[j, k, t] *= StochasticGene.pdf(d[j, k, l], obs[l])
-#                 end
-#             end
-#         end
-#         t += 1
-#     end
-#     return b
-# end
 
 
 """
@@ -663,8 +619,6 @@ end
 
 TBW
 """
-
-
 function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes)
     _, C = forward(a::Matrix, set_b_background(obs, d), p0, nstates, nframes)
     sum(log.(C))
@@ -770,7 +724,7 @@ TBW
 """
 function ll_hmm_hierarchical(rglobal, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(rglobal[:, 1], interval, components)
-    d = probfn(rglobal[end-n_noiseparams+1:end], reporters_per_state, nT)
+    d = probfn(rglobal[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
     lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(rindividual, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     return (1 - trace[3]) * ll + lb, vcat(logpredictions, lhp)
@@ -783,7 +737,7 @@ TBW
 """
 function ll_hmm_hierarchical_rateshared(rglobal, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(rglobal[:, 1], interval, components)
-    d = probfn(rglobal[end-n_noiseparams+1:end], reporters_per_state, nT)
+    d = probfn(rglobal[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
     lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(rindividual, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     (1 - trace[3]) * ll + lb, logpredictions
@@ -808,12 +762,12 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical(rglobal, noiseparams, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+function ll_hmm_grid_hierarchical(rglobal, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(rglobal, interval, components)
     logpredictions = Array{Float64}(undef, length(trace[1]))
     for t in trace[1]
-        d = probfn(noiseparams[i], reporters_per_state, Nstate, Ngrid)
+        d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)
         b = set_b_grid(t, d, Nstate, Ngrid)
         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
         @inbounds logpredictions[i] = sum(log.(C))
