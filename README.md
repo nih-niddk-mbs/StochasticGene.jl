@@ -158,6 +158,8 @@ The `datatype` argument is a String that specifies the types of data to be fit. 
 
 ### Example fitting traces
 
+You will still need the same folder structure with a root folder with results and data subfolders.
+
 Start Julia with multiple processors.
 
 ```
@@ -209,6 +211,8 @@ rhat: 2.9216933196063533
 
 ```
 In this run, `rhat` is close to 3 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
+
+Note that transitions is a tuple of vectors where each vector indicates a transition to be included. For example [1,2] means that there exists a transition from G state 1 to G state 2._
 
 
 ### Batch fitting on Biowulf using `swarm`.
