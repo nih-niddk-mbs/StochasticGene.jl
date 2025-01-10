@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data acceptable include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, and dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, S splice sites (up to R), and reporter insertion step (insertstep). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps at and after step 3 are considered visible. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. The alleles were also coupled; coupling between alleles and between genes is under construction. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather thabn usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors).
+Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data acceptable include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells, and in combination. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, S splice sites (up to R), and reporter insertion step (insertstep). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps at and after step 3 are considered visible. The genes/alleles can also be coupled. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather thabn usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors). The model can also be run on multiple processors and has been used to fit scRNA from the entire genome. Trzaskoma et al. Science Advances (2024).
 
 The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data (i.e. compute Bayesian posterior distributions), explicitly simulate models, and analyze the results. Unfortunately, not all capabilities are documented so just send me a message if you have any questions.
 
@@ -27,12 +27,13 @@ julia> ] add StochasticGene
 
 The command "]" brings you into the Julia Package environment, "Ctrl C" gets you out
 
-After the package has installed, you can check if it works by running
+After the package has installed, you can check if it works by running (you can skip this part if you don't want to wait)
 
 ```
 julia> ] test StochasticGene
 ```
-(this could take 10 or more minutes)
+(this could take 20 or more minutes)
+Currently, test may throw some warnings or errors regarding dependencies. These are from external packages that StochasticGene references but does not rely on so it can be ignored.
 
 StochasticGene will be updated on Github periodically. To update to a new version type
 
@@ -43,7 +44,7 @@ julia> ] update StochasticGene
 To install StochasticGene on Biowulf, log on and at the prompt type:
 
 ```
-[username@biowulf ~]$ sinteractive --mem=64G
+[username@biowulf ~]$ sinteractive --constraint=x2695 --mem=64G
 ```
 This generates an interactive session
 
@@ -76,15 +77,25 @@ julia> using StochasticGene
 
 julia> rna_setup("scRNA")
 ```
-will create the folder structure in the folder `scRNA` with the `data` and `results` subfolders, with some mock data in the `data` folder. Typing `rna_setup()` will assume the current folder is the root. Files for allele numbers and halflives for desired cell types can be added directly to the `data` folder.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. for HBEC cells are built into the system.
+will create the folder structure in the folder `scRNA` with the `data` and `results` subfolders, with some mock data in the `data` folder. Typing `rna_setup()` will assume the current folder is the root. Files for allele numbers and halflives for desired cell types can be added directly to the `data` folder.  These files should be csv format and have the form `[cell name]_alleles.csv` or `[cell name]_halflife.csv`.  Halflives for the then genes in Wan et al. (2021) for HBEC cells are built into the system.
+
+To move into the folder type
+
+```
+julia> cd("scRNA")
+```
+To confirm you are in the correct directory, use
+```
+julia> pwd()
+```
 
 ### Fitting data with StochasticGene
 
-To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity time traces (e.g. trk files), nascent RNA data (e.g. from intronic FISH probes), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, RNA histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
+To fit a model, you need to load data and choose a model. Data currently accepted are stationary histograms (e.g. smFISH or scRNA), intensity time traces (e.g. trk files), and dwell time distributions. Different data types from the same experiment can also be fit simultaneously. For example, RNA histograms from smFISH can be fit together with multiple intensity traces or dwell time histograms from live cell recordings.
 
 Models are distringuished by the number of G states, the transition graph between G states (i.e. which G states can transitions to which other G states), number of R steps, the step where the reporter is inserted, and whether splicing occurs.  For intensity traces and dwell time distributions, the sojourn or "on" states (i.e. R steps or G states where the reporter is visible) must also be specified. Multiple sets of on states are allowed.
 
-Data are fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing `fit()`, will fit the mock rna histogram data installed by `rna_setup(root)` with a simple two state telegraph model (2 G stsates, no R steps).  Data is in the folder "root/data/HCT116_testdata", where root is specified by the user. The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables. 
+Data are fit using the `fit` function, which has named arguments (see API below) to determine the type of data to be fit, where it can be found, what model to be used, and what options to be set for the fitting algorithm. The default, run by typing `fit()`, will fit the mock rna histogram data installed by `rna_setup(root)` with a simple two state telegraph model (2 G stsates, no R steps).  Data is in the folder "root/data/HCT116_testdata", where root is specified by the user (not the root of the computer system but the folder where the data and results subfolders reside). The default root is the folder in which julia was launched but can be specified using the named argument `root`. The `fit` function returns six variables. This will only work if you start Julia in the root folder.
 
 To fit on a single processor, type
 
@@ -113,7 +124,7 @@ The semicolon is not necessary but suppresses printing the returned variables. Y
 
 The data is fit using the function `run_mh(data,model,options,nchains)` (which runs a Metropolis-Hastings MCMC algorithm), where `data`, `model`, and `options` are structures (Julia types) constructed by `fit` and returned. `nchains` is the number of MCMC chains, each running on a separate processor.  The three structures `fits`, `stats`, and `measures` (returned by `run_mh` and `fit`, give the fit results (Bayesian posteriors) and measures of the quality of the fit and are also saved to the folder "./results/HCT116_test", which is specified by the `resultfolder` argument.
 
-During the run, the `fit` function prints out some of the information in fits, stats, and measures structures. `fit` will look for previous results in the folder specified by the argument `infolder` as an initial condition to start the MCMC run. In this case, there were no previous runs and thus the default was used, which is the priors of the parameters. In this run three rates were fit (set by argument `fittedparams`); the median of the posterior and the maximum likelihood parameters of the resulting fits are printed. The run was capped to a maximum of 60 seconds of real time (set by the argument `maxtime`) and `Acceptance` shows that out of 613219 MCMC samples, 325538 were accepted by the MCMC algorithm. The positive number `Deviance` is the difference in likelihood between a perfect fit and the resulting fit (for histograms only). `rhat` is a measure of MCMC convergence with 1 being ideal. 
+During the run, the `fit` function prints out some of the information in fits, stats, and measures structures. `fit` will look for previous results in the folder specified by the argument `infolder` as an initial condition to start the MCMC run. In this case, there were no previous runs and thus the default was used, which is the priors of the parameters. In this run three rates were fit (set by argument `fittedparams`); the median of the posterior and the maximum likelihood parameters of the resulting fits are printed. The run was capped to a maximum of 60 seconds of real time (set by the argument `maxtime`) and `Acceptance` shows that out of 613219 MCMC samples, 325538 were accepted by the MCMC algorithm. The positive number `Deviance` is the difference in likelihood between a perfect fit and the resulting fit (for histograms only). `rhat` is a measure of MCMC convergence. It is always larger than 1 with 1 being ideal. 
 
 The two state telegraph model has 4 transition rates, which are stored in a single vector. The order is 1) G state transitions (in the order as specified by the transition vector), 2) eject rate, 3) decay rate.  For general GRSM models, the order is 1) G state transitions 2) R transitions, 3) S transitions, 4) decay.  If there is no splicing then the S transitions are left out.  Not all the rates need to be fitted. In the above example, the decay rate is not fitted. This is specified by the fittedparams argument (see API). The posterior median, mean, standard deviations, and MADs will only be for the fitted params.
 
@@ -143,7 +154,7 @@ rhat: 1.0018023969479748
 
 ```
 
-The `datatype` argument is a String that specifies the types of data to be fit. Currently, there are six choices: 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracenascent", the same with the nascent RNA input through the argument `nascent`; 6) "tracerna": trace files with RNA histogram. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
+The `datatype` argument is a String that specifies the types of data to be fit. Currently, there are six choices: 1) "rna", which expects a single rna histogram file where the first column is the histogram; 2) "rnaonoff", which expects a rna histogram file and a three column dwelltime file with columns: bins, ON time distribution, and OFF time distribution; 3) "rnadwelltime", which fits an rna histogram together with multiple dwell time histograms specified by a vector of dwell time types, the choices being "ON","OFF" for R step reporters and "ONG", "OFFG" for G state reporters. Each dwelltime histogram is a two column file of the bins and dwell times and datapath is a vector of the paths to each; 4) "trace", which expects a folder of trace intensity (e.g. trk) files; 5) "tracerna": trace files with RNA histogram; 6) "tracejoint", which fits two simultaneous recorded traces using a coupled model. The data files are specified by the argument `datapath`. This can be a string pointing to a file or a folder containing the file.  If it points to a folder then `fit` will use the arguments `gene` and `datacond` to identify the correct file. For datatypes that require more than one data file, `datapath` is a vector of paths.  The path can include or not include the root folder.  
 
 ### Example fitting traces
 
@@ -197,7 +208,7 @@ rhat: 2.9216933196063533
 2023-10-28T15:40:18.448
 
 ```
-In this run, `rhat` is close to 3 indicating that the number of samples was insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
+In this run, `rhat` is close to 3 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. either `maxtime` or `samplesteps` needs to be increased.
 
 
 ### Batch fitting on Biowulf using `swarm`.
@@ -348,72 +359,78 @@ StochasticGene assumes all rates have units of inverse minutes and the half live
 
 ### API:
 
+
 ```
     fit(; <keyword arguments> )
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
 
+For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
+then G = (2,3). 
+
 #Arguments
-- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
-- `datatype::String=""`: String that desecribes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracenascent", "tracerna"
-- `dttype=String[]`: types are "OFF", "ON", for R states and "OFFG", "ONG" for G states
-- `datapath=""`: path to data file or folder or array of files or folders
-- `cell::String=""': cell type for halflives and allele numbers
-- `datacond=""`: string or vector of strings describing data treatment condition, e.g. "WT", "DMSO" or ["DMSO","AUXIN"]
-- `traceinfo=(1.0, 1., 240., .65)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of active traces
-- `nascent=(1, 2)`: 2-tuple (number of spots, number of locations) (e.g. number of cells times number of alleles/cell)
-- `infolder::String=""`: result folder used for initial parameters
-- `resultfolder::String=test`: folder for results of MCMC run
-- `label::String=""`: label of output files produced
-- `inlabel::String=""`: label of files used for initial conditions
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
-- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3
-     (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
-- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2 state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3 state kinetic proof reading model
-- `G::Int=2`: number of gene states
-- `R::Int=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
-- `S::Int=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
-- `insertstep::Int=1`: R step where reporter is inserted
-- `ModelType=""`: String describing type of G transition model, e.g. "3state", "KP" (kinetic proofreading), "cyclicory"
-- `root="."`: name of root directory for project, e.g. "scRNA"
-- `priormean=Float64[]`: mean rates of prior distribution
-- 'priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
-- `nalleles=2`: number of alleles, value in alleles folder will be used if it exists  
-- `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
-- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `splicetype=""`: RNA pathway for GRS models, (e.g. "offeject" =  spliced intron is not viable)
-- `probfn=prob_Gaussian`: probability function for hmm observation probability (i.e. noise distribution)
-- `noisepriors = []`: priors of observation noise (use empty set if not fitting traces), superceded if priormean is set
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3 tuple of hierchical model parameters (pool.nhyper::Int,individual fittedparams::Vector,individual fixedeffects::Tuple)
-- `ratetype="median"`: which rate to use for initial condition, choices are "ml", "mean", "median", or "last"
-- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
-- `samplesteps::Int=1000000`: number of MCMC sampling steps
-- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
+- `burst=false`: if true then compute burst frequency
+- `cell::String=""`: cell type for halflives and allele numbers
+- `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
+    1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
+    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
+    3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
+    4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
+    5. Int indicating number of coupling parameters
+- `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
+- `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
+- `datapath=""`: path to data file or folder or array of files or folders
+- `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
+- `elongationtime=6.0`: average time for elongation, vector of times for coupled model
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
+- `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
+- `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
+- `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `infolder::String=""`: result folder used for initial parameters
+- `inlabel::String=""`: label of files used for initial conditions
+- `insertstep=1`: R step where reporter is inserted
+- `label::String=""`: label of output files produced
+- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
+- `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), lsoda(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
+- `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, always set to 1 if coupling nonempty (multiple alleles handled as extra identical units)
+- `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
+- `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
+- `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
+- `optimize=false`: use optimizer to compute maximum likelihood value
+- `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
+- `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
+- `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution)
+- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
+- `resultfolder::String=test`: folder for results of MCMC run
+- `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
+- `root="."`: name of root directory for project, e.g. "scRNA"
+- `samplesteps::Int=1000000`: number of MCMC sampling steps
+- `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
+- `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
-- `temprna=1.`: reduce rna counts by temprna compared to dwell times
-- `burst=false`: if true then compute burst frequency
-- `optimize=false`: use optimizer to compute maximum likelihood value
+- `temprna=1.`: reduce RNA counts by temprna compared to dwell times
+- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of observed active traces for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
+- `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
+- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
+- `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
-- `method=1`: optional method variable, for hierarchical models method = tuple(Int,Bool) = (numerical method, true if transition rates are shared)
-
 
 Example:
 
 If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
 
-$julia -p 4
+bash> julia -p 4
 
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 
-
 ```
 
 
 ```
-
     makeswarm(;<keyword arguments>)
 
 write swarm and fit files used on biowulf
@@ -421,7 +438,7 @@ write swarm and fit files used on biowulf
 
 #Arguments
 
-- 'nthreads::Int=1`: number of Julia threads per processesor, default = 1
+- 'nthreads=1`: number of Julia threads per processesor, default = 1
 - `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
 - `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
 - `src=""`: path to folder containing StochasticGene.jl/src (only necessary if StochasticGene not installed)
@@ -429,6 +446,10 @@ write swarm and fit files used on biowulf
 and all keyword arguments of function fit(; <keyword arguments> )
 
 see fit
+
+Note:: the keyword 'method' is handled slightly differently here than in the function fit.  In fit it is a function (i.e. numerical method function used in DifferentialEquations.jl) or a tuple
+of the numerical method and a Bool for hierarchical models.  However, in biowulf.jl, the numerical method must be a String, i.e. use "lsoda()" for lsoda().  This is because when Julia writes
+the function, it will parse the numerical method rather than just writing it.
 
 ```
 
@@ -502,8 +523,9 @@ Arguments
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 ```
+
 ```
-    simulator(r::Vector{Float64}, transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int; nalleles::Int=1, nhist::Int=20, onstates::Vector=Int[], bins::Vector=Float64[], traceinterval::Float64=0.0, probfn=prob_GaussianMixture, noiseparams::Int=5, totalsteps::Int=1000000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+   simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
 
 Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null vector will return a vector of the mRNA histogram and ON and OFF time histograms. If traceinterval > 0, it will return a vector containing the mRNA histogram and the traces
 
@@ -516,32 +538,38 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `insertstep`: reporter insertion step
  	
 #Named arguments
-- `nalleles`: Number of alleles
+- `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
+- `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
+    1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
+    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
+    3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
+    4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
+    5. Int indicating number of coupling parameters
+- `nalleles`: Number of alleles, set to 1 if coupling nonempty
 - `nhist::Int`: Size of mRNA histogram
-- `onstates::Vector`: a vector of ON states (use empty set for any R step is ON) or vector of vector of ON states
-- `bins::Vector=Float64[]`: vector of time bins for ON and OFF histograms or vector of vectors of time bins
-- `probfn`=prob_GaussianMixture: reporter distribution
-- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
-- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
-- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
-- `totaltime`::Float64=0.0: total time of simulation
-- `splicetype`::String: splice action
+- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
+- `probfn`=prob_Gaussian: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
+- `splicetype`::String: splice action
+- `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
+- `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
+- `totaltime`::Float64=0.0: total time of simulation
+- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 - `verbose::Bool=false`: flag for printing state information
     
 #Example:
 
-julia> h=simulator(r,transitions,3,2,2,1,nhist=150,bins=[collect(5/3:5/3:200),collect(.1:.1:20)],onstates=[Int[],[2,3]],nalleles=2)
-
+julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],[3,2]),3,2,2,1,nhist=20,bins=[collect(2.:2.:200),collect(.2:.2:20)],onstates=[Int[],[3]],nalleles=2, totalsteps = 200000)
+5-element Vector{Vector}:
+ [7823.967526508377, 33289.19787176562, 69902.6774554014, 92942.59127561412, 91816.91189325438, 70259.88319069796, 43895.28637479579, 22426.725922619895, 9005.190755732247, 3043.2417332890695, 1005.6412773072143, 203.11430396725336, 6.420639815427421, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+ [2911, 2568, 2228, 1694, 1354, 1088, 819, 661, 514, 401  …  0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+ [622, 643, 592, 596, 553, 524, 520, 489, 448, 437  …  19, 13, 12, 12, 14, 10, 10, 17, 8, 8]
+ [550, 584, 569, 555, 498, 510, 497, 495, 489, 487  …  89, 96, 107, 99, 89, 103, 86, 97, 87, 77]
+ [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
+ 
 ```
 ```
     simulate_trace_data(datafolder::String;ntrials::Int=10,r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231,30,20,200,100,.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1,onstates=Int[], interval=1.0, totaltime=1000.)
 
 create simulated trace files in datafolder
-```
-
-```
-    predicted_trace(data::Union{AbstractTraceData,AbstractTraceHistogramData}, model)
-
-return predicted traces of fits using Viterbi algorithm
 ```
