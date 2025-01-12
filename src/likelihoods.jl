@@ -174,13 +174,13 @@ end
 
 
 """
-    prepare_rates(param, model::GRSMhierarchicalmodel)
+    prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
 
 Prepare rates and parameters for hierarchical model calculations by reshaping vectors into matrices.
 
 # Arguments
 - `param`: Vector of parameters including both rates and hyperparameters
-- `model::GRSMhierarchicalmodel`: The hierarchical model specification
+- `model::AbstractGRSMhierarchicalmodel`: The hierarchical model specification
 
 # Returns
 - `r`: Matrix of rates (nrates × nindividuals)

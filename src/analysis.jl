@@ -594,7 +594,11 @@ end
 return max ll normalized by number of trace frames
 """
 function deviance(fits, data::AbstractTraceData, model)
-    fits.llml / sum(sum.(data.trace[1]))
+    if isempty(data.trace[1])
+        return -1.0
+    else
+        return fits.llml / sum(sum.(data.trace[1]))
+    end
 end
 
 function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)

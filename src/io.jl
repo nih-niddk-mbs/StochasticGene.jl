@@ -704,7 +704,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     end
 end
 
-function writeall(path::String, fits, stats, measures, data, temp, model::GRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
+function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
     name = filename(data, model)
     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
     if ~isdir(path)

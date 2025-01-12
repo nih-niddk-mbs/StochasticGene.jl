@@ -210,7 +210,7 @@ abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
-abstract type AbstractGRSMhierarchicalModel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
+abstract type AbstractGRSMhierarchicalmodel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
 
 """
     Model structures
@@ -385,7 +385,7 @@ struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,Meth
     reporter::ReporterType
 end
 
-struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalModel{RateType,ReporterType}
+struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
     rates::RateType
     hierarchy::Hierarchy
     raterange::UnitRange
