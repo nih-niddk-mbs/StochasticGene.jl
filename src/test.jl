@@ -160,9 +160,18 @@ function test_grid_ll(; Ngrid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2
     model = load_model(data, [rinit; 0.3], [rinit; 0.3], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), Ngrid)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     r, noiseparams, pgrid = prepare_rates(get_param(model), model)
+    Nstate = model.components.nT
     a_grid = make_a_grid(pgrid[1], model.Ngrid)
     a, p0 = make_ap(r, data.interval, model.components)
     d = model.reporter.probfn(noiseparams, model.reporter.per_state, model.components.nT, model.Ngrid)
+    logpredictions = Array{Float64}(undef, 0)
+
+    t = data.trace[1][1]
+    T = size(t, 2)
+    b = set_b_grid(t, d, Nstate, Ngrid)
+    _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    C, a, a_grid, b, p0, Nstate, Ngrid, T, t
+    # push!(logpredictions, sum(log.(C)))
     # ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 
 end
