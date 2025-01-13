@@ -225,11 +225,11 @@ TBW
 """
 function make_a_grid(param, Ngrid)
     as = zeros(Ngrid, Ngrid)
-    d = zeros(Ngrid, Ngrid)
+    # d = zeros(Ngrid, Ngrid)
     for i in 1:Ngrid
         for j in 1:Ngrid
-            as[i, j] = exp(-grid_distance(i, j, div(Ngrid, 2))^2 / (2 * param^2))
-            d[i, j] = grid_distance(i, j, div(Ngrid, 2))
+            as[i, j] = exp(-grid_distance(i, j, round(Int, sqrt(Ngrid)) )^2 / (2 * param^2))
+            # d[i, j] = grid_distance(i, j, div(Ngrid, 2))
         end
     end
     as ./ sum(as, dims=2)

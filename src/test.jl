@@ -154,6 +154,51 @@ function test_fit_trace_grid(; Ngrid = 4, G=2, R=1, S=1, insertstep=1, transitio
     fits, stats, measures = run_mh(data, model, options)
 end
 
+function test_grid_ll(; Ngrid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70, 0.2], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70], maxtime=10.0)
+    traces = sim_grid(r=rtarget, p=rtarget[end], Ngrid=Ngrid, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, totaltime=totaltime, interval=interval, ntrials=ntrials)
+    data = StochasticGene.TraceData("tracegrid", "test", interval, (traces, [], weight, nframes))
+    model = load_model(data, [rinit; 0.3], [rinit; 0.3], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), Ngrid)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
+    r, noiseparams, pgrid = prepare_rates(get_param(model), model)
+    a_grid = make_a_grid(pgrid[1], model.Ngrid)
+    a, p0 = make_ap(r, data.interval, model.components)
+    d = model.reporter.probfn(noiseparams, model.reporter.per_state, model.components.nT, model.Ngrid)
+    # ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+
+end
+function test_ll_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0, ntrials=10)
+    Nstate = num_rates(transitions, R, S, insertstep)
+    a_grid = StochasticGene.make_a_grid(p, Ngrid)
+    # traces = simulator(r, transitions, G, R, S, insertstep, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=sum, a_grid=StochasticGene.make_a_grid(1.0, 4))[1]
+    traces = StochasticGene.simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, a_grid=a_grid)
+    T = length(traces[1])
+    components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, "")
+    reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
+    a, p0 = StochasticGene.make_ap(r, 1.0, components)
+    params = r[end-3:end]
+    d = StochasticGene.prob_Gaussian(params, reporters_per_state, Nstate)
+    bd = StochasticGene.set_b(traces[1], d, Nstate)
+    b = StochasticGene.set_b(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian, Nstate)
+    _, C = StochasticGene.forward(a, b, p0, Nstate, T)
+    d_grid = StochasticGene.prob_Gaussian_grid(params, reporters_per_state, Nstate, Ngrid)
+    b_gridd = StochasticGene.set_b_grid(traces[1], d_grid, Nstate, Ngrid)
+    b_grid = StochasticGene.set_b_grid(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian_grid, Nstate, Ngrid)
+    _, C_grid = StochasticGene.forward_grid(a, a_grid, b_grid, p0, Nstate, Ngrid, T)
+    # return b, bd, b_grid, b_gridd, sum(log.(C)), sum(log.(C_grid))
+    ll = StochasticGene.ll_hmm(r, Nstate, components, 4, reporters_per_state, StochasticGene.prob_Gaussian, StochasticGene.off_states(G, R, S, insertstep), interval, (traces, [], 0.0, 1000))
+    llg = StochasticGene.ll_hmm_grid(r, p, Nstate, Ngrid, components, 4, reporters_per_state, StochasticGene.prob_Gaussian_grid, interval, (traces, [], 0.0, 1000))
+    ll, llg
+    # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
+    # data = StochasticGene.TraceData("tracegrid", "test", interval, (trace, [], weight, nframes))
+    # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
+    # elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
+    # priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
+    # model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
+    # options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 0., 1.0)
+    # fits, stats, measures = run_mh(data, model, options)
+    # StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
+end
+
 ### end of functions used in runtest
 
 function test_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+length(noisepriors)), tuple()), method=(1, true), maxtime=120.0)
@@ -510,36 +555,5 @@ function conditional_distribution(joint_prob::Array, dist_index::Int, cond_indic
     return cond_prob
 end
 
-function test_ll_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0, ntrials=10)
-    Nstate = num_rates(transitions, R, S, insertstep)
-    a_grid = StochasticGene.make_a_grid(p, Ngrid)
-    # traces = simulator(r, transitions, G, R, S, insertstep, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=sum, a_grid=StochasticGene.make_a_grid(1.0, 4))[1]
-    traces = StochasticGene.simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, a_grid=a_grid)
-    T = length(traces[1])
-    components = StochasticGene.make_components_TRG(transitions, G, R, S, insertstep, "")
-    reporters_per_state = StochasticGene.num_reporters_per_state(G, R, S, insertstep)
-    a, p0 = StochasticGene.make_ap(r, 1.0, components)
-    params = r[end-3:end]
-    d = StochasticGene.prob_Gaussian(params, reporters_per_state, Nstate)
-    bd = StochasticGene.set_b(traces[1], d, Nstate)
-    b = StochasticGene.set_b(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian, Nstate)
-    _, C = StochasticGene.forward(a, b, p0, Nstate, T)
-    d_grid = StochasticGene.prob_Gaussian_grid(params, reporters_per_state, Nstate, Ngrid)
-    b_gridd = StochasticGene.set_b_grid(traces[1], d_grid, Nstate, Ngrid)
-    b_grid = StochasticGene.set_b_grid(traces[1], params, reporters_per_state, StochasticGene.prob_Gaussian_grid, Nstate, Ngrid)
-    _, C_grid = StochasticGene.forward_grid(a, a_grid, b_grid, p0, Nstate, Ngrid, T)
-    # return b, bd, b_grid, b_gridd, sum(log.(C)), sum(log.(C_grid))
-    ll = StochasticGene.ll_hmm(r, Nstate, components, 4, reporters_per_state, StochasticGene.prob_Gaussian, StochasticGene.off_states(G, R, S, insertstep), interval, (traces, [], 0.0, 1000))
-    llg = StochasticGene.ll_hmm_grid(r, p, Nstate, Ngrid, components, 4, reporters_per_state, StochasticGene.prob_Gaussian_grid, interval, (traces, [], 0.0, 1000))
-    ll, llg
-    # trace = StochasticGene.simulate_trace_vector(rtarget, transitions, G, R, S, interval, totaltime, ntrials)
-    # data = StochasticGene.TraceData("tracegrid", "test", interval, (trace, [], weight, nframes))
-    # # model = StochasticGene.load_model(data, rinit, Float64[], fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, "", prob_Gaussian, noisepriors, tuple())
-    # elongationtime = StochasticGene.mean_elongationtime(rtarget, transitions, R)
-    # priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, elongationtime)
-    # model = StochasticGene.load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, 1, 10.0, Int[], 1.0, propcv, "", prob_Gaussian, noisepriors, tuple(), tuple(), 1)
-    # options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 0., 1.0)
-    # fits, stats, measures = run_mh(data, model, options)
-    # StochasticGene.get_rates(fits.parml, model), rtarget, fits, stats, measures, model, data
-end
+
 

@@ -1731,6 +1731,18 @@ function makestring(v)
     return s
 end
 
+function grid_distance(i, j, Nx, Ny)
+    if Nx == 0 || Ny == 0
+        return 1.0
+    else
+        xi = rem(i - 1, Nx)
+        yi = div(i - 1, Ny)
+        xj = rem(j - 1, Nx)
+        yj = div(j - 1, Ny)
+        return sqrt((xi - xj)^2 + (yi - yj)^2)
+    end
+end
+
 """
     grid_distance(i, j, Ngrid)
 
@@ -1749,16 +1761,19 @@ This function calculates the Euclidean distance between two points `i` and `j` i
 
 """
 function grid_distance(i, j, Ngrid)
-    if Ngrid == 0
-        return 1.0
-    else
-        xi = rem(i - 1, Ngrid)
-        yi = div(i - 1, Ngrid)
-        xj = rem(j - 1, Ngrid)
-        yj = div(j - 1, Ngrid)
-        return sqrt((xi - xj)^2 + (yi - yj)^2)
-    end
+    grid_distance(i, j, Ngrid, Ngrid)
 end
+# function grid_distance(i, j, Ngrid)
+#     if Ngrid == 0
+#         return 1.0
+#     else
+#         xi = rem(i - 1, Ngrid)
+#         yi = div(i - 1, Ngrid)
+#         xj = rem(j - 1, Ngrid)
+#         yj = div(j - 1, Ngrid)
+#         return sqrt((xi - xj)^2 + (yi - yj)^2)
+#     end
+# end
 
 """
     find_top_two(x::AbstractArray{T}) where T <: Number
@@ -1774,12 +1789,12 @@ Finds the largest and second largest values in an array.
 # Throws
 - `ArgumentError`: If array has fewer than 2 elements.
 """
-function find_top_two(x::AbstractArray{T}) where T <: Number
+function find_top_two(x::AbstractArray{T}) where {T<:Number}
     length(x) < 2 && throw(ArgumentError("Array must have at least 2 elements"))
-    
+
     largest = second = typemin(T)
     largest_idx = 0
-    
+
     for (i, val) in enumerate(x)
         if val > largest
             second = largest
@@ -1789,7 +1804,7 @@ function find_top_two(x::AbstractArray{T}) where T <: Number
             second = val
         end
     end
-    
+
     return largest, second, largest_idx
 end
 
@@ -1804,7 +1819,7 @@ Replaces the largest value with second largest if it's more than double in magni
 # Returns
 - `Bool`: true if a replacement was made, false otherwise.
 """
-function replace_outlier!(x::AbstractArray{T}) where T <: Number
+function replace_outlier!(x::AbstractArray{T}) where {T<:Number}
     largest, second, idx = find_top_two(x)
     if abs(largest) > 2 * abs(second)
         x[idx] = second
