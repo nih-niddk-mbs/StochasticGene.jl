@@ -86,6 +86,8 @@ then G = (2,3).
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
+- `gene::String="MYC"`: gene name
+- `grid=nothing`: Int number of grid points for grid model
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
 - `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
 - `infolder::String=""`: result folder used for initial parameters
@@ -315,7 +317,7 @@ end
 
 TBW
 """
-function GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid)
+function GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid::Int)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     raterange = 1:n
