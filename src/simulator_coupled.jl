@@ -248,11 +248,15 @@ end
 """
     simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
 
-TBW
+- `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
 """
-function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing)
+function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing,hierarchical=tuple())
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
+        if !isempty(hierarchical)
+            d = Normal(hierarchical[1], hierarchical[2])
+            r[hierarchical[3]] = rand(d)
+        end
         if isnothing(a_grid)
             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
         else
@@ -647,11 +651,13 @@ initialize_tracelog(t, state::Matrix) = [(t, state[:, 1])]
 
 
 """
-    set_par(r, noiseparams::Vector)
     set_par(r, noiseparams::Int)
+    set_par(r, noiseparams::Vector)
 
 TBW
 """
+set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
+
 function set_par(r, noiseparams::Vector)
     par = Vector[]
     for i in eachindex(noiseparams)
@@ -659,7 +665,7 @@ function set_par(r, noiseparams::Vector)
     end
     par
 end
-set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
+
 
 """
     targets(coupling)
