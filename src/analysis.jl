@@ -1179,19 +1179,23 @@ function extract_source_target(pattern::String, filepath::String)
     return nothing
 end
 
+function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
+    println(file)
+    r = readrates(file, get_row(ratetype))
+    source, target = extract_source_target(pattern, file)
+    coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+    covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
+end
 
-function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1,1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype = "ml")
+
+function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin(pattern, f)
+            if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                println(file)
-                r = readrates(file, get_row(ratetype))
-                source, target = extract_source_target("gene", f)
-                coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-                m1, m2, cc12, cc21, ac1, ac2, cc, lags = covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
+                m1, m2, cc12, cc21, ac1, ac2, cc, tau = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
-                CSV.write(out, DataFrame(lags=lags, crosscovariance=cc))
+                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc))
             end
         end
     end
