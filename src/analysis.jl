@@ -1108,7 +1108,22 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
+"""
+    write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
 
+
+"""
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
+    CSV.write(outfile, df)
+end
+
+"""
+    write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+
+TBW
+"""
 function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
@@ -1120,16 +1135,7 @@ function write_trace_dataframe(file, datapath::String, datacond, interval, ratet
     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
-"""
-    write_traces(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G::Int, R::Int, S::Int, insertstep::Int, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
 
-
-"""
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
-    CSV.write(outfile, df)
-end
 """
     write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
 
@@ -1154,6 +1160,44 @@ function write_traces_coupling(folder, datafolder, datacond, interval, sources=1
         write_traces(folder, datafolder, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
     end
 end
+
+function extract_source_target(pattern::String, filepath::String)
+    # Get filename from path
+    filename = basename(filepath)
+
+    # Escape special characters in pattern and build regex
+    escaped_pattern = replace(pattern, r"([.*+?^\$()[]{}|\\])" => s"\\\1")
+    regex = Regex("$(escaped_pattern)(\\d)(\\d)")
+
+    # Find pattern## in filename
+    m = match(regex, filename)
+    if m !== nothing
+        source = parse(Int, m[1])
+        target = parse(Int, m[2])
+        return source, target
+    end
+    return nothing
+end
+
+
+function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1,1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype = "ml")
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f) && occursin(pattern, f)
+                file = joinpath(root, f)
+                println(file)
+                r = readrates(file, get_row(ratetype))
+                source, target = extract_source_target("gene", f)
+                coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+                m1, m2, cc12, cc21, ac1, ac2, cc, lags = covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
+                out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
+                CSV.write(out, DataFrame(lags=lags, crosscovariance=cc))
+            end
+        end
+    end
+end
+
+
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
 
