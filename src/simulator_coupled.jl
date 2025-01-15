@@ -217,22 +217,19 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
     return results
 end
 
+
+"""
+    simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
+
+simulate a trace
+"""
+simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps=100)[1][1:end-1, :]
+
 """
     simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
 
 create simulated trace files in datafolder
 """
-# function simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
-#     ~ispath(datafolder) && mkpath(datafolder)
-#     for i in 1:ntrials
-#         trace = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=reporterfn)[1][1:end-1, 2]
-#         l = length(trace)
-#         datapath = joinpath(datafolder, "testtrace$i.trk")
-#         writedlm(datapath, [zeros(l) zeros(l) trace collect(1:l)])
-#     end
-# end
-
-# function simulate_trace_data(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing)
 function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 40, 20, 200, 10], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
     isdir(datafolder) || mkdir(datafolder)
     trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, onstates=onstates, reporterfn=reporterfn, a_grid=a_grid)
@@ -250,12 +247,12 @@ end
 
 - `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
 """
-function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing,hierarchical=tuple())
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing,hierarchical=tuple())
     trace = Array{Array{Float64}}(undef, ntrials)
+    r = copy(rin)
     for i in eachindex(trace)
         if !isempty(hierarchical)
-            d = Normal(hierarchical[1], hierarchical[2])
-            r[hierarchical[3]] = rand(d)
+            r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
@@ -266,6 +263,11 @@ function simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, to
     trace
 end
 
+"""
+    simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+
+TBW
+"""
 function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
@@ -279,13 +281,10 @@ function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupl
     trace
 end
 
-"""
-    simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
+function simulate_trace_hierarchical()
 
-simulate a trace
-"""
-simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps=100)[1][1:end-1, :]
 
+end
 
 """
     make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
