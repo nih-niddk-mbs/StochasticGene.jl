@@ -718,27 +718,27 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
 end
 
 """
-    ll_hmm_hierarchical(rglobal, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    ll_hmm_hierarchical(rshared, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 
 TBW
 """
-function ll_hmm_hierarchical(rglobal, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
-    a, p0 = make_ap(rglobal[:, 1], interval, components)
-    d = probfn(rglobal[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
-    lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+function ll_hmm_hierarchical(rshared, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
+    a, p0 = make_ap(rshared[:, 1], interval, components)
+    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
+    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(rindividual, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     return (1 - trace[3]) * ll + lb, vcat(logpredictions, lhp)
 end
 
 """
-    ll_hmm_hierarchical_rateshared(rglobal, r::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, offstates, interval, trace)
+    ll_hmm_hierarchical_rateshared(rshared, r::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 
 TBW
 """
-function ll_hmm_hierarchical_rateshared(rglobal, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, interval, trace)
-    a, p0 = make_ap(rglobal[:, 1], interval, components)
-    d = probfn(rglobal[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
-    lb = trace[3] > 0 ? ll_background(rglobal[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+function ll_hmm_hierarchical_rateshared(rshared, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, interval, trace)
+    a, p0 = make_ap(rshared[:, 1], interval, components)
+    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
+    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(rindividual, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     (1 - trace[3]) * ll + lb, logpredictions
 end
@@ -762,9 +762,9 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical(rglobal, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
     a_grid = make_a_grid(pgrid, Ngrid)
-    a, p0 = make_ap(rglobal, interval, components)
+    a, p0 = make_ap(rshared, interval, components)
     logpredictions = Array{Float64}(undef, length(trace[1]))
     for t in trace[1]
         d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)

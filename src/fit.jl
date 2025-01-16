@@ -83,13 +83,15 @@ then G = (2,3).
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models, fitted hyper parameters are specified by individual fittedparams)
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
 - `gene::String="MYC"`: gene name
 - `grid=nothing`: Int number of grid points for grid model
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters: hierarchical=(pop.nhypersets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical model; 3-tuple for hierarchical: hierarchical=(number of hyper parameter sets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple),
+    for hierarchical models the keywords `fittedparam` and `fixedeffects` pertain to shared rates.  rates are given by a single vector that can be reshaped into a matrix where the columns correspond to the model rates and noise params, the first nhyper rows pertain to the shared and hyper parameter rates (whether fit or not), 
+    usually the first row is the shared and mean hyper parameters and the 2nd are the standard deviations, the rest of the rows are the individual rates and noise params
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
@@ -220,51 +222,9 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     return fits, stats, measures, data, model, options
 end
 
-"""
-    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
 
-return data structure
-"""
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
-    if datatype == "rna"
-        len, h = read_rna(gene, datacond, datapath)
-        return RNAData(label, gene, len, h)
-    elseif datatype == "rnaonoff"
-        len, h = read_rna(gene, datacond, datapath[1])
-        h = div.(h, temprna)
-        LC = readfile(gene, datacond, datapath[2])
-        return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
-    elseif datatype == "rnadwelltime"
-        len, h = read_rna(gene, datacond, datapath[1])
-        h = div.(h, temprna)
-        bins, DT = read_dwelltimes(datapath[2:end])
-        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
-    elseif datatype == "dwelltime"
-        bins, DT = read_dwelltimes(datapath)
-        return DwellTimeData(label, gene, bins, DT, dttype)
-    elseif occursin("trace", datatype)
-        if datatype == "tracejoint"
-            load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-        elseif datatype == "tracegrid"
-            load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
-        else
-            load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
-        end
-    else
-        throw("$datatype not included")
-    end
-end
 
-"""
-    load_data_grid(datapath, label, gene, datacond, traceinfo)
 
-TBW
-"""
-function load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
-    trace = read_tracefiles_grid(datapath, datacond, traceinfo)
-    # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1))
-end
 
 """
     load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
@@ -313,6 +273,52 @@ function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
 end
 
 """
+    load_data_grid(datapath, label, gene, datacond, traceinfo)
+
+TBW
+"""
+function load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
+    trace = read_tracefiles_grid(datapath, datacond, traceinfo)
+    # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1))
+end
+
+"""
+    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
+
+return data structure
+"""
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
+    if datatype == "rna"
+        len, h = read_rna(gene, datacond, datapath)
+        return RNAData(label, gene, len, h)
+    elseif datatype == "rnaonoff"
+        len, h = read_rna(gene, datacond, datapath[1])
+        h = div.(h, temprna)
+        LC = readfile(gene, datacond, datapath[2])
+        return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
+    elseif datatype == "rnadwelltime"
+        len, h = read_rna(gene, datacond, datapath[1])
+        h = div.(h, temprna)
+        bins, DT = read_dwelltimes(datapath[2:end])
+        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
+    elseif datatype == "dwelltime"
+        bins, DT = read_dwelltimes(datapath)
+        return DwellTimeData(label, gene, bins, DT, dttype)
+    elseif occursin("trace", datatype)
+        if datatype == "tracejoint"
+            load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+        elseif datatype == "tracegrid"
+            load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
+        else
+            load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
+        end
+    else
+        throw("$datatype not included")
+    end
+end
+
+"""
     GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid)
 
 TBW
@@ -342,7 +348,7 @@ function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedpara
     nparams = length(hierarchical[2])
     ratestart = nhypersets * nrates + 1
     paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
@@ -360,7 +366,7 @@ function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fitted
     nparams = length(hierarchical[2])
     ratestart = nhypersets * nrates + 1
     paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
@@ -669,19 +675,6 @@ function reset_nalleles(nalleles, coupling)
 end
 
 """
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
-
-TBW
-"""
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
-    else
-        return fittedparam
-    end
-end
-
-"""
     default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
 
 create vector of fittedparams that includes all rates except the decay time
@@ -714,6 +707,21 @@ function default_fitted(datatype::String, transitions, R::Int, S, insertstep, no
     end
     fittedparam
 end
+
+"""
+    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+
+TBW
+"""
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if isempty(fittedparam)
+        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
+    else
+        return fittedparam
+    end
+end
+
+
 """
     make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
 
@@ -732,24 +740,49 @@ function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, ins
     return fixed, fittedparam
 end
 """
-    make_fitted(fittedparams,N)
+    make_fitted_hierarchical(fittedparams,N)
 
 make fittedparams vector for hierarchical model
+
+returns 
+-`f`: all fitted parameters
+-`fhyper`: fitted hyper parameters (needed for hyper distribution)
+-`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
+
+Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
+hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
+shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
 """
-function make_fitted(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
+function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
     f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
     f = sort(f)
-    fhyper = [fittedindividual]
+    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
     for i in 1:nhypersets-1
         append!(f, fittedindividual .+ i * nrates)
         push!(fhyper, fittedindividual .+ i * nrates)
     end
-    fpriors = copy(f)
+    fpriors = copy(f) # priors only apply to shared and hyper parameters
     for i in 1:nindividuals
         append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
     end
     f, fhyper, fpriors
 end
+
+##### Under construction - specifying fitted hyper parameters independently of individual parameters
+# function make_fitted_hierarchical(fittedshared, fittedhyper, nhypersets, fittedindividual, nrates, nindividuals)
+#     fittedall = [fittedshared; fittedhyper; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+#     fittedall = sort(fittedall)
+#     fhyper = [fittedindividual]
+#     for i in 1:nhypersets-1
+#         append!(fittedall, fittedindividual .+ i * nrates)
+#         push!(fhyper, fittedindividual .+ i * nrates)
+#     end
+#     fpriors = copy(f)
+#     for i in 1:nindividuals
+#         append!(fittedall, fittedindividual .+ (i + nhypersets - 1) * nrates)
+#     end
+#     fittedall, fhyper, fpriors
+# end
 
 """
     make_fixed(fixedpop, fixedindividual, nrates, nindividuals)

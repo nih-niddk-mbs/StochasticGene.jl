@@ -201,17 +201,17 @@ r, p, h = prepare_rates(param, model)
 ```
 """
 function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
-    hyperparams = Vector{Float64}[]
+    phyper = Vector{Float64}[]
     for i in model.hierarchy.hyperindices
-        push!(hyperparams, r[i])
+        push!(phyper, r[i])
     end
     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-    return rglobal, rindividual, pindividual, hyperparams
+    return rshared, rindividual, pindividual, phyper
 end
 
 """
@@ -233,9 +233,9 @@ end
 #         push!(hyperparams, r[i])
 #     end
 #     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-#     rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+#     rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
 #     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-#     return rglobal, rindividual, pindividual, hyperparams
+#     return rshared, rindividual, pindividual, hyperparams
 # end
 
 
@@ -301,8 +301,8 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
-function ll_hierarchy(pindividual, rhyper)
-    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
+function ll_hierarchy(pindividual, phyper)
+    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
     lhp = Float64[]
     for pc in eachcol(pindividual)
         lhpc = 0
@@ -315,13 +315,13 @@ function ll_hierarchy(pindividual, rhyper)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rglobal, rindividual, pindividual, rhyper = prepare_rates(param, model)
+    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
     if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared(rglobal, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     else
-        llg, llgp = ll_hmm_hierarchical(rglobal, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end
-    lhp = ll_hierarchy(pindividual, rhyper)
+    lhp = ll_hierarchy(pindividual, phyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
