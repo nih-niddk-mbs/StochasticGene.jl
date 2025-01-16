@@ -400,7 +400,7 @@ then G = (2,3).
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhypersets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted

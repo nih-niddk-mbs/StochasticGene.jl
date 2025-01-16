@@ -124,7 +124,7 @@ function save_model(model::ComposableModel, outpath::String)
         push!(model_info["traits"], "hierarchical")
         model_info["parameters"]["hierarchical"] = Dict(
             "hierarchy" => Dict(
-                "nhyper" => hier.hierarchy.nhyper,
+                "nhypersets" => hier.hierarchy.nhypersets,
                 "nrates" => hier.hierarchy.nrates,
                 "nparams" => hier.hierarchy.nparams,
                 "nindividuals" => hier.hierarchy.nindividuals,
@@ -197,7 +197,7 @@ function load_model(filepath::String)
     if "hierarchical" in model_info["traits"]
         hp = model_info["parameters"]["hierarchical"]["hierarchy"]
         hierarchy = Hierarchy(
-            hp["nhyper"],
+            hp["nhypersets"],
             hp["nrates"],
             hp["nparams"],
             hp["nindividuals"],

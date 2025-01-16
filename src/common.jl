@@ -165,14 +165,14 @@ end
 Structure for hierarchical model
 
     # Fields
-- `nhyper::Int`: number of hyper parameter sets
+- `nhypersets::Int`: number of hyper parameter sets
 - `nparams::Int`: number of fitted hyper params per set = length(fittedparam)
 - `nrates`::Int`: number of rates (all params) for each individual
 - `nindividualparams::Int`: number of fitted params per individual
 - `nindividuals::Int`: number of individuals (traces)
 """
 struct Hierarchy
-    nhyper::Int
+    nhypersets::Int
     nrates::Int
     nparams::Int
     nindividuals::Int

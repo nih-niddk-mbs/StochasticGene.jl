@@ -209,7 +209,7 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
         push!(hyperparams, r[i])
     end
     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhyper)
+    rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return rglobal, rindividual, pindividual, hyperparams
 end
@@ -233,7 +233,7 @@ end
 #         push!(hyperparams, r[i])
 #     end
 #     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-#     rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhyper)
+#     rglobal = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
 #     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
 #     return rglobal, rindividual, pindividual, hyperparams
 # end

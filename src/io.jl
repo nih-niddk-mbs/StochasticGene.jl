@@ -562,7 +562,7 @@ end
 function rlabels(model::GRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
-    for i in 1:model.hierarchy.nhyper
+    for i in 1:model.hierarchy.nhypersets
         append!(labels, "shared_" .* l)
     end
     for i in 1:model.hierarchy.nindividuals

@@ -89,7 +89,7 @@ then G = (2,3).
 - `gene::String="MYC"`: gene name
 - `grid=nothing`: Int number of grid points for grid model
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhyper::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters: hierarchical=(pop.nhypersets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
@@ -336,35 +336,35 @@ hierarchical model
 # function load_model_hierarchical(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, method, hierarchical::Tuple)
 
 function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
-    nhyper = hierarchical[1]
+    nhypersets = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
-    ratestart = nhyper * nrates + 1
-    paramstart = length(fittedparam) + nhyper * nparams + 1
+    ratestart = nhypersets * nrates + 1
+    paramstart = length(fittedparam) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    rprior = rm[1:nhyper*nrates]
+    rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    pop = Hierarchy(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    pop = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
-    nhyper = hierarchical[1]
+    nhypersets = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
     raterange = 1:nrates
     noiserange = n+1:n+length(noisepriors)
     gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
-    ratestart = nhyper * nrates + 1
-    paramstart = length(fittedparam) + nhyper * nparams + 1
+    ratestart = nhypersets * nrates + 1
+    paramstart = length(fittedparam) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    rprior = rm[1:nhyper*nrates]
+    rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    pop = Hierarchy(nhyper, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    pop = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     GRSMgridhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, raterange, noiserange, gridrange, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -736,17 +736,17 @@ end
 
 make fittedparams vector for hierarchical model
 """
-function make_fitted(fittedshared, nhyper, fittedindividual, nrates, nindividuals)
+function make_fitted(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
     f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
     f = sort(f)
     fhyper = [fittedindividual]
-    for i in 1:nhyper-1
+    for i in 1:nhypersets-1
         append!(f, fittedindividual .+ i * nrates)
         push!(fhyper, fittedindividual .+ i * nrates)
     end
     fpriors = copy(f)
     for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhyper - 1) * nrates)
+        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
     end
     f, fhyper, fpriors
 end
@@ -808,16 +808,16 @@ function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, nois
     [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 """
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhyper::Int, elongationtime, cv=1.0)
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime, cv=1.0)
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhyper::Int, elongationtime::Float64, cv::Float64=1.0)
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime::Float64, cv::Float64=1.0)
     rm = prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime)
     r = copy(rm)
     priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R - 1); 5.0; fill(5.0, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.5, 0.5]]
     append!(r, priorcv)
-    for i in 3:nhyper
+    for i in 3:nhypersets
         append!(r, cv .* rm)
     end
     # for i in 1:nindividuals
