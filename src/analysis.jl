@@ -1155,9 +1155,16 @@ end
 
 TBW
 """
-function write_traces_coupling(folder, datafolder, datacond, interval, sources=1:3, targets=1:3, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true)
+function write_traces_coupling(folder, datapath, datacond, interval, sources=1:3, targets=1:4, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, pattern="gene")
     for source in sources, target in targets
-        write_traces(folder, datafolder, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+        for (root, dirs, files) in walkdir(folder)
+            for f in files
+                # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+                if occursin("rates", f) && occursin("$pattern$source$target", f)
+                    write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+                end
+            end
+        end
     end
 end
 
