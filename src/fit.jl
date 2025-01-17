@@ -188,7 +188,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     datapath = folder_path(datapath, root, "data")
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling, grid)
+    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid)
@@ -810,12 +810,74 @@ function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
     tuple(fixed...)
 end
 
+
+function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
+    [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
+end
+
+function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors)
+    rm = Float64[]
+    for i in eachindex(R)
+        append!(rm, prior_hypercv(transitions[i], R[i], S, insertstep, noisepriors[i]))
+    end
+    rm
+end
+
+
 """
-    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling)
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
+
+default priors for rates (includes all parameters, fitted or not)
+"""
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
+    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
+end
+
+"""
+    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+
+TBW
+"""
+function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+    rm = Float64[]
+    for i in eachindex(R)
+        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
+    end
+    [rm; fill(0.0, coupling[5])]
+end
+
+"""
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime, cv=1.0)
+
+default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
+"""
+function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets::Int, coupling=tuple(), cv::Float64=1.0)
+    r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
+    hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
+    # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
+    append!(r, hypercv)
+    for i in 3:nhypersets
+        append!(r, cv .* rm)
+    end
+    r
+end
+
+"""
+    prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
+
+TBW
+"""
+function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+    [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
+    # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
+end
+
+"""
+    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
 
 set priormean if empty
 """
-function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, hierarchical, elongationtime, coupling, grid)
+function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     if !isempty(priormean)
         return priormean
     else
@@ -829,52 +891,9 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
                 return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
             end
         else
-            return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1], elongationtime)
+            return prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1], elongationtime, coupling)
         end
     end
-end
-
-"""
-    prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-TBW
-"""
-function prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
-end
-"""
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-default priors for rates (includes all parameters, fitted or not)
-"""
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
-end
-"""
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime, cv=1.0)
-
-default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
-"""
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime::Float64, cv::Float64=1.0)
-    rm = prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime)
-    r = copy(rm)
-    hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
-    append!(r, hypercv)
-    for i in 3:nhypersets
-        append!(r, cv .* rm)
-    end
-    # for i in 1:nindividuals
-    #     append!(r, rm)
-    # end
-    r
-end
-
-function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-    rm = Float64[]
-    for i in eachindex(R)
-        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
-    end
-    [rm; fill(0.0, coupling[5])]
 end
 
 """

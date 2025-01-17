@@ -1644,6 +1644,24 @@ Computes the Kronecker delta of two integers.
 kronecker_delta(i, j) = i == j ? 1 : 0
 
 """
+    meantime(r::Vector)
+
+Calculates the mean time given a vector of rates.
+
+# Arguments
+- `r`: A vector of rates.
+
+# Description
+This function calculates the mean time by taking the reciprocal of each rate in the vector `r` and summing them up.
+
+# Returns
+- `Float64`: The mean time.
+"""
+function meantime(r::Vector)
+    sum(1 ./ r)
+end
+
+"""
     mean_elongationtime(r, model)
 
 Calculates the mean elongation time for a given model and rates.
@@ -1665,24 +1683,6 @@ function mean_elongationtime(r, transitions, R)
     else
         return 1.0
     end
-end
-
-"""
-    meantime(r::Vector)
-
-Calculates the mean time given a vector of rates.
-
-# Arguments
-- `r`: A vector of rates.
-
-# Description
-This function calculates the mean time by taking the reciprocal of each rate in the vector `r` and summing them up.
-
-# Returns
-- `Float64`: The mean time.
-"""
-function meantime(r::Vector)
-    sum(1 ./ r)
 end
 
 """
