@@ -116,7 +116,7 @@ then G = (2,3).
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of observed active traces for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
+- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple = (frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces); for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
@@ -246,7 +246,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     println(traceinfo)
     # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
     # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    weight = 1 - traceinfo[4]
+    weight = (1 - traceinfo[4]) / traceinfo[4]
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     if datatype == "trace"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
@@ -356,6 +356,11 @@ function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedpara
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
+"""
+    GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
+
+TBW
+"""
 function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
     nhypersets = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
@@ -375,7 +380,7 @@ function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fitted
 end
 
 """
-    load_model_coupled(r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
+    GRSMcoupledmodel(r::Vector, rm::Vector, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
 
 Coupled model
 """
@@ -592,6 +597,11 @@ end
 
 
 
+"""
+    num_noiseparams(datatype, noisepriors)
+
+TBW
+"""
 function num_noiseparams(datatype, noisepriors)
     if occursin("trace", lowercase(datatype))
         if eltype(noisepriors) <: Number
@@ -848,8 +858,8 @@ default priors for hierarchical models, arranged into a single vector, shared an
 function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, nhypersets::Int, elongationtime::Float64, cv::Float64=1.0)
     rm = prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime)
     r = copy(rm)
-    priorcv = [fill(5.0, length(transitions)); 5.0; fill(0.2, R - 1); 5.0; fill(5.0, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.5, 0.5]]
-    append!(r, priorcv)
+    hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
+    append!(r, hypercv)
     for i in 3:nhypersets
         append!(r, cv .* rm)
     end
