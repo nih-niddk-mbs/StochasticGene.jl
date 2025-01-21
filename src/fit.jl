@@ -353,16 +353,33 @@ function make_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv
     return reporter, components, priord
 end
 
+function make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
+    n = num_rates(transitions, R, S, insertstep)
+    raterange = 1:n
+    noiserange = n+1:n+length(noisepriors)
+    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+grid
+    priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
+    return raterange, noiserange, gridrange
+end
+
+"""
+    GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method)
+"""
 function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors)
-    if !isempty(hierarchical)
-
-    end
+    trait = NamedTuple()
     if !isempty(coupling)
-
+        reporter, components, priord = make_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling)
+        merge(trait, trait, (:reporter, reporter))
     end
-    if !isempty(grid)
-
+    if !isnothing(grid)
+        raterange, noiserange, gridrange = make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid)
+        merge(trait, trait, (:grid, grid))
     end
+    if !isempty(hierarchical)
+        hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical)
+        merge(trait, trait, (:hyper, hyper))
+    end
+
     
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype)
     n = num_rates(transitions, R, S, insertstep)
@@ -370,7 +387,7 @@ function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixe
     noiserange = n+1:n+length(noisepriors)
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     pop = nothing
-    return GRSMmodel{typeof(r),typeof(pop),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(raterange, noiserange, priord, propcv, fittedparam, fixedeffects, method, components[1], reporter)
+    return GRSMtraitmodelmodel{typeof(r),typeof(pop),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(raterange, noiserange, priord, propcv, fittedparam, fixedeffects, method, components[1], reporter)
 end
 
 """

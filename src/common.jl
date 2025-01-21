@@ -243,8 +243,18 @@ Trait for hierarchical models that share parameters across different levels.
 # Fields
 - `hierarchy::Hierarchy`: Hierarchy of models for hierarchical modeling
 """
+# struct HierarchicalTrait <: ModelTrait
+#     hierarchy::Hierarchy
+# end
+
 struct HierarchicalTrait <: ModelTrait
-    hierarchy::Hierarchy
+    nhypersets::Int
+    nrates::Int
+    nparams::Int
+    nindividuals::Int
+    ratestart::Int
+    paramstart::Int
+    hyperindices::Vector{Vector}
 end
 
 """
