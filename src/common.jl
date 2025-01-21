@@ -369,14 +369,14 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-struct GRSMtraitmodel{} <: AbstractGRSMmodel{RateType,ReporterType}
+struct GRSMtraitmodel{Gtype,Rtype,Stype,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     traits::NamedTuple
-    rates::RateType
+    rates::Vector
     Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
+    G::Gtype
+    R::Rtype
+    S::Stype
+    insertstep::InsertstepType
     nalleles::Int
     splicetype::String
     rateprior::PriorType
