@@ -318,7 +318,110 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
     end
 end
 
+"""
+    make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
 
+TBW
+"""
+function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
+    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+    sojourn = coupled_states(sojourn, coupling, components, G)
+    nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
+    return (sojourn, nonzeros), components
+end
+
+function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
+    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    components = TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype)
+    nonzeros = nonzero_rows(components)
+    return (sojourn, nonzeros), components
+end
+"""
+    make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+
+TBW
+"""
+
+function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    reporter = onstates
+    components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
+    return reporter, components
+end
+
+function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHistogramData}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    nnoise = length(noisepriors)
+    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+    return reporter, components
+end
+
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
+end
+
+
+function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    # mcomponents = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
+    # reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
+    components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype), tcomponents)
+    return reporter, components
+end
+
+function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    if isempty(onstates)
+        onstates = on_states(G, R, S, insertstep)
+    else
+        for i in eachindex(onstates)
+            if isempty(onstates[i])
+                onstates[i] = on_states(G, R, S, insertstep)
+            end
+            onstates[i] = Int64.(onstates[i])
+        end
+    end
+    reporter = onstates
+    if typeof(data) == RNADwellTimeData
+        if length(onstates) == length(data.DTtypes)
+            components = MTDComponents(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
+        else
+            throw("length of onstates and data.DTtypes not the same")
+        end
+    else
+        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
+    end
+    return reporter, components
+end
+
+function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple, R, S, insertstep, probfn, noisepriors, coupling::Tuple)
+    println(coupling)
+    reporter = HMMReporter[]
+    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    for i in eachindex(G)
+        nnoise = length(noisepriors[i])
+        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+    end
+    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
+    return reporter, components
+end
+
+function make_reporter_components_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling::Tuple)
+    println(coupling)
+    reporter = HMMReporter[]
+    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    for i in eachindex(G)
+        nnoise = length(noisepriors[i])
+        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+    end
+    priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
+    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
+    return reporter, components, priord
+end
 
 function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
     nhypersets = hierarchical[1]
@@ -338,20 +441,9 @@ function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, 
     return hyper, raterange, noiserange, gridrange, fittedparam, fixedeffects, priord
 end
 
-function make_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling::Tuple)
-    println(coupling)
-    reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
-    for i in eachindex(G)
-        nnoise = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
-        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
-    end
-    priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
-    return reporter, components, priord
-end
+
+
+
 
 function make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
     n = num_rates(transitions, R, S, insertstep)
@@ -370,6 +462,8 @@ function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixe
     if !isempty(coupling)
         reporter, components, priord = make_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling)
         merge(trait, trait, (:reporter, reporter))
+    else
+        reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype)
     end
     if !isnothing(grid)
         raterange, noiserange, gridrange = make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid)
@@ -541,100 +635,6 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
     else
         load_model(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical)
     end
-end
-"""
-    make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-
-TBW
-"""
-
-function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    reporter = onstates
-    components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-    return reporter, components
-end
-
-function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHistogramData}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    nnoise = length(noisepriors)
-    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-    return reporter, components
-end
-
-# function make_reporter_components(data::TraceRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-#     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-#     reporter = HMMReporter(length(noise_priors), num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-#     components = make_components_MT(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-#     return reporter, components
-# end
-
-
-
-function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
-    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
-    components = TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype)
-    nonzeros = nonzero_rows(components)
-    return (sojourn, nonzeros), components
-end
-
-function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
-    sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
-    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
-    sojourn = coupled_states(sojourn, coupling, components, G)
-    nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
-    return (sojourn, nonzeros), components
-end
-
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
-end
-
-
-function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    # mcomponents = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-    # reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
-    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, "")
-    components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype), tcomponents)
-    return reporter, components
-end
-
-function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    if isempty(onstates)
-        onstates = on_states(G, R, S, insertstep)
-    else
-        for i in eachindex(onstates)
-            if isempty(onstates[i])
-                onstates[i] = on_states(G, R, S, insertstep)
-            end
-            onstates[i] = Int64.(onstates[i])
-        end
-    end
-    reporter = onstates
-    if typeof(data) == RNADwellTimeData
-        if length(onstates) == length(data.DTtypes)
-            components = MTDComponents(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
-        else
-            throw("length of onstates and data.DTtypes not the same")
-        end
-    else
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
-    end
-    return reporter, components
-end
-
-function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple, R, S, insertstep, probfn, noisepriors, coupling::Tuple)
-    println(coupling)
-    reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
-    for i in eachindex(G)
-        nnoise = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
-        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
-    end
-    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
-    return reporter, components
 end
 
 """
