@@ -344,27 +344,14 @@ TBW
 """
 
 function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    reporter = onstates
-    components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-    return reporter, components
-end
-
-function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHistogramData}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    nnoise = length(noisepriors)
-    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
-    return reporter, components
+    return onstates, make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
 end
 
 function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
 end
 
-
 function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    # mcomponents = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-    # reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
     reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
     components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype), tcomponents)
     return reporter, components
@@ -381,16 +368,15 @@ function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, inse
             onstates[i] = Int64.(onstates[i])
         end
     end
-    reporter = onstates
-    if typeof(data) == RNADwellTimeData
-        if length(onstates) == length(data.DTtypes)
-            components = MTDComponents(transitions, G, R, S, insertstep, onstates, data.DTtypes, data.nRNA, decayrate, splicetype)
-        else
-            throw("length of onstates and data.DTtypes not the same")
-        end
-    else
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
-    end
+    components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
+    return onstates, components
+end
+
+function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHistogramData}, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
+    nnoise = length(noisepriors)
+    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
 
@@ -408,7 +394,7 @@ function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple
     return reporter, components
 end
 
-function make_reporter_components_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling::Tuple)
+function make_reporter_components(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling::Tuple)
     println(coupling)
     reporter = HMMReporter[]
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
@@ -474,7 +460,7 @@ function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixe
         merge(trait, trait, (:hyper, hyper))
     end
 
-    
+
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype)
     n = num_rates(transitions, R, S, insertstep)
     raterange = 1:n
