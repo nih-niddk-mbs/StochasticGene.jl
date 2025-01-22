@@ -412,9 +412,6 @@ end
 function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
     nhypersets = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
-    raterange = 1:nrates
-    noiserange = n+1:n+length(noisepriors)
-    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * nrates + 1
@@ -426,10 +423,6 @@ function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, 
     hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     return hyper, raterange, noiserange, gridrange, fittedparam, fixedeffects, priord
 end
-
-
-
-
 
 function make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
     n = num_rates(transitions, R, S, insertstep)
@@ -443,31 +436,25 @@ end
 """
     GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method)
 """
-function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors)
+function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, ngrid::Int)
     trait = NamedTuple()
     if !isempty(coupling)
         reporter, components, priord = make_coupled(rm, fittedparam, transitions, G, R, S, insertstep, priorcv, noisepriors, coupling)
         merge(trait, trait, (:reporter, reporter))
     else
-        reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype)
+        reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     end
     if !isnothing(grid)
         raterange, noiserange, gridrange = make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid)
-        merge(trait, trait, (:grid, grid))
+        merge(trait, trait, (:grid, GridTrait(raterange, noiserange, gridrange, ngrid)))
     end
     if !isempty(hierarchical)
         hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical)
         merge(trait, trait, (:hyper, hyper))
+    else 
+        priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     end
-
-
-    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype)
-    n = num_rates(transitions, R, S, insertstep)
-    raterange = 1:n
-    noiserange = n+1:n+length(noisepriors)
-    priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    pop = nothing
-    return GRSMtraitmodelmodel{typeof(r),typeof(pop),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(raterange, noiserange, priord, propcv, fittedparam, fixedeffects, method, components[1], reporter)
+    GRSMtraitmodel{typeof(trait),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 """

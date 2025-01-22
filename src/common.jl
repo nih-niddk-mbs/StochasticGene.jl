@@ -282,6 +282,7 @@ abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
 abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
+abstract type AbstractGRSMtraitmodel{TraitType} <: AbstractGmodel end
 abstract type AbstractGRSMhierarchicalmodel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
 
 """
@@ -379,14 +380,14 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-struct GRSMtraitmodel{Gtype,Rtype,Stype,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    traits::NamedTuple
+struct GRSMtraitmodel{TraitType,Gtype,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
+    traits::TraitType
     rates::Vector
     Gtransitions::Tuple
     G::Gtype
-    R::Rtype
-    S::Stype
-    insertstep::InsertstepType
+    R::Gtype
+    S::Gtype
+    insertstep::GType
     nalleles::Int
     splicetype::String
     rateprior::PriorType
