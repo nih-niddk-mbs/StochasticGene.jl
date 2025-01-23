@@ -172,7 +172,7 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
             println("t:", t)
             println(index, " ", allele)
             println(invactions[action])
-            println(enabled," ", disabled)
+            println(enabled, " ", disabled)
             println(initial, "->", final)
         end
 
@@ -247,7 +247,7 @@ end
 
 - `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
 """
-function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing,hierarchical=tuple())
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     for i in eachindex(trace)
@@ -255,7 +255,7 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
             r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, col]
         else
             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
         end
@@ -268,13 +268,13 @@ end
 
 TBW
 """
-function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
         tr = Vector[]
         for t in t
-            tr = push!(tr, t[1:end-1, 2])
+            tr = push!(tr, t[1:end-1, col])
         end
         trace[i] = hcat(tr...)
     end
@@ -1029,7 +1029,7 @@ function couplingG!(tau, state, unit::Int, t, r, disabled, enabled, initial, fin
             end
         end
     end
-    
+
     # unit as target
     # new state moves to a target transition
     for source in sources

@@ -1255,12 +1255,13 @@ ntrials = 100
 plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
-    _, _, ac1, ac2, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
-    simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
+    _, _, _, _, ac1, ac2, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:stride:lag))
+    simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag, stride)
 end
 
-function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(-60:60))
+function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time::Float64=720.0, lag=60, stride=1, col=2)
+    lags = collect(-lag:stride:lag)
     cc_mean = zeros(length(lags))
     cc_var = zeros(length(lags))
     ac1_mean = zeros(61)
@@ -1273,7 +1274,7 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, t
     ac2tuple = (0, ac2_mean, ac2_var)
     vartuple = (0, cc_mean, cc_var)
     for n in 1:ntrials
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1)
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1,col=col)
         vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
         ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:60), demean=true))
         ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:60), demean=true))

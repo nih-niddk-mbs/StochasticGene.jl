@@ -380,13 +380,13 @@ struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentT
     reporter::ReporterType
 end
 
-struct GRSMtraitmodel{TraitType,Gtype,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
+struct GRSMtraitmodel{TraitType,GType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
     traits::TraitType
     rates::Vector
     Gtransitions::Tuple
-    G::Gtype
-    R::Gtype
-    S::Gtype
+    G::GType
+    R::GType
+    S::GType
     insertstep::GType
     nalleles::Int
     splicetype::String
