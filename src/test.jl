@@ -166,6 +166,13 @@ end
 
 ### end of functions used in runtest
 
+function test_composable(; probfn = prob_Gaussian, ngrid=4, coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(2, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.0, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], hierarchical=(2, [9, 18], tuple()), method=(Tsit5(), true), rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0, priorcv=10.0)
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
+    rm = StochasticGene.prior_ratemean_hierarchical(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], hierarchical[1], coupling)
+    GRSMtraitmodel(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, ngrid)
+end
+
 function test_ll_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70])
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
@@ -221,32 +228,6 @@ function test_fit_coupled(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1
     # r, couplingStrength, noiseparams = prepare_rates(get_param(model), model)
 end
 
-
-function loglikelihood_test(data::TraceData, model::GRSMcoupledmodel)
-    r, couplingStrength, noiseparams = prepare_rates(get_param(model), model)
-    ll_hmm_coupled_test(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-end
-
-function test_Cparts(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
-    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
-    r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
-    sojourn, nonzeros = reporter
-    sources = components.sources
-    model = components.model
-    TDdims = get_TDdims(components)
-    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-    TCDnew = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-    p = nothing
-    pnew = nothing
-    for α in eachindex(components.modelcomponents)
-        dt = occursin.("G", dttype[α])
-        p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-    end
-    return TCD, p
-end
-
 function test_trace_background(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70])
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.5, 1))
@@ -256,115 +237,6 @@ function test_trace_background(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2
     # fits, stats, measures = run_mh(data, model, options)
     # StochasticGene.get_rates(fits.parml, model), rtarget
     return ll, trace
-end
-
-
-function test_init(r, transitions, G, R, S, insertstep)
-    onstates = on_states(G, R, S, insertstep)
-    indices = set_indices(length(transitions), R, S, insertstep)
-    base = S > 0 ? 3 : 2
-    nT = G * base^R
-    components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, 2, r[num_rates(transitions, R, S, insertstep)], "")
-    T = make_mat_T(components.tcomponents, r)
-    TA = make_mat_TA(components.tcomponents, r)
-    TI = make_mat_TI(components.tcomponents, r)
-    pss = normalized_nullspace(T)
-    nonzeros = nonzero_rows(TI)
-    SAinit = init_SA(r, onstates, components.tcomponents.elementsT, pss)
-    SIinit = init_SI(r, onstates, components.tcomponents.elementsT, pss, nonzeros)
-
-    return SIinit, SAinit, onstates, components.tcomponents, pss, nonzeros, T, TA, TI[nonzeros, nonzeros]
-end
-
-function histogram_model(r, transitions, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, nhist::Int, fittedparam, onstates, propcv, cv)
-    ntransitions = length(transitions)
-    if length(r) != num_rates(transitions, R, S, insertstep)
-        throw("r does not have", num_rates(transitions, R, S, insertstep), "elements")
-    end
-    method = 1
-    if typeof(cv) <: Real
-        rcv = fill(cv, length(r))
-    else
-        rcv = cv
-    end
-    d = distribution_array(log.(r[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
-    if R > 0
-        components = make_components_MTAI(transitions, G, R, S, insertstep, on_states(G, R, S, insertstep), nhist, r[num_rates(transitions, R, S, insertstep)])
-        return GRSMmodel{typeof(r),typeof(d),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),Int}(G, R, S, nalleles, "", r, d, propcv, fittedparam, method, transitions, components, 0)
-    else
-        components = make_components(transitions, G, r, nhist, set_indices(ntransitions), onstates)
-        return GMmodel{typeof(r),typeof(d),Float64,typeof(fittedparam),typeof(method),typeof(components)}(G, nalleles, r, d, proposal, fittedparam, method, transitions, components, onstates)
-    end
-end
-
-function test_mat_T(r, transitions, G, R, S, insertstep)
-    components1 = StochasticGene.make_components_T(transitions, G, R, S, insertstep, "")
-    components2 = StochasticGene.make_components_TGRS(transitions, G, R, S, insertstep, "")
-    T1 = StochasticGene.make_mat_T(components1, r)
-    T2 = StochasticGene.make_mat_T(components2, r)
-    return T1, T2
-end
-
-function test_mat2(r, transitions, G, R, S, insertstep, nhist=20)
-    components = StochasticGene.make_components_MTRG(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T = StochasticGene.make_mat_TRG(components.tcomponents, r)
-    M = StochasticGene.make_mat_MRG(components.mcomponents, r)
-    B = StochasticGene.make_mat_B2(components.mcomponents, r)
-    return T, M, B, components
-end
-
-function test_mat(r, transitions, G, R, S, insertstep, nhist=20)
-    components = make_components_MT(transitions, G, R, S, insertstep, nhist, 1.01, "")
-    T = StochasticGene.make_mat_T(components.tcomponents, r)
-    M = StochasticGene.make_mat_M(components.mcomponents, r)
-    T, M, components
-end
-
-function test_mat_TD(r, transitions, G, R, S, insertstep, onstates, dttype)
-    _, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "")
-    make_mat_TD(components, r)
-end
-
-function test_C(r=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), bins=[[collect(1:20), collect(1:20)], [collect(1:20), collect(1:20)]], coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), onstates=[[[2], Int[]], [[2], Int[]]], dttype=[["ONG", "ON"], ["ONG", "ON"]])
-    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, onstates, dttype, "", coupling)
-    r, coupling_strength, _ = prepare_rates(r, coupling[3], transitions, G, R, S, insertstep, [0, 0])
-    sojourn, nonzeros = reporter
-    sources = components.sources
-    model = components.model
-    TDdims = get_TDdims(components)
-    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-    hists = Vector{Vector}[]
-    TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-    for α in eachindex(components.modelcomponents)
-        dt = occursin.("G", dttype[α])
-        p = steady_state_dist(α, TDdims[α], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-        h = Vector[]
-        TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-        for i in eachindex(sojourn[α])
-            if dt[i]
-                push!(h, init_S(sojourn[α][i], p.GC, p.pssG))
-            else
-                push!(h, init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i]))
-            end
-        end
-        push!(hists, h)
-    end
-    return hists, reporter, components, r, coupling_strength, TCD
-end
-
-function test_mat_Tc(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
-    components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
-    return make_mat_TC(components, r, coupling_strength)
-end
-
-function test_mat_Tc2(coupling, r, coupling_strength, transitions, G, R, S, insertstep)
-    T = []
-    for i in eachindex(G)
-        c = make_components_TRG(transitions[i], G[i], R[i], S[i], insertstep[i], "")
-        push!(T, make_mat_TRG(c, r[i]))
-    end
-    components = make_components_TCoupled(coupling, transitions, G, R, S, insertstep, "")
-    return make_mat_TC(components, r, coupling_strength), T, kron(T[1], sparse(I, size(T[2]))) + kron(sparse(I, size(T[1])), T[2])
 end
 
 function compare(p0, x, y, z)
