@@ -412,8 +412,9 @@ end
 
 
 function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+    # println(reporter)
     nhypersets = hierarchical[1]
-    nrates = num_rates(transitions, R, S, insertstep) + reporter.n
+    nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * nrates + 1
@@ -423,7 +424,7 @@ function make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, 
     rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
     hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-    return hyper, raterange, noiserange, gridrange, fittedparam, fixedeffects, priord
+    return hyper, fittedparam, fixedeffects, priord
 end
 
 function make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
@@ -439,25 +440,26 @@ end
     GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method)
 """
 function GRSMtraitmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, grid::Int)
-    trait = NamedTuple()
+    traits = NamedTuple()
     if !isempty(coupling)
         reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, probfn, noisepriors, coupling)
         priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-        merge(trait, trait, (reporter=reporter,))
+        traits = merge(traits, (coupling=CouplingTrait(coupling[5]),))
+        println(traits)
     else
         reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     end
     if !isnothing(grid)
         raterange, noiserange, gridrange = make_grid(rm, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid)
-        merge(trait, trait, (grid=GridTrait(raterange, noiserange, gridrange, ngrid),))
+        traits = merge(traits, (grid=GridTrait(raterange, noiserange, gridrange, grid),))
     end
     if !isempty(hierarchical)
         hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
-        merge(trait, trait, (hyper=hyper,))
-    else 
+        traits = merge(traits, (hierarchical=hyper,))
+    else
         priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     end
-    GRSMtraitmodel{typeof(trait),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    GRSMtraitmodel{typeof(traits),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(traits, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 
@@ -531,7 +533,7 @@ function load_model_test(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, 
         return GRSMtraitmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, method, noisepriors, coupling, hierarchical, ngrid)
     end
 
-    
+
 
     # if !isempty(coupling)
     #     GRSMcoupledmodel(r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
@@ -1099,7 +1101,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
     end
 end
 
-prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, factor=10) = prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, factor=10)
+prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, factor=10) = prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, factor)
 
 
 

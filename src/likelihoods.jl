@@ -1023,8 +1023,29 @@ function num_rates(model::String)
 end
 
 
+
+
 """
-    total_parameters(model::AbstractGmodel)
+    num_total_parameters(transitions, R, S, insertstep
+    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
+    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
+
+TBW
+"""
+function num_total_parameters(transitions, R::Int, S, insertstep, reporter)
+    n = typeof(reporter) <: HMMReporter ? reporter.n : 0
+    num_rates(transitions, R, S, insertstep) + n
+end
+
+function num_total_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
+    n = 0
+    for i in eachindex(R)
+        n += num_total_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
+    end
+    n
+end
+"""
+    num_total_parameters(model::AbstractGmodel)
 
 total number of parameters
 
@@ -1045,3 +1066,7 @@ function num_total_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
+
+
+
+
