@@ -170,7 +170,8 @@ function test_composable(; probfn = prob_Gaussian, ngrid=4, coupling=((1, 2), (t
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
     rm = StochasticGene.prior_ratemean_hierarchical(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], hierarchical[1], coupling)
-    GRSMtraitmodel(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, ngrid)
+    model = GRSMtraitmodel(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, ngrid)
+    data, model
 end
 
 function test_ll_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70])

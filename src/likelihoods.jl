@@ -214,6 +214,20 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     return rshared, rindividual, pindividual, phyper
 end
 
+function prepare_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    r = get_rates(param, model)
+    phyper = Vector{Float64}[]
+    for i in model.hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+    pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+    return rshared, rindividual, pindividual, phyper
+end
+
 """
     prepare_rates(param, model::GRSMgridmodel)
 
@@ -224,6 +238,10 @@ function prepare_rates(param, model::GRSMgridmodel)
     r[model.raterange], r[model.noiserange], r[model.gridrange]
 end
 
+function prepare_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+    r = get_rates(param, model)
+    r[model.raterange], r[model.noiserange], r[model.gridrange]
+end
 # function prepare_rates(param, model::GRSMgridhierarchicalmodel)
 #     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
 #     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
@@ -276,6 +294,7 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
+
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
@@ -325,6 +344,35 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait, hierarchical::Hierarchy}})
+
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
+    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    lhp = ll_hierarchy(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
 
 
 # Likelihood functions

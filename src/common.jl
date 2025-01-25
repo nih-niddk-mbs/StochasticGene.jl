@@ -216,26 +216,6 @@ abstract type ModelTrait end
 struct GRSMTrait <: ModelTrait end
 
 """
-    CouplingTrait
-
-Trait for models that have coupling between units.
-
-# Fields
-- `source_models::Tuple`: Model indices for each unit (e.g., (1,1,2) means units 1 and 2 use model 1, unit 3 uses model 2)
-- `source_units::Tuple`: Source units for each unit (e.g., ([2,3], [1], Int[]) means unit 1 influenced by 2,3; unit 2 by 1; unit 3 by none)
-- `source_states::Tuple`: Source states (e.g., (3,0) means model 1 influences in G state 3, model 2 doesn't influence)
-- `target_transitions::Tuple`: Target transitions (e.g., (0,4) means model 1 not influenced, model 2 influenced at G transition 4)
-- `n_coupling_params::Int`: Number of coupling parameters
-"""
-struct CouplingTrait <: ModelTrait
-    source_models::Tuple
-    source_units::Tuple
-    source_states::Tuple
-    target_transitions::Tuple
-    n_coupling_params::Int
-end
-
-"""
     HierarchicalTrait
 
 Trait for hierarchical models that share parameters across different levels.
