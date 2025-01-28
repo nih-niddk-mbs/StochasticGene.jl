@@ -574,179 +574,38 @@ end
 
 
 
-
-
-
-
-"""
-    num_noiseparams(datatype, noisepriors)
-
-TBW
-"""
-function num_noiseparams(datatype, noisepriors)
-    if eltype(noisepriors) <: Number
-        return length(noisepriors)
-    else
-        return length.(noisepriors)
-    end
-end
-
-function num_noiseparams(noisepriors)
-    if eltype(noisepriors) <: Number
-        return length(noisepriors)
-    else
-        return length.(noisepriors)
-    end
-end
-function default_fittedparam(transitions, R::Int, S, insertstep, noiseparams::Int)
+function default_fittedparam(transitions, R::Int, S, insertstep, noisepriors::Vector)
+    noiseparams = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     [collect(1:n-1); collect(n+1:n+noiseparams)]
 end
 
-function default_fittedparam(transitions, R::Tuple, S, insertstep, noiseparams::Tuple)
+function default_fittedparam(transitions, R::Tuple, S, insertstep, noisepriors)
     fittedparam = Int[]
     totalrates = 0
     for i in eachindex(R)
-        fittedparam = vcat(fittedparam, totalrates .+ default_fittedparam(transitions[i], R[i], S[i], insertstep[i], noiseparams[i]))
+        fittedparam = vcat(fittedparam, totalrates .+ default_fittedparam(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
         totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
     end
     fittedparam
 end
 
-function default_fittedparam(transitions, R, S, insertstep, noiseparams, coupling, grid)
+function default_fittedparam(transitions, R, S, insertstep, noisepriors, coupling, grid)
     if !isempty(coupling) && isa(R, Int)
         coupling = tuple()
     end
-    fittedparam = default_fittedparam(transitions, R, S, insertstep, noiseparams)
+    fittedparam = default_fittedparam(transitions, R, S, insertstep, noisepriors)
     fittedparam = isempty(coupling) ? fittedparam : [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
     isnothing(grid) ? fittedparam : [fittedparam; fittedparam[end] + 1]
 end
 
 function default_fittedparam(fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid)
     if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(noisepriors), coupling, grid)
+        return default_fitted(datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     else
         return fittedparam
     end
 end
-
-
-
-
-
-"""
-    default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
-
-TBW
-"""
-function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling, grid)
-    n = num_rates(transitions, R, S, insertstep)
-    fittedparam = collect(1:n-1)
-    if occursin("trace", datatype)
-        if isnothing(grid)
-            isempty(noiseparams) && throw("noisepriors cannot be empty for trace data")
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
-        else
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))
-        end
-    end
-    fittedparam
-end
-
-"""
-    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
-
-create vector of fittedparams that includes all rates except the decay time
-"""
-function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
-    fittedparam = Int[]
-    totalrates = 0
-    for i in eachindex(R)
-        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling, grid))
-        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
-    end
-    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
-end
-
-
-
-"""
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
-
-TBW
-"""
-function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(fittedparam)
-        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
-    else
-        return fittedparam
-    end
-end
-
-
-"""
-    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
-
-make default fixedeffects tuple and fittedparams vector from fixedeffects String
-"""
-function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fixed = split(fixedeffects, "-")
-    if length(fixed) > 1
-        fixed = parse.(Int, fixed)
-        deleteat!(fittedparam, fixed[2:end])
-        fixed = tuple(fixed)
-    else
-        fixed = tuple()
-    end
-    return fixed, fittedparam
-end
-"""
-    make_fitted_hierarchical(fittedparams,N)
-
-make fittedparams vector for hierarchical model
-
-returns 
--`f`: all fitted parameters
--`fhyper`: fitted hyper parameters (needed for hyper distribution)
--`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
-
-Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
-hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
-shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
-"""
-function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
-    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
-    f = sort(f)
-    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
-    for i in 1:nhypersets-1
-        append!(f, fittedindividual .+ i * nrates)
-        push!(fhyper, fittedindividual .+ i * nrates)
-    end
-    fpriors = copy(f) # priors only apply to shared and hyper parameters
-    for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
-    end
-    f, fhyper, fpriors
-end
-
-
-"""
-    make_fixed(fixedpop, fixedindividual, nrates, nindividuals)
-
-make fixed effects tuple for hierarchical model
-"""
-function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
-    fixed = Vector{Int}[]
-    for f in fixedshared
-        push!(fixed, f)
-    end
-    for h in fixedindividual
-        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
-    end
-    tuple(fixed...)
-end
-
 
 function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
@@ -760,37 +619,20 @@ function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors)
     rm
 end
 
-
-"""
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-default priors for rates (includes all parameters, fitted or not)
-"""
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
+function prior_mean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
     [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 
-"""
-    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-
-TBW
-"""
-function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+function prior_mean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, initprior=[0.1, 0.1])
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
     end
-    [rm; fill(0.0, coupling[5])]
+    rm
 end
 
-"""
-    prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
-
-default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
-"""
-function prior_ratemean_hierarchical(r, transitions, R, S, insertstep, noisepriors, nhypersets)
+function prior_mean_hierarchical(r, transitions, R, S, insertstep, noisepriors, nhypersets)
     hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
-    # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
     append!(r, hypercv)
     for i in 3:nhypersets
         append!(r, cv .* rm)
@@ -798,57 +640,15 @@ function prior_ratemean_hierarchical(r, transitions, R, S, insertstep, noiseprio
     r
 end
 
-"""
-    prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-TBW
-"""
-function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-    [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
-    # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
+function prior_mean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
+    rm = prior_rate(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+    rm = isempty(coupling) ? rm : [rm; fill(0.0, coupling[5])]
+    rm = isnothing(grid) ? rm : [rm; 0.5]
+    isempty(hierarchical) ? rm : prior_mean_hierarchical(rm, transitions, R, S, insertstep, noisepriors, hierarchical[1])
 end
 
-"""
-    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
 
-set priormean if empty
-"""
-function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    if !isempty(priormean)
-        return priormean
-    else
-        if !isnothing(grid)
-            return prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-        end
-        if isempty(hierarchical)
-            if isempty(coupling)
-                return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-            else
-                return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-            end
-        else
-            return prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1], elongationtime, coupling)
-        end
-    end
-end
 
-function set_priormean2(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    if !isempty(priormean)
-        return priormean
-    else
-        if !isempty(coupling)
-            r = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-        elseif !isnothing(grid)
-            r = prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-        else
-            r = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-        end
-        if isempty(hierarchical)
-            r = prior_ratemean_hierarchical(r, transitions, R, S, insertstep, noisepriors, hierarchical[1])
-        end
-    end
-    return r
-end
 
 # function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
 """
@@ -1023,7 +823,7 @@ components: depends on data type and model type
 """
 function load_model_test(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+    priormean = prior_mean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
     r = isempty(hierarchical) ? set_rinit(r, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     if R == 0
@@ -1033,6 +833,216 @@ function load_model_test(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, 
     end
 end
 
+
+
+"""
+    default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
+
+TBW
+"""
+function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling, grid)
+    n = num_rates(transitions, R, S, insertstep)
+    fittedparam = collect(1:n-1)
+    if occursin("trace", datatype)
+        if isnothing(grid)
+            isempty(noiseparams) && throw("noisepriors cannot be empty for trace data")
+            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
+        else
+            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))
+        end
+    end
+    fittedparam
+end
+
+"""
+    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
+
+create vector of fittedparams that includes all rates except the decay time
+"""
+function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
+    fittedparam = Int[]
+    totalrates = 0
+    for i in eachindex(R)
+        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling, grid))
+        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
+    end
+    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
+end
+
+
+"""
+    num_noiseparams(datatype, noisepriors)
+
+TBW
+"""
+function num_noiseparams(datatype, noisepriors)
+    if eltype(noisepriors) <: Number
+        return length(noisepriors)
+    else
+        return length.(noisepriors)
+    end
+end
+"""
+    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+
+TBW
+"""
+function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if isempty(fittedparam)
+        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(datatype, noisepriors), coupling, grid)
+    else
+        return fittedparam
+    end
+end
+
+
+"""
+    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
+
+make default fixedeffects tuple and fittedparams vector from fixedeffects String
+"""
+function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
+    fixed = split(fixedeffects, "-")
+    if length(fixed) > 1
+        fixed = parse.(Int, fixed)
+        deleteat!(fittedparam, fixed[2:end])
+        fixed = tuple(fixed)
+    else
+        fixed = tuple()
+    end
+    return fixed, fittedparam
+end
+"""
+    make_fitted_hierarchical(fittedparams,N)
+
+make fittedparams vector for hierarchical model
+
+returns 
+-`f`: all fitted parameters
+-`fhyper`: fitted hyper parameters (needed for hyper distribution)
+-`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
+
+Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
+hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
+shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
+"""
+function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
+    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+    f = sort(f)
+    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
+    for i in 1:nhypersets-1
+        append!(f, fittedindividual .+ i * nrates)
+        push!(fhyper, fittedindividual .+ i * nrates)
+    end
+    fpriors = copy(f) # priors only apply to shared and hyper parameters
+    for i in 1:nindividuals
+        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
+    end
+    f, fhyper, fpriors
+end
+
+
+"""
+    make_fixed(fixedpop, fixedindividual, nrates, nindividuals)
+
+make fixed effects tuple for hierarchical model
+"""
+function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
+    fixed = Vector{Int}[]
+    for f in fixedshared
+        push!(fixed, f)
+    end
+    for h in fixedindividual
+        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
+    end
+    tuple(fixed...)
+end
+
+
+# function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
+#     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
+# end
+
+# function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors)
+#     rm = Float64[]
+#     for i in eachindex(R)
+#         append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
+#     end
+#     rm
+# end
+
+
+"""
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
+
+default priors for rates (includes all parameters, fitted or not)
+"""
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
+    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
+end
+
+"""
+    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+
+TBW
+"""
+function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+    rm = Float64[]
+    for i in eachindex(R)
+        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
+    end
+    [rm; fill(0.0, coupling[5])]
+end
+
+"""
+    prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
+
+default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
+"""
+function prior_ratemean_hierarchical(r, transitions, R, S, insertstep, noisepriors, nhypersets)
+    hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
+    # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
+    append!(r, hypercv)
+    for i in 3:nhypersets
+        append!(r, cv .* rm)
+    end
+    r
+end
+
+"""
+    prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
+
+TBW
+"""
+function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+    [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
+    # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
+end
+
+"""
+    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+
+set priormean if empty
+"""
+function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+    if !isempty(priormean)
+        return priormean
+    else
+        if !isnothing(grid)
+            return prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+        end
+        if isempty(hierarchical)
+            if isempty(coupling)
+                return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+            else
+                return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
+            end
+        else
+            return prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1], elongationtime, coupling)
+        end
+    end
+end
 
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
     gene = check_genename(gene, "[")
