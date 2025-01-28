@@ -583,7 +583,7 @@ end
 
 TBW
 """
-function num_noiseparams(noisepriors)
+function num_noiseparams(datatype, noisepriors)
     if eltype(noisepriors) <: Number
         return length(noisepriors)
     else
@@ -591,25 +591,47 @@ function num_noiseparams(noisepriors)
     end
 end
 
-
-function default_fittedparam(transitions, R, S, insertstep, noiseparams::Int=0)
+function num_noiseparams(noisepriors)
+    if eltype(noisepriors) <: Number
+        return length(noisepriors)
+    else
+        return length.(noisepriors)
+    end
+end
+function default_fittedparam(transitions, R::Int, S, insertstep, noiseparams::Int)
     n = num_rates(transitions, R, S, insertstep)
     [collect(1:n-1); collect(n+1:n+noiseparams)]
 end
 
-function default_fittedparam_coupled(transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
+function default_fittedparam(transitions, R::Tuple, S, insertstep, noiseparams::Tuple)
     fittedparam = Int[]
     totalrates = 0
     for i in eachindex(R)
         fittedparam = vcat(fittedparam, totalrates .+ default_fittedparam(transitions[i], R[i], S[i], insertstep[i], noiseparams[i]))
         totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
     end
-    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
+    fittedparam
 end
 
-function default_fittedparam_grid(r, np=1)
-    [r; r[end] + np]
+function default_fittedparam(transitions, R, S, insertstep, noiseparams, coupling, grid)
+    if !isempty(coupling) && isa(R, Int)
+        coupling = tuple()
+    end
+    fittedparam = default_fittedparam(transitions, R, S, insertstep, noiseparams)
+    fittedparam = isempty(coupling) ? fittedparam : [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
+    isnothing(grid) ? fittedparam : [fittedparam; fittedparam[end] + 1]
 end
+
+function default_fittedparam(fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if isempty(fittedparam)
+        return default_fitted(datatype, transitions, R, S, insertstep, num_noiseparams(noisepriors), coupling, grid)
+    else
+        return fittedparam
+    end
+end
+
+
+
 
 
 """
