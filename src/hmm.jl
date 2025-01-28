@@ -660,6 +660,11 @@ function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
     l
 end
 
+"""
+    ll_hmm(a, p0, d, traces, nT)
+
+TBW
+"""
 function ll_hmm(a, p0, d, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
