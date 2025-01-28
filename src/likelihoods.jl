@@ -172,6 +172,12 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
+function prepare_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
+    rates = get_rates(param, model)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+end
 
 """
     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
@@ -936,7 +942,7 @@ function get_rates(fits, stats, model, ratetype)
     elseif ratetype == "mean"
         return get_rates(stats.meanparam, model, false)
     else
-        println("ratetype unknown")
+        throw("ratetype unknown")
     end
 end
 
@@ -1111,7 +1117,17 @@ function num_rates(model::String)
     end
 end
 
+function num_total_rates(transitions, R::Int, S, insertstep, noisepriors)
+    num_rates(transitions, R, S, insertstep) + length(noisepriors)
+end
 
+function num_total_rates(transitions, R::Tuple, S, insertstep, noisepriors)
+    n = 0
+    for i in eachindex(R)
+        n += num_total_rates(transitions[i], R[i], S[i], insertstep[i], noisepriors[i])
+    end
+    n
+end
 
 
 """
@@ -1123,6 +1139,7 @@ TBW
 """
 function num_total_parameters(transitions, R::Int, S, insertstep, reporter)
     n = typeof(reporter) <: HMMReporter ? reporter.n : 0
+    # num_rates(transitions, R, S, insertstep) + n
     num_rates(transitions, R, S, insertstep) + n
 end
 
@@ -1133,6 +1150,7 @@ function num_total_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple
     end
     n
 end
+
 """
     num_total_parameters(model::AbstractGmodel)
 

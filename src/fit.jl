@@ -700,9 +700,9 @@ set rinit for hierarchical models
 """
 function set_rinit(rmean, transitions, R, S, insertstep, noisepriors, nindividuals)
     r = copy(rmean)
-    nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+    nrates = num_total_rates(transitions, R, S, insertstep, noisepriors)
     for i in 1:nindividuals
-        append!(r, rmean)
+        append!(r, rmean[1:nrates])
     end
     r
 end
@@ -808,7 +808,6 @@ end
 TBW
 """
 function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
-    # println(reporter)
     nhypersets = hierarchical[1]
     nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
     nindividuals = length(data.trace[1])
@@ -856,7 +855,6 @@ function GRSMtraitmodel(data::AbstractExperimentalData, r, rmean, fittedparam, f
     end
     GRSMtraitmodel{typeof(traits),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(traits, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
-
 
 function load_model(data, r, rmean, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
     priormean = prior_mean(rmean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
