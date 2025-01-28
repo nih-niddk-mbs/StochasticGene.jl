@@ -95,6 +95,7 @@ export
     plot,
     plot!,
     plot_histogram,
+    prior_mean,
     prob_Gaussian,
     prob_GaussianMixture,
     prob_GaussianMixture_6,

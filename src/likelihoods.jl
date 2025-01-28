@@ -200,31 +200,31 @@ model = GRSMhierarchicalmodel(...)
 r, p, h = prepare_rates(param, model)
 ```
 """
-function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    r = get_rates(param, model)
-    phyper = Vector{Float64}[]
-    for i in model.hierarchy.hyperindices
-        push!(phyper, r[i])
-    end
-    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-    pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-    return rshared, rindividual, pindividual, phyper
-end
+# function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
+#     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+#     r = get_rates(param, model)
+#     phyper = Vector{Float64}[]
+#     for i in model.traits.hierarchical.hyperindices
+#         push!(phyper, r[i])
+#     end
+#     rindividual = reshape(r[model.traits.hierarchical.ratestart:end], model.traits.hierarchical.nrates, model.traits.hierarchical.nindividuals)
+#     rshared = reshape(r[1:model.traits.hierarchical.ratestart-1], model.traits.hierarchical.nrates, model.traits.hierarchical.nhypersets)
+#     pindividual = reshape(param[model.traits.hierarchical.paramstart:end], model.traits.hierarchical.nparams, model.traits.hierarchical.nindividuals)
+#     return rshared, rindividual, pindividual, phyper
+# end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
     phyper = Vector{Float64}[]
-    for i in model.hierarchy.hyperindices
+    for i in model.traits.hierarchical.hyperindices
         push!(phyper, r[i])
     end
-    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-    pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+    rindividual = reshape(r[model.traits.hierarchical.ratestart:end], model.traits.hierarchical.nrates, model.traits.hierarchical.nindividuals)
+    rshared = reshape(r[1:model.traits.hierarchical.ratestart-1], model.traits.hierarchical.nrates, model.traits.hierarchical.nhypersets)
+    pindividual = reshape(param[model.traits.hierarchical.paramstart:end], model.traits.hierarchical.nparams, model.traits.hierarchical.nindividuals)
     return rshared, rindividual, pindividual, phyper
 end
 
@@ -247,12 +247,12 @@ end
 #     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 #     r = get_rates(param, model)
 #     hyperparams = Vector{Float64}[]
-#     for i in model.hierarchy.hyperindices
+#     for i in model.traits.hierarchical.hyperindices
 #         push!(hyperparams, r[i])
 #     end
-#     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-#     rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-#     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+#     rindividual = reshape(r[model.traits.hierarchical.ratestart:end], model.traits.hierarchical.nrates, model.traits.hierarchical.nindividuals)
+#     rshared = reshape(r[1:model.traits.hierarchical.ratestart-1], model.traits.hierarchical.nrates, model.traits.hierarchical.nhypersets)
+#     pindividual = reshape(param[model.traits.hierarchical.paramstart:end], model.traits.hierarchical.nparams, model.traits.hierarchical.nindividuals)
 #     return rshared, rindividual, pindividual, hyperparams
 # end
 
@@ -295,22 +295,47 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 
-function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+#     r, couplingStrength, noiseparams = prepare_rates(param, model)
+#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+# end
+
+function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
     r, noiseparams, pgrid = prepare_rates(param, model)
     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
     r, noiseparams, pgrid = prepare_rates(param, model)
     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+# function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+#     r = get_rates(param, model)
+#     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+#     llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+#     M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
+#     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+#     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+# end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -333,7 +358,18 @@ function ll_hierarchy(pindividual, phyper)
     lhp
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+#     if model.method[2]
+#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     else
+#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     end
+#     lhp = ll_hierarchy(pindividual, phyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
     if model.method[2]
         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -408,7 +444,7 @@ Calculates the likelihood for a single RNA histogram using a GRSM model.
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
+function likelihoodfn(param, data::RNAData, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     M = make_mat_M(components.mcomponents, r)
     steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
@@ -510,7 +546,12 @@ function likelihoodarray(r, data::DwellTimeData, model::AbstractGmodel)
     likelihoodarray(r, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
-function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
+# function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
+#     r, coupling_strength, _ = prepare_rates(r, model)
+#     likelihoodarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
+# end
+
+function likelihoodarray(r, data::DwellTimeData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
     r, coupling_strength, _ = prepare_rates(r, model)
     likelihoodarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
 end
