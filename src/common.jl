@@ -249,9 +249,9 @@ Trait for models that use grid-based parameter space exploration.
 - `n_grid::Int`: Number of grid points
 """
 struct GridTrait <: ModelTrait
-    rate_range::UnitRange
-    noise_range::UnitRange
-    grid_range::UnitRange
+    raterange::UnitRange
+    noiserange::UnitRange
+    gridrange::UnitRange
     n_grid::Int
 end
 
