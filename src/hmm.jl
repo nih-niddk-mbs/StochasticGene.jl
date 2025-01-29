@@ -179,7 +179,7 @@ Arguments:
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(r, interval, components::TRGComponents, method=Tsit5())
+function make_ap(r::Vector, interval, components::TRGComponents, method=Tsit5())
     Qtr = make_mat_TRG(components, r) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
@@ -192,6 +192,10 @@ end
 function make_ap_coupled(r, couplingStrength, interval, components, method=Tsit5())
     Qtr = make_mat_TC(components, r, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+end
+
+function make_ap(rset::Tuple, components::TRGComponents, method=Tsit5())
+    make_ap_coupled(rset[1], rset[2], interval, components, method)
 end
 
 """
@@ -228,7 +232,7 @@ function make_a_grid(param, Ngrid)
     # d = zeros(Ngrid, Ngrid)
     for i in 1:Ngrid
         for j in 1:Ngrid
-            as[i, j] = exp(-grid_distance(i, j, round(Int, sqrt(Ngrid)) )^2 / (2 * param^2))
+            as[i, j] = exp(-grid_distance(i, j, round(Int, sqrt(Ngrid)))^2 / (2 * param^2))
             # d[i, j] = grid_distance(i, j, div(Ngrid, 2))
         end
     end
@@ -240,19 +244,38 @@ end
 
 TBW
 """
-function set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector, N::Int)
+# function set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector, Nstate::Int)
+#     d = Vector[]
+#     for i in eachindex(noiseparams)
+#         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], Nstate))
+#     end
+#     return d
+# end
+
+# function set_d(noiseparams, reporter::Vector{HMMReporter}, Nstate)
+#     rps = [r.per_state for r in reporter]
+#     pf = [r.probfn for r in reporter]
+#     set_d(noiseparams, rps, pf, Nstate)
+# end
+
+
+function set_d(noiseparams::Vector, reporter::HMMReporter, Nstate::Int)
+    reporter.probfn(noiseparams, reporter.per_state, Nstate)
+end
+
+function set_d(noiseparams::Vector, reporter::HMMReporter, Nstate::Tuple)
+    reporter.probfn(noiseparams, reporter.per_state, Nstate[1], Nstate[2])
+end
+
+function set_d(noiseparams::Vector{Vector}, reporter::Vector{HMMReporter}, Nstate)
     d = Vector[]
     for i in eachindex(noiseparams)
-        push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
+        push!(d, set_d(noiseparams[i], reporter[i], Nstate))
     end
     return d
 end
 
-function set_d(noiseparams, reporter, N)
-    ps = [r.per_state for r in reporter]
-    pf = [r.probfn for r in reporter]
-    set_d(noiseparams, ps, pf, N)
-end
+
 """
     set_b(trace, params, reporters_per_state, probfn::Function=prob_Gaussian)
 
@@ -300,7 +323,22 @@ function set_b(trace::Matrix, d::Vector{Vector}, N)
     return b
 end
 
-
+function set_b(trace, d, Ntuple::Tuple)
+    Nstate, Ngrid = Ntuple
+    b = ones(Nstate, Ngrid, size(trace, 2))
+    t = 1
+    for obs in eachcol(trace)
+        for j in 1:Nstate
+            for k in 1:Ngrid
+                for l in 1:Ngrid
+                    b[j, k, t] *= pdf(d[j, k, l], obs[l])
+                end
+            end
+        end
+        t += 1
+    end
+    return b
+end
 
 """
     set_b_coupled(trace, d, N)
@@ -322,12 +360,6 @@ function set_b_coupled(trace, d::Vector{Vector}, N)
         t += 1
     end
     return b
-end
-
-
-function set_b_coupled(trace, params, reporters_per_state::Vector, probfn::Vector, N)
-    d = set_d(params, reporters_per_state, probfn, N)
-    set_b_coupled(trace, d, N)
 end
 
 function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
@@ -449,6 +481,30 @@ function forward_inner_operation!(α, a, b::Matrix, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
 end
 
+
+"""
+    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+
+TBW
+"""
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    α = zeros(Nstate, Ngrid, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
+end
+
 """
 forward(a, b, p0, N, T)
 
@@ -480,52 +536,33 @@ function forward(a::Matrix, b, p0)
     forward(a, b, p0, N, T)
 end
 
-function forward1(atuple::Tuple, b::Array, p0)
-    a, a_grid = atuple
-    Nstate, Ngrid, T = size(b)
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
-    end
-    return α, C
-end
 
 function forward(atuple::Tuple, b::Array, p0)
-    forward_grid(atuple[1], atuple[2], b, p0, size(b, 1), size(b, 2), size(b, 3))
-end
-
-"""
+    a, a_grid = atuple
+    Nstate, Ngrid, T = size(b)
     forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-
-TBW
-"""
-function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
-    end
-    return α, C
 end
+
+
+# function forward(atuple::Tuple, b::Array, p0)
+#     a, a_grid = atuple
+#     Nstate, Ngrid, T = size(b)
+#     α = zeros(Nstate, Ngrid, T)
+#     C = Vector{Float64}(undef, T)
+#     α[:, :, 1] = p0 .* b[:, :, 1]
+#     C[1] = 1 / sum(α[:, :, 1])
+#     α[:, :, 1] *= C[1]
+#     for t in 2:T
+#         for l in 1:Ngrid, k in 1:Nstate
+#             for j in 1:Ngrid, i in 1:Nstate
+#                 α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+#             end
+#         end
+#         C[t] = 1 / sum(α[:, :, t])
+#         α[:, :, t] *= C[t]
+#     end
+#     return α, C
+# end
 
 """
     forward_matrixmult(a, b, p0, N, T)
@@ -669,7 +706,17 @@ end
 
 TBW
 """
-function ll_hmm(a, p0, d, traces, nT)
+
+function ll_hmm(trace, a, d, p0, nT)
+    _, C = forward(a, set_b(trace, d, nT), p0, nT, size(trace, 1))
+    sum(log.(C))
+end
+
+function ll_hmm()
+end
+
+
+function ll_hmm(a::Matrix, p0, d, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         _, C = forward(a, set_b(traces[i], d, nT), p0, nT, size(traces[i], 1))
@@ -678,6 +725,28 @@ function ll_hmm(a, p0, d, traces, nT)
     sum(logpredictions), logpredictions
 end
 
+function ll_hmm(r, a::Matrix, p0, n_noiseparams, reporter, traces, nT)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        d = set_d(r[end-n_noiseparams+1:end, i], reporter[i], nT)
+        b = set_b(traces[i], d, nT)
+        # b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        _, C = forward(a, b, p0, nT, size(traces[i], 1))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+
+
+function ll_hmm(a::Matrix, p0, d, traces, nT)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        _, C = forward(a, set_b(traces[i], d, nT), p0, nT, size(traces[i], 1))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
 function ll_hmm(r, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -687,7 +756,6 @@ function ll_hmm(r, a::Matrix, p0, n_noiseparams, reporters_per_state, probfn, tr
     end
     sum(logpredictions), logpredictions
 end
-
 function ll_hmm(r, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -712,7 +780,24 @@ function ll_hmm(r::Vector, nstates::Int, components::TRGComponents, n_noiseparam
     ll + trace[3] * lb, logpredictions
 end
 
+function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    d = set_d(noiseparams, reporter, nT)
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nT, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(a, p0, d, trace[1], nT)
+    ll + lb, logpredictions
+end
 
+function ll_hmm(rtuple, pgrid, Ntuple, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+    r, noiseparams = rtuple
+    Nstate, Ngrid = Ntuple
+    a_grid = make_a_grid(pgrid, Ngrid)
+    a, p0 = make_ap(r, interval, components)
+    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+    ll, logpredictions = ll_hmm((a,a_grid), p0, d, trace[1], Ntuple)
+    ll + trace[3] * lb, logpredictions
+end
 
 """
     ll_hmm_hierarchical(rshared, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
@@ -740,11 +825,42 @@ function ll_hmm_hierarchical_rateshared(rshared, rindividual::Matrix, nT, compon
     ll + lb, logpredictions
 end
 
-"""
-    ll_hmm_coupled(r, couplingStrength, noiseparams, components, reporter, interval, traces)
 
-TBW
-"""
+
+
+function ll_hmm_coupled_hierarchical(rshared, rindividual, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+    nT = components.N
+    a, p0 = make_ap_coupled(rshared[:, 1], couplingStrength, interval, components)
+    d = set_d(noiseparams, reporter, nT)
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nT, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(rindividual, a, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
+    ll + lb, logpredictions
+end
+
+
+
+function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+    a_grid = make_a_grid(pgrid, Ngrid)
+    a, p0 = make_ap(rshared, interval, components)
+    logpredictions = Array{Float64}(undef, length(trace[1]))
+    for t in trace[1]
+        d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)
+        b = set_b_grid(t, d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm_coupled_grid()
+end
+
+function ll_hmm_coupled_grid_hierarchical()
+
+end
+
+
+
 function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
@@ -753,17 +869,6 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ll, logpredictions = ll_hmm(a, p0, d, trace[1], nT)
     ll + lb, logpredictions
 end
-
-
-function ll_hmm_coupled_hierarchical(rshared, rindividual, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
-    nT = components.N
-    a, p0 = make_ap_coupled(rshared[:,1], couplingStrength, interval, components)
-    d = set_d(noiseparams, reporter, nT)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nT, trace[4], trace[3]) : 0.0
-    ll, logpredictions = ll_hmm(rindividual, a, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
-    ll + lb, logpredictions
-end
-
 """
     ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 
@@ -795,7 +900,6 @@ function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, co
     end
     sum(logpredictions), logpredictions
 end
-
 
 """
 expected_transitions(α, a, b, β, N, T)
@@ -969,7 +1073,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     max_intensity = Float64[]
     for i in eachindex(noiseparams)
         mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
-        mmax = max(maximum(mi),1.)
+        mmax = max(maximum(mi), 1.0)
         push!(max_intensity, mmax)
         push!(mean_intensity, mi / mmax)
     end
