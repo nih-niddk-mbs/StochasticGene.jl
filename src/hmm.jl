@@ -480,7 +480,7 @@ function forward(a::Matrix, b, p0)
     forward(a, b, p0, N, T)
 end
 
-function forward(atuple::Tuple, b::Array, p0)
+function forward1(atuple::Tuple, b::Array, p0)
     a, a_grid = atuple
     Nstate, Ngrid, T = size(b)
     α = zeros(Nstate, Ngrid, T)
@@ -498,6 +498,10 @@ function forward(atuple::Tuple, b::Array, p0)
         α[:, :, t] *= C[t]
     end
     return α, C
+end
+
+function forward(atuple::Tuple, b::Array, p0)
+    forward_grid(atuple[1], atuple[2], b, p0, size(b, 1), size(b, 2), size(b, 3))
 end
 
 """

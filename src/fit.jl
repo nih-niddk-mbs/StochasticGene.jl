@@ -586,18 +586,18 @@ end
 TBW
 """
 function default_fittedparam(transitions, R::Int, S, insertstep, noisepriors::Vector)
-    noiseparams = length(noisepriors)
+    nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
-    [collect(1:n-1); collect(n+1:n+noiseparams)]
+    [collect(1:n-1); collect(n+1:n+nnoise)]
 end
 
 function default_fittedparam(transitions, R::Tuple, S, insertstep, noisepriors)
     fittedparam = Int[]
-    noiseparams = length.(noisepriors)
+    nnoise = length.(noisepriors)
     totalrates = 0
     for i in eachindex(R)
         fittedparam = vcat(fittedparam, totalrates .+ default_fittedparam(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
-        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
+        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise[i]
     end
     fittedparam
 end
@@ -1123,35 +1123,35 @@ end
 
 
 """
-    default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
+    default_fitted(datatype::String, transitions, R::Int, S, insertstep, nnoise, coupling)
 
 TBW
 """
-function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling, grid)
+function default_fitted(datatype::String, transitions, R::Int, S, insertstep, nnoise, coupling, grid)
     n = num_rates(transitions, R, S, insertstep)
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)
         if isnothing(grid)
-            isempty(noiseparams) && throw("noisepriors cannot be empty for trace data")
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
+            (nnoise == 0) && throw("number of noise params cannot be zero for trace data")
+            fittedparam = vcat(fittedparam, collect(n+1:n+nnoise))
         else
-            fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))
+            fittedparam = vcat(fittedparam, collect(n+1:n+nnoise+1))
         end
     end
     fittedparam
 end
 
 """
-    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
+    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, nnoise::Tuple, coupling)
 
 create vector of fittedparams that includes all rates except the decay time
 """
-function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
+function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, nnoise::Tuple, coupling, grid)
     fittedparam = Int[]
     totalrates = 0
     for i in eachindex(R)
-        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling, grid))
-        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
+        fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], nnoise[i], coupling, grid))
+        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise[i]
     end
     [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
 end
@@ -1170,7 +1170,7 @@ function num_noiseparams(datatype, noisepriors)
     end
 end
 """
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
+    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
 
 TBW
 """
@@ -1188,8 +1188,8 @@ end
 
 make default fixedeffects tuple and fittedparams vector from fixedeffects String
 """
-function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
+function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, nnoise, coupling, grid)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, nnoise, coupling, grid)
     fixed = split(fixedeffects, "-")
     if length(fixed) > 1
         fixed = parse.(Int, fixed)
