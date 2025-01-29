@@ -301,10 +301,10 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
 end
 
 
-# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
-#     r, couplingStrength, noiseparams = prepare_rates(param, model)
-#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-# end
+function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
 
 function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
     r, couplingStrength, noiseparams = prepare_rates(param, model)
@@ -828,6 +828,8 @@ transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = tran
 
 transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
+transform_rates(r, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}}) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
+
 # function transform_rates(pin, model::GRSMcoupledmodel)
 #     p = copy(pin)
 #     for f in model.transformations
@@ -890,6 +892,9 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
+
+
+get_param(model::AbstractGRSMtraitmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 
 """
