@@ -265,6 +265,20 @@ end
 
 # Model loglikelihoods
 
+
+function ll_hierarchy(pindividual, phyper)
+    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+    lhp = Float64[]
+    for pc in eachcol(pindividual)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    lhp
+end
+
 """
     loglikelihood(param, data, model)
 
@@ -300,80 +314,15 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-
-function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
     r, couplingStrength, noiseparams = prepare_rates(param, model)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
-    r, couplingStrength, noiseparams = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-# end
-
-function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
     r, noiseparams, pgrid = prepare_rates(param, model)
     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-# end
-
-function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-# function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
-#     r = get_rates(param, model)
-#     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-#     llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-#     M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
-#     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
-#     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-# end
-
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
-    r = get_rates(param, model)
-    # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-    M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
-    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-end
-
-function ll_hierarchy(pindividual, phyper)
-    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
-    lhp = Float64[]
-    for pc in eachcol(pindividual)
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc -= logpdf(d[i], pc[i])
-        end
-        push!(lhp, lhpc)
-    end
-    lhp
-end
-
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
-#     if model.method[2]
-#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     else
-#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     end
-#     lhp = ll_hierarchy(pindividual, phyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
@@ -386,21 +335,32 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitm
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait, hierarchical::Hierarchy}})
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait}})
 
-# end
-
-# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
-#     r, couplingStrength, noiseparams = prepare_rates(param, model)
-#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-# end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::Hierarchy}})
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64,hierarchical::Hierarchy}})
+
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait, hierarchical::Hierarchy}})
+
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMcoupledmodel)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
+# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
 #     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
 #     if model.method[2]
 #         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -410,12 +370,45 @@ end
 #     lhp = ll_hierarchy(pindividual, phyper)
 #     return llg + sum(lhp), vcat(llgp, lhp)
 # end
+# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
+#     r, couplingStrength, noiseparams = prepare_rates(param, model)
+#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::Hierarchy}})
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+#     r = get_rates(param, model)
+#     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+#     llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+#     M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
+#     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+#     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+# end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel{@NamedTuple{}})
+    r = get_rates(param, model)
+    # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    llg, llgp = ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
+    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
-
 
 # Likelihood functions
 
