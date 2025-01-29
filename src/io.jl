@@ -671,6 +671,7 @@ return output file names
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMcoupledmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 # function filename(data, model::GRSMcoupledmodel)
 #     m = ""

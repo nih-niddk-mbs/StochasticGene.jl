@@ -865,7 +865,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}
 
 inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
-
+inverse_transform_rates(p, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
 """
     get_param(model)
@@ -892,7 +892,6 @@ get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
-
 
 get_param(model::AbstractGRSMtraitmodel) = transform_rates(model.rates[model.fittedparam], model)
 
@@ -952,6 +951,12 @@ function get_rates(fits, stats, model, ratetype)
 end
 
 function get_rates(param, model::GRSMcoupledmodel, inverse=true)
+    r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
+end
+
+function get_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}, inverse=true)
     r = copy_r(model)
     get_rates!(r, param, model, inverse)
     fixed_rates(r, model.fixedeffects)

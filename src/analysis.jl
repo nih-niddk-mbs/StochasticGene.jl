@@ -609,6 +609,14 @@ function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)
     fits.llml / s
 end
 
+function deviance(fits, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}})  
+    s = 0
+    for t in data.trace[1]
+        s += sum(sum.(t))
+    end
+    fits.llml / s
+end
+
 """
     deviance(data::AbstractHistogramData, model::AbstractGmodel)
 

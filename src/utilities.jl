@@ -1068,7 +1068,7 @@ Calculates the splice site usage given rates, number of states, and number of sp
 # Returns
 - `Vector{Float64}`: Splice site usage probabilities.
 """
-splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G - 1, model.R)
+splicesiteusage(model::AbstractGRSMtraitmodel) = splicesiteusage(model.rates, model.G - 1, model.R)
 function splicesiteusage(r::Vector, n::Int, nr::Int)
     nu = get_nu(r, n, nr)
     eta = get_eta(r, n, nr)
@@ -1150,7 +1150,7 @@ Calculates the burst size distribution given the number of states, number of spl
 # Returns
 - `Tuple{Vector{Float64}, Vector{Float64}}`: The total pre-mRNA occupancy and unspliced (visible) occupancy distributions.
 """
-burstoccupancy(model::GRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
+burstoccupancy(model::AbstractGRSMtraitmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
 
 function burstoccupancy(n::Int, nr::Int, r::Vector)
     T = mat_GSR_T(r, n, nr)
@@ -1360,7 +1360,7 @@ This function simulates the RNA on-off model with splicing using the provided mo
 # Returns
 - `Nothing`: The function performs the simulation and comparison but does not return a value.
 """
-function test_model(data::RNAOnOffData, model::GRSMmodel)
+function test_model(data::RNAOnOffData, model::AbstractGRSMtraitmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 

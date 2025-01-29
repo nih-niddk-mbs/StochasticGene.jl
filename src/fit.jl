@@ -265,7 +265,7 @@ function burstsize(fits, model::AbstractGMmodel)
         return 0
     end
 end
-function burstsize(fits::Fit, model::GRSMmodel)
+function burstsize(fits::Fit, model::AbstractGRSMtraitmodel)
     if model.G > 1
         b = Float64[]
         L = size(fits.param, 2)
@@ -283,7 +283,7 @@ function burstsize(fits::Fit, model::GRSMmodel)
     end
 end
 
-burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtransitions))
+burstsize(r, model::AbstractGRSMtraitmodel) = burstsize(r, model.R, length(model.Gtransitions))
 
 function burstsize(r, R, ntransitions)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
@@ -1065,7 +1065,7 @@ end
 
 TBW
 """
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
+function make_structures1(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
     gene = check_genename(gene, "[")
     S = reset_S(S, R, insertstep)
     nalleles = reset_nalleles(nalleles, coupling)
