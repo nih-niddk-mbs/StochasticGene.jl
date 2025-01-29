@@ -425,20 +425,26 @@ function prepare_rates(r, hierarchical::HierarchicalTrait)
     return rshared, rindividual, pindividual, phyper
 end
 
-function prepare_rates_coupled(param, model::AbstractGRSMtraitmodel)
-    rates = get_rates(param, model)
+function prepare_rates_coupled(rates, model::AbstractGRSMtraitmodel)
     n_noise = [r.n for r in model.reporter]
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
-function prepare_rates_grid(param, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
-    prepare_rates(get_rates(param, model), model.traits.grid)
-end
+# function prepare_rates(param, model::AbstractGRSMtraitmodel)
+#     rates = get_rates(param, model)
+#     n_noise = [r.n for r in model.reporter]
+#     sourceStates = [c.sourceState for c in model.components.modelcomponents]
+#     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+# end
 
-function prepare_rates_hierarchical(param, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
-    prepare_rates(get_rates(param, model), model.traits.hierarchical)
-end
+# function prepare_rates_grid(param, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+#     prepare_rates(get_rates(param, model), model.traits.grid)
+# end
+
+# function prepare_rates_hierarchical(param, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
+#     prepare_rates(get_rates(param, model), model.traits.hierarchical)
+# end
 
 
 
@@ -532,16 +538,16 @@ end
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
     traits = model.traits
     r = get_rates(param, model)
-    if hasfield(traits, :coupling)
-        r, couplingStrength, noiseparams = prepare_rates_coupling(param, model)
+    if hasfield(traits, :hierarchical)
+        rshared, rindividual, pindividual, phyper = prepare_rates(r, traits.hierarchical)
     end
     if hasfield(traits, :grid)
-        r, noiseparams, pgrid = prepare_rates_grid(param, model)
+        r, noiseparams, pgrid = prepare_rates_grid(r, traits.grid)
     end
-    
-    if hasfield(traits, :hierarchical)
+    if hasfield(traits, :coupling)
+        r, couplingStrength, noiseparams = prepare_rates_coupling(r, model)
+    end
 
-    end
 
 
     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
