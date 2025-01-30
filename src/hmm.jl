@@ -707,37 +707,37 @@ TBW
 """
 
 
-function ll_hmm(a::Matrix, p0, d, traces, Nstate)
-    logpredictions = Array{Float64}(undef, length(traces))
-    for i in eachindex(traces)
-        _, C = forward(a, set_b(traces[i], d, Nstate), p0, Nstate, size(traces[i], 1))
-        @inbounds logpredictions[i] = sum(log.(C))
-    end
-    sum(logpredictions), logpredictions
-end
+# function ll_hmm(a::Matrix, p0, d, traces, Nstate)
+#     logpredictions = Array{Float64}(undef, length(traces))
+#     for i in eachindex(traces)
+#         _, C = forward(a, set_b(traces[i], d, Nstate), p0, Nstate, size(traces[i], 1))
+#         @inbounds logpredictions[i] = sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
 
-function ll_hmm(r, a::Matrix, p0, noiseparams, reporter, traces, Nstate)
-    logpredictions = Array{Float64}(undef, length(traces))
-    for i in eachindex(traces)
-        d = set_d(noiseparams[i], reporter[i], Nstate)
-        b = set_b(traces[i], d, Nstate)
-        # b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, Nstate)
-        _, C = forward(a, b, p0, Nstate, size(traces[i], 1))
-        @inbounds logpredictions[i] = sum(log.(C))
-    end
-    sum(logpredictions), logpredictions
-end
-function ll_hmm(r, interval::Float64, components, noiseparams, reporters, traces, Nstate)
-    logpredictions = Array{Float64}(undef, length(traces))
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[:, i], interval, components)
-        d = set_d(noiseparams[i], reporters[i], Nstate)
-        b = set_b(traces[i], d, Nstate)
-        _, C = forward(a, b, p0, Nstate, size(traces[i], 1))
-        @inbounds logpredictions[i] = sum(log.(C))
-    end
-    sum(logpredictions), logpredictions
-end
+# function ll_hmm(r, a::Matrix, p0, noiseparams, reporter, traces, Nstate)
+#     logpredictions = Array{Float64}(undef, length(traces))
+#     for i in eachindex(traces)
+#         d = set_d(noiseparams[i], reporter[i], Nstate)
+#         b = set_b(traces[i], d, Nstate)
+#         # b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, Nstate)
+#         _, C = forward(a, b, p0, Nstate, size(traces[i], 1))
+#         @inbounds logpredictions[i] = sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
+# function ll_hmm(r, interval::Float64, components, noiseparams, reporters, traces, Nstate)
+#     logpredictions = Array{Float64}(undef, length(traces))
+#     for i in eachindex(traces)
+#         a, p0 = make_ap(r[:, i], interval, components)
+#         d = set_d(noiseparams[i], reporters[i], Nstate)
+#         b = set_b(traces[i], d, Nstate)
+#         _, C = forward(a, b, p0, Nstate, size(traces[i], 1))
+#         @inbounds logpredictions[i] = sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
 
 
 function ll_hmm(a::Matrix, p0, d, traces, Nstate)
