@@ -608,7 +608,7 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel{@NamedTuple{}})
     r = get_rates(param, model)
     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.tcomponents.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
     logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
@@ -1083,6 +1083,8 @@ This function computes the number of transition rates for the provided GRSM mode
 
 """
 num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+
+num_rates(model::AbstractGRSMtraitmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
 
 """

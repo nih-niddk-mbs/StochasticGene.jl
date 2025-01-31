@@ -561,10 +561,10 @@ function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHis
     nnoise = length(noisepriors)
     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
     reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    if typeof(data) == TraceRNAData
+    if typeof(data) <: TraceRNAData
         components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     else
-        components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+        components = TRGComponents(transitions, G, R, S, insertstep, splicetype)
     end
     return reporter, components
 end
@@ -905,7 +905,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    model = load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     return data, model, options
 end

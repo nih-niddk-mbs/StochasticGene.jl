@@ -862,14 +862,14 @@ end
 
 
 
-function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
-    Nstate = components.N
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    d = set_d(noiseparams, reporter, Nstate)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, Nstate, trace[4], trace[3]) : 0.0
-    ll, logpredictions = ll_hmm(a, p0, d, trace[1], Nstate)
-    ll + lb, logpredictions
-end
+# function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
+#     Nstate = components.N
+#     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+#     d = set_d(noiseparams, reporter, Nstate)
+#     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, Nstate, trace[4], trace[3]) : 0.0
+#     ll, logpredictions = ll_hmm(a, p0, d, trace[1], Nstate)
+#     ll + lb, logpredictions
+# end
 """
     ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 
@@ -889,18 +889,18 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
-    a_grid = make_a_grid(pgrid, Ngrid)
-    a, p0 = make_ap(rshared, interval, components)
-    logpredictions = Array{Float64}(undef, length(trace[1]))
-    for t in trace[1]
-        d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)
-        b = set_b_grid(t, d, Nstate, Ngrid)
-        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
-        @inbounds logpredictions[i] = sum(log.(C))
-    end
-    sum(logpredictions), logpredictions
-end
+# function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, components::TRGComponents, reporters_per_state, probfn, interval, trace)
+#     a_grid = make_a_grid(pgrid, Ngrid)
+#     a, p0 = make_ap(rshared, interval, components)
+#     logpredictions = Array{Float64}(undef, length(trace[1]))
+#     for t in trace[1]
+#         d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)
+#         b = set_b_grid(t, d, Nstate, Ngrid)
+#         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
+#         @inbounds logpredictions[i] = sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
 
 """
 expected_transitions(α, a, b, β, N, T)

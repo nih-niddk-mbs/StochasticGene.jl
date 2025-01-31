@@ -257,7 +257,7 @@ struct MTComponents
 end
 
 struct MTRGComponents
-    mcomponents::MRGComponents
+    mcomponents::MComponents
     tcomponents::TRGComponents
 end
 
