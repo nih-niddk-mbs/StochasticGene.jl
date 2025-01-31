@@ -1026,7 +1026,7 @@ Calculates the residence probability of G states given the rates.
 
 # Arguments
 - `r`: A vector representing the rates.
-- `n`: The number of states.
+- `G`: The number of states.
 
 # Description
 This function calculates the residence probability of G states given the rates. It initializes the residence probability array `Gss` and iteratively computes the residence probabilities for each state using the rates `r`.
@@ -1034,7 +1034,8 @@ This function calculates the residence probability of G states given the rates. 
 # Returns
 - `Array{Float64,2}`: A 2D array containing the residence probabilities for each state.
 """
-function residenceprob_G(r::Vector, n::Int)
+function residenceprob_G(r::Vector, G::Int)
+    n = G - 1
     Gss = Array{Float64,2}(undef, 1, n + 1)
     Gss[1, 1] = 1.0
     for k in 1:n
@@ -1052,8 +1053,8 @@ Calculates the splice site usage for a GRSM model or given rates.
 # Arguments
 - `model`: An instance of `GRSMmodel`.
 - `r`: Rates vector.
-- `n`: Number of states.
-- `nr`: Number of splice sites.
+- `G`: Number of states
+- `S`: Number of splice sites.
 
 # Methods
 
@@ -1068,8 +1069,11 @@ Calculates the splice site usage given rates, number of states, and number of sp
 # Returns
 - `Vector{Float64}`: Splice site usage probabilities.
 """
-splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G - 1, model.R)
-function splicesiteusage(r::Vector, n::Int, nr::Int)
+splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G, model.R)
+
+function splicesiteusage(r::Vector, G::Int, S::Int)
+    n = G - 1
+    nr = S
     nu = get_nu(r, n, nr)
     eta = get_eta(r, n, nr)
     ssf = zeros(nr)
