@@ -5,11 +5,11 @@
 """
 
 """
-    likelihoodfn(model::ComposableModel, data::ComposableData)
+    predictedfn(model::ComposableModel, data::ComposableData)
 
 Compute likelihood function based on model and data traits.
 """
-function likelihoodfn(model::ComposableModel, data::ComposableData)
+function predictedfn(model::ComposableModel, data::ComposableData)
     # Base case - RNA data
     if has_data_trait(data, RNATrait)
         rna_trait = get_data_trait(data, RNATrait)
