@@ -535,30 +535,30 @@ end
 
 
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
-    traits = model.traits
-    r = get_rates(param, model)
-    if hasfield(traits, :hierarchical)
-        rshared, rindividual, pindividual, phyper = prepare_rates(r, traits.hierarchical)
-    end
-    if hasfield(traits, :grid)
-        r, noiseparams, pgrid = prepare_rates_grid(r, traits.grid)
-    end
-    if hasfield(traits, :coupling)
-        r, couplingStrength, noiseparams = prepare_rates_coupling(r, model)
-    end
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
+#     traits = model.traits
+#     r = get_rates(param, model)
+#     # if hasfield(traits, :hierarchical)
+#     #     rshared, rindividual, pindividual, phyper = prepare_rates(r, traits.hierarchical)
+#     # end
+#     # if hasfield(traits, :grid)
+#     #     r, noiseparams, pgrid = prepare_rates_grid(r, traits.grid)
+#     # end
+#     # if hasfield(traits, :coupling)
+#     #     r, couplingStrength, noiseparams = prepare_rates_coupling(r, model)
+#     # end
 
 
 
-    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
-    if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    else
-        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    end
-    lhp = ll_hierarchy(pindividual, phyper)
-    return llg + sum(lhp), vcat(llgp, lhp)
-end
+#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+#     if model.method[2]
+#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     else
+#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     end
+#     lhp = ll_hierarchy(pindividual, phyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
 
 
 
