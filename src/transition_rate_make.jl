@@ -473,7 +473,7 @@ This function returns an MTRGComponents structure for GRS models, which is used 
 """
 make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(make_components_MRG(transitions, G, R, nhist, decay), make_components_TRG(transitions, G, R, S, insertstep, splicetype))
 
-MTRGComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(MRGComponents(transitions, G, R, nhist, decay), TRGComponents(transitions, G, R, S, insertstep, splicetype))
+MTRGComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="") = MTRGComponents(MComponents(transitions, G, R, nhist, decay, splicetype), TRGComponents(transitions, G, R, S, insertstep, splicetype))
 
 ### matrix constructors
 
