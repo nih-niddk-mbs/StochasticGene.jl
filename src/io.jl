@@ -885,6 +885,7 @@ read in rna histograms
 """
 function read_rna(gene, cond, datapath)
     h = readfile(gene, cond, datapath)[:, 1]
+    h = truncate_histogram(h,.99, 1000)
     return length(h), h
 end
 """

@@ -584,7 +584,7 @@ return deviance
 deviance(fits, data, model) = -1.0
 
 function deviance(fits, data::AbstractHistogramData, model)
-    predictions = likelihoodfn(fits.parml, data, model)
+    predictions = predictedfn(fits.parml, data, model)
     deviance(log.(max.(predictions, eps())), datapdf(data))
 end
 
@@ -615,7 +615,7 @@ end
 
 """
 function deviance(data::AbstractHistogramData, model::AbstractGmodel)
-    h = likelihoodfn(model.rates[model.fittedparam], data, model)
+    h = predictedfn(model.rates[model.fittedparam], data, model)
     println(h)
     deviance(h, datapdf(data))
 end
@@ -954,7 +954,7 @@ function histograms(rin, cell, cond, G::Int, datapath, root)
     data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), fish)
-    likelihoodarray(r, data, model)
+    predictedarray(r, data, model)
 end
 
 function get_histogram_rna(gene, datacond, datapath)
@@ -1436,7 +1436,7 @@ function plot_histogram(gene::String, cell::String, G::String, cond::String, lab
 end
 
 function plot_histogram(data::AbstractRNAData{Array{Array,1}}, model)
-    h = likelihoodarray(model.rates, data, model)
+    h = predictedarray(model.rates, data, model)
     figure(data.gene)
     for i in eachindex(h)
         plot(h[i])
@@ -1446,7 +1446,7 @@ function plot_histogram(data::AbstractRNAData{Array{Array,1}}, model)
     return h
 end
 function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
-    h = likelihoodfn(get_param(model), data, model)
+    h = predictedfn(get_param(model), data, model)
     plt = plot(h)
     plot!(plt, normalize_histogram(data.histRNA))
     display(plt)
@@ -1454,7 +1454,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
 end
 
 function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
-    h = likelihoodarray(model.rates, data, model)
+    h = predictedarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))
     plt2 = plot(data.bins, h[2])
@@ -1482,7 +1482,7 @@ function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
 end
 
 function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false) where {T1<:Array,T2<:Array}
-    m = likelihoodarray(model.rates, data, model)
+    m = predictedarray(model.rates, data, model)
     println("*")
     for i in eachindex(m)
         plt = plot(m[i])
@@ -1499,7 +1499,7 @@ function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false
 end
 
 function plot_histogram(data::RNAData, model::AbstractGMmodel)
-    h = likelihoodfn(get_param(model), data, model)
+    h = predictedfn(get_param(model), data, model)
     plt = plot(h)
     plot!(normalize_histogram(data.histRNA))
     display(plt)

@@ -237,21 +237,20 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
         background = Vector[]
     else
         trace = read_tracefiles(datapath[1], datacond, traceinfo)
-        background = read_tracefiles(datapath[2], datacond, traceinfo)
+        background = Vector[]
+        # background = read_tracefiles(datapath[3], datacond, traceinfo)
     end
     (length(trace) == 0) && throw("No traces")
     println(length(trace))
     println(datapath)
     println(datacond)
     println(traceinfo)
-    # weight = (1 - traceinfo[4]) / traceinfo[4] * length(trace)
-    # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
     weight = (1 - traceinfo[4]) / traceinfo[4]
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     if datatype == "trace"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
-        len, h = read_rna(gene, datacond, datapath[3])
+        len, h = read_rna(gene, datacond, datapath[2])
         return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
     end
 end
@@ -478,7 +477,7 @@ TBW
 
 function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     reporter = onstates
-    components = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
+    components = make_components_M(transitions, G, R, data.nRNA, decayrate, splicetype)
     return reporter, components
 end
 

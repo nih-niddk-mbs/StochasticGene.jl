@@ -266,7 +266,7 @@ This function calculates the negative loglikelihood for different types of data 
 - `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
 """
 function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
-    predictions = likelihoodfn(param, data, model)
+    predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, hist), -logpredictions
@@ -295,9 +295,11 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
-    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    # logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    predictions = likelihoodRNA(r[1:num_rates(model)], data, model)
+    logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
@@ -329,8 +331,9 @@ end
 
 # Likelihood functions
 
+
 """
-    likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
+    predictedfn(param, data::RNAData, model::AbstractGMmodel)
 
 Calculates the likelihood for a single RNA histogram.
 
@@ -342,32 +345,21 @@ Calculates the likelihood for a single RNA histogram.
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
+function predictedfn(param, data::RNAData, model::AbstractGmodel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    steady_state(M, model.G, model.nalleles, data.nRNA)
+    steady_state(M, model.components.nT, model.nalleles, data.nRNA)
 end
-"""
-    likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
 
-Calculates the likelihood for a single RNA histogram using a GRSM model.
 
-# Arguments
-- `param`: The model parameters.
-- `data::RNAData`: The RNA data.
-- `model::AbstractGRSMmodel`: The GRSM model.
-
-# Returns
-- `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
-"""
-function likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
-    r = get_rates(param, model)
-    M = make_mat_M(components.mcomponents, r)
-    steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
+function likelihoodRNA(r, data::TraceRNAData, model::AbstractGmodel)
+    # r = get_rates(param, model)
+    M = make_mat_M(model.components.mcomponents, r)
+    steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
 end
 
 """
-    likelihoodfn(param, data::AbstractHistogramData, model::AbstractGmodel)
+    predictedfn(param, data::AbstractHistogramData, model::AbstractGmodel)
 
 Calculates the likelihood for multiple histograms.
 
@@ -379,14 +371,14 @@ Calculates the likelihood for multiple histograms.
 # Returns
 - `Array{Float64,2}`: An array of likelihoods for the histograms.
 """
-function likelihoodfn(param, data::AbstractHistogramData, model::AbstractGmodel)
-    h = likelihoodarray(get_rates(param, model), data, model)
+function predictedfn(param, data::AbstractHistogramData, model::AbstractGmodel)
+    h = predictedarray(get_rates(param, model), data, model)
     make_array(h)
 end
 
 
 """
-    likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array, T2<:Array}
+    predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array, T2<:Array}
 
 Calculates the likelihood for multiple histograms and returns an array of PDFs.
 
@@ -398,7 +390,7 @@ Calculates the likelihood for multiple histograms and returns an array of PDFs.
 # Returns
 - `Array{Array{Float64,1},1}`: An array of PDFs for the histograms.
 """
-function likelihoodarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
     h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
     for i in eachindex(data.nRNA)
         M = make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G])
@@ -409,7 +401,7 @@ end
 
 
 """
-    likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
+    predictedarray(r, data::RNAOnOffData, model::AbstractGmodel)
 
 Calculates the likelihood for RNA On/Off data.
 
@@ -421,7 +413,7 @@ Calculates the likelihood for RNA On/Off data.
 # Returns
 - `Array{Float64,1}`: The likelihoods for the RNA On/Off data.
 """
-function likelihoodarray(r, data::RNAOnOffData, model::AbstractGmodel)
+function predictedarray(r, data::RNAOnOffData, model::AbstractGmodel)
     #     if model.splicetype == "offdecay"
     #         # r[end-1] *= survival_fraction(nu, eta, model.R)
     #     end
@@ -438,7 +430,7 @@ end
 
 
 """
-    likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
+    predictedarray(r, data::RNADwellTimeData, model::AbstractGmodel)
 
 Calculates the likelihood array for RNA dwell time data.
 
@@ -454,20 +446,20 @@ This function calculates the likelihood array for RNA dwell time data using the 
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods for the dwell times.
 
 """
-function likelihoodarray(r, data::RNADwellTimeData, model::AbstractGmodel)
-    likelihoodarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
+function predictedarray(r, data::RNADwellTimeData, model::AbstractGmodel)
+    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
 end
 
-function likelihoodarray(r, data::DwellTimeData, model::AbstractGmodel)
-    likelihoodarray(r, model.components, data.bins, model.reporter, data.DTtypes)
+function predictedarray(r, data::DwellTimeData, model::AbstractGmodel)
+    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
-function likelihoodarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
+function predictedarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
     r, coupling_strength, _ = prepare_rates(r, model)
-    likelihoodarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
+    predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
 end
 """
-    likelihoodarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
+    predictedarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 
 Calculates the likelihood array
 
@@ -489,7 +481,7 @@ This function calculates the likelihood array for various types of data, includi
 """
 
 
-function likelihoodarray(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -530,7 +522,7 @@ function steady_state_dist(r, components, dt)
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function likelihoodarray(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray(r, components::TDComponents, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt)
@@ -547,13 +539,13 @@ function likelihoodarray(r, components::TDComponents, bins, reporter, dttype)
     hists
 end
 
-function likelihoodarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
+function predictedarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
 
 
-# function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
+# function predictedarray(r, components::TCoupledComponents, bins, reporter, dttype)
 #     sojourn, nonzeros = reporter
 #     dt = occursin.("G", dttype)
 #     p = steady_state_dist(r, components, dt)
@@ -586,7 +578,7 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
-# function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+# function predictedarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
 #     sojourn, nonzeros = reporter
 #     sources = components.sources
 #     model = components.model
@@ -636,11 +628,11 @@ function empty_cache!(cache)
     end
 end
 
-function likelihoodarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
-    cache = CoupledDTCache(Dict(),Dict())
+    cache = CoupledDTCache(Dict(), Dict())
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
     hists = Vector{Vector}[]
     for α in eachindex(components.modelcomponents)
