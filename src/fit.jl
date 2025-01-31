@@ -542,11 +542,7 @@ function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHis
     if typeof(data) <: TraceRNAData
         components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     else
-        if typeof(data) <: TraceRNAData
-            components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-        else
-            components = TRGComponents(transitions, G, R, S, insertstep, splicetype)
-        end
+        components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
     end
     return reporter, components
 end

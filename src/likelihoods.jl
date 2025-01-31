@@ -660,18 +660,123 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     return rshared, rindividual, pindividual, phyper
 end
 
+"""
+    prepare_rates(param, model::GRSMgridmodel)
 
-
-# Predicted probability density functions
-
-
-function logpredictedRNA(r, mcomponents, nalleles, nRNA)
-    M = make_mat_M(mcomponents, r)
-    log.(max.(steady_state(M, mcomponents.nT, nalleles, nRNA), eps()))
+TBW
+"""
+function prepare_rates(param, model::GRSMgridmodel)
+    r = get_rates(param, model)
+    r[model.raterange], r[model.noiserange], r[model.gridrange]
 end
 
+# function prepare_rates(param, model::GRSMgridhierarchicalmodel)
+#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+#     r = get_rates(param, model)
+#     hyperparams = Vector{Float64}[]
+#     for i in model.hierarchy.hyperindices
+#         push!(hyperparams, r[i])
+#     end
+#     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+#     rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+#     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
+#     return rshared, rindividual, pindividual, hyperparams
+# end
+
+
+# Model loglikelihoods
+
 """
-    predictedfn(param, data::RNAData, model::AbstractGMmodel)
+    loglikelihood(param, data, model)
+
+Calculates the negative loglikelihood for various types of data and models.
+
+# Arguments
+- `param`: The model parameters.
+- `data`: The data, which can be of various types (e.g., `AbstractHistogramData`, `AbstractTraceData`, `TraceData`, `TraceRNAData`).
+- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `GRSMcoupledmodel`, `AbstractGRSMmodel`, `GRSMhierarchicalmodel`).
+
+# Description
+This function calculates the negative loglikelihood for different types of data and models. It supports histogram data, trace data, coupled models, and hierarchical models. The specific calculation method depends on the types of `data` and `model` provided.
+
+# Methods
+- `loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)`: Returns the negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
+- `loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)`: Returns the negative loglikelihood of combined time series traces and each trace.
+- `loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)`: Returns the negative loglikelihood for a coupled model.
+- `loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)`: Returns the negative loglikelihood of time series traces and mRNA FISH steady state histogram.
+- `loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)`: Returns the negative loglikelihood for a hierarchical model.
+
+# Returns
+- `Float64`: The negative loglikelihood for the combined time series traces and each trace.
+- `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
+"""
+function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
+    predictions = likelihoodfn(param, data, model)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictions, eps()))
+    return crossentropy(logpredictions, hist), -logpredictions
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
+    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+    r = get_rates(param, model)
+    # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
+    llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
+    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+end
+
+function ll_hierarchy(pindividual, phyper)
+    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+    lhp = Float64[]
+    for pc in eachcol(pindividual)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    lhp
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    lhp = ll_hierarchy(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+
+
+# Likelihood functions
+
+"""
+    likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
 
 Calculates the likelihood for a single RNA histogram.
 
