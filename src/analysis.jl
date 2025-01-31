@@ -962,44 +962,7 @@ function get_histogram_rna(gene, datacond, datapath)
     normalize_histogram(h)
 end
 
-# function get_histogram_rna(gene, cond, datapath, root)
-#     fish = false
-#     if fish
-#         datapath = FISHpath(gene, cond, datapath, root)
-#         h = read_fish(datapath, cond, 0.98)
-#     else
-#         datapath = scRNApath(gene, cond, datapath, root)
-#         h = read_scrna(datapath, 0.99)
-#     end
-#     normalize_histogram(h)
-# end
 
-# function get_histogram_rna(gene, cond, datapath)
-#     if fish
-#         datapath = FISHpath(gene, cond, datapath)
-#         h = read_fish(datapath, cond, 0.98)
-#     else
-#         datapath = scRNApath(gene, cond, datapath)
-#         h = read_scrna(datapath, 0.99)
-#     end
-#     normalize_histogram(h)
-# end
-
-function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
-    files = get_resultfiles(folder)
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f)
-                parts = fields(f)
-                G, R, S, insertstep = decompose_model(parts.model)
-                r = readrates(joinpath(root, f))
-                out = joinpath(root, replace(f, "rates" => "ONOFF", ".txt" => ".csv"))
-                transitions = get_transitions(G, parts.label)
-                make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
-            end
-        end
-    end
-end
 
 """
     make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")
@@ -1025,8 +988,47 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     return df
 end
 
-function make_covariance()
+function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
+    files = get_resultfiles(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                parts = fields(f)
+                G, R, S, insertstep = decompose_model(parts.model)
+                r = readrates(joinpath(root, f))
+                out = joinpath(root, replace(f, "rates" => "ONOFF", ".txt" => ".csv"))
+                transitions = get_transitions(G, parts.label)
+                make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
+            end
+        end
+    end
+end
 
+
+function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, nalleles::Int, nRNA::Int; outfile::String="", splicetype="")
+    mcomponents = MComponents(transitions, G, R, nRNA, decayrate, splicetype)
+    df = DataFrame(Freq=predictedRNA(r, mcomponents, nalleles, nRNA), Bin=collect(0:nRNA-1))
+    if ~isempty(outfile)
+        CSV.write(outfile, df)
+    end
+    return df
+end
+
+function write_RNAhistogram(folder, nRNA)
+    files = get_resultfiles(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                parts = fields(f)
+                G, R, S, insertstep = decompose_model(parts.model)
+                nalleles = parse(Int, parts.nalleles)
+                r = readrates(joinpath(root, f))
+                out = joinpath(root, replace(f, "rates" => "RNA", ".txt" => ".csv"))
+                transitions = get_transitions(G, parts.label)
+                write_RNAhistogram(r, transitions, G, R, r[num_rates(transitions, R, S, insertstep)], nalleles, nRNA, outfile=out)
+            end
+        end
+    end
 end
 
 """
