@@ -412,6 +412,8 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
         trace = read_tracefiles(datapath[1], datacond, traceinfo)
         background = Vector[]
         # background = read_tracefiles(datapath[3], datacond, traceinfo)
+        background = Vector[]
+        # background = read_tracefiles(datapath[3], datacond, traceinfo)
     end
     (length(trace) == 0) && throw("No traces")
     println(length(trace))

@@ -712,7 +712,7 @@ This function calculates the negative loglikelihood for different types of data 
 - `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
 """
 function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
-    predictions = likelihoodfn(param, data, model)
+    predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, hist), -logpredictions
@@ -741,9 +741,11 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
     llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
     # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
-    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    # logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    predictions = likelihoodRNA(r[1:num_rates(model)], data, model)
+    logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
@@ -775,8 +777,9 @@ end
 
 # Likelihood functions
 
+
 """
-    likelihoodfn(param, data::RNAData, model::AbstractGMmodel)
+    predictedfn(param, data::RNAData, model::AbstractGMmodel)
 
 Calculates the likelihood for a single RNA histogram.
 
@@ -789,9 +792,28 @@ Calculates the likelihood for a single RNA histogram.
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
 function predictedfn(param, data::RNAData, model::AbstractGmodel)
+function predictedfn(param, data::RNAData, model::AbstractGmodel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    steady_state(M, model.components.nT, model.nalleles, data.nRNA)
+    steady_state(M, model.G, model.nalleles, data.nRNA)
+end
+"""
+    likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
+
+Calculates the likelihood for a single RNA histogram using a GRSM model.
+
+# Arguments
+- `param`: The model parameters.
+- `data::RNAData`: The RNA data.
+- `model::AbstractGRSMmodel`: The GRSM model.
+
+# Returns
+- `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
+"""
+function likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
+    r = get_rates(param, model)
+    M = make_mat_M(components.mcomponents, r)
+    steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
 end
 
 
@@ -980,8 +1002,25 @@ end
 
 function predictedarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
+
+
+# function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
+#     sojourn, nonzeros = reporter
+#     dt = occursin.("G", dttype)
+#     p = steady_state_dist(r, components, dt)
+#     hists = Vector[]
+#     for i in eachindex(sojourn)
+#         TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
+#         if dt[i]
+#             push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
+#         else
+#             push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
+#         end
+#     end
+#     hists
+# end
 
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
@@ -999,6 +1038,31 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     end
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
+
+# function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+#     sojourn, nonzeros = reporter
+#     sources = components.sources
+#     model = components.model
+#     TDdims = get_TDdims(components)
+#     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+#     hists = Vector{Vector}[]
+#     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
+#     for α in eachindex(components.modelcomponents)
+#         dt = occursin.("G", dttype[α])
+#         p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+#         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
+#         h = Vector[]
+#         for i in eachindex(sojourn[α])
+#             if dt[i]
+#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
+#             else
+#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i])))
+#             end
+#         end
+#         push!(hists, h)
+#     end
+#     return hists
+# end
 
 function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
     if dt
