@@ -807,9 +807,9 @@ TBW
 """
 function ll_hmm_hierarchical(rshared, rindividual::Matrix, Nstate, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(rshared[:, 1], interval, components)
-    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, Nstate)
-    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, Nstate, trace[4], trace[3]) : 0.0
-    ll, logpredictions = ll_hmm(rindividual, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, trace[1], Nstate)
+    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
+    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, nT, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(rindividual, interval::Float64, components, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     return ll + lb, vcat(logpredictions, lhp)
 end
 
@@ -820,9 +820,9 @@ TBW
 """
 function ll_hmm_hierarchical_rateshared(rshared, rindividual::Matrix, Nstate, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(rshared[:, 1], interval, components)
-    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, Nstate)
-    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, Nstate, trace[4], trace[3]) : 0.0
-    ll, logpredictions = ll_hmm(rindividual, a, p0, n_noiseparams, reporters_per_state, probfn, trace[1], Nstate)
+    d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
+    lb = trace[3] > 0 ? ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(rindividual, a, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     ll + lb, logpredictions
 end
 
