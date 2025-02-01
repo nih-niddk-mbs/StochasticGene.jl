@@ -1,5 +1,6 @@
 # Model and Data dependent functions
 
+
 """
 datahistogram(data)
 Return the RNA histogram data as one vector
@@ -118,6 +119,155 @@ function datapdf(data::RNADwellTimeData)
     return v
 end
 
+"""
+    num_rates(transitions, R, S, insertstep)
+    num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+
+compute number of transition rates (not counting noise parameters)
+"""
+function num_rates(transitions, R, S, insertstep)
+    if R > 0
+        if insertstep > R
+            throw("insertstep>R")
+        end
+        if S == 0
+            insertstep = 1
+        elseif S > R - insertstep + 1
+            S = R - insertstep + 1
+        end
+        return length(transitions) + 1 + R + S + 1
+    else
+        return length(transitions) + 2
+    end
+end
+
+function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+    n = 0
+    for i in eachindex(R)
+        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
+    end
+    n
+end
+
+
+"""
+    num_rates(model)
+
+compute number of transition rates
+
+# Arguments
+- `model`: The model, which can be of various types (e.g., `AbstractGRSMmodel`, `GRSMcoupledmodel`) or a model string.
+
+# Description
+This function computes the number of transition rates for the provided GRSM model. It calculates the number of rates based on the model's G transitions, R steps, S splicing indicator, and insert step.
+
+#Methods
+- `num_rates(model::AbstractGRSMmodel)`: Returns the number of transition rates for the GRSM model.
+- `num_rates(model::String)`: Computes the number of transition rates given a model string.
+
+# Returns
+- `Int`: The number of transition rates.
+
+"""
+
+"""
+    num_rates(model::AbstractGRSMmodel)
+
+# Description
+This function computes the number of transition rates for the provided GRSM model. It calculates the number of rates based on the model's G transitions, R steps, S splicing indicator, and insert step.
+
+"""
+num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+
+num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+
+
+"""
+    num_rates(model::String)
+
+compute number of transition rates given model string
+"""
+function num_rates(model::String)
+    m = digits(parse(Int, model))
+    if length(m) == 1
+        return 2 * m[1]
+    else
+        return 2 * (m[4] - 1) + m[3] + m[2] - m[1] + 2
+    end
+end
+
+function num_total_rates(transitions, R::Int, S, insertstep, noisepriors)
+    num_rates(transitions, R, S, insertstep) + length(noisepriors)
+end
+
+function num_total_rates(transitions, R::Tuple, S, insertstep, noisepriors)
+    n = 0
+    for i in eachindex(R)
+        n += num_total_rates(transitions[i], R[i], S[i], insertstep[i], noisepriors[i])
+    end
+    n
+end
+
+"""
+    num_noiseparams(datatype, noisepriors)
+
+TBW
+"""
+function num_noiseparams(datatype, noisepriors)
+    if eltype(noisepriors) <: Number
+        return length(noisepriors)
+    else
+        return length.(noisepriors)
+    end
+end
+
+"""
+    num_total_parameters(transitions, R, S, insertstep
+    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
+    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
+
+TBW
+"""
+function num_total_parameters(transitions, R::Int, S, insertstep, reporter)
+    n = typeof(reporter) <: HMMReporter ? reporter.n : 0
+    # num_rates(transitions, R, S, insertstep) + n
+    num_rates(transitions, R, S, insertstep) + n
+end
+
+function num_total_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
+    n = 0
+    for i in eachindex(R)
+        n += num_total_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
+    end
+    n
+end
+
+"""
+    num_total_parameters(model::AbstractGmodel)
+
+total number of parameters
+
+# Arguments
+- `model`: The model, which can be of various types (e.g., `AbstractGRSMmodel`, `GRSMcoupledmodel`).
+
+# Description
+This function calculates the total number of parameters for the provided model. It includes the number of transition rates, R steps, S splicing indicator, insert step, and the number of reporters
+
+# Methods
+- `total_parameters(model::AbstractGmodel)`: Returns the total number of parameters for the model.
+
+# Returns
+- `Int`: The total number of parameters.
+
+"""
+function num_total_parameters(model::AbstractGmodel)
+    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
+    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
+end
+
+
+
+
 
 """
     transform_array(v, index, f1, f2)
@@ -196,7 +346,7 @@ transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = tran
 
 transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
-transform_rates(r, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}}) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
+transform_rates(r, model::AbstractGRSMmodel{@NamedTuple{coupling::Int64}}) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
 # function transform_rates(pin, model::GRSMcoupledmodel)
 #     p = copy(pin)
@@ -233,7 +383,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}
 
 inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
-inverse_transform_rates(p, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
+inverse_transform_rates(p, model::AbstractGRSMmodel{@NamedTuple{coupled::Int}}) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
 """
     get_param(model)
@@ -261,7 +411,7 @@ get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedpa
 
 get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_param(model::AbstractGRSMtraitmodel) = transform_rates(model.rates[model.fittedparam], model)
+get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 """
     fixed_rates(r, fixedeffects)
@@ -346,7 +496,7 @@ function get_rates(param, model::GRSMcoupledmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
-function get_rates(param, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}, inverse=true)
+function get_rates(param, model::AbstractGRSMmodel{@NamedTuple{coupled::Int}}, inverse=true)
     r = copy_r(model)
     get_rates!(r, param, model, inverse)
     fixed_rates(r, model.fixedeffects)
@@ -414,7 +564,7 @@ function prepare_rates(r, grid::GridTrait)
 end
 
 function prepare_rates(r, hierarchical::HierarchicalTrait)
-    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params
     phyper = Vector{Float64}[]
     for i in hierarchical.hyperindices
         push!(phyper, r[i])
@@ -425,24 +575,24 @@ function prepare_rates(r, hierarchical::HierarchicalTrait)
     return rshared, rindividual, pindividual, phyper
 end
 
-function prepare_rates_coupled(rates, model::AbstractGRSMtraitmodel)
+function prepare_rates_coupled(rates, model::AbstractGRSMmodel)
     n_noise = [r.n for r in model.reporter]
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 end
 
-# function prepare_rates(param, model::AbstractGRSMtraitmodel)
+# function prepare_rates(param, model::AbstractGRSMmodel)
 #     rates = get_rates(param, model)
 #     n_noise = [r.n for r in model.reporter]
 #     sourceStates = [c.sourceState for c in model.components.modelcomponents]
 #     prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
 # end
 
-# function prepare_rates_grid(param, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
+# function prepare_rates_grid(param, model::AbstractGRSMmodel{@NamedTuple{grid::GridTrait}})
 #     prepare_rates(get_rates(param, model), model.traits.grid)
 # end
 
-# function prepare_rates_hierarchical(param, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
+# function prepare_rates_hierarchical(param, model::AbstractGRSMmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
 #     prepare_rates(get_rates(param, model), model.traits.hierarchical)
 # end
 
@@ -480,7 +630,7 @@ Prepare rates and parameters for hierarchical model calculations by reshaping ve
 
 # Returns
 - `r`: Matrix of rates (nrates × nindividuals)
-- `p`: Matrix of parameters (nparams × nindividuals)  
+- `p`: Matrix of parameters (nparams × nindividuals)
 - `h`: Vector of vectors containing hyperparameter indices
 
 # Description
@@ -497,7 +647,7 @@ r, p, h = prepare_rates(param, model)
 ```
 """
 function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
-    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
     phyper = Vector{Float64}[]
@@ -510,188 +660,15 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     return rshared, rindividual, pindividual, phyper
 end
 
-# Model loglikelihoods
-
-function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
-    predictions = likelihoodfn(param, data, model)
-    hist = datahistogram(data)
-    logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, hist), -logpredictions
-end
 
 
-function ll_hierarchy(pindividual, phyper)
-    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
-    lhp = Float64[]
-    for pc in eachcol(pindividual)
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc -= logpdf(d[i], pc[i])
-        end
-        push!(lhp, lhpc)
-    end
-    lhp
-end
+# Predicted probability density functions
 
 
-
-# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
-#     traits = model.traits
-#     r = get_rates(param, model)
-#     # if hasfield(traits, :hierarchical)
-#     #     rshared, rindividual, pindividual, phyper = prepare_rates(r, traits.hierarchical)
-#     # end
-#     # if hasfield(traits, :grid)
-#     #     r, noiseparams, pgrid = prepare_rates_grid(r, traits.grid)
-#     # end
-#     # if hasfield(traits, :coupling)
-#     #     r, couplingStrength, noiseparams = prepare_rates_coupling(r, model)
-#     # end
-
-
-
-#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
-#     if model.method[2]
-#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     else
-#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     end
-#     lhp = ll_hierarchy(pindividual, phyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64}})
-    r, couplingStrength, noiseparams = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait}})
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
-    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
-    if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    else
-        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    end
-    lhp = ll_hierarchy(pindividual, phyper)
-    return llg + sum(lhp), vcat(llgp, lhp)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait}})
-
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, hierarchical::HierarchicalTrait}})
-
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{grid::GridTrait, hierarchical::HierarchicalTrait}})
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel{@NamedTuple{coupling::Int64, grid::GridTrait, hierarchical::HierarchicalTrait}})
-
-end
-
-
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel{@NamedTuple{}})
-    r = get_rates(param, model)
-    # llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn, model.reporter.offstates, data.interval, data.trace)
-    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
-    # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
-    logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-end
-
-###########
-
-"""
-    loglikelihood(param, data, model)
-
-Calculates the negative loglikelihood for various types of data and models.
-
-# Arguments
-- `param`: The model parameters.
-- `data`: The data, which can be of various types (e.g., `AbstractHistogramData`, `AbstractTraceData`, `TraceData`, `TraceRNAData`).
-- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `GRSMcoupledmodel`, `AbstractGRSMmodel`, `GRSMhierarchicalmodel`).
-
-# Description
-This function calculates the negative loglikelihood for different types of data and models. It supports histogram data, trace data, coupled models, and hierarchical models. The specific calculation method depends on the types of `data` and `model` provided.
-
-# Methods
-- `loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)`: Returns the negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
-- `loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)`: Returns the negative loglikelihood of combined time series traces and each trace.
-- `loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)`: Returns the negative loglikelihood for a coupled model.
-- `loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)`: Returns the negative loglikelihood of time series traces and mRNA FISH steady state histogram.
-- `loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)`: Returns the negative loglikelihood for a hierarchical model.
-
-# Returns
-- `Float64`: The negative loglikelihood for the combined time series traces and each trace.
-- `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
-"""
-function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
-    predictions = predictedfn(param, data, model)
-    hist = datahistogram(data)
-    logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, hist), -logpredictions
-end
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
-    r, couplingStrength, noiseparams = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-end
-function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
-    if model.method[2]
-        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    else
-        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    end
-    lhp = ll_hierarchy(pindividual, phyper)
-    return llg + sum(lhp), vcat(llgp, lhp)
-end
-function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function predictedRNA(r, mcomponents, nalleles, nRNA)
+function logpredictedRNA(r, mcomponents, nalleles, nRNA)
     M = make_mat_M(mcomponents, r)
-    steady_state(M, mcomponents.nT, nalleles, nRNA)
+    log.(max.(steady_state(M, mcomponents.nT, nalleles, nRNA), eps()))
 end
-
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
-    r = get_rates(param, model)
-    llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles,data.nRNA)
-    logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-end
-
-################
-
-# Likelihood functions
-
 
 """
     predictedfn(param, data::RNAData, model::AbstractGMmodel)
@@ -901,23 +878,6 @@ function predictedarray(r, components::MTDComponents, bins, reporter, dttype, na
     [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
 
-
-# function predictedarray(r, components::TCoupledComponents, bins, reporter, dttype)
-#     sojourn, nonzeros = reporter
-#     dt = occursin.("G", dttype)
-#     p = steady_state_dist(r, components, dt)
-#     hists = Vector[]
-#     for i in eachindex(sojourn)
-#         TD = make_mat(components.elementsTD[i], r, components.TDdims[i])
-#         if dt[i]
-#             push!(hists, dwelltimePDF(bins[i], TD, sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)))
-#         else
-#             push!(hists, dwelltimePDF(bins[i], TD[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i])))
-#         end
-#     end
-#     hists
-# end
-
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
     pss = nothing
@@ -934,31 +894,6 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     end
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
-
-# function predictedarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
-#     sojourn, nonzeros = reporter
-#     sources = components.sources
-#     model = components.model
-#     TDdims = get_TDdims(components)
-#     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
-#     hists = Vector{Vector}[]
-#     TCD = Vector{Vector{SparseMatrixCSC}}(undef, length(Gm))
-#     for α in eachindex(components.modelcomponents)
-#         dt = occursin.("G", dttype[α])
-#         p = steady_state_dist(α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
-#         TCD[α] = make_mat_TCD(α, TD[α], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn[α])
-#         h = Vector[]
-#         for i in eachindex(sojourn[α])
-#             if dt[i]
-#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i], sojourn[α][i], init_S(sojourn[α][i], p.GC, p.pssG)))
-#             else
-#                 push!(h, dwelltimePDF(bins[α][i], TCD[α][i][nonzeros[α][i], nonzeros[α][i]], nonzero_states(sojourn[α][i], nonzeros[α][i]), init_S(sojourn[α][i], p.TC, p.pss, nonzeros[α][i])))
-#             end
-#         end
-#         push!(hists, h)
-#     end
-#     return hists
-# end
 
 function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
     if dt
@@ -1006,7 +941,181 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
 end
 
 
+function ll_hierarchy(pindividual, phyper)
+    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+    lhp = Float64[]
+    for pc in eachcol(pindividual)
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    lhp
+end
 
+# Model loglikelihoods
+
+function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictedfn(param, data, model), eps()))
+    return crossentropy(logpredictions, hist), -logpredictions
+end
+
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel{@NamedTuple{}})
+    r = get_rates(param, model)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    # M = make_mat_M(model.components.mcomponents, r[1:num_rates(model)])
+    # M = make_mat_MRG(model.components.mcomponents, r[1:num_rates(model)])
+    # logpredictions = log.(max.(steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA), eps()))
+    logpredictions = logpredictedRNA(r[1:num_rates(model)], components.mcomponents, model.nalleles, data.nRNA)
+    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+end
+
+
+
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+    traits = model.traits
+    r = get_rates(param, model)
+    # if hasfield(traits, :hierarchical)
+    #     rshared, rindividual, pindividual, phyper = prepare_rates(r, traits.hierarchical)
+    # end
+    # if hasfield(traits, :grid)
+    #     r, noiseparams, pgrid = prepare_rates_grid(r, traits.grid)
+    # end
+    # if hasfield(traits, :coupling)
+    #     r, couplingStrength, noiseparams = prepare_rates_coupling(r, model)
+    # end
+
+
+
+    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+    if model.method[2]
+        llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    else
+        llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    end
+    lhp = ll_hierarchy(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
+#     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{coupling::Int64}})
+#     r, couplingStrength, noiseparams = prepare_rates(param, model)
+#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{grid::GridTrait}})
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{hierarchical::HierarchicalTrait}})
+#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+#     if model.method[2]
+#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     else
+#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     end
+#     lhp = ll_hierarchy(pindividual, phyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{coupling::Int64, grid::GridTrait}})
+
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{coupling::Int64, hierarchical::HierarchicalTrait}})
+
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{grid::GridTrait, hierarchical::HierarchicalTrait}})
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel{@NamedTuple{coupling::Int64, grid::GridTrait, hierarchical::HierarchicalTrait}})
+
+# end
+
+
+
+###########
+
+"""
+    loglikelihood(param, data, model)
+
+Calculates the negative loglikelihood for various types of data and models.
+
+# Arguments
+- `param`: The model parameters.
+- `data`: The data, which can be of various types (e.g., `AbstractHistogramData`, `AbstractTraceData`, `TraceData`, `TraceRNAData`).
+- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `GRSMcoupledmodel`, `AbstractGRSMmodel`, `GRSMhierarchicalmodel`).
+
+# Description
+This function calculates the negative loglikelihood for different types of data and models. It supports histogram data, trace data, coupled models, and hierarchical models. The specific calculation method depends on the types of `data` and `model` provided.
+
+# Methods
+- `loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)`: Returns the negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
+- `loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)`: Returns the negative loglikelihood of combined time series traces and each trace.
+- `loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)`: Returns the negative loglikelihood for a coupled model.
+- `loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)`: Returns the negative loglikelihood of time series traces and mRNA FISH steady state histogram.
+- `loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)`: Returns the negative loglikelihood for a hierarchical model.
+
+# Returns
+- `Float64`: The negative loglikelihood for the combined time series traces and each trace.
+- `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
+"""
+# function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
+#     predictions = predictedfn(param, data, model)
+#     hist = datahistogram(data)
+#     logpredictions = log.(max.(predictions, eps()))
+#     return crossentropy(logpredictions, hist), -logpredictions
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
+#     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+#     r, couplingStrength, noiseparams = prepare_rates(param, model)
+#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+# end
+# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+#     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+#     if model.method[2]
+#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     else
+#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     end
+#     lhp = ll_hierarchy(pindividual, phyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+
+# function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+#     r = get_rates(param, model)
+#     llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+#     logpredictions = log.(max.(predictions, eps()))
+#     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+# end
+
+################
 
 
 """
@@ -1059,141 +1168,4 @@ function logprior(param, model::AbstractGmodel)
     end
     return p
 end
-
-"""
-    num_rates(transitions, R, S, insertstep)
-    num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
-
-compute number of transition rates (not counting noise parameters)
-"""
-function num_rates(transitions, R, S, insertstep)
-    if R > 0
-        if insertstep > R
-            throw("insertstep>R")
-        end
-        if S == 0
-            insertstep = 1
-        elseif S > R - insertstep + 1
-            S = R - insertstep + 1
-        end
-        return length(transitions) + 1 + R + S + 1
-    else
-        return length(transitions) + 2
-    end
-end
-
-function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
-    n = 0
-    for i in eachindex(R)
-        n += num_rates(transitions[i], R[i], S[i], insertstep[i])
-    end
-    n
-end
-
-
-"""
-    num_rates(model)
-
-compute number of transition rates
-
-# Arguments
-- `model`: The model, which can be of various types (e.g., `AbstractGRSMmodel`, `GRSMcoupledmodel`) or a model string.
-
-# Description
-This function computes the number of transition rates for the provided GRSM model. It calculates the number of rates based on the model's G transitions, R steps, S splicing indicator, and insert step.
-
-#Methods
-- `num_rates(model::AbstractGRSMmodel)`: Returns the number of transition rates for the GRSM model.
-- `num_rates(model::String)`: Computes the number of transition rates given a model string.
-
-# Returns
-- `Int`: The number of transition rates.
-
-"""
-
-"""
-    num_rates(model::AbstractGRSMmodel)
-
-# Description
-This function computes the number of transition rates for the provided GRSM model. It calculates the number of rates based on the model's G transitions, R steps, S splicing indicator, and insert step.
-
-"""
-num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
-
-num_rates(model::AbstractGRSMtraitmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
-
-
-"""
-    num_rates(model::String)
-
-compute number of transition rates given model string
-"""
-function num_rates(model::String)
-    m = digits(parse(Int, model))
-    if length(m) == 1
-        return 2 * m[1]
-    else
-        return 2 * (m[4] - 1) + m[3] + m[2] - m[1] + 2
-    end
-end
-
-function num_total_rates(transitions, R::Int, S, insertstep, noisepriors)
-    num_rates(transitions, R, S, insertstep) + length(noisepriors)
-end
-
-function num_total_rates(transitions, R::Tuple, S, insertstep, noisepriors)
-    n = 0
-    for i in eachindex(R)
-        n += num_total_rates(transitions[i], R[i], S[i], insertstep[i], noisepriors[i])
-    end
-    n
-end
-
-
-"""
-    num_total_parameters(transitions, R, S, insertstep
-    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
-    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
-
-TBW
-"""
-function num_total_parameters(transitions, R::Int, S, insertstep, reporter)
-    n = typeof(reporter) <: HMMReporter ? reporter.n : 0
-    # num_rates(transitions, R, S, insertstep) + n
-    num_rates(transitions, R, S, insertstep) + n
-end
-
-function num_total_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
-    n = 0
-    for i in eachindex(R)
-        n += num_total_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
-    end
-    n
-end
-
-"""
-    num_total_parameters(model::AbstractGmodel)
-
-total number of parameters
-
-# Arguments
-- `model`: The model, which can be of various types (e.g., `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function calculates the total number of parameters for the provided model. It includes the number of transition rates, R steps, S splicing indicator, insert step, and the number of reporters
-
-# Methods
-- `total_parameters(model::AbstractGmodel)`: Returns the total number of parameters for the model.
-
-# Returns
-- `Int`: The total number of parameters.
-
-"""
-function num_total_parameters(model::AbstractGmodel)
-    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
-    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
-end
-
-
-
 

@@ -1154,7 +1154,7 @@ Calculates the burst size distribution given the number of states, number of spl
 # Returns
 - `Tuple{Vector{Float64}, Vector{Float64}}`: The total pre-mRNA occupancy and unspliced (visible) occupancy distributions.
 """
-burstoccupancy(model::AbstractGRSMtraitmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
+burstoccupancy(model::AbstractGRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
 
 function burstoccupancy(n::Int, nr::Int, r::Vector)
     T = mat_GSR_T(r, n, nr)
@@ -1364,7 +1364,7 @@ This function simulates the RNA on-off model with splicing using the provided mo
 # Returns
 - `Nothing`: The function performs the simulation and comparison but does not return a value.
 """
-function test_model(data::RNAOnOffData, model::AbstractGRSMtraitmodel)
+function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 

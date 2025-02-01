@@ -2,6 +2,15 @@
 
 ###  common.jl
 
+
+"""
+Abstract Option types for fitting methods
+"""
+abstract type Options end
+abstract type Results end
+
+
+
 # Data types
 """
     AbstractExperimentalData
@@ -72,10 +81,6 @@ struct DwellTimeData <: AbstractHistogramData
     DwellTimes::Vector
     DTtypes::Vector
 end
-
-
-
-
 
 """
     RNAOnOffData
@@ -159,27 +164,16 @@ end
 
 # Model structures
 
-"""
-    Hierarchy
 
-Structure for hierarchical model
-
-    # Fields
-- `nhypersets::Int`: number of hyper parameter sets
-- `nparams::Int`: number of fitted hyper params per set = length(fittedparam)
-- `nrates`::Int`: number of rates (all params) for each individual
-- `nindividualparams::Int`: number of fitted params per individual
-- `nindividuals::Int`: number of individuals (traces)
-"""
-struct Hierarchy
-    nhypersets::Int
-    nrates::Int
-    nparams::Int
-    nindividuals::Int
-    ratestart::Int
-    paramstart::Int
-    hyperindices::Vector{Vector}
-end
+# struct Hierarchy
+#     nhypersets::Int
+#     nrates::Int
+#     nparams::Int
+#     nindividuals::Int
+#     ratestart::Int
+#     paramstart::Int
+#     hyperindices::Vector{Vector}
+# end
 
 """
     HMMReporter
@@ -215,19 +209,26 @@ abstract type ModelTrait end
 """
 struct GRSMTrait <: ModelTrait end
 
-"""
-    HierarchicalTrait
 
-Trait for hierarchical models that share parameters across different levels.
+
+"""
+    struct HierarchicalTrait <: ModelTrait
+
+A structure representing hierarchical traits in a model.
 
 # Fields
-- `hierarchy::Hierarchy`: Hierarchy of models for hierarchical modeling
-"""
-# struct HierarchicalTrait <: ModelTrait
-#     hierarchy::Hierarchy
-# end
+- `nhypersets::Int`: Number of hyperparameter sets.
+- `nrates::Int`: Number of rates (all parameters) for each individual.
+- `nparams::Int`: Number of fitted hyperparameters per set.
+- `nindividuals::Int`: Number of individuals (traces).
+- `ratestart::Int`: Starting index for rates in the parameter vector.
+- `paramstart::Int`: Starting index for hyperparameters in the parameter vector.
+- `hyperindices::Vector{Vector}`: Indices of hyperparameters for each set.
 
-struct HierarchicalTrait <: ModelTrait
+# Description
+The `HierarchicalTrait` struct is used to represent hierarchical traits in a model. It includes information about the number of hyperparameter sets, the number of rates and parameters for each individual, and the indices of hyperparameters for each set. This struct is useful for models that involve hierarchical or multi-level parameters, allowing for more complex and flexible modeling of traits across different individuals or groups.
+"""
+struct HierarchicalTrait <: GRSMTrait
     nhypersets::Int
     nrates::Int
     nparams::Int
@@ -236,7 +237,6 @@ struct HierarchicalTrait <: ModelTrait
     paramstart::Int
     hyperindices::Vector{Vector}
 end
-
 """
     GridTrait
 
@@ -248,7 +248,7 @@ Trait for models that use grid-based parameter space exploration.
 - `grid_range::UnitRange`: Range of grid points
 - `n_grid::Int`: Number of grid points
 """
-struct GridTrait <: ModelTrait
+struct GridTrait <: GRSMTrait
     raterange::UnitRange
     noiserange::UnitRange
     gridrange::UnitRange
@@ -261,33 +261,12 @@ end
 abstract type AbstractModel end
 abstract type AbstractGmodel <: AbstractModel end
 abstract type AbstractGMmodel <: AbstractGmodel end
-abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
-abstract type AbstractGRSMtraitmodel{TraitType} <: AbstractGmodel end
-abstract type AbstractGRSMhierarchicalmodel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
+abstract type AbstractGRSMmodel{TraitType} <: AbstractGmodel end
 
-"""
-    Model structures
+# abstract type AbstractGRSMmodel{RateType,ReporterType} <: AbstractGmodel end
+# abstract type AbstractGRSMhierarchicalmodel{RateType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType} end
 
-fields:
-- `rates`: transition rates
-- `Gtransitions`:  tuple of vectors of G state transitions
-- `G`: number of G steps
-- `R`: number of R steps
-- `S`: indicator for splicing, 0 no splicing, > 1 splicing
-- `insertstep`: R step where reporter is inserted (first step where reporter is visible)
-- `nalleles`: number of alleles producing RNA
-- `splicetype`: choices are "", "offeject", "offdecay"
-- `rateprior`: prior distribution for rates
-- `proposal`: MCMC proposal distribution
-- `fittedparam`: indices of rates to be fitted
-- `fixedeffects`: indices of rates that are fixed to each other, in the form of a 2 tuple of vectors
-    with index 1 the tied index vector and 2 the corresponding fitted index vector
-- `fixedeffects`: tuple of vectors of rates that are locked together
-- `method`: method option, for nonhierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition, 
-            for hierarchical models, 2-tuple, where 1st component is same as above and 2nd is Bool where true means rates are fixed for all individuals
--` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
 
-"""
 
 """
     GMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
@@ -316,22 +295,19 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     components::ComponentType
     reporter::ReporterType
 end
-
-### To be replaced with new code
-
-
 """
-    GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+    struct GRSMmodel{TraitType, GType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType} <: AbstractGRSMmodel{TraitType}
 
-Structure for GRSM models.
+A structure for GRSM trait models.
 
 # Fields
-- `rates::RateType`: Transition rates.
+- `traits::TraitType`: Traits of the model.
+- `rates::Vector`: Transition rates.
 - `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
-- `G::Int`: Number of G steps.
-- `R::Int`: Number of R steps.
-- `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
-- `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+- `G::GType`: Number of G steps.
+- `R::GType`: Number of R steps.
+- `S::GType`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+- `insertstep::GType`: R step where reporter is inserted (first step where reporter is visible).
 - `nalleles::Int`: Number of alleles producing RNA.
 - `splicetype::String`: Choices are "", "offeject", "offdecay".
 - `rateprior::PriorType`: Prior distribution for rates.
@@ -341,26 +317,11 @@ Structure for GRSM models.
 - `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
 - `components::ComponentType`: Components of the model.
 - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
-"""
-struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
 
-struct GRSMtraitmodel{TraitType,GType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
+# Description
+The `GRSMmodel` struct is used to represent GRSM trait models. It includes information about the traits, transition rates, state transitions, splicing, alleles, priors, proposals, and various components of the model. This struct is useful for modeling gene transcription with stochastic processes and performing Bayesian inference on model parameters.
+"""
+struct GRSMmodel{TraitType, GType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType} <: AbstractGRSMmodel{TraitType}
     traits::TraitType
     rates::Vector
     Gtransitions::Tuple
@@ -380,201 +341,6 @@ struct GRSMtraitmodel{TraitType,GType,PriorType,ProposalType,ParamType,MethodTyp
 end
 
 """
-    GRSMhierarchicalmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
-
-Structure for GRSM hierarchical models.
-
-# Fields
-- `hierarchy::Hierarchy`: Hierarchy of rates for hierarchical modeling.
-- as in GRSMmodel
-"""
-struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
-    rates::RateType
-    hierarchy::Hierarchy
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-"""
-    GRSMcoupledmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
-
-Structure for GRSM coupled models.
-
-# Fields
-- `coupling::CouplingType`: Coupling information for the model.
-"""
-struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    coupling::CouplingType
-    Gtransitions::Tuple
-    G::Tuple
-    R::Tuple
-    S::Tuple
-    insertstep::Tuple
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    rates::RateType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    coupling::CouplingType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
-    rates::RateType
-    hierarchy::Hierarchy
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    coupling::CouplingType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-"""
-    GRSMcoupledgridmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
-
-Structure for GRSM coupled grid models.
-
-# Fields
-- `coupling::CouplingType`: Coupling type.
-"""
-struct GRSMcoupledgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    coupling::CouplingType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-"""
-    GRSMcoupledhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
-
-Structure for GRSM coupled hierarchical models.
-
-# Fields
-- `hierarchy::Hierarchy`: Hierarchy of models.
-- `coupling::CouplingType`: Coupling type.
-"""
-struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    hierarchy::Hierarchy
-    coupling::CouplingType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-"""
-    GRSMcoupledgridhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
-
-Structure for GRSM coupled grid hierarchical models.
-
-# Fields
-- `hierarchy::Hierarchy`: Hierarchy of models.
-- `coupling::CouplingType`: Coupling type.
-"""
-struct GRSMcoupledgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    hierarchy::Hierarchy
-    coupling::CouplingType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-
-
-"""
     print_model(model::AbstractModel)
 
 Print all fields of model
@@ -591,9 +357,245 @@ function print_model(model::AbstractModel)
     end
 end
 
+#### obsolete structures
+
+
 """
-Abstract Option types for fitting methods
+    Model structures
+
+fields:
+- `rates`: transition rates
+- `Gtransitions`:  tuple of vectors of G state transitions
+- `G`: number of G steps
+- `R`: number of R steps
+- `S`: indicator for splicing, 0 no splicing, > 1 splicing
+- `insertstep`: R step where reporter is inserted (first step where reporter is visible)
+- `nalleles`: number of alleles producing RNA
+- `splicetype`: choices are "", "offeject", "offdecay"
+- `rateprior`: prior distribution for rates
+- `proposal`: MCMC proposal distribution
+- `fittedparam`: indices of rates to be fitted
+- `fixedeffects`: indices of rates that are fixed to each other, in the form of a 2 tuple of vectors
+    with index 1 the tied index vector and 2 the corresponding fitted index vector
+- `fixedeffects`: tuple of vectors of rates that are locked together
+- `method`: method option, for nonhierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition, 
+            for hierarchical models, 2-tuple, where 1st component is same as above and 2nd is Bool where true means rates are fixed for all individuals
+-` reporter`: vector of reporters or sojorn states (onstates) or vectors of vectors depending on model and data
+
 """
-abstract type Options end
-abstract type Results end
+# struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     rates::RateType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+
+
+# """
+#     GRSMhierarchicalmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+# Structure for GRSM hierarchical models.
+
+# # Fields
+# - `hierarchy::Hierarchy`: Hierarchy of rates for hierarchical modeling.
+# - as in GRSMmodel
+# """
+# struct GRSMhierarchicalmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
+#     rates::RateType
+#     hierarchy::Hierarchy
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+# """
+#     GRSMcoupledmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+# Structure for GRSM coupled models.
+
+# # Fields
+# - `coupling::CouplingType`: Coupling information for the model.
+# """
+# struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     rates::RateType
+#     coupling::CouplingType
+#     Gtransitions::Tuple
+#     G::Tuple
+#     R::Tuple
+#     S::Tuple
+#     insertstep::Tuple
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+# struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     rates::RateType
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+#     coupling::CouplingType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+# struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
+#     rates::RateType
+#     hierarchy::Hierarchy
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+#     coupling::CouplingType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+# """
+#     GRSMcoupledgridmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+# Structure for GRSM coupled grid models.
+
+# # Fields
+# - `coupling::CouplingType`: Coupling type.
+# """
+# struct GRSMcoupledgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+#     coupling::CouplingType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+# """
+#     GRSMcoupledhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+# Structure for GRSM coupled hierarchical models.
+
+# # Fields
+# - `hierarchy::Hierarchy`: Hierarchy of models.
+# - `coupling::CouplingType`: Coupling type.
+# """
+# struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     hierarchy::Hierarchy
+#     coupling::CouplingType
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+# """
+#     GRSMcoupledgridhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
+
+# Structure for GRSM coupled grid hierarchical models.
+
+# # Fields
+# - `hierarchy::Hierarchy`: Hierarchy of models.
+# - `coupling::CouplingType`: Coupling type.
+# """
+# struct GRSMcoupledgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+#     hierarchy::Hierarchy
+#     coupling::CouplingType
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+
+
 

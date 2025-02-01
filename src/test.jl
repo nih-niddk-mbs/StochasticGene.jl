@@ -182,7 +182,7 @@ function test_composable_data(; probfn=prob_Gaussian, grid=4, coupling=((1, 2), 
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
     # rm = StochasticGene.prior_ratemean_hierarchical(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], hierarchical[1], coupling)
     # rm = set_priormean2([], transitions, R, S, insertstep, 1., noisepriors, elongationtime, hierarchical, coupling, grid)
-    # model = GRSMtraitmodel(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, grid)
+    # model = GRSMmodel(data, rm, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, grid)
     data
 end
 

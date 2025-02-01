@@ -496,7 +496,7 @@ function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
-function rlabels(model::AbstractGRSMtraitmodel)
+function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
@@ -673,10 +673,10 @@ end
 return output file names
 """
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
-filename(data, model::AbstractGRSMtraitmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMcoupledmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
-filename(data, model::AbstractGRSMtraitmodel{@NamedTuple{coupled::Int}}) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
+filename(data, model::AbstractGRSMmodel{@NamedTuple{coupled::Int}}) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 # function filename(data, model::GRSMcoupledmodel)
 #     m = ""
