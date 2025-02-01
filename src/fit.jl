@@ -461,6 +461,8 @@ end
 return data structure
 """
 function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
+    gene = check_genename(gene, "[")
+    datapath = folder_path(datapath, root, "data")
     if datatype == "rna"
         len, h = read_rna(gene, datacond, datapath)
         return RNAData(label, gene, len, h)
@@ -541,10 +543,10 @@ function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHis
         components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     else
         if typeof(data) <: TraceRNAData
-        components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-    else
-        components = TRGComponents(transitions, G, R, S, insertstep, splicetype)
-    end
+            components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
+        else
+            components = TRGComponents(transitions, G, R, S, insertstep, splicetype)
+        end
     end
     return reporter, components
 end
@@ -1005,9 +1007,13 @@ function GRSMmodel(data::AbstractExperimentalData, r, rmean, fittedparam, fixede
     GRSMmodel{typeof(traits),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(traits, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
-function load_model(data, r, rmean, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
-    priormean = prior_mean(rmean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
+function load_model(data, r, priormean, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
+    priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
     r = isempty(hierarchical) ? set_rinit(r, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+    nalleles = reset_nalleles(nalleles, coupling)
+    decayrate = set_decayrate(decayrate, gene, cell, root)
+    priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     fittedparam = default_fittedparam(fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid)
     if R == 0
         priord = prior_distribution(priormean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
@@ -1018,17 +1024,8 @@ function load_model(data, r, rmean, fittedparam::Vector, fixedeffects::Tuple, tr
     end
 end
 
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
-    gene = check_genename(gene, "[")
-    S = reset_S(S, R, insertstep)
-    nalleles = reset_nalleles(nalleles, coupling)
-    infolder = folder_path(infolder, root, "results")
-    datapath = folder_path(datapath, root, "data")
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
-    decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
-    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     return data, model, options
@@ -1138,7 +1135,7 @@ function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, ge
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
-    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method)
+    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
