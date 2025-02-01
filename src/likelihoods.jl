@@ -962,7 +962,6 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel
     return crossentropy(logpredictions, hist), -logpredictions
 end
 
-
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel{@NamedTuple{}})
     r = get_rates(param, model)
     llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -972,8 +971,6 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel{@Name
     logpredictions = logpredictedRNA(r[1:num_rates(model)], components.mcomponents, model.nalleles, data.nRNA)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
-
-
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
     traits = model.traits
