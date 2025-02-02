@@ -793,28 +793,9 @@ Calculates the likelihood for a single RNA histogram.
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
 function predictedfn(param, data::RNAData, model::AbstractGmodel)
-function predictedfn(param, data::RNAData, model::AbstractGmodel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    steady_state(M, model.G, model.nalleles, data.nRNA)
-end
-"""
-    likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
-
-Calculates the likelihood for a single RNA histogram using a GRSM model.
-
-# Arguments
-- `param`: The model parameters.
-- `data::RNAData`: The RNA data.
-- `model::AbstractGRSMmodel`: The GRSM model.
-
-# Returns
-- `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
-"""
-function likelihoodfn(param, data::RNAData, model::AbstractGRSMmodel)
-    r = get_rates(param, model)
-    M = make_mat_M(components.mcomponents, r)
-    steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
+    steady_state(M, model.components.nT, model.nalleles, data.nRNA)
 end
 
 
@@ -1003,11 +984,11 @@ end
 
 function predictedarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); likelihoodarray(r, components.tcomponents, bins, reporter, dttype)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
 
 
-# function likelihoodarray(r, components::TCoupledComponents, bins, reporter, dttype)
+# function predictedarray(r, components::TCoupledComponents, bins, reporter, dttype)
 #     sojourn, nonzeros = reporter
 #     dt = occursin.("G", dttype)
 #     p = steady_state_dist(r, components, dt)
@@ -1040,7 +1021,7 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
 end
 
-# function likelihoodarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+# function predictedarray2(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
 #     sojourn, nonzeros = reporter
 #     sources = components.sources
 #     model = components.model
