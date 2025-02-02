@@ -892,11 +892,14 @@ end
 
 set rinit for hierarchical models
 """
-function set_rinit(rmean, transitions, R, S, insertstep, noisepriors, nindividuals)
-    r = copy(rmean)
-    nrates = num_total_rates(transitions, R, S, insertstep, noisepriors)
-    for i in 1:nindividuals
-        append!(r, rmean[1:nrates])
+function set_rinit(r, rmean, transitions, R, S, insertstep, noisepriors, nindividuals)
+    if isempty(r)
+        println("No rate file, set rate to prior")
+        r = copy(rmean)
+        nrates = num_total_rates(transitions, R, S, insertstep, noisepriors)
+        for i in 1:nindividuals
+            append!(r, rmean[1:nrates])
+        end
     end
     r
 end
@@ -989,7 +992,7 @@ end
 
 function load_model(data, r, priormean, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, elongationtime, method, hierarchical, coupling, grid)
     priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
-    r = isempty(hierarchical) ? set_rinit(r, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+    r = isempty(hierarchical) ? set_rinit(r, priormean) : set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     nalleles = reset_nalleles(nalleles, coupling)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = prior_mean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid, hierarchical)
