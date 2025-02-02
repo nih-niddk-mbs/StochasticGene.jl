@@ -189,7 +189,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
@@ -605,11 +605,13 @@ end
 
 set rinit for hierarchical models
 """
-function set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
-    r = copy(rm)
-    nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
-    for i in 1:nindividuals
-        append!(r, rm[1:nrates])
+function set_rinit(r, priormean, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
+    if isempty(r)
+        r = copy(priormean)
+        nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+        for i in 1:nindividuals
+            append!(r, priormean[1:nrates])
+        end
     end
     r
 end
