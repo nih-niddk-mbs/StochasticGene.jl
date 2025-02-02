@@ -225,76 +225,31 @@ function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
 end
 
 """
-    reset_nalleles(nalleles, coupling)
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5())
 
-TBW
 """
-function reset_nalleles(nalleles, coupling)
-    if !isempty(coupling)
-        nalleles = 1
-        println("Setting nalleles to 1")
-    end
-    return nalleles
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5())
+    println(now())
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
+    resultfolder = folder_path(resultfolder, root, "results", make=true)
+    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
-
-
-"""
-lossfn(x,data,model)
-
-Compute loss function
-
-"""
-lossfn(x, data, model) = loglikelihood(x, data, model)[1]
-
-"""
-burstsize(fits,model::AbstractGMmodel)
-
-Compute burstsize and stats using MCMC chain
-
-"""
-function burstsize(fits, model::AbstractGMmodel)
-    if model.G > 1
-        b = Float64[]
-        for p in eachcol(fits.param)
-            r = get_rates(p, model)
-            push!(b, r[2*model.G-1] / r[2*model.G-2])
-        end
-        return BurstMeasures(mean(b), std(b), median(b), mad(b), quantile(b, [0.025; 0.5; 0.975]))
-    else
-        return 0
-    end
-end
-function burstsize(fits::Fit, model::AbstractGRSMmodel)
-    if model.G > 1
-        b = Float64[]
-        L = size(fits.param, 2)
-        rho = 100 / L
-        println(rho)
-        for p in eachcol(fits.param)
-            r = get_rates(p, model)
-            if rand() < rho
-                push!(b, burstsize(r, model))
-            end
-        end
-        return BurstMeasures(mean(b), std(b), median(b), mad(b), quantile(b, [0.025; 0.5; 0.975]))
-    else
-        return 0
-    end
-end
-
-burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtransitions))
-
-function burstsize(r, R, ntransitions)
-    total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end], ""), r)
-    # M = make_components_M(transitions, G, R, nhist, decay, splicetype)
-    nT = 2 * 2^R
-    L = nT * total
-    S0 = zeros(L)
-    S0[2] = 1.0
-    s = time_evolve_diff([1, 10 / minimum(r[ntransitions:ntransitions+R+1])], M, S0)
-    mean_histogram(s[2, collect(1:nT:L)])
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5())
+    gene = check_genename(gene, "[")
+    S = reset_S(S, R, insertstep)
+    nalleles = reset_nalleles(nalleles, coupling)
+    infolder = folder_path(infolder, root, "results")
+    datapath = folder_path(datapath, root, "data")
+    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
+    decayrate = set_decayrate(decayrate, gene, cell, root)
+    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+    fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid)
+    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    return data, model, options
 end
 
 """
@@ -578,32 +533,59 @@ TBW
 function default_fittedparam(transitions, R::Int, S, insertstep, noisepriors::Vector)
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
-    [collect(1:n-1); collect(n+1:n+nnoise)]
-end
-
-function default_fittedparam(transitions, R::Tuple, S, insertstep, noisepriors)
-    fittedparam = Int[]
-    nnoise = length.(noisepriors)
-    totalrates = 0
-    for i in eachindex(R)
-        fittedparam = vcat(fittedparam, totalrates .+ default_fittedparam(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
-        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise[i]
+    if typeof(reporter) <: HMMReporter
+        (length(r) != n + reporter.n) && throw("r has wrong length")
+    else
+        (length(r) != n) && throw("r has wrong length")
     end
-    fittedparam
+    nothing
 end
 
-function default_fittedparam(transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if !isempty(coupling) && isa(R, Int)
-        coupling = tuple()
+
+# function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
+"""
+    set_rinit(r, priormean)
+
+set rinit to prior if empty
+"""
+function set_rinit(r, priormean)
+    if isempty(r)
+        println("No rate file, set rate to prior")
+        r = priormean
     end
-    fittedparam = default_fittedparam(transitions, R, S, insertstep, noisepriors)
-    fittedparam = isempty(coupling) ? fittedparam : [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
-    isnothing(grid) ? fittedparam : [fittedparam; fittedparam[end] + 1]
+    println(r)
+    r
 end
 
-function default_fittedparam(fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if isempty(fittedparam)
-        return default_fittedparam(transitions, R, S, insertstep, noisepriors, coupling, grid)
+
+"""
+    set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
+
+set rinit for hierarchical models
+"""
+function set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
+    r = copy(rm)
+    nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+    for i in 1:nindividuals
+        append!(r, rm[1:nrates])
+    end
+    r
+end
+
+
+
+"""
+    num_noiseparams(datatype, noisepriors)
+
+TBW
+"""
+function num_noiseparams(datatype, noisepriors)
+    if occursin("trace", lowercase(datatype))
+        if eltype(noisepriors) <: Number
+            return length(noisepriors)
+        else
+            return length.(noisepriors)
+        end
     else
         return fittedparam
     end
