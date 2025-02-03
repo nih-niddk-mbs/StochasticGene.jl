@@ -95,6 +95,7 @@ export
     plot_histogram,
     predictedarray,
     predictedfn,
+    prepare_rates,
     prob_Gaussian,
     prob_GaussianMixture,
     prob_GaussianMixture_6,

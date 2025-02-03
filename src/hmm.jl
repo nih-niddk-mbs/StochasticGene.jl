@@ -620,10 +620,14 @@ end
 TBW
 """
 function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes, weight)
-    _, C = forward(a::Matrix, set_b_background(obs, d), p0, nstates, nframes)
+    _, C = forward(a, set_b_background(obs, d), p0, nstates, nframes)
     weight * sum(log.(C))
 end
 
+function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes, weight)
+    _, C = forward(a, set_b(obs, d, nstates), p0, nstates, nframes)
+    weight * sum(log.(C))
+end
 
 function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, nstates, nframes, weight)
     l = 0
@@ -698,7 +702,7 @@ return total loglikelihood of traces with reporter noise and loglikelihood of ea
 function ll_hmm(r::Vector, nstates::Int, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nstates)
-    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(r[end-n_noiseparams+1], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(a, p0, d, trace[1], nstates)
     ll + lb, logpredictions
 end
@@ -726,7 +730,7 @@ TBW
 function ll_hmm_hierarchical_rateshared(rshared, rindividual::Matrix, nT, components::TRGComponents, n_noiseparams, reporters_per_state, probfn, interval, trace)
     a, p0 = make_ap(rshared[:, 1], interval, components)
     d = probfn(rshared[end-n_noiseparams+1:end, 1], reporters_per_state, nT)
-    lb = trace[3] > 0 ? length(trace[1]) * ll_background(rshared[end-n_noiseparams+1, 1], d, a, p0, nT, trace[4], trace[3]) : 0.0
+    lb = trace[3] > 0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, nT, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm(rindividual, a, p0, n_noiseparams, reporters_per_state, probfn, trace[1], nT)
     ll + lb, logpredictions
 end

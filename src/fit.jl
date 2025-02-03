@@ -234,10 +234,10 @@ TBW
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     if typeof(datapath) <: String
         trace = read_tracefiles(datapath, datacond, traceinfo)
-        background = Vector[]
+        # background = Vector[]
     else
         trace = read_tracefiles(datapath[1], datacond, traceinfo)
-        background = Vector[]
+        # background = Vector[]
         # background = read_tracefiles(datapath[3], datacond, traceinfo)
     end
     (length(trace) == 0) && throw("No traces")
@@ -248,6 +248,11 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     weight = (1 - traceinfo[4]) / traceinfo[4]
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     if datatype == "trace"
+        if length(traceinfo) > 4
+            background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
+        else
+            background = Vector[]
+        end
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
         len, h = read_rna(gene, datacond, datapath[2])

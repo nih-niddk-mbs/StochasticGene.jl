@@ -298,7 +298,7 @@ end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
-    llg, llgp = ll_hmm(get_rates(param, model), model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles,data.nRNA)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
