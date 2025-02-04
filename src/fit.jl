@@ -60,6 +60,76 @@ function make_coupling(source::UnitRange{Int64}=1:3, target::UnitRange{Int64}=1:
 end
 
 """
+    set_decayrate(decayrate::Float64, gene, cell, root)
+
+TBW
+"""
+function set_decayrate(decayrate::Float64, gene, cell, root)
+    if decayrate < 0
+        return get_decay(gene, cell, root)
+    else
+        return decayrate
+    end
+end
+
+"""
+    set_decayrate(decayrate::Tuple, gene, cell, root)
+
+TBW
+"""
+function set_decayrate(decayrate::Tuple, gene, cell, root)
+    for i in eachindex(decayrate)
+        if typeof(gene) < Tuple
+            decayrate[i] = set_decayrate(decayrate[i], gene[i], cell, root)
+        else
+            decayrate[i] = set_decayrate(decayrate[i], gene, cell, root)
+        end
+    end
+    return decayrate
+end
+
+"""
+    reset_S(S::Int, R::Int, insertstep::Int)
+
+Set S to R - insertstep + 1 if greater than zero
+"""
+function reset_S(S::Int, R::Int, insertstep::Int)
+    if S > R - insertstep + 1
+        S = R - insertstep + 1
+        println("Setting S to ", S)
+    end
+    return S
+end
+
+"""
+    reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
+
+"""
+function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
+    S = collect(S)
+    for i in eachindex(S)
+        if S[i] > R[i] - insertstep[i] + 1
+            S[i] = R[i] - insertstep[i] + 1
+            println("Setting S[$i] to ", S[i])
+        end
+    end
+    return Tuple(S)
+end
+
+"""
+    reset_nalleles(nalleles, coupling)
+
+TBW
+"""
+function reset_nalleles(nalleles, coupling)
+    if !isempty(coupling)
+        nalleles = 1
+        println("Setting nalleles to 1")
+    end
+    return nalleles
+end
+
+"""
     fit(; <keyword arguments> )
 
 Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
@@ -222,10 +292,6 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     return fits, stats, measures, data, model, options
 end
 
-
-
-
-
 """
     load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
 
@@ -234,11 +300,8 @@ TBW
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     if typeof(datapath) <: String
         trace = read_tracefiles(datapath, datacond, traceinfo)
-        # background = Vector[]
     else
         trace = read_tracefiles(datapath[1], datacond, traceinfo)
-        # background = Vector[]
-        # background = read_tracefiles(datapath[3], datacond, traceinfo)
     end
     (length(trace) == 0) && throw("No traces")
     println(length(trace))
@@ -498,15 +561,6 @@ function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHis
     return reporter, components
 end
 
-# function make_reporter_components(data::TraceRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-#     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-#     reporter = HMMReporter(length(noise_priors), num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-#     components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
-#     return reporter, components
-# end
-
-
-
 function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     components = TDComponents(transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype)
@@ -528,8 +582,6 @@ end
 
 
 function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    # mcomponents = make_components_M(transitions, G, 0, data.nRNA, decayrate, splicetype)
-    # reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, splicetype)
     reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, "")
     components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype), tcomponents)
     return reporter, components
@@ -612,6 +664,7 @@ set rinit for hierarchical models
 """
 function set_rinit(r, priormean, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
     if isempty(r)
+        println("No rate file, set rate to prior")
         r = copy(priormean)
         nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
         for i in 1:nindividuals
@@ -640,75 +693,7 @@ function num_noiseparams(datatype, noisepriors)
     end
 end
 
-"""
-    set_decayrate(decayrate::Float64, gene, cell, root)
 
-TBW
-"""
-function set_decayrate(decayrate::Float64, gene, cell, root)
-    if decayrate < 0
-        return get_decay(gene, cell, root)
-    else
-        return decayrate
-    end
-end
-
-"""
-    set_decayrate(decayrate::Tuple, gene, cell, root)
-
-TBW
-"""
-function set_decayrate(decayrate::Tuple, gene, cell, root)
-    for i in eachindex(decayrate)
-        if typeof(gene) < Tuple
-            decayrate[i] = set_decayrate(decayrate[i], gene[i], cell, root)
-        else
-            decayrate[i] = set_decayrate(decayrate[i], gene, cell, root)
-        end
-    end
-    return decayrate
-end
-
-"""
-    reset_S(S::Int, R::Int, insertstep::Int)
-
-Set S to R - insertstep + 1 if greater than zero
-"""
-function reset_S(S::Int, R::Int, insertstep::Int)
-    if S > R - insertstep + 1
-        S = R - insertstep + 1
-        println("Setting S to ", S)
-    end
-    return S
-end
-
-"""
-    reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
-
-"""
-function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
-    S = collect(S)
-    for i in eachindex(S)
-        if S[i] > R[i] - insertstep[i] + 1
-            S[i] = R[i] - insertstep[i] + 1
-            println("Setting S[$i] to ", S[i])
-        end
-    end
-    return Tuple(S)
-end
-
-"""
-    reset_nalleles(nalleles, coupling)
-
-TBW
-"""
-function reset_nalleles(nalleles, coupling)
-    if !isempty(coupling)
-        nalleles = 1
-        println("Setting nalleles to 1")
-    end
-    return nalleles
-end
 
 """
     default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
@@ -758,23 +743,7 @@ function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, n
 end
 
 
-"""
-    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
 
-make default fixedeffects tuple and fittedparams vector from fixedeffects String
-"""
-function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
-    fixed = split(fixedeffects, "-")
-    if length(fixed) > 1
-        fixed = parse.(Int, fixed)
-        deleteat!(fittedparam, fixed[2:end])
-        fixed = tuple(fixed)
-    else
-        fixed = tuple()
-    end
-    return fixed, fittedparam
-end
 """
     make_fitted_hierarchical(fittedparams,N)
 
@@ -836,6 +805,23 @@ function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
     tuple(fixed...)
 end
 
+"""
+    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
+
+make default fixedeffects tuple and fittedparams vector from fixedeffects String
+"""
+function make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
+    fittedparam = default_fitted(datatype, transitions, R, S, insertstep, noiseparams, coupling, grid)
+    fixed = split(fixedeffects, "-")
+    if length(fixed) > 1
+        fixed = parse.(Int, fixed)
+        deleteat!(fittedparam, fixed[2:end])
+        fixed = tuple(fixed)
+    else
+        fixed = tuple()
+    end
+    return fixed, fittedparam
+end
 
 function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
