@@ -971,7 +971,7 @@ simulations and master equation solutions of dwell time histograms
 """
 function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="", simulate=false)
     onstates = on_states(G, R, S, insertstep)
-    components = make_components_TAI(transitions, G, R, S, insertstep, onstates, "")
+    components = TAI_components(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
     TA = make_mat_TA(components, r)
     TI = make_mat_TI(components, r)
@@ -1057,7 +1057,7 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S,
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
     end
-    components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+    components = TComponents(transitions, G, R, S, insertstep, splicetype)
     ts, td = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
     l = maximum(length.(traces))
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]

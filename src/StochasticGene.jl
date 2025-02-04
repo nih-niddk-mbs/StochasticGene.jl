@@ -119,6 +119,7 @@ export
     test_fit_trace_hierarchical,
     test_fit_tracejoint,
     test_fit_tracejoint_hierarchical,
+    TComponents,
     TraceData,
     TraceRNAData,
     Tsit5,

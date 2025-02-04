@@ -67,26 +67,26 @@ struct TComponents <: AbstractTComponents
     elementsT::Vector
 end
 
-"""
-	struct TRGComponents
+# """
+# 	struct TRGComponents
 
-fields: 
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
+# fields: 
+#     nT::Int
+#     nG::Int
+#     nR::Int
+#     elementsG::Vector
+#     elementsRGbar::Vector
+#     elementsRG::Vector
 
-"""
-struct TRGComponents <: AbstractTComponents
-    nT::Int
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
-end
+# """
+# struct TRGComponents <: AbstractTComponents
+#     nT::Int
+#     nG::Int
+#     nR::Int
+#     elementsG::Vector
+#     elementsRGbar::Vector
+#     elementsRG::Vector
+# end
 
 
 """
@@ -149,17 +149,13 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
     elementsRGbar::Vector{Element}
     elementsRG::Vector{Element}
 end
-struct TDCoupledUnitComponents1 <: AbstractTDComponents
+struct TCoupledUnitComponents <: AbstractTComponents
     nT::Int
-    nG::Int
     sourceState::Union{Int, Vector{Int}}
-    elementsTarget::Vector{Element}
-    elementsSource::Vector{Element}
-    targetTransition::Union{Int, Vector{Int}}
-    elementsG::Vector{Element}
+    targetTransition::Union{Int,Vector{Int}}
     elementsT::Vector{Element}
-    elementsTD::Vector{Vector{Element}}
-    TDdims::Vector{Int}
+    elementsSource::Vector{Element}
+    elementsTarget::Vector{Element}
 end
 
 struct TDCoupledUnitComponents <: AbstractTDComponents
@@ -213,32 +209,32 @@ struct MComponents
     Uplus::SparseMatrixCSC
 end
 
-"""
-    struct MRGComponents
+# """
+#     struct MRGComponents
 
-fields:
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
-    elementsB::Vector{Element}
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
-end
-"""
-struct MRGComponents
-    nG::Int
-    nR::Int
-    elementsG::Vector
-    elementsRGbar::Vector
-    elementsRG::Vector
-    elementsB::Vector{Element}
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
-end
+# fields:
+#     nG::Int
+#     nR::Int
+#     elementsG::Vector
+#     elementsRGbar::Vector
+#     elementsRG::Vector
+#     elementsB::Vector{Element}
+#     U::SparseMatrixCSC
+#     Uminus::SparseMatrixCSC
+#     Uplus::SparseMatrixCSC
+# end
+# """
+# struct MRGComponents
+#     nG::Int
+#     nR::Int
+#     elementsG::Vector
+#     elementsRGbar::Vector
+#     elementsRG::Vector
+#     elementsB::Vector{Element}
+#     U::SparseMatrixCSC
+#     Uminus::SparseMatrixCSC
+#     Uplus::SparseMatrixCSC
+# end
 
 
 
@@ -256,10 +252,10 @@ struct MTComponents
     tcomponents::TComponents
 end
 
-struct MTRGComponents
-    mcomponents::MComponents
-    tcomponents::TRGComponents
-end
+# struct MTRGComponents
+#     mcomponents::MComponents
+#     tcomponents::TRGComponents
+# end
 
 
 """

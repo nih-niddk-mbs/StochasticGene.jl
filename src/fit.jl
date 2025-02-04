@@ -545,7 +545,7 @@ TBW
 
 function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
     reporter = onstates
-    components = make_components_M(transitions, G, R, data.nRNA, decayrate, splicetype)
+    components = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype)
     return reporter, components
 end
 
@@ -554,9 +554,9 @@ function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHis
     weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
     reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
     if typeof(data) <: TraceRNAData
-        components = MTRGComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
+        components = MTComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype)
     else
-        components = make_components_TRG(transitions, G, R, S, insertstep, splicetype)
+        components = TComponents(transitions, G, R, S, insertstep, splicetype)
     end
     return reporter, components
 end
@@ -606,7 +606,7 @@ function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, inse
             throw("length of onstates and data.DTtypes not the same")
         end
     else
-        components = make_components_MTAI(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
+        components = MTAIComponents(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype)
     end
     return reporter, components
 end
@@ -1008,7 +1008,7 @@ burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtra
 
 function burstsize(r, R, ntransitions)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    M = make_mat_M(make_components_M([(2, 1)], 2, R, total, r[end], ""), r)
+    M = make_mat_M(MComponents([(2, 1)], 2, R, total, r[end], ""), r)
     # M = make_components_M(transitions, G, R, nhist, decay, splicetype)
     nT = 2 * 2^R
     L = nT * total
