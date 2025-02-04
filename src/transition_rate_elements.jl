@@ -182,6 +182,22 @@ function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Ind
         return set_elements_G(transitions, indices.gamma), G
     end
 end
+
+
+function set_base(S, splicetype)
+    if splicetype == "offeject"
+        S = 0
+        base = 2
+    end
+    if S == 0
+        base = 2
+    else
+        base = 3
+    end
+    return S, base
+end
+
+
 """
     set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
 
@@ -191,15 +207,7 @@ inplace update matrix elements in elementsT for GRS state transition matrix, do 
 """
 function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
-        if splicetype == "offeject"
-            S = 0
-            base = 2
-        end
-        if S == 0
-            base = 2
-        else
-            base = 3
-        end
+        S, base = set_base(S, splicetype)
         for w = 1:base^R, z = 1:base^R
             zdigits = digit_vector(z, base, R)
             wdigits = digit_vector(w, base, R)
@@ -517,12 +525,6 @@ function set_elements_Gs(nS::Vector{Int})
     return elementsGs
 end
 
-
-"""
-    set_elements_Source(nS::Int)
-
-source elements
-"""
 function set_elements_Source(nS::Int)
     [Element(nS, nS, 0, 1)]
 end
@@ -533,6 +535,62 @@ function set_elements_Source(nS::Vector{Int})
         push!(elementsSource, Element(i, i, 0, 1))
     end
     return elementsSource
+end
+
+function source_states(nS, base, R)
+    sources = Int[]
+    for z in 1:base^R
+         if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
+            push!(sources, z)
+        end
+    end
+    sources
+end
+
+function parse_sourcestring(s::String)
+    m = match(r"^([A-Za-z]+)(\d*)$", s)
+    if m === nothing
+        error("Input must consist of one or more letters optionally followed by digits: $s")
+    else
+        letters = m.captures[1]
+        digits = m.captures[2]
+        if isempty(digits)
+            return letters, nothing
+        else
+            return letters, parse(Int, digits)
+        end
+    end
+end
+
+function group_sources(strings::Vector{String})
+    groups = Dict{String,Vector{Any}}()
+    for s in strings
+        letter, number = parse_sourcestring(s)
+        if !haskey(groups, letter)
+            groups[letter] = Vector{Int}()  # Initialize an empty vector for this letter.
+        end
+        push!(groups[letter], number)
+    end
+    return groups
+end
+
+function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="")
+    elementsSource = Vector{Element}(undef, 0)
+    base = set_base(S, splicetype)
+    groups = group_sources(sources)
+    for (key, nS) in groups
+        isnothing(nS) && (nS = collect(1:G))
+        if key == "G"
+            elementsG = set_elements_Source(nS)
+            set_elementsTG!(elementsSource, elementsG)
+        end
+        if kind == "R"
+            isnothing(nS) && (nS = collect(1:R))
+            elementsR = set_elements_Rs(nS, G)
+            set_elementsTR!(elementsSource, elementsR, G)
+        end
+    end
+    elementsSource
 end
 """
     set_elements_Target(transitions, target_transition, gamma)

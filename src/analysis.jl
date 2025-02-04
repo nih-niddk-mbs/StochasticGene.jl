@@ -971,7 +971,7 @@ simulations and master equation solutions of dwell time histograms
 """
 function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="", simulate=false)
     onstates = on_states(G, R, S, insertstep)
-    components = TAI_components(transitions, G, R, S, insertstep, onstates, "")
+    components = TAIComponents(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
     TA = make_mat_TA(components, r)
     TI = make_mat_TI(components, r)
