@@ -466,7 +466,7 @@ function GRSMcoupledmodel(r::Vector, rm::Vector, fittedparam::Vector, fixedeffec
     end
     priord = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 

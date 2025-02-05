@@ -137,7 +137,7 @@ convert MCMC params into form to compute likelihood for coupled model
 - `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
 
 """
-function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
+function prepare_rates(rates, sourceStates::Vector{Int}, transitions, G, R, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
@@ -148,7 +148,7 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
         j += n
     end
     for i in eachindex(G)
-        if !isempty(sourceStates[i])
+        if sourceStates[i] > 0
             push!(couplingStrength, rates[j])
             j += 1
         else
@@ -160,6 +160,7 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
     end
     return r, couplingStrength, noiseparams
 end
+
 """
     prepare_rates(param, model::GRSMcoupledmodel)
 

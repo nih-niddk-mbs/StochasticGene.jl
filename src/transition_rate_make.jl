@@ -208,6 +208,8 @@ end
 
 make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
+TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
+
 function TCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = TCoupledUnitComponents[]
     for i in eachindex(G)

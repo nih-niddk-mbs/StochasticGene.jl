@@ -43,15 +43,16 @@ inplace update to RG and RGbar matrix elements
 """
 function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
-        if splicetype == "offeject"
-            S = 0
-            base = 2
-        end
-        if S == 0
-            base = 2
-        else
-            base = 3
-        end
+        S, base = set_base(S, splicetype)
+        # if splicetype == "offeject"
+        #     S = 0
+        #     base = 2
+        # end
+        # if S == 0
+        #     base = 2
+        # else
+        #     base = 3
+        # end
         nR = base^R
         for b = 1:nR, a = 1:nR
             zdigits = digit_vector(a, base, R)
@@ -620,7 +621,77 @@ function set_elements_Target(Gtransitions, target_transition, gamma, G, nT)
     return elementsTarget
 end
 
-
+function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    if R > 0
+        S, base = set_base(S, splicetype)
+        for b = 1:nR, a = 1:nR
+            zdigits = digit_vector(a, base, R)
+            wdigits = digit_vector(b, base, R)
+            z1 = zdigits[1]
+            w1 = wdigits[1]
+            zr = zdigits[R]
+            wr = wdigits[R]
+            zbar1 = zdigits[2:R]
+            wbar1 = wdigits[2:R]
+            zbarr = zdigits[1:R-1]
+            wbarr = wdigits[1:R-1]
+            sB = 0
+            for l in 1:base-1
+                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+            end
+            if S > 0
+                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+            end
+            if abs(sB) == 1 && R + 1 ∈ RTarget
+                push!(elementsRGbar, Element(a, b, nu[R+1], sB))
+            end
+            if S == R && S - insertstep + 1 ∈ STarget
+                if S > insertstep - 1 && abs(sC) == 1
+                    push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
+                end
+            end
+            if splicetype == "offeject" && S - insertstep + 1 ∈ STarget
+                s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+                if abs(s) == 1
+                    push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
+                end
+            end
+            for j = 1:R-1
+                zbarj = zdigits[[1:j-1; j+2:R]]
+                wbarj = wdigits[[1:j-1; j+2:R]]
+                zbark = zdigits[[1:j-1; j+1:R]]
+                wbark = wdigits[[1:j-1; j+1:R]]
+                zj = zdigits[j]
+                zj1 = zdigits[j+1]
+                wj = wdigits[j]
+                wj1 = wdigits[j+1]
+                s = 0
+                for l in 1:base-1
+                    s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+                end
+                if abs(s) == 1 && j+1 ∈ RTarget
+                    push!(elementsRGbar, Element(a, b, nu[j+1], s))
+                end
+                if S >= j && j > insertstep - 1
+                    s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
+                    if abs(s) == 1 && j - insertstep + 1 ∈ STarget
+                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+                if splicetype == "offeject" && j > insertstep - 1 && j - insertstep + 1 ∈ STarget
+                    s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
+                    if abs(s) == 1
+                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+            end
+            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
+            if abs(s) == 1 && 1 ∈ RTarget
+                push!(elementsRG, Element(a, b, nu[1], s))
+            end
+        end
+    end
+end
 
 """
     set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
