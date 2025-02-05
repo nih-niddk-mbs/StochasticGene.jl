@@ -148,7 +148,7 @@ function prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_
         j += n
     end
     for i in eachindex(G)
-        if sourceStates[i] > 0
+        if !isempty(sourceStates[i])
             push!(couplingStrength, rates[j])
             j += 1
         else

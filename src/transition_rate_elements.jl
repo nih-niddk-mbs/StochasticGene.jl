@@ -579,18 +579,17 @@ function group_sources(strings::Vector{String}, G, R)
     return groups
 end
 
-function set_elements_source(sources::Vector{String}, G::Int, R, S, splicetype="")
+function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="")
     elementsSource = Vector{Element}(undef, 0)
     _, base = set_base(S, splicetype)
     groups = group_sources(sources, G, R)
     for (key, nS) in groups
         if key == "G"
-            println(nS)
             elementsG = set_elements_Source(nS)
-            elements_TG!(elementsSource, elementsG, G, G*base^R)
+            elements_TG!(elementsSource, elementsG, G, G * base^R)
         end
         if key == "R"
-            nS = source_states(nS,base,R)
+            nS = source_states(nS, base, R)
             elementsR = set_elements_Source(nS)
             elements_TR!(elementsSource, elementsR, G)
         end
@@ -603,19 +602,21 @@ end
 
 target elements
 """
-function set_elements_Target!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
-    i = 1
-    for t in transitions
-        if i == target_transition
-            push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
-            push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
-        end
-        i += 1
-    end
-end
-function set_elements_Target(transitions, target_transition, gamma)
+# function set_elements_Rt!(elements, transitions, target_transition=length(transitions), nu::Vector=collect(1:length(transitions)), j=0)
+#     i = 1
+#     for t in transitions
+#         if i == target_transition
+#             push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
+#             push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
+#         end
+#         i += 1
+#     end
+# end
+function set_elements_Target(Gtransitions, target_transition, gamma, G, nT)
     elementsTarget = Vector{Element}(undef, 0)
-    set_elements_Target!(elementsGt, transitions, target_transition, gamma)
+    # println(target_transition)
+    elementsGt = set_elements_Gt(Gtransitions, target_transition, gamma)
+    elements_TG!(elementsTarget, elementsGt, G, nT)
     return elementsTarget
 end
 
@@ -639,11 +640,11 @@ end
 #     elementsSource = set_elements_Gs(source_state)
 # end
 
-function set_elements_TCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsTarget = set_elements_V(transitions, target_transition, indices.gamma)
-    elementsSource = set_elements_U(source_state)
-    return elementsT, elementsTarget, elementsSource, nT
+    elementsSource = set_elements_Source(source_state, G, R, S)
+    elementsTarget = set_elements_Target(transitions, target_transition, indices.gamma,G, nT)
+    return elementsT, elementsSource, elementsTarget, nT
 end
 
 
