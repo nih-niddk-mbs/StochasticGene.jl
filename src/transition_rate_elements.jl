@@ -540,7 +540,7 @@ end
 function source_states(nS, base, R)
     sources = Int[]
     for z in 1:base^R
-         if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
+        if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
             push!(sources, z)
         end
     end
@@ -562,36 +562,42 @@ function parse_sourcestring(s::String)
     end
 end
 
-function group_sources(strings::Vector{String})
-    groups = Dict{String,Vector{Any}}()
+function group_sources(strings::Vector{String}, G, R)
+    groups = Dict{String,Vector{Int}}()
     for s in strings
         letter, number = parse_sourcestring(s)
         if !haskey(groups, letter)
             groups[letter] = Vector{Int}()  # Initialize an empty vector for this letter.
         end
-        push!(groups[letter], number)
+        if isnothing(number)
+            number = letter == "G" ? collect(1:G) : collect(1:R)
+            push!(groups[letter], number...)
+        else
+            push!(groups[letter], number)
+        end
     end
     return groups
 end
 
-function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="")
+function set_elements_source(sources::Vector{String}, G::Int, R, S, splicetype="")
     elementsSource = Vector{Element}(undef, 0)
-    base = set_base(S, splicetype)
-    groups = group_sources(sources)
+    _, base = set_base(S, splicetype)
+    groups = group_sources(sources, G, R)
     for (key, nS) in groups
-        isnothing(nS) && (nS = collect(1:G))
         if key == "G"
+            println(nS)
             elementsG = set_elements_Source(nS)
-            set_elementsTG!(elementsSource, elementsG)
+            elements_TG!(elementsSource, elementsG, G, G*base^R)
         end
-        if kind == "R"
-            isnothing(nS) && (nS = collect(1:R))
-            elementsR = set_elements_Rs(nS, G)
-            set_elementsTR!(elementsSource, elementsR, G)
+        if key == "R"
+            nS = source_states(nS,base,R)
+            elementsR = set_elements_Source(nS)
+            elements_TR!(elementsSource, elementsR, G)
         end
     end
     elementsSource
 end
+
 """
     set_elements_Target(transitions, target_transition, gamma)
 
