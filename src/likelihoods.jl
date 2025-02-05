@@ -148,7 +148,8 @@ function prepare_rates(rates, sourceStates::Vector{Int}, transitions, G, R, S, i
         j += n
     end
     for i in eachindex(G)
-        if sourceStates[i] > 0
+        s = sourceStates[i]
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
             push!(couplingStrength, rates[j])
             j += 1
         else

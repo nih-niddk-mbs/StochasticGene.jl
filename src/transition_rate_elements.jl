@@ -538,16 +538,6 @@ function set_elements_Source(nS::Vector{Int})
     return elementsSource
 end
 
-function source_states(nS, base, R)
-    sources = Int[]
-    for z in 1:base^R
-        if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
-            push!(sources, z)
-        end
-    end
-    sources
-end
-
 function parse_sourcestring(s::String)
     m = match(r"^([A-Za-z]+)(\d*)$", s)
     if m === nothing
@@ -580,6 +570,39 @@ function group_sources(strings::Vector{String}, G, R)
     return groups
 end
 
+function source_Rstates(nS, base, R)
+    sources = Int[]
+    for z in 1:base^R
+        if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
+            push!(sources, z)
+        end
+    end
+    sources
+end
+
+function classify_states(state, G, R, S, insertstep, splicetype)
+    Gstates = []
+    Rsteps = []
+    _, base = set_base(S, splicetype)
+    for s in state
+        if s <= G
+            append!(Gstates, state)
+        else
+            append!(Rstates, source_Rstates(state, base, R))
+        end
+    end
+    return Gstates, Rstates
+end
+
+function classify_transitions(target, Gtransitions, R, S, insertstep, indices)
+    Gts = []
+    Rts = []
+    for t in target
+
+
+    end
+end
+
 function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="")
     elementsSource = Vector{Element}(undef, 0)
     _, base = set_base(S, splicetype)
@@ -590,7 +613,7 @@ function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="
             elements_TG!(elementsSource, elementsG, G, G * base^R)
         end
         if key == "R"
-            nS = source_states(nS, base, R)
+            nS = source_Rstates(nS, base, R)
             elementsR = set_elements_Source(nS)
             elements_TR!(elementsSource, elementsR, G)
         end
@@ -645,12 +668,12 @@ function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S,
             if abs(sB) == 1 && R + 1 ∈ RTarget
                 push!(elementsRGbar, Element(a, b, nu[R+1], sB))
             end
-            if S == R && S - insertstep + 1 ∈ STarget
+            if S == R && eta[S-insertstep+1] ∈ STarget
                 if S > insertstep - 1 && abs(sC) == 1
                     push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
                 end
             end
-            if splicetype == "offeject" && S - insertstep + 1 ∈ STarget
+            if splicetype == "offeject" && eta[S-insertstep+1] ∈ STarget
                 s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
                 if abs(s) == 1
                     push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
@@ -669,16 +692,16 @@ function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S,
                 for l in 1:base-1
                     s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
                 end
-                if abs(s) == 1 && j+1 ∈ RTarget
+                if abs(s) == 1 && nu[j+1] ∈ RTarget
                     push!(elementsRGbar, Element(a, b, nu[j+1], s))
                 end
-                if S >= j && j > insertstep - 1
+                if S >= j && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
                     s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-                    if abs(s) == 1 && j - insertstep + 1 ∈ STarget
+                    if abs(s) == 1
                         push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
                     end
                 end
-                if splicetype == "offeject" && j > insertstep - 1 && j - insertstep + 1 ∈ STarget
+                if splicetype == "offeject" && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
                     s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
                     if abs(s) == 1
                         push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
@@ -686,7 +709,7 @@ function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S,
                 end
             end
             s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
-            if abs(s) == 1 && 1 ∈ RTarget
+            if abs(s) == 1 && nu[1] ∈ RTarget
                 push!(elementsRG, Element(a, b, nu[1], s))
             end
         end
@@ -714,7 +737,7 @@ end
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     elementsSource = set_elements_Source(source_state, G, R, S)
-    elementsTarget = set_elements_Target(transitions, target_transition, indices.gamma,G, nT)
+    elementsTarget = set_elements_Target(transitions, target_transition, indices.gamma, G, nT)
     return elementsT, elementsSource, elementsTarget, nT
 end
 

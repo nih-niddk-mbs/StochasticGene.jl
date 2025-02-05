@@ -106,6 +106,7 @@ export
     RNAOnOffData,
     rna_setup,
     run_mh,
+    set_indices,
     simulate_trace,
     simulate_trace_data,
     simulate_trace_vector,
