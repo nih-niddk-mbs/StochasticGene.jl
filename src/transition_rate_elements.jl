@@ -44,15 +44,6 @@ inplace update to RG and RGbar matrix elements
 function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         S, base = set_base(S, splicetype)
-        # if splicetype == "offeject"
-        #     S = 0
-        #     base = 2
-        # end
-        # if S == 0
-        #     base = 2
-        # else
-        #     base = 3
-        # end
         nR = base^R
         for b = 1:nR, a = 1:nR
             zdigits = digit_vector(a, base, R)
@@ -183,21 +174,6 @@ function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Ind
         return set_elements_G(transitions, indices.gamma), G
     end
 end
-
-
-function set_base(S, splicetype)
-    if splicetype == "offeject"
-        S = 0
-        base = 2
-    end
-    if S == 0
-        base = 2
-    else
-        base = 3
-    end
-    return S, base
-end
-
 
 """
     set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
@@ -527,48 +503,22 @@ function set_elements_Gs(nS::Vector{Int})
 end
 
 function set_elements_Source(nS::Int)
-    [Element(nS, nS, 0, 1)]
+    if nS > 0
+        return [Element(nS, nS, 0, 1)]
+    else
+        return Element[]
+    end
 end
 
 function set_elements_Source(nS::Vector{Int})
     elementsSource = Vector{Element}(undef, 0)
     for i in nS
-        push!(elementsSource, Element(i, i, 0, 1))
+        i > 0 && push!(elementsSource, Element(i, i, 0, 1))
     end
     return elementsSource
 end
 
-function parse_sourcestring(s::String)
-    m = match(r"^([A-Za-z]+)(\d*)$", s)
-    if m === nothing
-        error("Input must consist of one or more letters optionally followed by digits: $s")
-    else
-        letters = m.captures[1]
-        digits = m.captures[2]
-        if isempty(digits)
-            return letters, nothing
-        else
-            return letters, parse(Int, digits)
-        end
-    end
-end
 
-function group_sources(strings::Vector{String}, G, R)
-    groups = Dict{String,Vector{Int}}()
-    for s in strings
-        letter, number = parse_sourcestring(s)
-        if !haskey(groups, letter)
-            groups[letter] = Vector{Int}()  # Initialize an empty vector for this letter.
-        end
-        if isnothing(number)
-            number = letter == "G" ? collect(1:G) : collect(1:R)
-            push!(groups[letter], number...)
-        else
-            push!(groups[letter], number)
-        end
-    end
-    return groups
-end
 
 function source_Rstates(nS, base, R)
     sources = Int[]
@@ -580,43 +530,47 @@ function source_Rstates(nS, base, R)
     sources
 end
 
-function classify_states(state, G, R, S, insertstep, splicetype)
-    Gstates = []
-    Rsteps = []
+function classify_states(state, G, R, S, splicetype)
+    Gstates = Int[]
+    Rsteps = Int[]
     _, base = set_base(S, splicetype)
     for s in state
         if s <= G
-            append!(Gstates, state)
+            append!(Gstates, s)
         else
-            append!(Rstates, source_Rstates(state, base, R))
+            append!(Rsteps, source_Rstates(s - G, base, R))
         end
     end
-    return Gstates, Rstates
+    unique(Gstates), unique(Rsteps)
 end
 
-function classify_transitions(target, Gtransitions, R, S, insertstep, indices)
-    Gts = []
-    Rts = []
+function classify_transitions(target, indices)
+    Gts = Int[]
+    Init = Int[]
+    Rts = Int[]
     for t in target
-
-
+        if t in indices.gamma
+            append!(Gts, t)
+        elseif t == indices.nu[1]
+            append!(Init)
+        elseif t > indices.nu[1]
+            append!(Rts)
+        end
     end
+    unique(Gts), unique(Init), unique(Rts)
 end
 
-function set_elements_Source(sources::Vector{String}, G::Int, R, S, splicetype="")
+function set_elements_Source(sources, G::Int, R, S, splicetype="")
     elementsSource = Vector{Element}(undef, 0)
     _, base = set_base(S, splicetype)
-    groups = group_sources(sources, G, R)
-    for (key, nS) in groups
-        if key == "G"
-            elementsG = set_elements_Source(nS)
-            elements_TG!(elementsSource, elementsG, G, G * base^R)
-        end
-        if key == "R"
-            nS = source_Rstates(nS, base, R)
-            elementsR = set_elements_Source(nS)
-            elements_TR!(elementsSource, elementsR, G)
-        end
+    Gstates, Rstates = classify_states(sources, G, R, S, splicetype)
+    for nS in Gstates
+        elementsG = set_elements_Source(nS)
+        elements_TG!(elementsSource, elementsG, G, G * base^R)
+    end
+    for nS in Rstates
+        elementsR = set_elements_Source(nS)
+        elements_TR!(elementsSource, elementsR, G)
     end
     elementsSource
 end
@@ -626,27 +580,26 @@ end
 
 target elements
 """
-# function set_elements_Rt!(elements, transitions, target_transition=length(transitions), nu::Vector=collect(1:length(transitions)), j=0)
-#     i = 1
-#     for t in transitions
-#         if i == target_transition
-#             push!(elements, Element(t[1] + j, t[1] + j, gamma[i], -1))
-#             push!(elements, Element(t[2] + j, t[1] + j, gamma[i], 1))
-#         end
-#         i += 1
-#     end
-# end
-function set_elements_Target(Gtransitions, target_transition, gamma, G, nT)
+function set_elements_Target(Gtransitions, target, indices, G, nT)
     elementsTarget = Vector{Element}(undef, 0)
     # println(target_transition)
-    elementsGt = set_elements_Gt(Gtransitions, target_transition, gamma)
-    elements_TG!(elementsTarget, elementsGt, G, nT)
+    Gts, Init, Rts = classify_transitions(target, indices)
+    for t in Gts
+        elements = set_elements_Gt(Gtransitions, target_transition, gamma)
+        elements_TG!(elementsTarget, elements, G, nT)
+    end
+    for t in Init
+        elements = set_elements_Init!(elementsR)
+        elements_RG!(elementsTarget, elements, G)
+
+    end
     return elementsTarget
 end
 
-function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+function set_elements_Rt!(RTarget, STarget, elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         S, base = set_base(S, splicetype)
+        nR = base^R
         for b = 1:nR, a = 1:nR
             zdigits = digit_vector(a, base, R)
             wdigits = digit_vector(b, base, R)
@@ -708,6 +661,79 @@ function set_elements_Target!(RTarget, STarget, elementsRGbar, elementsRG, R, S,
                     end
                 end
             end
+            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
+            if abs(s) == 1 && nu[1] ∈ RTarget
+                push!(elementsRG, Element(a, b, nu[1], s))
+            end
+        end
+    end
+end
+
+function set_elements_Init!(elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    if R > 0
+        S, base = set_base(S, splicetype)
+        nR = base^R
+        for b = 1:nR, a = 1:nR
+            zdigits = digit_vector(a, base, R)
+            wdigits = digit_vector(b, base, R)
+            z1 = zdigits[1]
+            w1 = wdigits[1]
+            # zr = zdigits[R]
+            # wr = wdigits[R]
+            zbar1 = zdigits[2:R]
+            wbar1 = wdigits[2:R]
+            # zbarr = zdigits[1:R-1]
+            # wbarr = wdigits[1:R-1]
+            # sB = 0
+            # for l in 1:base-1
+            #     sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+            # end
+            # if S > 0
+            #     sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+            # end
+            # if abs(sB) == 1 && R + 1 ∈ RTarget
+            #     push!(elementsRGbar, Element(a, b, nu[R+1], sB))
+            # end
+            # if S == R && eta[S-insertstep+1] ∈ STarget
+            #     if S > insertstep - 1 && abs(sC) == 1
+            #         push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
+            #     end
+            # end
+            # if splicetype == "offeject" && eta[S-insertstep+1] ∈ STarget
+            #     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+            #     if abs(s) == 1
+            #         push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
+            #     end
+            # end
+            # for j = 1:R-1
+            #     zbarj = zdigits[[1:j-1; j+2:R]]
+            #     wbarj = wdigits[[1:j-1; j+2:R]]
+            #     zbark = zdigits[[1:j-1; j+1:R]]
+            #     wbark = wdigits[[1:j-1; j+1:R]]
+            #     zj = zdigits[j]
+            #     zj1 = zdigits[j+1]
+            #     wj = wdigits[j]
+            #     wj1 = wdigits[j+1]
+            #     s = 0
+            #     for l in 1:base-1
+            #         s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+            #     end
+            #     if abs(s) == 1 && nu[j+1] ∈ RTarget
+            #         push!(elementsRGbar, Element(a, b, nu[j+1], s))
+            #     end
+            #     if S >= j && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
+            #         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
+            #         if abs(s) == 1
+            #             push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+            #         end
+            #     end
+            #     if splicetype == "offeject" && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
+            #         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
+            #         if abs(s) == 1
+            #             push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+            #         end
+            #     end
+            # end
             s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
             if abs(s) == 1 && nu[1] ∈ RTarget
                 push!(elementsRG, Element(a, b, nu[1], s))
@@ -861,3 +887,35 @@ end
 function set_elements_RS!(elementsRS, G, R, S, insertstep, nu, eta, splicetype="")
     R > 0 && process_states!(elementsRS, G, R, S, insertstep, nu, eta, splicetype)
 end
+
+# function parse_sourcestring(s::String)
+#     m = match(r"^([A-Za-z]+)(\d*)$", s)
+#     if m === nothing
+#         error("Input must consist of one or more letters optionally followed by digits: $s")
+#     else
+#         letters = m.captures[1]
+#         digits = m.captures[2]
+#         if isempty(digits)
+#             return letters, nothing
+#         else
+#             return letters, parse(Int, digits)
+#         end
+#     end
+# end
+
+# function group_sources(strings::Vector{String}, G, R)
+#     groups = Dict{String,Vector{Int}}()
+#     for s in strings
+#         letter, number = parse_sourcestring(s)
+#         if !haskey(groups, letter)
+#             groups[letter] = Vector{Int}()  # Initialize an empty vector for this letter.
+#         end
+#         if isnothing(number)
+#             number = letter == "G" ? collect(1:G) : collect(1:R)
+#             push!(groups[letter], number...)
+#         else
+#             push!(groups[letter], number)
+#         end
+#     end
+#     return groups
+# end

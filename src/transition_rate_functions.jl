@@ -650,3 +650,15 @@ function indices_kron_right(index::Vector, dimension::Int)
     indices
 end
 
+function set_base(S, splicetype)
+    if splicetype == "offeject"
+        S = 0
+        base = 2
+    end
+    if S == 0
+        base = 2
+    else
+        base = 3
+    end
+    return S, base
+end
