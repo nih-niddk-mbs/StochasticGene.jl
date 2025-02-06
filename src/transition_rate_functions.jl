@@ -662,3 +662,43 @@ function set_base(S, splicetype)
     end
     return S, base
 end
+
+function source_Rstates(nS, base, R)
+    sources = Int[]
+    for z in 1:base^R
+        if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
+            push!(sources, z)
+        end
+    end
+    sources
+end
+
+function classify_states(state, G, R, S, splicetype)
+    Gstates = Int[]
+    Rsteps = Int[]
+    _, base = set_base(S, splicetype)
+    for s in state
+        if s <= G
+            append!(Gstates, s)
+        else
+            append!(Rsteps, source_Rstates(s - G, base, R))
+        end
+    end
+    unique(Gstates), unique(Rsteps)
+end
+
+function classify_transitions(target, indices)
+    Gts = Int[]
+    Init = Int[]
+    Rts = Int[]
+    for t in target
+        if t in indices.gamma
+            append!(Gts, t)
+        elseif t == indices.nu[1]
+            append!(Init)
+        elseif t > indices.nu[1]
+            append!(Rts)
+        end
+    end
+    unique(Gts), unique(Init), unique(Rts)
+end

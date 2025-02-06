@@ -473,7 +473,6 @@ function set_elements_Gt!(elements, transitions, target_transition=length(transi
         i += 1
     end
 end
-
 """
     set_elements_Gt(transitions, target_transition, gamma)
 
@@ -518,46 +517,100 @@ function set_elements_Source(nS::Vector{Int})
     return elementsSource
 end
 
-
-
-function source_Rstates(nS, base, R)
-    sources = Int[]
-    for z in 1:base^R
-        if !isdisjoint(findall(!iszero, digit_vector(z, base, R)), nS)
-            push!(sources, z)
+function set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    if R > 0
+        S, base = set_base(S, splicetype)
+        nR = base^R
+        for b = 1:nR, a = 1:nR
+            zdigits = digit_vector(a, base, R)
+            wdigits = digit_vector(b, base, R)
+            zr = zdigits[R]
+            wr = wdigits[R]
+            zbarr = zdigits[1:R-1]
+            wbarr = wdigits[1:R-1]
+            sB = 0
+            for l in 1:base-1
+                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
+            end
+            if S > 0
+                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
+            end
+            if abs(sB) == 1 && R + 1 ∈ target
+                push!(elementsRGbar, Element(a, b, nu[R+1], sB))
+            end
+            if S == R && eta[S-insertstep+1] ∈ target
+                if S > insertstep - 1 && abs(sC) == 1
+                    push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
+                end
+            end
+            if splicetype == "offeject" && eta[S-insertstep+1] ∈ target
+                s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
+                if abs(s) == 1
+                    push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
+                end
+            end
+            for j = 1:R-1
+                zbarj = zdigits[[1:j-1; j+2:R]]
+                wbarj = wdigits[[1:j-1; j+2:R]]
+                zbark = zdigits[[1:j-1; j+1:R]]
+                wbark = wdigits[[1:j-1; j+1:R]]
+                zj = zdigits[j]
+                zj1 = zdigits[j+1]
+                wj = wdigits[j]
+                wj1 = wdigits[j+1]
+                s = 0
+                for l in 1:base-1
+                    s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
+                end
+                if abs(s) == 1 && nu[j+1] ∈ target
+                    push!(elementsRGbar, Element(a, b, nu[j+1], s))
+                end
+                if S >= j && j > insertstep - 1 && eta[j-insertstep+1] ∈ target
+                    s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
+                    if abs(s) == 1
+                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+                if splicetype == "offeject" && j > insertstep - 1 && eta[j-insertstep+1] ∈ target
+                    s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
+                    if abs(s) == 1
+                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
+                    end
+                end
+            end
         end
     end
-    sources
 end
 
-function classify_states(state, G, R, S, splicetype)
-    Gstates = Int[]
-    Rsteps = Int[]
-    _, base = set_base(S, splicetype)
-    for s in state
-        if s <= G
-            append!(Gstates, s)
-        else
-            append!(Rsteps, source_Rstates(s - G, base, R))
-        end
-    end
-    unique(Gstates), unique(Rsteps)
+function set_elements_Rt(target, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    elements = Elements[]
+    set_elements_Rt!(elements, target, R, S, insertstep, nu, eta, splicetype)
+    elements
 end
 
-function classify_transitions(target, indices)
-    Gts = Int[]
-    Init = Int[]
-    Rts = Int[]
-    for t in target
-        if t in indices.gamma
-            append!(Gts, t)
-        elseif t == indices.nu[1]
-            append!(Init)
-        elseif t > indices.nu[1]
-            append!(Rts)
+function set_elements_Init!(elementsRG, target, R, S, nu::Vector{Int}, splicetype="")
+    if R > 0
+        S, base = set_base(S, splicetype)
+        nR = base^R
+        for b = 1:nR, a = 1:nR
+            zdigits = digit_vector(a, base, R)
+            wdigits = digit_vector(b, base, R)
+            z1 = zdigits[1]
+            w1 = wdigits[1]
+            zbar1 = zdigits[2:R]
+            wbar1 = wdigits[2:R]
+            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
+            if abs(s) == 1 && nu[1] ∈ target
+                push!(elementsRG, Element(a, b, nu[1], s))
+            end
         end
     end
-    unique(Gts), unique(Init), unique(Rts)
+end
+
+function set_elements_Init(target, R, S, nu::Vector{Int}, splicetype="")
+    elements = Elements[]
+    set_elements_Init!(elements, target, R, S, nu, splicetype)
+    elements
 end
 
 function set_elements_Source(sources, G::Int, R, S, splicetype="")
@@ -580,166 +633,22 @@ end
 
 target elements
 """
-function set_elements_Target(Gtransitions, target, indices, G, nT)
+function set_elements_Target(target, Gtransitions, indices, G, nT)
     elementsTarget = Vector{Element}(undef, 0)
-    # println(target_transition)
     Gts, Init, Rts = classify_transitions(target, indices)
     for t in Gts
-        elements = set_elements_Gt(Gtransitions, target_transition, gamma)
+        elements = set_elements_Gt(Gtransitions, t, indices.gamma)
         elements_TG!(elementsTarget, elements, G, nT)
     end
     for t in Init
-        elements = set_elements_Init!(elementsR)
+        elements = set_elements_Init(t, R, S, nu, splicetype)
         elements_RG!(elementsTarget, elements, G)
-
+    end
+    for t in Rts
+        set_elements_Rt(t, R, S, insertstep, nu, eta, splicetype)
+        elements_TR!(elementsTarget, elements, G)
     end
     return elementsTarget
-end
-
-function set_elements_Rt!(RTarget, STarget, elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
-    if R > 0
-        S, base = set_base(S, splicetype)
-        nR = base^R
-        for b = 1:nR, a = 1:nR
-            zdigits = digit_vector(a, base, R)
-            wdigits = digit_vector(b, base, R)
-            z1 = zdigits[1]
-            w1 = wdigits[1]
-            zr = zdigits[R]
-            wr = wdigits[R]
-            zbar1 = zdigits[2:R]
-            wbar1 = wdigits[2:R]
-            zbarr = zdigits[1:R-1]
-            wbarr = wdigits[1:R-1]
-            sB = 0
-            for l in 1:base-1
-                sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
-            end
-            if S > 0
-                sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
-            end
-            if abs(sB) == 1 && R + 1 ∈ RTarget
-                push!(elementsRGbar, Element(a, b, nu[R+1], sB))
-            end
-            if S == R && eta[S-insertstep+1] ∈ STarget
-                if S > insertstep - 1 && abs(sC) == 1
-                    push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
-                end
-            end
-            if splicetype == "offeject" && eta[S-insertstep+1] ∈ STarget
-                s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
-                if abs(s) == 1
-                    push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
-                end
-            end
-            for j = 1:R-1
-                zbarj = zdigits[[1:j-1; j+2:R]]
-                wbarj = wdigits[[1:j-1; j+2:R]]
-                zbark = zdigits[[1:j-1; j+1:R]]
-                wbark = wdigits[[1:j-1; j+1:R]]
-                zj = zdigits[j]
-                zj1 = zdigits[j+1]
-                wj = wdigits[j]
-                wj1 = wdigits[j+1]
-                s = 0
-                for l in 1:base-1
-                    s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
-                end
-                if abs(s) == 1 && nu[j+1] ∈ RTarget
-                    push!(elementsRGbar, Element(a, b, nu[j+1], s))
-                end
-                if S >= j && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
-                    s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-                    if abs(s) == 1
-                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
-                    end
-                end
-                if splicetype == "offeject" && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
-                    s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
-                    if abs(s) == 1
-                        push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
-                    end
-                end
-            end
-            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
-            if abs(s) == 1 && nu[1] ∈ RTarget
-                push!(elementsRG, Element(a, b, nu[1], s))
-            end
-        end
-    end
-end
-
-function set_elements_Init!(elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
-    if R > 0
-        S, base = set_base(S, splicetype)
-        nR = base^R
-        for b = 1:nR, a = 1:nR
-            zdigits = digit_vector(a, base, R)
-            wdigits = digit_vector(b, base, R)
-            z1 = zdigits[1]
-            w1 = wdigits[1]
-            # zr = zdigits[R]
-            # wr = wdigits[R]
-            zbar1 = zdigits[2:R]
-            wbar1 = wdigits[2:R]
-            # zbarr = zdigits[1:R-1]
-            # wbarr = wdigits[1:R-1]
-            # sB = 0
-            # for l in 1:base-1
-            #     sB += (zbarr == wbarr) * ((zr == 0) - (zr == l)) * (wr == l)
-            # end
-            # if S > 0
-            #     sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
-            # end
-            # if abs(sB) == 1 && R + 1 ∈ RTarget
-            #     push!(elementsRGbar, Element(a, b, nu[R+1], sB))
-            # end
-            # if S == R && eta[S-insertstep+1] ∈ STarget
-            #     if S > insertstep - 1 && abs(sC) == 1
-            #         push!(elementsRGbar, Element(a, b, eta[S-insertstep+1], sC))
-            #     end
-            # end
-            # if splicetype == "offeject" && eta[S-insertstep+1] ∈ STarget
-            #     s = (zbarr == wbarr) * ((zr == 0) - (zr == 1)) * (wr == 1)
-            #     if abs(s) == 1
-            #         push!(elementsRGbar, Element(a, b, eta[R-insertstep+1], s))
-            #     end
-            # end
-            # for j = 1:R-1
-            #     zbarj = zdigits[[1:j-1; j+2:R]]
-            #     wbarj = wdigits[[1:j-1; j+2:R]]
-            #     zbark = zdigits[[1:j-1; j+1:R]]
-            #     wbark = wdigits[[1:j-1; j+1:R]]
-            #     zj = zdigits[j]
-            #     zj1 = zdigits[j+1]
-            #     wj = wdigits[j]
-            #     wj1 = wdigits[j+1]
-            #     s = 0
-            #     for l in 1:base-1
-            #         s += (zbarj == wbarj) * ((zj == 0) * (zj1 == l) - (zj == l) * (zj1 == 0)) * (wj == l) * (wj1 == 0)
-            #     end
-            #     if abs(s) == 1 && nu[j+1] ∈ RTarget
-            #         push!(elementsRGbar, Element(a, b, nu[j+1], s))
-            #     end
-            #     if S >= j && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
-            #         s = (zbark == wbark) * ((zj == 1) - (zj == 2)) * (wj == 2)
-            #         if abs(s) == 1
-            #             push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
-            #         end
-            #     end
-            #     if splicetype == "offeject" && j > insertstep - 1 && eta[j-insertstep+1] ∈ STarget
-            #         s = (zbark == wbark) * ((zj == 0) - (zj == 1)) * (wj == 1)
-            #         if abs(s) == 1
-            #             push!(elementsRGbar, Element(a, b, eta[j-insertstep+1], s))
-            #         end
-            #     end
-            # end
-            s = (zbar1 == wbar1) * ((z1 == base - 1) - (z1 == 0)) * (w1 == 0)
-            if abs(s) == 1 && nu[1] ∈ RTarget
-                push!(elementsRG, Element(a, b, nu[1], s))
-            end
-        end
-    end
 end
 
 """
@@ -754,16 +663,10 @@ function set_elements_TRGCoupled(source_state, target_transition, transitions, G
     return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
 end
 
-# function set_elements_TCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
-#     elementsT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
-#     elementsTarget = set_elements_Gt(transitions, target_transition, indices.gamma)
-#     elementsSource = set_elements_Gs(source_state)
-# end
-
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     elementsSource = set_elements_Source(source_state, G, R, S)
-    elementsTarget = set_elements_Target(transitions, target_transition, indices.gamma, G, nT)
+    elementsTarget = set_elements_Target(target_transition, transitions, indices, G, nT)
     return elementsT, elementsSource, elementsTarget, nT
 end
 
