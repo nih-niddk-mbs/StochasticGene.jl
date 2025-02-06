@@ -155,6 +155,7 @@ function test_fit_trace_grid(; Ngrid=4, G=2, R=1, S=1, insertstep=1, transitions
     model = load_model(data, [rinit; 0.1], [rinit; 0.1], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), Ngrid)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
+    fits, stats, measures, data, model, options
 end
 
 
@@ -164,6 +165,7 @@ function test_fit_trace_grid_hierarchical(; Ngrid=4, G=2, R=1, S=1, insertstep=1
     model = load_model(data, [rinit; 0.1], [rinit; 0.1], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), Ngrid)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
+    fits, stats, measures, data, model, options
 end
 
 ### end of functions used in runtest

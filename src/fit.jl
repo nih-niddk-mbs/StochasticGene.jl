@@ -312,12 +312,12 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
     println(traceinfo)
     weight = (1 - traceinfo[4]) / traceinfo[4]
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
+    if length(traceinfo) > 4
+        background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
+    else
+        background = Vector[]
+    end
     if datatype == "trace"
-        if length(traceinfo) > 4
-            background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
-        else
-            background = Vector[]
-        end
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
         len, h = read_rna(gene, datacond, datapath[2])
