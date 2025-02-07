@@ -133,6 +133,7 @@ export
     write_dataframes,
     write_dataframes_only,
     write_histograms,
+    write_RNAhistogram,
     write_traces,
     write_traces_coupling,
     write_winners
