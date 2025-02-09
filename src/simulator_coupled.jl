@@ -247,7 +247,7 @@ end
 
 - `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
 """
-function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple())
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     for i in eachindex(trace)
@@ -255,13 +255,28 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
             r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, col]
         else
             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
         end
     end
     trace
 end
+# function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple())
+#     trace = Array{Array{Float64}}(undef, ntrials)
+#     r = copy(rin)
+#     for i in eachindex(trace)
+#         if !isempty(hierarchical)
+#             r[hierarchical[1]] = hierarchical[2][i]
+#         end
+#         if isnothing(a_grid)
+#             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
+#         else
+#             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
+#         end
+#     end
+#     trace
+# end
 
 """
     simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
