@@ -283,18 +283,30 @@ end
 
 TBW
 """
-function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
     for i in eachindex(trace)
         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
         tr = Vector[]
         for t in t
-            tr = push!(tr, t[1:end-1, 2])
+            tr = push!(tr, t[1:end-1, col])
         end
         trace[i] = hcat(tr...)
     end
     trace
 end
+# function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+#     trace = Array{Array{Float64}}(undef, ntrials)
+#     for i in eachindex(trace)
+#         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
+#         tr = Vector[]
+#         for t in t
+#             tr = push!(tr, t[1:end-1, 2])
+#         end
+#         trace[i] = hcat(tr...)
+#     end
+#     trace
+# end
 
 function simulate_trace_hierarchical()
 

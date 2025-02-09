@@ -137,7 +137,7 @@ convert MCMC params into form to compute likelihood for coupled model
 - `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
 
 """
-function prepare_rates(rates, sourceStates::Vector{Int}, transitions, G, R, S, insertstep, n_noise)
+function prepare_rates(rates, sourceStates::Vector, transitions, G, R, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
