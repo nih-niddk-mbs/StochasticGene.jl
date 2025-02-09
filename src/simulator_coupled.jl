@@ -231,6 +231,8 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
 
     S = reset_S(S, R, insertstep)
 
+    sshist = initialize_ss(G,R,S)
+
     _, _, _, m, steps, t, _, t0, _, _ = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, reactions, nalleles)
@@ -249,6 +251,8 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
         initial, final, disabled, enabled, action = set_arguments(reactions, index)
         dth = t - t0
         t0 = t
+
+        update_sshist!(sshist, state, dt, G, R, S)
 
         if verbose
             println("---")
@@ -273,6 +277,10 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
     nhist > 0 && push!(results, prune_mhist(mhist, nhist))
 
     return results
+end
+
+function initialize_ss(G,R,S)
+    prod(T_dmension(G,R,S))
 end
 
 function update_sshist!(sshist, state, dt, G, R, S)
