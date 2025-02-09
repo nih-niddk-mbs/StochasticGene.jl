@@ -170,6 +170,16 @@ end
 
 ### end of functions used in runtest
 
+function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval = 1., rates=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, 0.], totalsteps=500000)
+    sshist = simulator_ss(rates, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps)
+    components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    # n_noise = [r.n for r in reporter]
+    sourceStates = [c.sourceState for c in components.modelcomponents]
+    r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    return sshist, p0, a
+end
+
 
 function test_fit_tracejoint_out(coupling=((1, 2), (tuple(), tuple(1)), (2, []), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0)
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)

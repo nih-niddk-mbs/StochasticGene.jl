@@ -231,7 +231,7 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
 
     S = reset_S(S, R, insertstep)
 
-    sshist = initialize_ss(G,R,S)
+    sshist = initialize_ss(G, R, S)
 
     _, _, _, m, steps, t, _, t0, _, _ = initialize_sim(r, nhist, tol)
     reactions = set_reactions(transitions, G, R, S, insertstep)
@@ -252,13 +252,11 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
         dth = t - t0
         t0 = t
 
-        update_sshist!(sshist, state, dt, G, R, S)
-
         if verbose
             println("---")
             println(steps)
             println(state)
-            # println(state_index(state, G, R, S))
+            println(state_index(state, G, R, S))
             println(tau)
             println("t:", t)
             println(index, " ", allele)
@@ -267,23 +265,24 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
             println(initial, "->", final)
         end
 
+        update_sshist!(sshist, state, dth, G, R, S)
+
         update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
 
 
     end  # while
     # verbose && println(steps)
 
-    results = []
-    nhist > 0 && push!(results, prune_mhist(mhist, nhist))
-
-    return results
+    return sshist
 end
 
-function initialize_ss(G,R,S)
-    prod(T_dmension(G,R,S))
+function initialize_ss(G, R, S)
+    zeros(prod(T_dimension(G, R, S)))
 end
 
 function update_sshist!(sshist, state, dt, G, R, S)
+    # println(state_index(state, G, R, S))
+
     sshist[state_index(state, G, R, S)] += dt
 end
 """
@@ -635,7 +634,7 @@ state_index(state::Array, G, allele) = argmax(state[1:G, allele])
 
 TBW
 """
-function state_index(state::Array, G, R, S, allele=1)
+function state_index(state::Array, G::Int, R, S, allele=1)
     Gstate = gstate(G, state, allele)
     if R == 0
         return Gstate
@@ -652,11 +651,11 @@ function state_index(state::Array, G, R, S, allele=1)
 end
 
 function state_index(state, G::Tuple, R::Tuple, S::Tuple, allele=1)
-    si = Vector{Vector{Int}}(undef,2)
+    si = Vector{Int}(undef, 2)
     for i in eachindex(G)
-        si[i] = state_index(state[i], G[i], R[i], S[i], allele)
+        si[i] = state_index(state[i, 1], G[i], R[i], S[i], allele)
     end
-    indices_kron_right(si,T_dimension(G,R,S)...)
+    prod(si)
 end
 
 function prune_mhist(mhist, nhist)
