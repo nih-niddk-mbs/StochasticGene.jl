@@ -275,13 +275,8 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
     return results
 end
 
-function make_state()
-
-end
-
-function update_sshist!(sshist, state, dt)
-    sshist[state] += dt
-
+function update_sshist!(sshist, state, dt, G, R, S)
+    sshist[state_index(state, G, R, S)] += dt
 end
 """
     initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
@@ -646,6 +641,14 @@ function state_index(state::Array, G, R, S, allele=1)
         end
         return Gstate + G * decimal(Rstate, base)
     end
+end
+
+function state_index(state, G::Tuple, R::Tuple, S::Tuple, allele=1)
+    si = Vector{Vector{Int}}(undef,2)
+    for i in eachindex(G)
+        si[i] = state_index(state[i], G[i], R[i], S[i], allele)
+    end
+    indices_kron_right(si,T_dimension(G,R,S)...)
 end
 
 function prune_mhist(mhist, nhist)
