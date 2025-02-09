@@ -187,8 +187,6 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
         end
     end  # while
     verbose && println(steps)
-    # counts = max(sum(mhist), 1)
-    # mhist /= counts
 
     results = []
     nhist > 0 && push!(results, prune_mhist(mhist, nhist))
@@ -217,6 +215,200 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
     return results
 end
 
+
+
+"""
+    simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+
+TBW
+"""
+function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+
+    if !isempty(coupling)
+        coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+        nhist = 0
+    end
+
+    S = reset_S(S, R, insertstep)
+
+    _, _, _, m, steps, t, _, t0, _, _ = initialize_sim(r, nhist, tol)
+    reactions = set_reactions(transitions, G, R, S, insertstep)
+    tau, state = initialize(r, G, R, reactions, nalleles)
+
+    if verbose
+        invactions = invert_dict(set_actions())
+    end
+    if totaltime > 0.0
+        err = 0.0
+        totalsteps = 0
+    end
+
+    while steps < totalsteps
+        steps += 1
+        t, index, allele = findmin_tau(tau)   # reaction index and allele for least time transition
+        initial, final, disabled, enabled, action = set_arguments(reactions, index)
+        dth = t - t0
+        t0 = t
+
+        if verbose
+            println("---")
+            println(steps)
+            println(state)
+            # println(state_index(state, G, R, S))
+            println(tau)
+            println("t:", t)
+            println(index, " ", allele)
+            println(invactions[action])
+            println(enabled, " ", disabled)
+            println(initial, "->", final)
+        end
+
+        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+
+
+    end  # while
+    # verbose && println(steps)
+
+    results = []
+    nhist > 0 && push!(results, prune_mhist(mhist, nhist))
+
+    return results
+end
+
+function make_state()
+
+end
+
+function update_sshist!(sshist, state, dt)
+    sshist[state] += dt
+
+end
+"""
+    initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
+
+TBW
+"""
+function initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
+    nreactions = length(reactions)
+    tau = fill(Inf, nreactions, nalleles)
+    states = zeros(Int, G + R, nalleles)
+    for n in 1:nalleles
+        tau[initreaction, n] = -log(rand()) / r[1]
+        states[initstate, n] = 1
+    end
+    return tau, states
+end
+"""
+    initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
+
+return initial proposed next reaction times and states
+"""
+function initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
+    tau = Matrix[]
+    states = Matrix[]
+    for i in eachindex(G)
+        t, s = initialize(r[i], G[i], R[i], reactions[i], 1, initstate, initreaction)
+        push!(tau, t)
+        push!(states, s)
+    end
+    return tau, states
+end
+
+
+"""
+    initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
+
+"""
+function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
+    if nhist isa Number && nhist > 0
+        nhist = fill(nhist, length(r) - 1)
+    end
+    mhist = Vector[]
+    mhist0 = similar(mhist)
+    rmin = Inf
+    for i in eachindex(nhist)
+        rmin = min(rmin, minimum(r[i]))
+        push!(mhist, zeros(nhist[i] + 1))
+        push!(mhist0, ones(nhist[1] + 1))
+    end
+    return nhist, mhist, mhist0, zeros(Int, length(r) - 1), 0, 0.0, 0.0, 0.0, samplefactor / rmin, errfactor * tol
+end
+
+"""
+    initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0)
+
+TBW
+"""
+initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0) = nhist, zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
+
+"""
+    set_par(r, noiseparams::Int)
+    set_par(r, noiseparams::Vector)
+
+TBW
+"""
+set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
+
+function set_par(r, noiseparams::Vector)
+    par = Vector[]
+    for i in eachindex(noiseparams)
+        push!(par, set_par(r[i], noiseparams[i]))
+    end
+    par
+end
+
+
+"""
+    targets(coupling)
+
+Find coupled targets for each unit
+"""
+function targets(coupling)
+    targets = Vector{Int}[]
+    models = coupling[1]
+    sources = coupling[2]
+    for m in models
+        t = Int[]
+        for i in eachindex(sources)
+            if m ∈ sources[i]
+                push!(t, i)
+            end
+        end
+        push!(targets, t)
+    end
+    targets
+end
+
+"""
+    prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+
+TBW
+"""
+function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+    if noiseparams isa Number
+        noiseparams = fill(noiseparams, length(G))
+    end
+    coupling = (coupling..., targets(coupling))
+    return coupling, nalleles, noiseparams, prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+end
+
+
+"""
+    prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+
+TBW
+"""
+function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+    rv = Vector[]
+    n = 0
+    for i in eachindex(R)
+        num = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
+        push!(rv, r[n+1:n+num])
+        n += num
+    end
+    push!(rv, r[end-coupling[5]+1:end])
+    rv
+end
 
 """
     simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
@@ -676,77 +868,6 @@ TBW
 initialize_tracelog(t, state::Matrix) = [(t, state[:, 1])]
 
 
-"""
-    set_par(r, noiseparams::Int)
-    set_par(r, noiseparams::Vector)
-
-TBW
-"""
-set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
-
-function set_par(r, noiseparams::Vector)
-    par = Vector[]
-    for i in eachindex(noiseparams)
-        push!(par, set_par(r[i], noiseparams[i]))
-    end
-    par
-end
-
-
-"""
-    targets(coupling)
-
-Find coupled targets for each unit
-"""
-function targets(coupling)
-    targets = Vector{Int}[]
-    models = coupling[1]
-    sources = coupling[2]
-    for m in models
-        t = Int[]
-        for i in eachindex(sources)
-            if m ∈ sources[i]
-                push!(t, i)
-            end
-        end
-        push!(targets, t)
-    end
-    targets
-end
-
-"""
-    prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-
-TBW
-"""
-function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-    # if nalleles isa Number
-    #     nalleles = fill(1, length(G))
-    # end
-    if noiseparams isa Number
-        noiseparams = fill(noiseparams, length(G))
-    end
-    coupling = (coupling..., targets(coupling))
-    return coupling, nalleles, noiseparams, prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
-end
-
-
-"""
-    prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
-
-TBW
-"""
-function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
-    rv = Vector[]
-    n = 0
-    for i in eachindex(R)
-        num = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
-        push!(rv, r[n+1:n+num])
-        n += num
-    end
-    push!(rv, r[end-coupling[5]+1:end])
-    rv
-end
 
 
 """
@@ -774,63 +895,6 @@ function findmin_tau(tau::Matrix)
     return t, ind[1], ind[2]
 end
 
-
-"""
-    initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
-
-return initial proposed next reaction times and states
-"""
-function initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
-    tau = Matrix[]
-    states = Matrix[]
-    for i in eachindex(G)
-        t, s = initialize(r[i], G[i], R[i], reactions[i], 1, initstate, initreaction)
-        push!(tau, t)
-        push!(states, s)
-    end
-    return tau, states
-end
-
-"""
-    initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
-
-TBW
-"""
-function initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
-    nreactions = length(reactions)
-    tau = fill(Inf, nreactions, nalleles)
-    states = zeros(Int, G + R, nalleles)
-    for n in 1:nalleles
-        tau[initreaction, n] = -log(rand()) / r[1]
-        states[initstate, n] = 1
-    end
-    return tau, states
-end
-"""
-    initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
-
-"""
-function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
-    if nhist isa Number && nhist > 0
-        nhist = fill(nhist, length(r) - 1)
-    end
-    mhist = Vector[]
-    mhist0 = similar(mhist)
-    rmin = Inf
-    for i in eachindex(nhist)
-        rmin = min(rmin, minimum(r[i]))
-        push!(mhist, zeros(nhist[i] + 1))
-        push!(mhist0, ones(nhist[1] + 1))
-    end
-    return nhist, mhist, mhist0, zeros(Int, length(r) - 1), 0, 0.0, 0.0, 0.0, samplefactor / rmin, errfactor * tol
-end
-
-"""
-    initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0)
-
-TBW
-"""
-initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0) = nhist, zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
 
 """
     update_error(mhist::Vector{Vector}, mhist0)
@@ -870,6 +934,8 @@ function update_mhist!(mhist, m::Int, dt, nhist)
         mhist[nhist+1] += dt
     end
 end
+
+
 
 """
     set_arguments(reaction, index::Tuple)
@@ -1029,7 +1095,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
             end
         end
     end
-    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
     return m
 end
 
@@ -1111,7 +1177,7 @@ update tau and state for G transition
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1134,7 +1200,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1153,7 +1219,7 @@ end
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1319,14 +1385,3 @@ function set_decay!(tau, index::Int, t, m, r)
     end
     m
 end
-
-
-# function simulator(T, totalsteps)
-#     τ = fill(Inf, size(T))
-#     nonzeros = T .> 0
-#     τ[1, nonzeros[1,:]] = -log(rand()) / T[1, nonzeros[1,:]]
-#     for i in totalsteps
-#     findmin(τ)
-
-
-# end
