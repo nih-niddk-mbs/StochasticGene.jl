@@ -957,7 +957,7 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     j = G + insertstep - 1
     for s in indices.srange
         j += 1
-        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, 0))
+        push!(reactions, Reaction(actions["splice!"], s, Int[], Int[], j, j))
     end
     push!(reactions, Reaction(actions["decay!"], indices.decay, Int[], Int[indices.decay], 0, 0))
     return reactions
@@ -972,7 +972,7 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling=0)
+function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
     if action < 5
         if action < 3
             if action == 1
@@ -1002,15 +1002,47 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
             end
         end
     end
+    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
     return m
 end
 
 """
-    couplingG!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
+    coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
 
 TBW
 """
-function couplingG!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
+# function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
+#     sources = coupling[2][unit]
+#     sstate = coupling[3]
+#     ttrans = coupling[4]
+#     targets = coupling[6][unit]
+
+#     # unit just changed state
+
+#     # unit as source
+#     # new state moves into or out of a primed source state
+#     for target in targets
+#         if isfinite(tau[target][ttrans[target], 1])
+#             if initial != sstate[unit] && final == sstate[unit]
+#                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
+#             elseif initial == sstate[unit] && final != sstate[unit]
+#                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
+#             end
+#         end
+#     end
+    
+#     # unit as target
+#     # new state moves to a target transition
+#     for source in sources
+#         if ttrans[unit] ∈ enabled
+#             if state[source][sstate[source], 1] > 0
+#                 tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
+#             end
+#         end
+#     end
+# end
+
+function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
     sources = coupling[2][unit]
     sstate = coupling[3]
     ttrans = coupling[4]
@@ -1022,14 +1054,14 @@ function couplingG!(tau, state, unit::Int, t, r, disabled, enabled, initial, fin
     # new state moves into or out of a primed source state
     for target in targets
         if isfinite(tau[target][ttrans[target], 1])
-            if initial != sstate[unit] && final == sstate[unit]
+            if initial ∉ sstate[unit] && final ∈ sstate[unit]
                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
-            elseif initial == sstate[unit] && final != sstate[unit]
+            elseif initial ∈ sstate[unit] && final ∉ sstate[unit]
                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
     end
-    
+
     # unit as target
     # new state moves to a target transition
     for source in sources
@@ -1039,7 +1071,6 @@ function couplingG!(tau, state, unit::Int, t, r, disabled, enabled, initial, fin
             end
         end
     end
-
 end
 
 
@@ -1051,7 +1082,7 @@ update tau and state for G transition
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1074,7 +1105,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1093,7 +1124,7 @@ end
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # couplingG!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
