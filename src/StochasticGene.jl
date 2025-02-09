@@ -112,6 +112,7 @@ export
     simulate_trace,
     simulate_trace_data,
     simulate_trace_vector,
+    simulate_trials,
     simulator,
     source_states,
     sparse,

@@ -1258,7 +1258,8 @@ plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
-    _, _, ac1, ac2, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
+    println(probfn)
+    _, _, ac1, ac2, cc_theory, lags = covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
     simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
 end
 

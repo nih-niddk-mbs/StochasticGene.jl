@@ -151,7 +151,7 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
 end
 struct TCoupledUnitComponents <: AbstractTComponents
     nT::Int
-    sourceState::Vector{String}
+    sourceState::Union{Int,Vector{Int}}
     targetTransition::Union{Int,Vector{Int}}
     elementsT::Vector{Element}
     elementsSource::Vector{Element}

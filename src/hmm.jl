@@ -963,6 +963,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     mean_intensity = Vector[]
     max_intensity = Float64[]
     for i in eachindex(noiseparams)
+        println(probfn)
         mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
         mmax = max(maximum(mi),1.)
         push!(max_intensity, mmax)
