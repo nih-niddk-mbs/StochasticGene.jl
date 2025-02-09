@@ -172,7 +172,7 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
             println("t:", t)
             println(index, " ", allele)
             println(invactions[action])
-            println(enabled," ", disabled)
+            println(enabled, " ", disabled)
             println(initial, "->", final)
         end
 
@@ -247,7 +247,7 @@ end
 
 - `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
 """
-function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing,hierarchical=tuple())
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple())
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     for i in eachindex(trace)
@@ -1030,7 +1030,7 @@ TBW
 #             end
 #         end
 #     end
-    
+
 #     # unit as target
 #     # new state moves to a target transition
 #     for source in sources
@@ -1066,8 +1066,10 @@ function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initia
     # new state moves to a target transition
     for source in sources
         if ttrans[unit] ∈ enabled
-            if state[source][sstate[source], 1] > 0
-                tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
+            for ss in sstate[source]
+                if state[source][ss, 1] > 0
+                    tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
+                end
             end
         end
     end
