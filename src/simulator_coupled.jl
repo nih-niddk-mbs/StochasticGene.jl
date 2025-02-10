@@ -282,7 +282,6 @@ end
 
 function update_sshist!(sshist, state, dt, G, R, S)
     # println(state_index(state, G, R, S))
-
     sshist[state_index(state, G, R, S)] += dt
 end
 """
@@ -655,7 +654,7 @@ function state_index(state, G::Tuple, R::Tuple, S::Tuple, allele=1)
     for i in eachindex(G)
         si[i] = state_index(state[i, 1], G[i], R[i], S[i], allele)
     end
-    prod(si)
+    (si[1]-1)*T_dimension(G[2],R[2],S[2]) + si[2]
 end
 
 function prune_mhist(mhist, nhist)
