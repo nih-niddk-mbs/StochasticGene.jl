@@ -57,10 +57,10 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `R`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `S`: number of splice sites (set to 0 for G (classic telegraph) and GR models and R for GRS models)
 - `insertstep`: reporter insertion step
- 	
+
 #Named arguments
 - `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
-- `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
+- `coupling=tuple()`: if nonempty, a 4-tuple where elements are
     1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
     2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
     3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
@@ -77,7 +77,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `totaltime`::Float64=0.0: total time of simulation
 - `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
 - `verbose::Bool=false`: flag for printing state information
-    
+
 #Example:
 
 julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],[3,2]),3,2,2,1,nhist=20,bins=[collect(2.:2.:200),collect(.2:.2:20)],onstates=[Int[],[3]],nalleles=2, totalsteps = 200000)
@@ -87,7 +87,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [622, 643, 592, 596, 553, 524, 520, 489, 448, 437  …  19, 13, 12, 12, 14, 10, 10, 17, 8, 8]
  [550, 584, 569, 555, 498, 510, 497, 495, 489, 487  …  89, 96, 107, 99, 89, 103, 86, 97, 87, 77]
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
- 
+
 """
 function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
 
@@ -137,7 +137,7 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
     #         t, index, allele = findmin_tau(tau)
     #         initial, final, disabled, enabled, action = set_arguments(reactions, index)
     #         m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
-    #     end # for   
+    #     end # for
     #     println(tau)
     #     for taui in tau
     #         taui .-= t
@@ -166,13 +166,13 @@ function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=
         if verbose
             println("---")
             println(steps)
-            println("m:", m)
-            println(state)
-            println(tau)
-            println("t:", t)
-            println(index, " ", allele)
+            println("m: ", m)
+            println("state: ", state)
+            println("tau: ", tau)
+            println("t: ", t)
+            println("index: ", index, ", allele: ", allele)
             println(invactions[action])
-            println(enabled, " ", disabled)
+            println("enabled: ", enabled, ", disabled: ", disabled)
             println(initial, "->", final)
         end
 
@@ -255,29 +255,19 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
         if verbose
             println("---")
             println(steps)
-            println(state)
-            println(findall(!iszero, vec(state[index[1], 1])), ",", coupling[3], ":", state_index(state, G, R, S))
-            println(tau)
-            println("t:", t)
-            println(index, " ", allele)
+            println("state: ", state, ": ", state_index(state, G, R, S))
+            println("state indices: ", findall(!iszero, vec(state[index[1], 1])), ", coupling: ", coupling[3])
+            println("tau: ", tau)
+            println("t: ", t)
+            println("index: ", index, " ", allele)
             println(invactions[action])
-            println(enabled, " ", disabled)
+            println("enabled: ", enabled, ", disabled: ", disabled)
             println(initial, "->", final)
         end
 
-
         update_sshist!(sshist, state, dth, G, R, S)
+
         update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
-
-        
-
-        if verbose
-            println("<<")
-            println(state)
-            println(findall(!iszero, vec(state[index[1], 1])), ",", coupling[3], ":", state_index(state, G, R, S))
-            println(">>")
-        end
-
 
     end  # while
     # verbose && println(steps)
@@ -1084,6 +1074,7 @@ Arguments are same as defined in simulator
 
 """
 function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+    initialstate = copy(state[index[1], 1])
     if action < 5
         if action < 3
             if action == 1
@@ -1098,7 +1089,6 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
                 initiate!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final)
             end
         end
-        # !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
     else
         if action < 7
             if action == 5
@@ -1111,12 +1101,10 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
                 splice!(tau, state, index, t, m, r, allele, G, R, initial)
             else
                 m = decay!(tau, index, t, m, r)
-                # update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
             end
         end
-        
     end
-    # !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, enabled, initialstate, coupling)
     return m
 end
 
@@ -1156,21 +1144,24 @@ TBW
 #     end
 # end
 
-function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
+function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling)
     sources = coupling[2][unit]
     sstate = coupling[3]
     ttrans = coupling[4]
     targets = coupling[6][unit]
 
-    # unit just changed state
+    # oldstate = findall(!iszero, vec(initialstate[unit, 1]))
+
+    oldstate = findall(!iszero, vec(initialstate))
+    newstate = findall(!iszero, vec(state[unit, 1]))
 
     # unit as source
     # new state moves into or out of a primed source state
     for target in targets
         if isfinite(tau[target][ttrans[target], 1])
-            if initial ∉ sstate[unit] && final ∈ sstate[unit]
+            if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
-            elseif initial ∈ sstate[unit] && final ∉ sstate[unit]
+            elseif !isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
@@ -1188,22 +1179,30 @@ function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initia
         end
     end
 end
-# function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
+# function update_coupling_verbose!(tau, state, unit::Int, t, r, disabled, enabled, initial, initialstate, coupling)
 #     sources = coupling[2][unit]
 #     sstate = coupling[3]
 #     ttrans = coupling[4]
 #     targets = coupling[6][unit]
 #     newstate = findall(!iszero, vec(state[unit, 1]))
+#     oldstate = findall(!iszero, vec(initialstate[unit, 1]))
 
+#     verbose = false
+
+#     # oldstate = initial
+#     verbose && println("oldstate: ",oldstate, ", newstate: ", newstate,", sstate: ",sstate, ", sources: ",sources, ", targets: ", targets)
 #     # unit just changed state
 
 #     # unit as source
 #     # new state moves into or out of a primed source state
 #     for target in targets
+#         verbose && println("targets: ", isfinite(tau[target][ttrans[target], 1]))
 #         if isfinite(tau[target][ttrans[target], 1])
-#             if isdisjoint(newstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
+#             verbose && println("1: ",isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit]))
+#             verbose && println("2: ",!isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit]))
+#             if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
 #                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
-#             elseif !isdisjoint(newstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
+#             elseif !isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
 #                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
 #             end
 #         end
@@ -1212,8 +1211,10 @@ end
 #     # unit as target
 #     # new state moves to a target transition
 #     for source in sources
+#         verbose && println("sources: ", ttrans[unit] ∈ enabled)
 #         if ttrans[unit] ∈ enabled
 #             for ss in sstate[source]
+#                 verbose && println("1: ", state[source][ss, 1] > 0)
 #                 if state[source][ss, 1] > 0
 #                     tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
 #                 end
@@ -1221,7 +1222,6 @@ end
 #         end
 #     end
 # end
-
 """
     transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
@@ -1230,7 +1230,7 @@ update tau and state for G transition
 """
 function transitionG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     transitionG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     transitionG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1253,7 +1253,7 @@ end
 """
 function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     activateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1268,11 +1268,11 @@ function activateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, ena
 end
 """
     deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
- 
+
 """
 function deactivateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
     deactivateG!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], disabled, enabled, initial, final, coupling)
-    update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
+    # update_coupling!(tau, state, index[1], t, r, disabled, enabled, initial, final, coupling)
 end
 """
     deactivateG!(tau, state, index::Int, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling=tuple())
@@ -1375,7 +1375,7 @@ function eject!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enab
 end
 """
     splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
-   
+
 """
 function splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
     splice!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], initial)
