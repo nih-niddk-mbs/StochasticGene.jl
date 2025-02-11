@@ -266,10 +266,10 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
         end
 
 
-
+        update_sshist!(sshist, state, dth, G, R, S)
         update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
 
-        update_sshist!(sshist, state, dth, G, R, S)
+        
 
         if verbose
             println("<<")
