@@ -1178,10 +1178,10 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
 
-    verbose = false
+    verbose = true
 
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
-    verbose && println("taunew: ",tau)
+    verbose && println("tau1: ",tau)
     # unit as source
     # new state moves into or out of a primed source state
     for target in targets
@@ -1207,6 +1207,7 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
             end
         end
     end
+    verbose && println("tau2: ",tau)
 end
 
 """
@@ -1240,7 +1241,7 @@ end
     activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
 
 """
-function activateG!(tau, state, index::Tuple, t, m, r, allele, G, R, disabled, enabled, initial, final, coupling)
+function activateG!(tau::Vector, state, index::Tuple, t, m, r, allele, G::Tuple, R::Tuple, disabled, enabled, initial, final, coupling)
 
     # println("before mutation:\n", tau)
     # taui = tau[index[1]]
