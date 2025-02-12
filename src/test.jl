@@ -170,7 +170,7 @@ end
 
 ### end of functions used in runtest
 
-function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval = 1., rates=[0.1, 0.1, 0.5, 0.4, 0.4, 0.1, 0.01, 50, 30, 100, 20, 0.07, 0.1, 0.4, 0.2, 0.1, 50, 30, 100, 20, 1.], totalsteps=500000, verbose=false)
+function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval = 1., rates=[0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, 0.1, 0.5, 0.5, 0.1, 0.01, 50, 30, 100, 20, 1.], totalsteps=500000, verbose=false)
     sshist = simulator_ss(rates, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps, verbose=verbose)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     # n_noise = [r.n for r in reporter]
