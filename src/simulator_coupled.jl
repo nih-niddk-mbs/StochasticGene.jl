@@ -1433,3 +1433,119 @@ function set_decay!(tau::Matrix, index::Int, t, m, r)
     end
     m
 end
+
+"""
+    compute_transition_matrix(trace, G, R, S, insertstep; coupling=tuple())
+
+Compute the state-to-state transition probability matrix from frame-to-frame using trace data.
+
+# Arguments
+- `trace`: Output from make_trace function
+- `G`: Number of gene states (Int for uncoupled, Tuple for coupled models)
+- `R`: Number of pre-RNA steps
+- `S`: Number of splice sites
+- `insertstep`: Reporter insertion step
+- `coupling`: Optional coupling tuple for coupled models
+
+# Returns
+- For uncoupled models: A matrix P where P[i,j] is probability of transitioning from state i to j
+- For coupled models: A matrix P where P[i,j] is probability of transitioning from combined state i to j
+"""
+function compute_transition_matrix(trace, G, R, S, insertstep; coupling=tuple())
+    if isempty(coupling)
+        # Single unit case
+        n_states = T_dimension(G, R, S)
+        P = zeros(n_states, n_states)
+        
+        # Get state indices from trace data
+        gstates = trace[:, "Gstate1"]
+        rstates = trace[:, "Rstate1"]
+        
+        # Count transitions
+        for i in 1:(length(gstates)-1)
+            # Create state vectors for current and next states
+            current_state = zeros(Int, G + R, 1)
+            next_state = zeros(Int, G + R, 1)
+            
+            # Set G states
+            current_state[gstates[i], 1] = 1
+            next_state[gstates[i+1], 1] = 1
+            
+            # Set R states if they exist
+            if R > 0
+                current_state[G+1:end, 1] = rstates[i]
+                next_state[G+1:end, 1] = rstates[i+1]
+            end
+            
+            # Convert to indices
+            from_state = state_index(current_state, G, R, S)
+            to_state = state_index(next_state, G, R, S)
+            
+            P[from_state, to_state] += 1
+        end
+        
+        # Normalize to get probabilities
+        for i in 1:n_states
+            row_sum = sum(P[i,:])
+            if row_sum > 0
+                P[i,:] ./= row_sum
+            end
+        end
+        
+        return P
+    else
+        # Coupled model case
+        if !(G isa Tuple)
+            error("G must be a tuple for coupled models")
+        end
+        
+        # Calculate total number of combined states
+        n_states = prod(T_dimension.(G, R, S))
+        P = zeros(n_states, n_states)
+        
+        # For coupled models, process each unit's states
+        for i in 1:length(trace)-1
+            # Create state matrices for both units
+            current_states = Vector{Matrix{Int}}()
+            next_states = Vector{Matrix{Int}}()
+            
+            for unit in 1:length(G)
+                # Get state data for current unit
+                gstate_col = Symbol("Gstate1_$unit")
+                rstate_col = Symbol("Rstate1_$unit")
+                
+                # Create current state matrix
+                current_state = zeros(Int, G[unit] + R[unit], 1)
+                current_state[trace[i, gstate_col], 1] = 1
+                if R[unit] > 0
+                    current_state[G[unit]+1:end, 1] = trace[i, rstate_col]
+                end
+                push!(current_states, current_state)
+                
+                # Create next state matrix
+                next_state = zeros(Int, G[unit] + R[unit], 1)
+                next_state[trace[i+1, gstate_col], 1] = 1
+                if R[unit] > 0
+                    next_state[G[unit]+1:end, 1] = trace[i+1, rstate_col]
+                end
+                push!(next_states, current_state)
+            end
+            
+            # Convert to indices using the coupled state_index
+            from_state = state_index(current_states, G, R, S)
+            to_state = state_index(next_states, G, R, S)
+            
+            P[from_state, to_state] += 1
+        end
+        
+        # Normalize to get probabilities
+        for i in 1:n_states
+            row_sum = sum(P[i,:])
+            if row_sum > 0
+                P[i,:] ./= row_sum
+            end
+        end
+        
+        return P
+    end
+end
