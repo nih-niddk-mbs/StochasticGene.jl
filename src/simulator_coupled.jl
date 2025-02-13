@@ -886,7 +886,7 @@ Arguments are same as defined in simulator
 
 """
 function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose = false)
-    initialstate = copy(state[index[1], 1])
+    !isempty(coupling) && (initialstate = copy(state[index[1], 1]))
     if action < 5
         if action < 3
             if action == 1
@@ -926,36 +926,6 @@ end
 
 TBW
 """
-# function update_coupling!(tau, state, unit::Int, t, r, disabled, enabled, initial, final, coupling)
-#     sources = coupling[2][unit]
-#     sstate = coupling[3]
-#     ttrans = coupling[4]
-#     targets = coupling[6][unit]
-
-#     # unit just changed state
-
-#     # unit as source
-#     # new state moves into or out of a primed source state
-#     for target in targets
-#         if isfinite(tau[target][ttrans[target], 1])
-#             if initial != sstate[unit] && final == sstate[unit]
-#                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
-#             elseif initial == sstate[unit] && final != sstate[unit]
-#                 tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
-#             end
-#         end
-#     end
-
-#     # unit as target
-#     # new state moves to a target transition
-#     for source in sources
-#         if ttrans[unit] ∈ enabled
-#             if state[source][sstate[source], 1] > 0
-#                 tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
-#             end
-#         end
-#     end
-# end
 
 function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling, verbose=false)
     sources = coupling[2][unit]
@@ -970,6 +940,7 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
 
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ",tau)
+
     # unit as source
     # new state moves into or out of a primed source state
     for target in targets
@@ -988,7 +959,6 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     for source in sources
         verbose && println(ttrans[unit] ∈ enabled, ": ", tau[unit][ttrans[unit], 1])
         if ttrans[unit] ∈ enabled
-        # if isfinite(tau[unit][ttrans[unit], 1])
             verbose && println(sstate[source], " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source]))
             if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source])
                 tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
