@@ -102,6 +102,7 @@ export
     prob_GaussianMixture,
     prob_GaussianMixture_6,
     prob_Gaussian_grid,
+    readfile,
     RNAData,
     RNADwellTimeData,
     RNAOnOffData,

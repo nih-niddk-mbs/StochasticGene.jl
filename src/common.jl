@@ -362,6 +362,26 @@ struct GRSMcoupledmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,M
     reporter::ReporterType
 end
 
+struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
+    rates::RateType
+    coupling::CouplingType
+    hierarchy::Hierarchy
+    Gtransitions::Tuple
+    G::Int
+    R::Int
+    S::Int
+    insertstep::Int
+    nalleles::Int
+    splicetype::String
+    rateprior::PriorType
+    proposal::ProposalType
+    fittedparam::ParamType
+    fixedeffects::Tuple
+    method::MethodType
+    components::ComponentType
+    reporter::ReporterType
+end
+
 struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
     raterange::UnitRange
@@ -437,37 +457,7 @@ struct GRSMcoupledgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamTy
     components::ComponentType
     reporter::ReporterType
 end
-"""
-    GRSMcoupledhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
 
-Structure for GRSM coupled hierarchical models.
-
-# Fields
-- `hierarchy::Hierarchy`: Hierarchy of models.
-- `coupling::CouplingType`: Coupling type.
-"""
-struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    hierarchy::Hierarchy
-    coupling::CouplingType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
 
 """
     GRSMcoupledgridhierarchicalmodel{RateType, CouplingType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
