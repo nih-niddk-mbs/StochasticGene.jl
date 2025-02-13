@@ -170,15 +170,48 @@ end
 
 ### end of functions used in runtest
 
-function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval = 1., rates=[0.2, 0.05, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, 0.1, 0.5, 0.5, 0.1, 0.01, 50, 30, 100, 20, -0.9], totalsteps=500000, verbose=false)
+
+# function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.2, 0.05, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, 0.1, 0.5, 0.5, 0.1, 0.01, 50, 30, 100, 20, -0.9], totalsteps=500000, verbose=false)
+function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 4), 1), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.1, 0.1, 0.1, 0.1, 0.01,  50, 30, 100, 20, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, -0.9], totalsteps=500000, verbose=false)
     sshist = simulator_ss(rates, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps, verbose=verbose)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    # n_noise = [r.n for r in reporter]
     sourceStates = [c.sourceState for c in components.modelcomponents]
-    r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    r, couplingStrength, _ = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    println(couplingStrength)
     a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
-    return sshist, p0, a
+     return sshist/sum(sshist), p0, a
 end
+
+function test_coupling_a(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 2), 1), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.1, 0.1, 0.1, 0.1, 0.1, 50, 30, 100, 20, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, -0.9], totaltime=10000., ntrials=1, verbose=false)
+    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    sourceStates = [c.sourceState for c in components.modelcomponents]
+    r, couplingStrength, _ = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    println(couplingStrength)
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    suma = zeros(size(a))
+    sump = zeros(size(p0))
+    erra = Float64[];
+    errp = Float64[];
+    for i in 1:ntrials
+        trace = simulator(rates, transitions, G, R, S, insertstep, coupling=coupling, traceinterval=interval, totaltime=totaltime)
+        as, ps = compute_transition_matrix(trace, G, R, S)
+        suma .+= as
+        sump .+= ps
+        push!(erra, norm(a .- suma ./ i, 1))
+        push!(errp, norm(p0 .- sump ./ i, 1))
+    end
+    return erra, errp, a, p0, suma ./ ntrials, sump ./ ntrials
+end
+
+function test_ap(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 3), 1), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.1, 0.1, 0.1, 0.1, 0.1, 50, 30, 100, 20, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, -0.9])
+    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    sourceStates = [c.sourceState for c in components.modelcomponents]
+    r, couplingStrength, _ = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    Qtr = make_mat_TC(components, r, couplingStrength)
+    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    a, p0, Qtr, components
+end
+
 
 
 function test_fit_tracejoint_out(coupling=((1, 2), (tuple(), tuple(1)), (2, []), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0)

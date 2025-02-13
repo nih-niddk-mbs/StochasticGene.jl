@@ -113,9 +113,9 @@ Return the unit state for a given state index.
 # Arguments
 - `i::Int`: State index.
 - `G::Tuple`: Tuple of total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
-- `unit_model`: Unit model.
+- `R`: Tuple of RNA steps
+- `S`: Tuple of splicing sites
+- `unit_model`: Tuple or vector of model indices
 
 # Returns
 - `Tuple`: Unit state.
@@ -692,12 +692,12 @@ function classify_transitions(target, indices)
     Init = Int[]
     Rts = Int[]
     for t in target
-        if t in indices.gamma
+        if t ∈ indices.gamma
             append!(Gts, t)
         elseif t == indices.nu[1]
-            append!(Init)
+            append!(Init, t)
         elseif t > indices.nu[1]
-            append!(Rts)
+            append!(Rts, t)
         end
     end
     unique(Gts), unique(Init), unique(Rts)

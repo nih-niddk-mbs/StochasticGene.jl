@@ -535,7 +535,7 @@ function set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu::Vector{In
             if S > 0
                 sC = (zbarr == wbarr) * ((zr == 1) - (zr == 2)) * (wr == 2)
             end
-            if abs(sB) == 1 && R + 1 ∈ target
+            if abs(sB) == 1 && nu[R+1] ∈ target
                 push!(elementsRGbar, Element(a, b, nu[R+1], sB))
             end
             if S == R && eta[S-insertstep+1] ∈ target
@@ -583,7 +583,7 @@ function set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu::Vector{In
 end
 
 function set_elements_Rt(target, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
-    elements = Elements[]
+    elements = Element[]
     set_elements_Rt!(elements, target, R, S, insertstep, nu, eta, splicetype)
     elements
 end
@@ -608,7 +608,7 @@ function set_elements_Init!(elementsRG, target, R, S, nu::Vector{Int}, splicetyp
 end
 
 function set_elements_Init(target, R, S, nu::Vector{Int}, splicetype="")
-    elements = Elements[]
+    elements = Element[]
     set_elements_Init!(elements, target, R, S, nu, splicetype)
     elements
 end
@@ -633,7 +633,7 @@ end
 
 target elements
 """
-function set_elements_Target(target, Gtransitions, indices, G, nT)
+function set_elements_Target(target, Gtransitions, G, R, S, insertstep, indices, nT, splicetype)
     elementsTarget = Vector{Element}(undef, 0)
     Gts, Init, Rts = classify_transitions(target, indices)
     for t in Gts
@@ -641,11 +641,11 @@ function set_elements_Target(target, Gtransitions, indices, G, nT)
         elements_TG!(elementsTarget, elements, G, nT)
     end
     for t in Init
-        elements = set_elements_Init(t, R, S, nu, splicetype)
+        elements = set_elements_Init(t, R, S, indices.nu, splicetype)
         elements_RG!(elementsTarget, elements, G)
     end
     for t in Rts
-        set_elements_Rt(t, R, S, insertstep, nu, eta, splicetype)
+        elements = set_elements_Rt(t, R, S, insertstep, indices.nu, indices.eta, splicetype)
         elements_TR!(elementsTarget, elements, G)
     end
     return elementsTarget
@@ -666,7 +666,7 @@ end
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     elementsSource = set_elements_Source(source_state, G, R, S)
-    elementsTarget = set_elements_Target(target_transition, transitions, indices, G, nT)
+    elementsTarget = set_elements_Target(target_transition, transitions, G, R, S, insertstep, indices, nT, splicetype)
     return elementsT, elementsSource, elementsTarget, nT
 end
 

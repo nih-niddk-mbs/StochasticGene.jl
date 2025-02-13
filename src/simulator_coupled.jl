@@ -89,8 +89,9 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
 
 """
-function simulator(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
 
+    r = copy(rin)
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
         nhist = 0
@@ -222,8 +223,8 @@ end
 
 TBW
 """
-function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
-
+function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+    r = copy(rin)
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
         nhist = 0
@@ -267,7 +268,7 @@ function simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupli
 
         update_sshist!(sshist, state, dth, G, R, S)
 
-        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose)
 
     end  # while
     # verbose && println(steps)
@@ -528,6 +529,35 @@ function simulate_trace_hierarchical()
 end
 
 """
+    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
+
+TBW
+"""
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
+    n = length(tracelog)
+    trace = Matrix{Float64}(undef, 0, 4)
+    state = tracelog[1][2]
+    frame = interval
+    if isempty(onstates)
+        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
+    else
+        reporters = num_reporters_per_state(G, onstates)
+    end
+    i = 2
+    base = S > 0 ? 3 : 2
+    d = probfn(par, reporters, G * base^R)
+    while i < n
+        while tracelog[i][1] <= frame && i < n
+            state = tracelog[i][2]
+            i += 1
+        end
+        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)] state_index(state, G, R, S)])
+        frame += interval
+    end
+    return trace
+end
+
+"""
     make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
 
 Return array of frame times and intensities
@@ -558,34 +588,7 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{
     traces
 end
 
-"""
-    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
 
-TBW
-"""
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
-    n = length(tracelog)
-    trace = Matrix{Float64}(undef, 0, 4)
-    state = tracelog[1][2]
-    frame = interval
-    if isempty(onstates)
-        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
-    else
-        reporters = num_reporters_per_state(G, onstates)
-    end
-    i = 2
-    base = S > 0 ? 3 : 2
-    d = probfn(par, reporters, G * base^R)
-    while i < n
-        while tracelog[i][1] <= frame && i < n
-            state = tracelog[i][2]
-            i += 1
-        end
-        trace = vcat(trace, [frame intensity(state, G, R, S, d) reporters[state_index(state, G, R, S)] state_index(state, G, R, S)])
-        frame += interval
-    end
-    return trace
-end
 
 function make_trace_grid(trace::Vector{T}, a_grid, d_background) where {T<:Array}
     gridtrace = Matrix[]
@@ -678,205 +681,10 @@ function state_index(state, G::Tuple, R::Tuple, S::Tuple, allele=1)
     (si[1] - 1) * T_dimension(G[2], R[2], S[2]) + si[2]
 end
 
-function prune_mhist(mhist, nhist)
-    if eltype(mhist) <: Vector
-        for i in eachindex(mhist)
-            mhist[i] = mhist[i][1:nhist[i]]
-        end
-    else
-        mhist = mhist[1:nhist]
-    end
-    return mhist
+function coupled_state_index(jointstate::Vector, G, R, S)
+    (jointstate[1] - 1) * T_dimension(G[2], R[2], S[2]) + jointstate[2]
 end
 
-"""
-    set_onoff(onstates, bins, nalleles, coupling)
-
-TBW
-"""
-function set_onoff(onstates, bins, nalleles, coupling)
-    if isempty(coupling)
-        if ~(eltype(onstates) <: Vector)
-            onstates = [onstates]
-        end
-        if ~(eltype(bins) <: Vector)
-            bins = [bins]
-        end
-        if length(bins) != length(onstates)
-            throw("number of time bin vectors do not match number of onstates")
-        end
-        before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
-        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
-    else
-        if ~(eltype(onstates) <: Vector && eltype(eltype(onstates)) <: Vector)
-            throw("onstates not a vector of vectors of vectors")
-        end
-        if ~(eltype(bins) <: Vector && eltype(eltype(bins)) <: Vector)
-            throw("bins not a vector of vectors of vectors")
-        end
-
-        tIA = Vector[]
-        tAI = Vector[]
-        before = Vector[]
-        after = Vector[]
-        ndt = Vector[]
-        dt = Vector[]
-        histofftdd = Vector[]
-        histontdd = Vector[]
-
-        for i in eachindex(onstates)
-            b, a, nndt, ddt, off, on, IA, AI = set_onoff(onstates[i], bins[i], 1)
-            push!(before, b)
-            push!(after, a)
-            push!(ndt, nndt)
-            push!(dt, ddt)
-            push!(histofftdd, off)
-            push!(histontdd, on)
-            push!(tIA, IA)
-            push!(tAI, AI)
-        end
-        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
-    end
-end
-"""
-    set_onoff(onstates, bins, nalleles)
-
-TBW
-"""
-function set_onoff(onstates, bins, nalleles)
-    nn = length(onstates)
-    tIA = Vector{Float64}[]
-    tAI = Vector{Float64}[]
-    before = Vector{Int}(undef, nn)
-    after = Vector{Int}(undef, nn)
-    ndt = Int[]
-    dt = Float64[]
-    histofftdd = Vector{Int}[]
-    histontdd = Vector{Int}[]
-    for i in eachindex(onstates)
-        push!(ndt, length(bins[i]))
-        push!(dt, bins[i][2] - bins[i][1])
-        push!(histofftdd, zeros(Int, ndt[i]))
-        push!(histontdd, zeros(Int, ndt[i]))
-        push!(tIA, zeros(nalleles))
-        push!(tAI, zeros(nalleles))
-    end
-    return before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
-end
-
-
-"""
-    set_before(onstates, state, allele, G, R, inserstep)
-
-find before and after states for the same allele to define dwell time histograms
-"""
-function set_before(before, onstates, state, allele, G::Int, R, insertstep)
-    for i in eachindex(onstates)
-        before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-    end
-    before
-end
-
-function set_before(before, onstates, state, allele, G::Tuple, R, insertstep)
-    for i in eachindex(onstates)
-        for j in eachindex(onstates[i])
-            before[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
-        end
-    end
-    before
-end
-
-"""
-    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
-
-TBW
-"""
-function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
-    for i in eachindex(onstates)
-        after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
-        firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
-    end
-    verbose && println(tAI)
-    verbose && println(tIA)
-end
-
-"""
-    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
-
-TBW
-"""
-function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
-    for i in eachindex(onstates)
-        for j in eachindex(onstates[i])
-            after[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
-            firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i][j], tIA[i][j], t, dt[i][j], ndt[i][j], 1, before[i][j], after[i][j], verbose)
-        end
-    end
-    verbose && println(tAI)
-    verbose && println(tIA)
-end
-
-
-
-"""
-    num_reporters(state, allele, G::Int, R, insertstep)
-
-return number of states with R steps > 1
-"""
-num_reporters(state, allele, G::Int, R, insertstep) = sum(state[G+insertstep:G+R, allele] .> 1)
-
-
-"""
-    firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
-
-decide if transition exits or enters sojourn states then in place update appropriate histogram
-"""
-function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
-    if before == 1 && after == 0  # turn off
-        firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
-        if verbose
-            println("off:", allele)
-        end
-    elseif before == 0 && after == 1 # turn on
-        firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
-        if verbose
-            println("on:", allele)
-        end
-    end
-end
-
-"""
-    firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
-
-in place update of first passage time histograms
-"""
-function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
-    t1[allele] = t
-    t12 = (t - t2[allele]) / dt
-    if t12 <= ndt && t12 > 0 && t2[allele] > 0
-        hist[ceil(Int, t12)] += 1
-    end
-end
-
-"""
-    set_tracelog(tracelog, t, state::Vector{Matrix})
-
-TBW
-"""
-function set_tracelog!(tracelog, t, state::Vector{Matrix})
-    for i in eachindex(state)
-        set_tracelog!(tracelog[i], t, state[i])
-    end
-end
-
-"""
-    set_tracelog!(tracelog, t, state::Matrix)
-
-TBW
-"""
-function set_tracelog!(tracelog, t, state::Matrix)
-    push!(tracelog, (t, state[:, 1]))
-end
 """
     initialize_tracelog(t, state::Vector{Matrix})
 
@@ -896,6 +704,27 @@ end
 TBW
 """
 initialize_tracelog(t, state::Matrix) = [(t, state[:, 1])]
+
+
+"""
+    set_tracelog!(tracelog, t, state::Matrix)
+
+TBW
+"""
+function set_tracelog!(tracelog, t, state::Matrix)
+    push!(tracelog, (t, state[:, 1]))
+end
+"""
+    set_tracelog(tracelog, t, state::Vector{Matrix})
+
+TBW
+"""
+function set_tracelog!(tracelog, t, state::Vector{Matrix})
+    for i in eachindex(state)
+        set_tracelog!(tracelog[i], t, state[i])
+    end
+end
+
 
 
 
@@ -925,45 +754,6 @@ function findmin_tau(tau::Matrix)
     return t, ind[1], ind[2]
 end
 
-
-"""
-    update_error(mhist::Vector{Vector}, mhist0)
-
-TBW
-"""
-function update_error(mhist::Vector{Vector}, mhist0)
-    n = 0
-    for i in eachindex(mhist)
-        n = max(n, norm(mhist[i] / sum(mhist[i]) - mhist0[i] / sum(mhist0[i]), Inf))
-    end
-    return n, copy(mhist)
-end
-
-
-update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
-"""
-    update_mhist!(mhist, m::Vector, dt, nhist)
-    update_mhist!(mhist, m::Int, dt, nhist)
-
-"""
-function update_mhist!(mhist, m::Vector, dt, nhist)
-    for i in eachindex(m)
-        update_mhist!(mhist[i], m[i], dt, nhist[i])
-    end
-end
-
-"""
-    update_mhist!(mhist, m::Int, dt, nhist)
-
-TBW
-"""
-function update_mhist!(mhist, m::Int, dt, nhist)
-    if m + 1 <= nhist
-        mhist[m+1] += dt
-    else
-        mhist[nhist+1] += dt
-    end
-end
 
 
 
@@ -1095,7 +885,7 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose = false)
     initialstate = copy(state[index[1], 1])
     if action < 5
         if action < 3
@@ -1127,7 +917,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
         end
     end
     # println("taup: ",tau)
-    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, enabled, initialstate, coupling)
+    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, enabled, initialstate, coupling, verbose)
     return m
 end
 
@@ -1167,7 +957,7 @@ TBW
 #     end
 # end
 
-function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling)
+function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling, verbose=false)
     sources = coupling[2][unit]
     sstate = coupling[3]
     ttrans = coupling[4]
@@ -1177,8 +967,6 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
 
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
-
-    verbose = true
 
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ",tau)
@@ -1434,6 +1222,231 @@ function set_decay!(tau::Matrix, index::Int, t, m, r)
     m
 end
 
+
+"""
+    update_error(mhist::Vector{Vector}, mhist0)
+
+TBW
+"""
+function update_error(mhist::Vector{Vector}, mhist0)
+    n = 0
+    for i in eachindex(mhist)
+        n = max(n, norm(mhist[i] / sum(mhist[i]) - mhist0[i] / sum(mhist0[i]), Inf))
+    end
+    return n, copy(mhist)
+end
+
+
+update_error(mhist, mhist0) = (norm(mhist / sum(mhist) - mhist0 / sum(mhist0), Inf), copy(mhist))
+"""
+    update_mhist!(mhist, m::Vector, dt, nhist)
+    update_mhist!(mhist, m::Int, dt, nhist)
+
+"""
+function update_mhist!(mhist, m::Vector, dt, nhist)
+    for i in eachindex(m)
+        update_mhist!(mhist[i], m[i], dt, nhist[i])
+    end
+end
+
+"""
+    update_mhist!(mhist, m::Int, dt, nhist)
+
+TBW
+"""
+function update_mhist!(mhist, m::Int, dt, nhist)
+    if m + 1 <= nhist
+        mhist[m+1] += dt
+    else
+        mhist[nhist+1] += dt
+    end
+end
+
+
+function prune_mhist(mhist, nhist)
+    if eltype(mhist) <: Vector
+        for i in eachindex(mhist)
+            mhist[i] = mhist[i][1:nhist[i]]
+        end
+    else
+        mhist = mhist[1:nhist]
+    end
+    return mhist
+end
+
+"""
+    set_onoff(onstates, bins, nalleles, coupling)
+
+TBW
+"""
+function set_onoff(onstates, bins, nalleles, coupling)
+    if isempty(coupling)
+        if ~(eltype(onstates) <: Vector)
+            onstates = [onstates]
+        end
+        if ~(eltype(bins) <: Vector)
+            bins = [bins]
+        end
+        if length(bins) != length(onstates)
+            throw("number of time bin vectors do not match number of onstates")
+        end
+        before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
+        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+    else
+        if ~(eltype(onstates) <: Vector && eltype(eltype(onstates)) <: Vector)
+            throw("onstates not a vector of vectors of vectors")
+        end
+        if ~(eltype(bins) <: Vector && eltype(eltype(bins)) <: Vector)
+            throw("bins not a vector of vectors of vectors")
+        end
+
+        tIA = Vector[]
+        tAI = Vector[]
+        before = Vector[]
+        after = Vector[]
+        ndt = Vector[]
+        dt = Vector[]
+        histofftdd = Vector[]
+        histontdd = Vector[]
+
+        for i in eachindex(onstates)
+            b, a, nndt, ddt, off, on, IA, AI = set_onoff(onstates[i], bins[i], 1)
+            push!(before, b)
+            push!(after, a)
+            push!(ndt, nndt)
+            push!(dt, ddt)
+            push!(histofftdd, off)
+            push!(histontdd, on)
+            push!(tIA, IA)
+            push!(tAI, AI)
+        end
+        return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+    end
+end
+"""
+    set_onoff(onstates, bins, nalleles)
+
+TBW
+"""
+function set_onoff(onstates, bins, nalleles)
+    nn = length(onstates)
+    tIA = Vector{Float64}[]
+    tAI = Vector{Float64}[]
+    before = Vector{Int}(undef, nn)
+    after = Vector{Int}(undef, nn)
+    ndt = Int[]
+    dt = Float64[]
+    histofftdd = Vector{Int}[]
+    histontdd = Vector{Int}[]
+    for i in eachindex(onstates)
+        push!(ndt, length(bins[i]))
+        push!(dt, bins[i][2] - bins[i][1])
+        push!(histofftdd, zeros(Int, ndt[i]))
+        push!(histontdd, zeros(Int, ndt[i]))
+        push!(tIA, zeros(nalleles))
+        push!(tAI, zeros(nalleles))
+    end
+    return before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+end
+
+
+"""
+    set_before(onstates, state, allele, G, R, inserstep)
+
+find before and after states for the same allele to define dwell time histograms
+"""
+function set_before(before, onstates, state, allele, G::Int, R, insertstep)
+    for i in eachindex(onstates)
+        before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+    end
+    before
+end
+
+function set_before(before, onstates, state, allele, G::Tuple, R, insertstep)
+    for i in eachindex(onstates)
+        for j in eachindex(onstates[i])
+            before[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+        end
+    end
+    before
+end
+
+"""
+    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
+
+TBW
+"""
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
+    for i in eachindex(onstates)
+        after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+        firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
+    end
+    verbose && println(tAI)
+    verbose && println(tIA)
+end
+
+"""
+    set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
+
+TBW
+"""
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
+    for i in eachindex(onstates)
+        for j in eachindex(onstates[i])
+            after[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+            firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i][j], tIA[i][j], t, dt[i][j], ndt[i][j], 1, before[i][j], after[i][j], verbose)
+        end
+    end
+    verbose && println(tAI)
+    verbose && println(tIA)
+end
+
+
+
+"""
+    num_reporters(state, allele, G::Int, R, insertstep)
+
+return number of states with R steps > 1
+"""
+num_reporters(state, allele, G::Int, R, insertstep) = sum(state[G+insertstep:G+R, allele] .> 1)
+
+
+"""
+    firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
+
+decide if transition exits or enters sojourn states then in place update appropriate histogram
+"""
+function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
+    if before == 1 && after == 0  # turn off
+        firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
+        if verbose
+            println("off:", allele)
+        end
+    elseif before == 0 && after == 1 # turn on
+        firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
+        if verbose
+            println("on:", allele)
+        end
+    end
+end
+
+"""
+    firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
+
+in place update of first passage time histograms
+"""
+function firstpassagetime!(hist, t1, t2, t, dt, ndt, allele)
+    t1[allele] = t
+    t12 = (t - t2[allele]) / dt
+    if t12 <= ndt && t12 > 0 && t2[allele] > 0
+        hist[ceil(Int, t12)] += 1
+    end
+end
+
+
+
+
+
 """
     compute_transition_matrix(trace, G, R, S, insertstep; coupling=tuple())
 
@@ -1451,101 +1464,124 @@ Compute the state-to-state transition probability matrix from frame-to-frame usi
 - For uncoupled models: A matrix P where P[i,j] is probability of transitioning from state i to j
 - For coupled models: A matrix P where P[i,j] is probability of transitioning from combined state i to j
 """
-function compute_transition_matrix(trace, G, R, S, insertstep; coupling=tuple())
-    if isempty(coupling)
-        # Single unit case
-        n_states = T_dimension(G, R, S)
-        P = zeros(n_states, n_states)
-        
-        # Get state indices from trace data
-        gstates = trace[:, "Gstate1"]
-        rstates = trace[:, "Rstate1"]
-        
-        # Count transitions
-        for i in 1:(length(gstates)-1)
-            # Create state vectors for current and next states
-            current_state = zeros(Int, G + R, 1)
-            next_state = zeros(Int, G + R, 1)
-            
-            # Set G states
-            current_state[gstates[i], 1] = 1
-            next_state[gstates[i+1], 1] = 1
-            
-            # Set R states if they exist
-            if R > 0
-                current_state[G+1:end, 1] = rstates[i]
-                next_state[G+1:end, 1] = rstates[i+1]
-            end
-            
-            # Convert to indices
-            from_state = state_index(current_state, G, R, S)
-            to_state = state_index(next_state, G, R, S)
-            
-            P[from_state, to_state] += 1
-        end
-        
-        # Normalize to get probabilities
-        for i in 1:n_states
-            row_sum = sum(P[i,:])
-            if row_sum > 0
-                P[i,:] ./= row_sum
-            end
-        end
-        
-        return P
-    else
-        # Coupled model case
-        if !(G isa Tuple)
-            error("G must be a tuple for coupled models")
-        end
-        
-        # Calculate total number of combined states
-        n_states = prod(T_dimension.(G, R, S))
-        P = zeros(n_states, n_states)
-        
-        # For coupled models, process each unit's states
-        for i in 1:length(trace)-1
-            # Create state matrices for both units
-            current_states = Vector{Matrix{Int}}()
-            next_states = Vector{Matrix{Int}}()
-            
-            for unit in 1:length(G)
-                # Get state data for current unit
-                gstate_col = Symbol("Gstate1_$unit")
-                rstate_col = Symbol("Rstate1_$unit")
-                
-                # Create current state matrix
-                current_state = zeros(Int, G[unit] + R[unit], 1)
-                current_state[trace[i, gstate_col], 1] = 1
-                if R[unit] > 0
-                    current_state[G[unit]+1:end, 1] = trace[i, rstate_col]
-                end
-                push!(current_states, current_state)
-                
-                # Create next state matrix
-                next_state = zeros(Int, G[unit] + R[unit], 1)
-                next_state[trace[i+1, gstate_col], 1] = 1
-                if R[unit] > 0
-                    next_state[G[unit]+1:end, 1] = trace[i+1, rstate_col]
-                end
-                push!(next_states, current_state)
-            end
-            
-            # Convert to indices using the coupled state_index
-            from_state = state_index(current_states, G, R, S)
-            to_state = state_index(next_states, G, R, S)
-            
-            P[from_state, to_state] += 1
-        end
-        
-        # Normalize to get probabilities
-        for i in 1:n_states
-            row_sum = sum(P[i,:])
-            if row_sum > 0
-                P[i,:] ./= row_sum
-            end
-        end
-        
-        return P
+
+# jointstates = [StochasticGene.coupled_state_index(collect(r),G,R,S) for r in eachrow(states)]
+
+
+function compute_transition_matrix(states, nstates::Int)
+    states = Int.(states)
+    a = zeros(nstates,nstates)
+    p0 = zeros(nstates)
+    for i in 1:length(states)-1
+        a[states[i],states[i+1]] += 1.
+        p0[states[i]] += 1.
     end
+    a ./ max.(sum(a, dims=2),eps()),  p0 / sum(p0)
 end
+
+
+function compute_transition_matrix(trace, G::Tuple, R, S)
+    states=[trace[1][1][:,4] trace[1][2][:,4]]
+    jointstates = [StochasticGene.coupled_state_index(collect(r),G,R,S) for r in eachrow(states)]
+    nstates = prod(T_dimension.(G, R, S))
+    compute_transition_matrix(jointstates,nstates)
+end
+
+# function compute_transition_matrixa(trace, G, R, S, insertstep; coupling=tuple())
+#     if isempty(coupling)
+#         # Single unit case
+#         n_states = T_dimension(G, R, S)
+#         P = zeros(n_states, n_states)
+        
+#         # Get state indices from trace data
+#         gstates = trace[:, "Gstate1"]
+#         rstates = trace[:, "Rstate1"]
+        
+#         # Count transitions
+#         for i in 1:(length(gstates)-1)
+#             # Create state vectors for current and next states
+#             current_state = zeros(Int, G + R, 1)
+#             next_state = zeros(Int, G + R, 1)
+            
+#             # Set G states
+#             current_state[gstates[i], 1] = 1
+#             next_state[gstates[i+1], 1] = 1
+            
+#             # Set R states if they exist
+#             if R > 0
+#                 current_state[G+1:end, 1] = rstates[i]
+#                 next_state[G+1:end, 1] = rstates[i+1]
+#             end
+            
+#             # Convert to indices
+#             from_state = state_index(current_state, G, R, S)
+#             to_state = state_index(next_state, G, R, S)
+            
+#             P[from_state, to_state] += 1
+#         end
+        
+#         # Normalize to get probabilities
+#         for i in 1:n_states
+#             row_sum = sum(P[i,:])
+#             if row_sum > 0
+#                 P[i,:] ./= row_sum
+#             end
+#         end
+        
+#         return P
+#     else
+#         # Coupled model case
+#         if !(G isa Tuple)
+#             error("G must be a tuple for coupled models")
+#         end
+        
+#         # Calculate total number of combined states
+#         n_states = prod(T_dimension.(G, R, S))
+#         P = zeros(n_states, n_states)
+        
+#         # For coupled models, process each unit's states
+#         for i in 1:length(trace)-1
+#             # Create state matrices for both units
+#             current_states = Vector{Matrix{Int}}()
+#             next_states = Vector{Matrix{Int}}()
+            
+#             for unit in 1:length(G)
+#                 # Get state data for current unit
+#                 gstate_col = Symbol("Gstate1_$unit")
+#                 rstate_col = Symbol("Rstate1_$unit")
+                
+#                 # Create current state matrix
+#                 current_state = zeros(Int, G[unit] + R[unit], 1)
+#                 current_state[trace[i, gstate_col], 1] = 1
+#                 if R[unit] > 0
+#                     current_state[G[unit]+1:end, 1] = trace[i, rstate_col]
+#                 end
+#                 push!(current_states, current_state)
+                
+#                 # Create next state matrix
+#                 next_state = zeros(Int, G[unit] + R[unit], 1)
+#                 next_state[trace[i+1, gstate_col], 1] = 1
+#                 if R[unit] > 0
+#                     next_state[G[unit]+1:end, 1] = trace[i+1, rstate_col]
+#                 end
+#                 push!(next_states, current_state)
+#             end
+            
+#             # Convert to indices using the coupled state_index
+#             from_state = state_index(current_states, G, R, S)
+#             to_state = state_index(next_states, G, R, S)
+            
+#             P[from_state, to_state] += 1
+#         end
+        
+#         # Normalize to get probabilities
+#         for i in 1:n_states
+#             row_sum = sum(P[i,:])
+#             if row_sum > 0
+#                 P[i,:] ./= row_sum
+#             end
+#         end
+        
+#         return P
+#     end
+# end
