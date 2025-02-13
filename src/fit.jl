@@ -407,8 +407,8 @@ function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedpara
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
     rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    pop = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-    GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, pop, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
 """
@@ -419,9 +419,6 @@ TBW
 function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
     nhypersets = hierarchical[1]
     nrates = num_rates(transitions, R, S, insertstep) + reporter.n
-    raterange = 1:nrates
-    noiserange = n+1:n+length(noisepriors)
-    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * nrates + 1
@@ -431,6 +428,9 @@ function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fitted
     rprior = rm[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
     hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    raterange = 1:nrates
+    noiserange = nrates+1:n+length(noisepriors)
+    gridrange = nrates+length(noisepriors)+1:nrates+length(noisepriors)+1
     GRSMgridhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, raterange, noiserange, gridrange, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -454,6 +454,25 @@ function GRSMcoupledmodel(r::Vector, rm::Vector, fittedparam::Vector, fixedeffec
     # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
     components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     GRSMcoupledmodel{typeof(r),Int,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+end
+"""
+    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+
+TBW
+"""
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+    nhypersets = hierarchical[1]
+    nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
+    nindividuals = length(data.trace[1])
+    nparams = length(hierarchical[2])
+    ratestart = nhypersets * nrates + 1
+    paramstart = length(fittedparam) + nhypersets * nparams + 1
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
+    rprior = rmean[1:nhypersets*nrates]
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
+    hyper = HierarchicalTrait(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    return hyper, fittedparam, fixedeffects, priord
 end
 
 function GRSMcoupledhierarchicalmodel(r::Vector, rm::Vector, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
@@ -515,7 +534,11 @@ return model structure
 """
 function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid)
     if !isempty(coupling)
-        GRSMcoupledmodel(r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
+        if !isempty(hierarchical)
+            GRSMcoupledhierarchicalmodel()
+        else
+            GRSMcoupledmodel(r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, method, coupling)
+        end
     elseif !isnothing(grid)
         if !isempty(hierarchical)
             !isa(method, Tuple) && throw("method not a Tuple")
@@ -563,25 +586,6 @@ end
 
 
 
-# """
-#     make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
-
-# TBW
-# """
-# function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
-#     nhypersets = hierarchical[1]
-#     nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
-#     nindividuals = length(data.trace[1])
-#     nparams = length(hierarchical[2])
-#     ratestart = nhypersets * nrates + 1
-#     paramstart = length(fittedparam) + nhypersets * nparams + 1
-#     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-#     fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-#     rprior = rmean[1:nhypersets*nrates]
-#     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-#     hyper = HierarchicalTrait(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-#     return hyper, fittedparam, fixedeffects, priord
-# end
 
 # function make_grid(rmean, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
 #     n = num_rates(transitions, R, S, insertstep)

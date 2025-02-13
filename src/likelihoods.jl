@@ -1032,6 +1032,10 @@ This function calculates the total number of parameters for the provided model. 
 - `Int`: The total number of parameters.
 
 """
+
+function num_total_parameters(transitions, R, S, insertstep, reporter)
+
+end
 function num_total_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
