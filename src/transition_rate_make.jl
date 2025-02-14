@@ -239,53 +239,14 @@ This function returns an MComponents structure, which includes matrix components
 # Returns
 - `MComponents`: The created MComponents structure.
 """
-function MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)
+function MComponents(transitions::Tuple, G, R, nhist, decay, splicetype, ejectnumber=1)
     indices = set_indices(length(transitions), R)
     elementsT, nT = set_elements_TGRS(transitions, G, R, 0, 1, indices, splicetype)
     elementsB = set_elements_B(G, R, indices.nu[R+1])
-    U, Um, Up = make_mat_U(nhist, decay)
+    U, Um, Up = make_mat_U(nhist, decay, ejectnumber)
     return MComponents(elementsT, elementsB, nT, U, Um, Up)
 end
-# function make_components_M(transitions, G, R, nhist, decay, splicetype)
-#     indices = set_indices(length(transitions), R)
-#     elementsT, nT = set_elements_TGRS(transitions, G, R, 0, 1, indices, splicetype)
-#     elementsB = set_elements_B(G, R, indices.nu[R+1])
-#     U, Um, Up = make_mat_U(nhist, decay)
-#     return MComponents(elementsT, elementsB, nT, U, Um, Up)
-# end
-# """
-#     make_components_MRG(transitions, G, R, nhist, decay)
 
-# Return MRGComponents structure for GRS models.
-
-# # Description
-# This function returns an MRGComponents structure for GRS models, which includes matrix components for fitting mRNA histograms and reporter gene data.
-
-# # Arguments
-# - `transitions`: Transition rates.
-# - `G`: Total number of genes.
-# - `R`: Number of reporters.
-# - `nhist`: Number of histograms.
-# - `decay`: Decay rates.
-
-# # Returns
-# - `MRGComponents`: The created MRGComponents structure.
-# """
-# function make_components_MRG(transitions, G, R, nhist, decay)
-#     indices = set_indices(length(transitions), R)
-#     elementsG, elementsRGbar, elementsRG, nR = set_elements_GRS(transitions, G, R, 0, 1, indices, "")
-#     elementsB = set_elements_BRG(G, R, indices.nu[R+1])
-#     U, Um, Up = make_mat_U(nhist, decay)
-#     MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
-# end
-
-# function MRGComponents(transitions::Tuple, G, R, nhist, decay)
-#     indices = set_indices(length(transitions), R)
-#     elementsG, elementsRGbar, elementsRG, nR = set_elements_GRS(transitions, G, R, 0, 1, indices, "")
-#     elementsB = set_elements_BRG(G, R, indices.nu[R+1])
-#     U, Um, Up = make_mat_U(nhist, decay)
-#     MRGComponents(G, nR, elementsG, elementsRGbar, elementsRG, elementsB, U, Um, Up)
-# end
 """
     MTAIComponents(transitions::Tuple, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
 
@@ -308,10 +269,10 @@ This function creates an MTAI structure for GRS models, which is used for fittin
 # Returns
 - `MTAIComponents`: The created MTAI structure.
 """
-function MTAIComponents(transitions::Tuple, G, R, S, insertstep, onstates, nhist, decay, splicetype="")
+function MTAIComponents(transitions::Tuple, G, R, S, insertstep, onstates, nhist, decay, splicetype="", ejectnumber=1)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
-    MTAIComponents(MComponents(transitions, G, R, nhist, decay, splicetype), TAIComponents(elementsT, nT, onstates))
+    MTAIComponents(MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber), TAIComponents(elementsT, nT, onstates))
 end
 
 """
@@ -338,8 +299,8 @@ This function creates an MTD structure for GRS models, which is used for various
 - `MTDComponents`: The created MTD structure.
 """
 
-function MTDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
-    MTDComponents(MComponents(transitions, G, R, nhist, decay, splicetype), TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype))
+function MTDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="", ejectnumber=1)
+    MTDComponents(MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber), TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype, ejectnumber))
 end
 
 """
@@ -363,7 +324,7 @@ This function returns an MTComponents structure for GRS models, which is used fo
 # Returns
 - `MTComponents`: The created MTComponents structure.
 """
-MTComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="") = MTComponents(MComponents(transitions, G, R, nhist, decay, splicetype), TComponents(transitions, G, R, S, insertstep, splicetype))
+MTComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="", ejectnumber=1) = MTComponents(MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber), TComponents(transitions, G, R, S, insertstep, splicetype))
 
 # """
 #     make_components_MTRG(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
@@ -451,7 +412,7 @@ This function returns matrices U, Uminus, and Uplus for m transitions, using the
 # Returns
 - `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices U, Uminus, and Uplus.
 """
-function make_mat_U(total::Int, decay::Float64)
+function make_mat_U(total::Int, decay::Float64, ejectnumber=1)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
@@ -459,7 +420,7 @@ function make_mat_U(total::Int, decay::Float64)
     Uplus[1, 2] = decay
     for m = 2:total-1
         U[m, m] = -decay * (m - 1)
-        Uminus[m, m-1] = 1
+        m - ejectnumber > 0 && (Uminus[m, m-ejectnumber] = 1)
         Uplus[m, m+1] = decay * m
     end
     U[total, total] = -decay * (total - 1)
@@ -496,8 +457,8 @@ This function returns the M matrix used to compute the steady state RNA distribu
 # Returns
 - `SparseMatrixCSC`: The created M matrix.
 """
-function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
-    U, Uminus, Uplus = make_mat_U(total, decay)
+function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int, ejectnumber=1)
+    U, Uminus, Uplus = make_mat_U(total, decay, ejectnumber)
     make_mat_M(T, B, U, Uminus, Uplus)
 end
 

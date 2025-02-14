@@ -1005,8 +1005,8 @@ function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
 end
 
 
-function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, nalleles::Int, nRNA::Int; outfile::String="", splicetype="")
-    mcomponents = MComponents(transitions, G, R, nRNA, decayrate, splicetype)
+function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, nalleles::Int, nRNA::Int; outfile::String="", splicetype="", ejectnumber=1)
+    mcomponents = MComponents(transitions, G, R, nRNA, decayrate, splicetype, ejectnumber)
     df = DataFrame(Freq=predictedRNA(r, mcomponents, nalleles, nRNA), Bin=collect(0:nRNA-1))
     if ~isempty(outfile)
         CSV.write(outfile, df)
@@ -1014,7 +1014,7 @@ function write_RNAhistogram(r, transitions, G::Int, R::Int, decayrate::Float64, 
     return df
 end
 
-function write_RNAhistogram(folder, nRNA)
+function write_RNAhistogram(folder, nRNA; ejectnumber=1)
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
@@ -1025,7 +1025,7 @@ function write_RNAhistogram(folder, nRNA)
                 r = readrates(joinpath(root, f))
                 out = joinpath(root, replace(f, "rates" => "RNA", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
-                write_RNAhistogram(r, transitions, G, R, r[num_rates(transitions, R, S, insertstep)], nalleles, nRNA, outfile=out)
+                write_RNAhistogram(r, transitions, G, R, r[num_rates(transitions, R, S, insertstep)], nalleles, nRNA, outfile=out, ejectnumber=ejectnumber)
             end
         end
     end

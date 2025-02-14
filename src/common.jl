@@ -367,10 +367,10 @@ struct GRSMcoupledhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType
     coupling::CouplingType
     hierarchy::Hierarchy
     Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
+    G::Tuple
+    R::Tuple
+    S::Tuple
+    insertstep::Tuple
     nalleles::Int
     splicetype::String
     rateprior::PriorType
