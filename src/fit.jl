@@ -205,12 +205,12 @@ julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 """
 function fit(; nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), ejectnumber=1)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
-    if typeof(fixedeffects) <: AbstractString
-        fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors), coupling, grid)
-        println(transitions)
-        println(fixedeffects)
-        println(fittedparam)
-    end
+    # if typeof(fixedeffects) <: AbstractString
+    #     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, R, S, insertstep, length(noisepriors), coupling, grid)
+    #     println(transitions)
+    #     println(fixedeffects)
+    #     println(fittedparam)
+    # end
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber)
 end
@@ -376,25 +376,19 @@ end
 
 
 
-
 """
     make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
 
 TBW
 """
-function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
+function make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, splicetype, onstates, dttype, coupling)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     components = TDComponents(transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     nonzeros = nonzero_rows(components)
     return (sojourn, nonzeros), components
 end
 
-"""
-    make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
-
-TBW
-"""
-function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, onstates, dttype, splicetype, coupling)
+function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep, splicetype, onstates, dttype, coupling)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     sojourn = coupled_states(sojourn, coupling, components, G)
@@ -402,29 +396,40 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R, S, insertstep
     return (sojourn, nonzeros), components
 end
 
+function make_reporter_components(transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, probfn, noisepriors, coupling)
+    nnoise = length(noisepriors)
+    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+    components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    return reporter, components
+end
+
+function make_reporter_components(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, probfn, noisepriors, coupling)
+    println(coupling)
+    reporter = HMMReporter[]
+    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    for i in eachindex(G)
+        nnoise = length(noisepriors[i])
+        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+    end
+    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    return reporter, components
+end
+
 """
     make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
 
 TBW
 """
-function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
+function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
     reporter = onstates
     components = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber)
     return reporter, components
 end
 
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    make_reporter_components(transitions, G, R, S, insertstep, onstates, Data.DTtypes, splicetype)
-end
-
-
-function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
-    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, onstates, data.DTtypes, "")
-    components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber), tcomponents)
-    return reporter, components
-end
-
-function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
+function make_reporter_components(data::RNAOnOffData, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     else
@@ -438,46 +443,25 @@ function make_reporter_components(data::RNAOnOffData, transitions, G, R, S, inse
     return onstates, MTAIComponents(transitions, G, R, S, insertstep, onstates, data.nRNA, decayrate, splicetype, ejectnumber)
 end
 
-function make_reporter_components(data::Union{AbstractTraceData,AbstractTraceHistogramData}, transitions, G::Int, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
-    nnoise = length(noisepriors)
-    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
-    if typeof(data) <: TraceRNAData
-        components = MTComponents(transitions, G, R, S, insertstep, data.nRNA, decayrate, splicetype, ejectnumber)
-    else
-        components = TComponents(transitions, G, R, S, insertstep, splicetype)
-    end
-    return reporter, components
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
+    make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, Data.DTtypes, coupling)
 end
 
-function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple, R, S, insertstep, splicetype, probfn, noisepriors, coupling::Tuple)
-    println(coupling)
-    reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
-    for i in eachindex(G)
-        nnoise = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
-        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
-    end
-    # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, "")
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-    return reporter, components
+function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, data.DTtypes, coupling)
+    mcomponents = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber)
+    # components = MTDComponents(MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber), tcomponents)
+    return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
 
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
-    nhypersets = hierarchical[1]
-    nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
-    nindividuals = length(data.trace[1])
-    nparams = length(hierarchical[2])
-    ratestart = nhypersets * nrates + 1
-    paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    rprior = rmean[1:nhypersets*nrates]
-    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-    return hyper, fittedparam, fixedeffects, priord
+function make_reporter_components(data::AbstractTraceData, transitions, G::Tuple, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling::Tuple, ejectnumber=1)
+    make_reporter_components(transitions, G, R, S, insertstep, splicetype, probfn, noisepriors, coupling)
+end
+
+function make_reporter_components(data::AbstractTraceHistogramData, transitions, G::Int, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, probfn, noisepriors, coupling)
+    mcomponents = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber)
+    return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
 
 """
@@ -485,14 +469,10 @@ end
 
 TBW
 """
-function GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid::Int)
-    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors)
-    n = num_rates(transitions, R, S, insertstep)
-    raterange = 1:n
-    noiserange = n+1:n+length(noisepriors)
-    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+1
+function GRSMgridmodel(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, grid::Int, ejectnumber=1)
+    reporter, components = make_reporter_components(data, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+    raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
     priord = prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-    # propcv < 0 && (propcv = getcv(gene, G, nalleles, fittedparam, inlabel, infolder, root))
     GRSMgridmodel{typeof(r),Nothing,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, raterange, noiserange, gridrange, grid, nothing, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -504,10 +484,8 @@ end
 TBW
 """
 function GRSMgridhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
-    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
-    raterange = 1:nrates
-    noiserange = nrates+1:n+length(noisepriors)
-    gridrange = nrates+length(noisepriors)+1:nrates+length(noisepriors)+1
+    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
+    raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
     GRSMgridhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, raterange, noiserange, gridrange, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -540,18 +518,7 @@ hierarchical model
 # function load_model_hierarchical(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, nalleles, priorcv, onstates, decayrate, propcv, splicetype, probfn, noisepriors, method, hierarchical::Tuple)
 
 function GRSMhierarchicalmodel(data::AbstractExperimentalData, r, rm, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method, noisepriors, hierarchical::Tuple, components, reporter)
-    # nhypersets = hierarchical[1]
-    # nrates = num_rates(transitions, R, S, insertstep) + reporter.n
-    # nindividuals = length(data.trace[1])
-    # nparams = length(hierarchical[2])
-    # ratestart = nhypersets * nrates + 1
-    # paramstart = length(fittedparam) + nhypersets * nparams + 1
-    # fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-    # fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    # rprior = rm[1:nhypersets*nrates]
-    # priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    # hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
-    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
+    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
     GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -559,7 +526,7 @@ end
 
 function GRSMcoupledhierarchicalmodel(data, r::Vector, rm::Vector, fittedparam::Vector, fixedeffects::Tuple, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, propcv, probfn, noisepriors, hierarchical, method, coupling)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber)
-    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
+    hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rm, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
     GRSMcoupledhierarchicalmodel{typeof(r),typeof(coupling[5]),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, coupling[5], hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 end
 
@@ -608,6 +575,66 @@ function load_model(data, r, rm, fittedparam::Vector, fixedeffects::Tuple, trans
         load_model(data, r, rm, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, ejectnumber)
     end
 end
+
+function make_grid(transitions, R::Int, S, insertstep, noisepriors, grid::Int)
+    n = num_rates(transitions, R, S, insertstep)
+    raterange = 1:n
+    noiserange = n+1:n+length(noisepriors)
+    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+grid
+    return raterange, noiserange, gridrange
+end
+
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+    nhypersets = hierarchical[1]
+    nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
+    nindividuals = length(data.trace[1])
+    nparams = length(hierarchical[2])
+    ratestart = nhypersets * nrates + 1
+    paramstart = length(fittedparam) + nhypersets * nparams + 1
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
+    rprior = rmean[1:nhypersets*nrates]
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
+    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    return hyper, fittedparam, fixedeffects, priord
+end
+function loadmodel(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, nalleles, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, grid)
+    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber)
+    if !isnothing(grid)
+        raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
+    end
+    if !isempty(hierarchical)
+        hierarchy, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
+    else
+        fittedparam = default_fittedparam(fittedparam, transitions, R, S, insertstep, noisepriors, coupling, grid)
+        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
+    end
+
+    H = isempty(hierarchial)
+    G = isnothing(grid)
+    C = isempty(coupling)
+
+    if C && G && H
+        return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif C && G && !H
+          return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+
+    elseif C && !G && H
+        return GRSMgridmodel
+    elseif C && !G && !H
+        return GRSMgridhierarchicalmodel
+    elseif !C && G && H
+        return GRSMcoupledmodel
+    elseif !C && G && !H
+        return GRSMcoupledhierarchicalmodel
+    elseif !C && !G && H
+        return GRSMcoupledgridmodel
+    elseif !C && !G && !H
+        return GRSMcoupledgridhierarchicalmodel
+    end
+
+end
+
 
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), ejectnumber=1)
     gene = check_genename(gene, "[")
@@ -659,22 +686,6 @@ end
 #     end
 # end
 
-
-
-
-
-# function make_grid(rmean, fittedparam, transitions, R, S, insertstep, priorcv, noisepriors, grid::Int)
-#     n = num_rates(transitions, R, S, insertstep)
-#     raterange = 1:n
-#     noiserange = n+1:n+length(noisepriors)
-#     gridrange = n+length(noisepriors)+1:n+length(noisepriors)+grid
-#     return raterange, noiserange, gridrange
-# end
-
-
-# """
-#     GRSMmodel(data::AbstractExperimentalData, r, rmean, fittedparam, fixedeffects, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, nalleles, priorcv, propcv, method)
-# """
 # function GRSMmodel(data::AbstractExperimentalData, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, nalleles, priorcv, propcv, method, noisepriors, probfn, coupling, hierarchical, grid)
 #     traits = NamedTuple()
 #     if !isempty(coupling)
@@ -696,6 +707,13 @@ end
 #     end
 #     GRSMmodel{typeof(traits),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(traits, r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
 # end
+
+
+
+
+
+
+
 
 
 
@@ -935,7 +953,7 @@ end
 
 TBW
 """
-function default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling, grid)
+function default_fitted(datatype::String, transitions, R::Int, S::Int, insertstep::Int, noiseparams, coupling, grid)
     n = num_rates(transitions, R, S, insertstep)
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)

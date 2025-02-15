@@ -176,7 +176,7 @@ fields:
     N::Int: total number of states
     model::Tuple: model index for each trace
     sources::Tuple: source model for each
-    modelcomponents::Vector{TRGCoupledComponents}
+    modelcomponents::ModelType}
 """
 struct TCoupledComponents{ModelType}
     N::Int
@@ -209,37 +209,15 @@ struct MComponents
     Uplus::SparseMatrixCSC
 end
 
-# """
-#     struct MRGComponents
-
-# fields:
-#     nG::Int
-#     nR::Int
-#     elementsG::Vector
-#     elementsRGbar::Vector
-#     elementsRG::Vector
-#     elementsB::Vector{Element}
-#     U::SparseMatrixCSC
-#     Uminus::SparseMatrixCSC
-#     Uplus::SparseMatrixCSC
-# end
-# """
-# struct MRGComponents
-#     nG::Int
-#     nR::Int
-#     elementsG::Vector
-#     elementsRGbar::Vector
-#     elementsRG::Vector
-#     elementsB::Vector{Element}
-#     U::SparseMatrixCSC
-#     Uminus::SparseMatrixCSC
-#     Uplus::SparseMatrixCSC
-# end
 
 
+struct MTComponents{MType,Ttype}
+    mcomponents::MType
+    tcomponents::Ttype
+end
 
 """
- 	MTComponents
+ 	MT0Components
 
  structure for M and T components
 
@@ -247,16 +225,10 @@ fields:
 mcomponents::MComponents
 tcomponents::TComponents
 """
-struct MTComponents
+struct MT0Components
     mcomponents::MComponents
     tcomponents::TComponents
 end
-
-# struct MTRGComponents
-#     mcomponents::MComponents
-#     tcomponents::TRGComponents
-# end
-
 
 """
  	MTAIComponents
