@@ -181,6 +181,13 @@ struct Hierarchy
     hyperindices::Vector{Vector}
 end
 
+struct Grid
+    raterange::UnitRange
+    noiserange::UnitRange
+    gridrange::UnitRange
+    Ngrid::Int
+end
+
 """
     HMMReporter
 
@@ -290,6 +297,7 @@ Structure for GRSM models.
 - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
 """
 struct GRSMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    traits::TraitType
     rates::RateType
     Gtransitions::Tuple
     G::Int
@@ -384,11 +392,7 @@ end
 
 struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
     rates::RateType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    coupling::CouplingType
+    grid::GridType
     Gtransitions::Tuple
     G::Int
     R::Int
@@ -408,11 +412,7 @@ end
 struct GRSMgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMhierarchicalmodel{RateType,ReporterType}
     rates::RateType
     hierarchy::Hierarchy
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-    coupling::CouplingType
+    grid::GridType
     Gtransitions::Tuple
     G::Int
     R::Int
@@ -437,10 +437,8 @@ Structure for GRSM coupled grid models.
 - `coupling::CouplingType`: Coupling type.
 """
 struct GRSMcoupledgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
+    rates::RateType
+    grid::GridType
     coupling::CouplingType
     Gtransitions::Tuple
     G::Int
@@ -469,12 +467,10 @@ Structure for GRSM coupled grid hierarchical models.
 - `coupling::CouplingType`: Coupling type.
 """
 struct GRSMcoupledgridhierarchicalmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
+    rates::RateType
     hierarchy::Hierarchy
+    grid::GridType
     coupling::CouplingType
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
     Gtransitions::Tuple
     G::Int
     R::Int
