@@ -538,7 +538,7 @@ function predictedarray(r, components::TDComponents, bins, reporter, dttype)
     hists
 end
 
-function predictedarray(r, components::MTDComponents, bins, reporter, dttype, nalleles, nRNA)
+function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA)
     M = make_mat_M(components.mcomponents, r)
     [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
