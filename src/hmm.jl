@@ -248,7 +248,7 @@ function set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector,
     return d
 end
 
-function set_d(noiseparams, reporter, N)
+function set_d(noiseparams, reporter::Vector, N)
     ps = [r.per_state for r in reporter]
     pf = [r.probfn for r in reporter]
     set_d(noiseparams, ps, pf, N)

@@ -666,7 +666,7 @@ function make_mat_GR(G)
 end
 
 """
-    make_mat_Gs(elements, nG)
+    make_mat_S(elements, nG)
 
 Return Gs matrix used to compute steady state RNA distribution.
 
@@ -680,7 +680,7 @@ This function returns the Gs matrix used to compute the steady state RNA distrib
 # Returns
 - `SparseMatrixCSC`: The created Gs matrix.
 """
-function make_mat_Gs(elements, nG)
+function make_mat_S(elements, nG)
     G = spzeros(nG, nG)
     for e in elements
         G[e.a, e.b] += 1.0
@@ -717,7 +717,7 @@ function make_mat_C(components::TRGCoupledUnitComponents, rates)
         Gs = spzeros(0)
     else
         # Gs = make_mat_GC(nS, nS, couplingStrength)
-        Gs = make_mat_Gs(components.elementsGs, nG)
+        Gs = make_mat_S(components.elementsGs, nG)
     end
     return T, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
@@ -726,13 +726,20 @@ function make_mat_C(components::TCoupledUnitComponents, rates)
     nT = components.nT
     T = make_mat_T(components, rates)
     Target = make_mat(components.elementsTarget, rates, nT)
-    Source = make_mat_Gs(components.elementsSource, nT)
-    # if components.elementsSource[1].a < 1 || components.elementsSource[1].b < 1
-    #     Source = spzeros(0)
-    # else
-    #     Source = make_mat_Gs(components.elementsSource, nT)
-    # end
+    Source = make_mat_S(components.elementsSource, nT)
     return T, Source, Target, sparse(I, nT, nT)
+end
+
+function make_mat_CD(components::TDCoupledUnitComponents, rates)
+    nT = components.nT
+    T = make_mat_T(components, rates)
+    Target = make_mat(components.elementsTarget, rates, nT)
+    Source = make_mat_S(components.elementsSource, nT)
+    TD = SparseMatrixCSC[]
+    for i in eachindex(components.elementsTD)
+        push!(TD, make_mat(components.elementsTD[i], rates, components.TDdims[i]))
+    end
+    return T, TD, Source, Target, sparse(I, nT, nT)
 end
 
 function make_mat_C(components::TDCoupledUnitComponents, rates)
@@ -749,7 +756,7 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     if components.elementsSource[1].a < 1 || components.elementsSource[1].b < 1
         Gs = spzeros(0)
     else
-        Gs = make_mat_Gs(components.elementsSource, nG)
+        Gs = make_mat_S(components.elementsSource, nG)
     end
     Gt = make_mat(components.elementsTarget, rates, nG)
     return T, TD, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)

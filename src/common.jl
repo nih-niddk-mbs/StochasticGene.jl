@@ -181,7 +181,18 @@ struct Hierarchy
     hyperindices::Vector{Vector}
 end
 
-struct Grid
+struct HierarchicalTrait
+    nhypersets::Int
+    nrates::Int
+    nparams::Int
+    nindividuals::Int
+    sharedindices:: Vector
+    individualindices:: Vector
+    paramindices::Vector
+    hyperindices::Vector{Vector}
+end
+
+struct GridTrait
     raterange::UnitRange
     noiserange::UnitRange
     gridrange::UnitRange

@@ -306,10 +306,7 @@ function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
     ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-function predictedRNA(r, mcomponents, nalleles, nRNA)
-    M = make_mat_M(mcomponents, r)
-    steady_state(M, mcomponents.nT, nalleles, nRNA)
-end
+
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
@@ -345,7 +342,12 @@ end
 
 
 
-# Likelihood functions
+# Predicted histogram functions
+
+function predictedRNA(r, mcomponents, nalleles, nRNA)
+    M = make_mat_M(mcomponents, r)
+    steady_state(M, mcomponents.nT, nalleles, nRNA)
+end
 
 
 """

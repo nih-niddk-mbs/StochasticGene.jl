@@ -469,6 +469,10 @@ function make_grid(transitions, R::Int, S, insertstep, noisepriors, grid::Int)
     raterange, noiserange, gridrange
 end
 
+function make_gridtrait()
+
+end
+
 function grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid::Int)
     n = num_rates(transitions, R, S, insertstep)
     raterange = 1:n
@@ -480,6 +484,36 @@ end
 function coupled_indices(transitions, R, S, insertstep, noisepriors, coupling, grid::Int)
 
 
+end
+
+
+"""
+    make_fitted_hierarchical(fittedparams,N)
+
+make fittedparams vector for hierarchical model
+
+returns 
+-`f`: all fitted parameters
+-`fhyper`: fitted hyper parameters (needed for hyper distribution)
+-`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
+
+Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
+hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
+shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
+"""
+function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
+    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+    f = sort(f)
+    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
+    for i in 1:nhypersets-1
+        append!(f, fittedindividual .+ i * nrates)
+        push!(fhyper, fittedindividual .+ i * nrates)
+    end
+    fpriors = copy(f) # priors only apply to shared and hyper parameters
+    for i in 1:nindividuals
+        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
+    end
+    f, fhyper, fpriors
 end
 
 function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
@@ -494,6 +528,24 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     rprior = rmean[1:nhypersets*nrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
     hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    return hyper, fittedparam, fixedeffects, priord
+end
+
+function make_hierarchicaltrait(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, ncoupling=0, ngrid=0)
+    nhypersets = hierarchical[1]
+    nrates = num_total_parameters(transitions, R, S, insertstep, reporter) + ncoupling + ngrid
+    nindividuals = length(data.trace[1])
+    nparams = length(hierarchical[2])
+    sharedindices = 1:nhypersets*nrates
+    individualindices = nhypersets*nrates+1:(nhypersets+nindividuals)*nrates
+    paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedparam)+(nhypersets+nindividuals)*nparams
+    # ratestart = nhypersets * nrates + 1
+    # paramstart = length(fittedparam) + nhypersets * nparams + 1
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
+    rprior = rmean[1:nhypersets*nrates]
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
+    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
     return hyper, fittedparam, fixedeffects, priord
 end
 
@@ -969,34 +1021,6 @@ end
 #     nothing
 # end
 
-"""
-    make_fitted_hierarchical(fittedparams,N)
-
-make fittedparams vector for hierarchical model
-
-returns 
--`f`: all fitted parameters
--`fhyper`: fitted hyper parameters (needed for hyper distribution)
--`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
-
-Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
-hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
-shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
-"""
-function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
-    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
-    f = sort(f)
-    fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
-    for i in 1:nhypersets-1
-        append!(f, fittedindividual .+ i * nrates)
-        push!(fhyper, fittedindividual .+ i * nrates)
-    end
-    fpriors = copy(f) # priors only apply to shared and hyper parameters
-    for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
-    end
-    f, fhyper, fpriors
-end
 
 ##### Under construction - specifying fitted hyper parameters independently of individual parameters
 # function make_fitted_hierarchical(fittedshared, fittedhyper, nhypersets, fittedindividual, nrates, nindividuals)
