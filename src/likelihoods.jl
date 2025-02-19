@@ -227,16 +227,36 @@ function prepare_rates(param, model::GRSMgridmodel)
 end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
+ 
+    rates = extract_rates(get_rates(param, model), rindices)
+
     traits = keys(model.traits)
     if :coupled ∈ traits
         r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+    else
+        r, noiseparams = prepare_rates()
     end
     if :grid ∈ traits
 
     end
     if :hierarchical ∈ traits
+        rshared, rindividual, pindividual, phyper = prepare_rate()
     end
 
+end
+
+function extract_rates(r, rindices)
+    extracted = Dict{Symbol,Any}()
+
+    # Possible keys
+    possible_keys = (:rates, :noiseparams, :coupling, :grid)
+
+    for key in possible_keys
+        if hasfield(typeof(rindices), key)
+            extracted[key] = r[rindices[key]]
+        end
+    end
+    return extracted
 end
 
 # function prepare_rates(param, model::GRSMgridhierarchicalmodel)
