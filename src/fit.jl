@@ -518,34 +518,34 @@ end
 
 function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
     nhypersets = hierarchical[1]
-    nrates = num_total_parameters(transitions, R, S, insertstep, reporter)
+    ntotalrates = num_total_parameters(transitions, R, S, insertstep, reporter)
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
-    ratestart = nhypersets * nrates + 1
+    ratestart = nhypersets * ntotalrates + 1
     paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    rprior = rmean[1:nhypersets*nrates]
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], ntotalrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], ntotalrates, nindividuals)
+    rprior = rmean[1:nhypersets*ntotalrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    hyper = Hierarchy(nhypersets, ntotalrates, nparams, nindividuals, ratestart, paramstart, fittedhyper)
     return hyper, fittedparam, fixedeffects, priord
 end
 
 function make_hierarchicaltrait(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, ncoupling=0, ngrid=0)
     nhypersets = hierarchical[1]
-    nrates = num_total_parameters(transitions, R, S, insertstep, reporter) + ncoupling + ngrid
+    ntotalrates = num_total_parameters(transitions, R, S, insertstep, reporter) + ncoupling + ngrid
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
-    sharedindices = 1:nhypersets*nrates
-    individualindices = nhypersets*nrates+1:(nhypersets+nindividuals)*nrates
+    sharedindices = 1:nhypersets*ntotalrates
+    individualindices = nhypersets*ntotalrates+1:(nhypersets+nindividuals)*ntotalrates
     paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedparam)+(nhypersets+nindividuals)*nparams
-    # ratestart = nhypersets * nrates + 1
+    # ratestart = nhypersets * ntotalrates + 1
     # paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], nrates, nindividuals)
-    fixedeffects = make_fixed(fixedeffects, hierarchical[3], nrates, nindividuals)
-    rprior = rmean[1:nhypersets*nrates]
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], ntotalrates, nindividuals)
+    fixedeffects = make_fixed(fixedeffects, hierarchical[3], ntotalrates, nindividuals)
+    rprior = rmean[1:nhypersets*ntotalrates]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    hyper = Hierarchy(nhypersets, nrates, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
+    hyper = Hierarchy(nhypersets, ntotalrates, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
     return hyper, fittedparam, fixedeffects, priord
 end
 
@@ -827,9 +827,9 @@ function set_rinit(r, priormean, transitions, R::Int, S::Int, insertstep, noisep
     if isempty(r)
         println("No rate file, set rate to prior")
         r = copy(priormean)
-        nrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+        ntotalrates = num_rates(transitions, R, S, insertstep) + length(noisepriors)
         for i in 1:nindividuals
-            append!(r, priormean[1:nrates])
+            append!(r, priormean[1:ntotalrates])
         end
     end
     r
