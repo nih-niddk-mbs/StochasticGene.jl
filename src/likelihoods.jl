@@ -216,6 +216,19 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     return rshared, rindividual, pindividual, phyper
 end
 
+function prepare_rates(r, hierarchy)
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+    rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
+    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+    pindividual = reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)
+    return rshared, rindividual, pindividual, phyper
+end
+
 """
     prepare_rates(param, model::GRSMgridmodel)
 
@@ -224,25 +237,6 @@ TBW
 function prepare_rates(param, model::GRSMgridmodel)
     r = get_rates(param, model)
     r[model.raterange], r[model.noiserange], r[model.gridrange]
-end
-
-function prepare_rates(param, model::AbstractGRSMtraitmodel)
- 
-    rates = extract_rates(get_rates(param, model), rindices)
-
-    traits = keys(model.traits)
-    if :coupled ∈ traits
-        r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
-    else
-        r, noiseparams = prepare_rates()
-    end
-    if :grid ∈ traits
-
-    end
-    if :hierarchical ∈ traits
-        rshared, rindividual, pindividual, phyper = prepare_rate()
-    end
-
 end
 
 function extract_rates(r, rindices)
@@ -258,6 +252,69 @@ function extract_rates(r, rindices)
     end
     return extracted
 end
+
+
+function prepare_rates(rates, coupling, rindices)
+    r = Vector{Float64}(undef, length(rindices))
+    noiseparams = similar(r)
+    couplingStrength = similar(r)
+    for i in eachindex(rindices)
+        r[i] = rates[rindices[i].rates]
+        couplingStrength[i] = rates[rindices[i].coupling]
+    end
+    rateset = (rate=r, coupling=couplingStrength)
+    if :noise ∈ keys(rindices)
+        noiseparams = similar(r)
+        for i in eachindex(rindices)
+            noiseparams[i] = rates[rindices[i].noise]
+        end
+        rateset = merge(rateset, (noise=noiseparams,))
+    end
+
+end
+
+function prepare_rates(param, model::AbstractGRSMtraitmodel)
+
+
+    if :hierarchical ∈ traits
+        rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchy)
+    end
+
+    rindices = model.rateindices
+    traits = keys(model.traits)
+    # rates = extract_rates(get_rates(param, model), rindices)
+
+    rates = get_rates(param, model)
+    if :coupled ∈ traits
+        r = Vector{Float64}(undef, length(rindices))
+        noiseparams = similar(r)
+        couplingStrength = similar(r)
+        for i in eachindex(rindices)
+            r[i] = rates[rindices[i].rates]
+            couplingStrength[i] = rates[rindices[i].coupling]
+        end
+        rateset = (rate=r, coupling=couplingStrength)
+        if :noise ∈ keys(model.rateindices)
+            noiseparams = similar(r)
+            for i in eachindex(model.rateindices)
+                noiseparams[i] = rates[reindices[i].noise]
+            end
+            rateset = merge(rateset, (noise=noiseparams,))
+        end
+    else
+        rateset = (rate = rates[r])
+        if :noise ∈ keys(model.rateindices)
+            rateset = merge(rateset, (noise=rates[rindices[i].noise],))
+        end
+    end
+    if :grid ∈ traits
+        rateset = merge(rateset, (grid = rates[rindices.grid]))
+    end
+
+
+end
+
+
 
 # function prepare_rates(param, model::GRSMgridhierarchicalmodel)
 #     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
@@ -331,7 +388,7 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles,data.nRNA)
+    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
