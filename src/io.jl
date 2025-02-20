@@ -1019,22 +1019,6 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
         return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
     end
 end
-
-"""
-    read_tracefiles(path, label, traceinfo::Tuple, col=3)
-
-#Arguments: same as read_tracefiles with
-- `traceinfo`: tuple of (dt, start, stop, ...)
-
-read in a set of trace files from a folder
-"""
-function read_tracefiles(path, label, traceinfo::Tuple, col=3)
-    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
-    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
-    read_tracefiles(path, label, start, stop, col)
-end
-
-
 """
     read_tracefiles(path::String, label::Vector{String}, start::Int, stop::Int, col=3)
 
@@ -1068,6 +1052,21 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
         end
         return traces
     end
+end
+
+
+"""
+    read_tracefiles(path, label, traceinfo::Tuple, col=3)
+
+#Arguments: same as read_tracefiles with
+- `traceinfo`: tuple of (dt, start, stop, ...)
+
+read in a set of trace files from a folder
+"""
+function read_tracefiles(path, label, traceinfo::Tuple, col=3)
+    start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
+    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    read_tracefiles(path, label, start, stop, col)
 end
 """
     read_tracefiles_grid(path::String, label::String, start::Int, stop::Int, col=3)
