@@ -1103,27 +1103,27 @@ This function calculates the total number of parameters for the provided model. 
 """
 
 """
-    num_total_parameters(transitions, R, S, insertstep
+    num_all_parameters(transitions, R, S, insertstep
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 
 TBW
 """
-function num_total_parameters(transitions, R::Int, S, insertstep, reporter)
+function num_all_parameters(transitions, R::Int, S, insertstep, reporter)
     n = typeof(reporter) <: HMMReporter ? reporter.n : 0
     # num_rates(transitions, R, S, insertstep) + n
     num_rates(transitions, R, S, insertstep) + n
 end
 
-function num_total_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
+function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
     n = 0
     for i in eachindex(R)
-        n += num_total_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
+        n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
     end
     n
 end
 
-function num_total_parameters(model::AbstractGmodel)
+function num_all_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
