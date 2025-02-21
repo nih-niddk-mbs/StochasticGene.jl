@@ -313,6 +313,7 @@ Structure for GRSM trait model.
 struct GRSMtraitmodel{TraitType,RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
     traits::TraitType
     rates::RateType
+    indices::IndicesType
     Gtransitions::Tuple
     G::Int
     R::Int
