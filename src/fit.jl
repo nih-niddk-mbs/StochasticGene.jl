@@ -370,9 +370,6 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
     end
 end
 
-
-
-
 """
     make_reporter_components(transitions::Tuple, G::Int, R, S, insertstep, onstates, dttype, splicetype)
 
@@ -501,37 +498,37 @@ Hierarchical models have shared, individual, and hyper parameters.  shared param
 hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
 shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
 """
-function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nrates, nindividuals)
+function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
     f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
     f = sort(f)
     fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
     for i in 1:nhypersets-1
-        append!(f, fittedindividual .+ i * nrates)
-        push!(fhyper, fittedindividual .+ i * nrates)
+        append!(f, fittedindividual .+ i * nallparams)
+        push!(fhyper, fittedindividual .+ i * nallparams)
     end
     fpriors = copy(f) # priors only apply to shared and hyper parameters
     for i in 1:nindividuals
-        append!(f, fittedindividual .+ (i + nhypersets - 1) * nrates)
+        append!(f, fittedindividual .+ (i + nhypersets - 1) * nallparams)
     end
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter)
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * n_all_params + 1
     paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
     rprior = rmean[1:nhypersets*n_all_params]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper)
+    hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
     return hyper, fittedparam, fixedeffects, priord
 end
 
-function make_hierarchicaltrait(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, ncoupling=0, ngrid=0)
+function make_hierarchicaltrait(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, ncoupling=0, ngrid=0)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter) + ncoupling + ngrid
     nindividuals = length(data.trace[1])
@@ -541,12 +538,12 @@ function make_hierarchicaltrait(data, rmean, fittedparam, fixedeffects, transiti
     paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedparam)+(nhypersets+nindividuals)*nparams
     # ratestart = nhypersets * n_all_params + 1
     # paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedparam, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
+    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
     rprior = rmean[1:nhypersets*n_all_params]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
     hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
-    return hyper, fittedparam, fixedeffects, priord
+    return hyper, fittedparam, fixedeffects, priord, fittedshared
 end
 
 
@@ -921,34 +918,34 @@ end
 
 
 ##### Under construction - specifying fitted hyper parameters independently of individual parameters
-# function make_fitted_hierarchical(fittedshared, fittedhyper, nhypersets, fittedindividual, nrates, nindividuals)
+# function make_fitted_hierarchical(fittedshared, fittedhyper, nhypersets, fittedindividual, nallparams, nindividuals)
 #     fittedall = [fittedshared; fittedhyper; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
 #     fittedall = sort(fittedall)
 #     fhyper = [fittedindividual]
 #     for i in 1:nhypersets-1
-#         append!(fittedall, fittedindividual .+ i * nrates)
-#         push!(fhyper, fittedindividual .+ i * nrates)
+#         append!(fittedall, fittedindividual .+ i * nallparams)
+#         push!(fhyper, fittedindividual .+ i * nallparams)
 #     end
 #     fpriors = copy(f)
 #     for i in 1:nindividuals
-#         append!(fittedall, fittedindividual .+ (i + nhypersets - 1) * nrates)
+#         append!(fittedall, fittedindividual .+ (i + nhypersets - 1) * nallparams)
 #     end
 #     fittedall, fhyper, fpriors
 # end
 
 
 """
-    make_fixed(fixedpop, fixedindividual, nrates, nindividuals)
+    make_fixed(fixedpop, fixedindividual, nallparams, nindividuals)
 
 make fixed effects tuple for hierarchical model
 """
-function make_fixed(fixedshared, fixedindividual, nrates, nindividuals)
+function make_fixed(fixedshared, fixedindividual, nallparams, nindividuals)
     fixed = Vector{Int}[]
     for f in fixedshared
         push!(fixed, f)
     end
     for h in fixedindividual
-        push!(fixed, [h + i * nrates for i in 0:nindividuals-1])
+        push!(fixed, [h + i * nallparams for i in 0:nindividuals-1])
     end
     tuple(fixed...)
 end

@@ -791,6 +791,11 @@ function ll_hmm_grid_hierarchical(rshared, rindividual, pgrid, Nstate, Ngrid, co
     sum(logpredictions), logpredictions
 end
 
+function ll_hmm_trait(r, noiserange, N, components, reporters, interval, trace)
+
+
+end
+
 
 """
 expected_transitions(α, a, b, β, N, T)

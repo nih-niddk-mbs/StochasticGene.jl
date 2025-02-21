@@ -167,13 +167,13 @@ function prepare_rates(allparams, ctrait::CouplingTrait)
     noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
     for i in ctrait.raterange
-        push!(r, allparams[i,:])
+        push!(r, allparams[i, :])
     end
     for i in ctrait.noiserange
-        push!(noiseparams, allparams[i,:])
+        push!(noiseparams, allparams[i, :])
     end
     for i in ctrait.couplingrange
-        push!(couplingStrength, allparams[i,:])
+        push!(couplingStrength, allparams[i, :])
     end
 end
 
@@ -225,12 +225,13 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
+    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
     phyper = Vector{Float64}[]
     for i in model.hierarchy.hyperindices
         push!(phyper, r[i])
     end
     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+    rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return rshared, rindividual, pindividual, phyper
 end
@@ -240,6 +241,7 @@ function prepare_rates(r, htrait::HierarchicalTrait)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     rshared = reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
     rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
+    rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
     pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
     phyper = Vector{Float64}[]
     for i in htrait.hyperindices
@@ -293,8 +295,7 @@ function prepare_rates(rates, coupling, rindices)
 end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
-
-
+    r = get_rates(param, model)
     if :hierarchical ∈ traits
         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchy)
     end

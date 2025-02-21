@@ -179,6 +179,7 @@ struct Hierarchy
     ratestart::Int
     paramstart::Int
     hyperindices::Vector{Vector}
+    fittedshared::Vector{Int}
 end
 
 struct HierarchicalTrait
@@ -186,9 +187,10 @@ struct HierarchicalTrait
     nrates::Int
     nparams::Int
     nindividuals::Int
-    sharedindices:: Vector
-    individualindices:: Vector
-    paramindices::Vector
+    sharedindices:: Vector{Int}
+    fittedshared::Vector{Int}
+    individualindices:: Vector{Int}
+    paramindices::Vector{Int}
     hyperindices::Vector{Vector}
 end
 
@@ -197,6 +199,10 @@ struct GridTrait
     noiserange::UnitRange
     gridrange::UnitRange
     Ngrid::Int
+end
+
+struct CouplingTrait
+
 end
 
 """
@@ -217,6 +223,7 @@ struct HMMReporter
     probfn::Function
     weightind::Int
     offstates::Vector{Int}
+    noiseparams::Vector{Int}
 end
 
 
@@ -313,7 +320,6 @@ Structure for GRSM trait model.
 struct GRSMtraitmodel{TraitType,RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
     traits::TraitType
     rates::RateType
-    indices::IndicesType
     Gtransitions::Tuple
     G::Int
     R::Int
