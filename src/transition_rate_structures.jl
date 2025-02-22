@@ -44,12 +44,14 @@ mutable struct CoupledDTCache
     pss::Dict
 end
 
+abstract type AbstractComponents end
+
 """
 	AbstractTComponents
 
 abstract type for components of transition matrices 
 """
-abstract type AbstractTComponents end
+abstract type AbstractTComponents <: AbstractComponents end
 
 
 abstract type AbstractTDComponents <: AbstractTComponents end
@@ -178,7 +180,7 @@ fields:
     sources::Tuple: source model for each
     modelcomponents::ModelType}
 """
-struct TCoupledComponents{ModelType}
+struct TCoupledComponents{ModelType} <: AbstractComponents
     N::Int
     model::Tuple
     sources::Tuple
@@ -200,7 +202,7 @@ fields:
     Uminus::SparseMatrixCSC
     Uplus::SparseMatrixCSC
 """
-struct MComponents
+struct MComponents <: AbstractComponents
     elementsT::Vector{Element}
     elementsB::Vector{Element}
     nT::Int
@@ -211,7 +213,7 @@ end
 
 
 
-struct MTComponents{MType,Ttype}
+struct MTComponents{MType,Ttype} <: AbstractComponents
     mcomponents::MType
     tcomponents::Ttype
 end
@@ -225,7 +227,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TComponents
 """
-struct MT0Components
+struct MT0Components <: AbstractComponents
     mcomponents::MComponents
     tcomponents::TComponents
 end
@@ -239,7 +241,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TAIComponents
 """
-struct MTAIComponents{elementType}
+struct MTAIComponents{elementType} <: AbstractComponents
     mcomponents::MComponents
     tcomponents::TAIComponents{elementType}
 end
@@ -252,7 +254,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TDComponents
 """
-struct MTDComponents
+struct MTDComponents <: AbstractComponents
     mcomponents::MComponents
     tcomponents::TDComponents
 end

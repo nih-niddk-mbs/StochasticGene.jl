@@ -392,8 +392,9 @@ end
 
 function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, probfn, noisepriors, coupling=tuple())
     nnoise = length(noisepriors)
-    weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions, R, S, insertstep) + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep))
+    n = num_rates(transitions, R, S, insertstep)
+    weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep),collect(n+1:n+nnoise))
     components = TComponents(transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
@@ -405,8 +406,9 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     for i in eachindex(G)
         nnoise = length(noisepriors[i])
-        weightind = occursin("Mixture", "$(probfn)") ? num_rates(transitions[i], R[i], S[i], insertstep[i]) + nnoise : 0
-        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i])))
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+        weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]),collect(n+1:n+nnoise)))
     end
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     return reporter, components
@@ -519,7 +521,7 @@ function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions,
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * n_all_params + 1
-    paramstart = length(fittedparam) + nhypersets * nparams + 1
+    paramstart = length(fittedshared) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
     rprior = rmean[1:nhypersets*n_all_params]
@@ -535,7 +537,7 @@ function make_hierarchicaltrait(data, rmean, fittedshared, fixedeffects, transit
     nparams = length(hierarchical[2])
     sharedindices = 1:nhypersets*n_all_params
     individualindices = nhypersets*n_all_params+1:(nhypersets+nindividuals)*n_all_params
-    paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedparam)+(nhypersets+nindividuals)*nparams
+    paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedshared)+(nhypersets+nindividuals)*nparams
     # ratestart = nhypersets * n_all_params + 1
     # paramstart = length(fittedparam) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)

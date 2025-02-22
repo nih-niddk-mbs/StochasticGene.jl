@@ -164,9 +164,6 @@ end
 
 
 
-function prepare_rates(allparams, gtrait::GridTrait)
-
-end
 
 """
     prepare_rates(param, model::GRSMcoupledmodel)
@@ -303,61 +300,57 @@ function prepare_rates(allparams, ctrait::CouplingTrait)
     end
 end
 
+
+function prepare_rates(allparams, gtrait::GridTrait)
+
+end
+
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     if :hierarchical ∈ traits
         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
-    end
-
-    rindices = model.rateindices
-    traits = keys(model.traits)
-    # rates = extract_rates(get_rates(param, model), rindices)
-
-    rates = get_rates(param, model)
-    if :coupled ∈ traits
-        r = Vector{Float64}(undef, length(rindices))
-        noiseparams = similar(r)
-        couplingStrength = similar(r)
-        for i in eachindex(rindices)
-            r[i] = rates[rindices[i].rates]
-            couplingStrength[i] = rates[rindices[i].coupling]
+        if :coupled ∈ traits
+            r, noiseparams, couplingStrength = prepare_rates(rshared, coupled)
         end
-        rateset = (rate=r, coupling=couplingStrength)
-        if :noise ∈ keys(model.rateindices)
-            noiseparams = similar(r)
-            for i in eachindex(model.rateindices)
-                noiseparams[i] = rates[reindices[i].noise]
-            end
-            rateset = merge(rateset, (noise=noiseparams,))
+        if :grid ∈ traits
+
         end
+
     else
-        rateset = (rate = rates[r])
-        if :noise ∈ keys(model.rateindices)
-            rateset = merge(rateset, (noise=rates[rindices[i].noise],))
+
+        rindices = model.rateindices
+        traits = keys(model.traits)
+        # rates = extract_rates(get_rates(param, model), rindices)
+
+
+        rates = get_rates(param, model)
+        if :coupled ∈ traits
+            r = Vector{Float64}(undef, length(rindices))
+            noiseparams = similar(r)
+            couplingStrength = similar(r)
+            for i in eachindex(rindices)
+                r[i] = rates[rindices[i].rates]
+                couplingStrength[i] = rates[rindices[i].coupling]
+            end
+            rateset = (rate=r, coupling=couplingStrength)
+            if :noise ∈ keys(model.rateindices)
+                noiseparams = similar(r)
+                for i in eachindex(model.rateindices)
+                    noiseparams[i] = rates[reindices[i].noise]
+                end
+                rateset = merge(rateset, (noise=noiseparams,))
+            end
+        else
+            rateset = (rate = rates[r])
+            if :noise ∈ keys(model.rateindices)
+                rateset = merge(rateset, (noise=rates[rindices[i].noise],))
+            end
+        end
+        if :grid ∈ traits
+            rateset = merge(rateset, (grid = rates[rindices.grid]))
         end
     end
-    if :grid ∈ traits
-        rateset = merge(rateset, (grid = rates[rindices.grid]))
-    end
-
-
 end
-
-
-
-# function prepare_rates(param, model::GRSMgridhierarchicalmodel)
-#     # rates reshaped from a vector into a matrix with columns pertaining to hyperparams and individuals 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-#     r = get_rates(param, model)
-#     hyperparams = Vector{Float64}[]
-#     for i in model.hierarchy.hyperindices
-#         push!(hyperparams, r[i])
-#     end
-#     rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-#     rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-#     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-#     return rshared, rindividual, pindividual, hyperparams
-# end
 
 
 # Model loglikelihoods
@@ -444,6 +437,21 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     end
     lhp = ll_hierarchy(pindividual, phyper)
     return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
+    r = prepare_rates(param, model)
+    nstates = prepare_nstates(param, model)
+    ll_hmm(r, nstates, model.components, model.reporter, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
+    r = prepare_rates(param, model)
+    nstates = prepare_nstates(param, model)
+    llg, llgp = ll_hmm(r, nstates, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+    logpredictions = log.(max.(predictions, eps()))
+    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
 
