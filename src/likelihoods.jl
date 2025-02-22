@@ -391,62 +391,102 @@ end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
+    traits = keys(model.traits)
+
     if :hierarchical ∈ traits
         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
         if :coupled ∈ traits
-            r, noiseparams, couplingStrength = prepare_rates(rshared, coupled)
-        end
-        if :grid ∈ traits
-
-        end
-
-    else
-
-        rindices = model.rateindices
-        traits = keys(model.traits)
-        # rates = extract_rates(get_rates(param, model), rindices)
-
-
-        rates = get_rates(param, model)
-        if :coupled ∈ traits
-            r = Vector{Float64}(undef, length(rindices))
-            noiseparams = similar(r)
-            couplingStrength = similar(r)
-            for i in eachindex(rindices)
-                r[i] = rates[rindices[i].rates]
-                couplingStrength[i] = rates[rindices[i].coupling]
-            end
-            rateset = (rate=r, coupling=couplingStrength)
-            if :noise ∈ keys(model.rateindices)
-                noiseparams = similar(r)
-                for i in eachindex(model.rateindices)
-                    noiseparams[i] = rates[reindices[i].noise]
-                end
-                rateset = merge(rateset, (noise=noiseparams,))
-            end
+            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling)
+            rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, phyper=phyper, coupling=couplingStrength, noiseparams=noiseparams)
         else
-            rateset = (rate = rates[r])
-            if :noise ∈ keys(model.rateindices)
-                rateset = merge(rateset, (noise=rates[rindices[i].noise],))
-            end
+            rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, phyper=phyper)
+        end
+    else
+        if :coupled ∈ traits
+            r, noiseparams, couplingStrength = prepare_rates(r, model.coupling)
+            rateset = (rates=r, noiseparams=noiseparams, coupling=couplingStrength)
+        else
+            r, noiseparams = prepare_rates(r, model)
         end
         if :grid ∈ traits
             rateset = merge(rateset, (grid = rates[rindices.grid]))
         end
+
     end
+    if :grid ∈ traits
+        merge(rateset, (grid=r[model.gridindices],))
+    end
+    return rateset
 end
+"""
+    prepare_rates_traits(r::NamedTuple)
+
+Prepare rates and parameters for trait model calculations by extracting fields from the NamedTuple.
+
+# Arguments
+- `r::NamedTuple`: NamedTuple containing fields like rates, couplingStrength, noiseparams, and pgrid.
+
+# Returns
+- `Tuple`: A tuple containing prepared rates, coupling strengths, noise parameters, and pgrid.
+
+# Description
+This function extracts the necessary fields from the NamedTuple and prepares them for use in trait model calculations.
+
+# Example
+```julia
+r = (rates=[1.0, 2.0], couplingStrength=[0.5], noiseparams=[0.1, 0.2], pgrid=0.3)
+prepared = prepare_rates_traits(r)
+```
+"""
+function prepare_rates_traits(r::NamedTuple, traits::NamedTuple)
+    # Initialize an empty NamedTuple
+    prepared = NamedTuple()
+
+    # Check for hierarchical trait
+    if :hierarchical in keys(traits)
+        # Prepare hierarchical rates
+        rshared, rindividual, pindividual, phyper = prepare_rates(r.rates, traits.hierarchical)
+        prepared = merge(prepared, (rateshared = rshared, rateindividual = rindividual, pindividual = pindividual, phyper = phyper))
+
+        # Check for coupled trait within hierarchical
+        if :coupled in keys(traits)
+            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, traits.coupled)
+            prepared = merge(prepared, (coupling = couplingStrength, noiseparams = noiseparams))
+        end
+    else
+        # Non-hierarchical case
+        rates = r.rates
+        noiseparams = r.noiseparams
+        prepared = merge(prepared, (rates = rates, noiseparams = noiseparams))
+
+        # Check for coupled trait
+        if :coupled in keys(traits)
+            r, noiseparams, couplingStrength = prepare_rates(rates, traits.coupled)
+            prepared = merge(prepared, (rates = r, noiseparams = noiseparams, coupling = couplingStrength))
+        end
+    end
+
+    # Check for grid trait
+    if :grid in keys(traits)
+        grid = r.pgrid
+        prepared = merge(prepared, (grid = grid))
+    end
+
+    return prepared
+end
+
 
 
 function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
     nstates = prepare_nstates(param, model)
-    ll_hmm(r, nstates, model.components, model.reporter, data.interval, data.trace)
+    ll_hmm_trait(r, nstates, model.components, model.reporter, data.interval, data.trace, model.method)
 end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
     nstates = prepare_nstates(param, model)
-    llg, llgp = ll_hmm(r, nstates, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+    llg, llgp = ll_hmm_trai(r, nstates, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
@@ -1143,4 +1183,5 @@ function num_all_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
+
 
