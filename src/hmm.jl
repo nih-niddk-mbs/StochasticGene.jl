@@ -781,11 +781,12 @@ function ll_hmm_coupled_hierarchical(r::@NamedTuple{rshared, rindividual, coupli
     ll + lb, logpredictions
 end
 
-function ll_hmm_grid_trait(rates::@NamedTuple{r,noiseparams, pgrid}, Nstate, Ngrid, components::TComponents, reporters, interval, trace)
+function ll_hmm(rates::@NamedTuple{r::Vector{Float64}, noiseparams::Vector{Float64}, prid::Float64}, N::Tuple, components::TComponents, reporters, interval, trace)
     r, noiseparams, pgrid = rates
+    Nstate, Ngrid = N
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(r, interval, components)
-    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+    d = probfn(noiseparams, reportersper_state, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = size(t, 2)
@@ -796,12 +797,14 @@ function ll_hmm_grid_trait(rates::@NamedTuple{r,noiseparams, pgrid}, Nstate, Ngr
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical_trait(r::GridHierarchicalRates, Nstate, Ngrid, components::TComponents, reporters, interval, trace)
+function ll_hmm_grid_hierarchical_trait(rates::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64}, N::Tuple, components::TComponents, reporters, interval, trace)
+    rshared, rindividual, noiseparams, pgrid = rates
+    Nstate, Ngrid = N
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(rshared, interval, components)
     logpredictions = Array{Float64}(undef, length(trace[1]))
     for t in trace[1]
-        d = probfn(rindividual[end-n_noiseparams+1:end, i], reporters_per_state, Nstate, Ngrid)
+        d = probfn(rindividual[noiseparams, i], reporters_per_state, Nstate, Ngrid)
         b = set_b_grid(t, d, Nstate, Ngrid)
         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
         @inbounds logpredictions[i] = sum(log.(C))
