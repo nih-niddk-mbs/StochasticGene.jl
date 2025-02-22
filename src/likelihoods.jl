@@ -317,39 +317,39 @@ end
 
 #### Trait model
 
-function extract_rates(r, rindices)
-    extracted = Dict{Symbol,Any}()
+# function extract_rates(r, rindices)
+#     extracted = Dict{Symbol,Any}()
 
-    # Possible keys
-    possible_keys = (:rates, :noiseparams, :coupling, :grid)
+#     # Possible keys
+#     possible_keys = (:rates, :noiseparams, :coupling, :grid)
 
-    for key in possible_keys
-        if hasfield(typeof(rindices), key)
-            extracted[key] = r[rindices[key]]
-        end
-    end
-    return extracted
-end
+#     for key in possible_keys
+#         if hasfield(typeof(rindices), key)
+#             extracted[key] = r[rindices[key]]
+#         end
+#     end
+#     return extracted
+# end
 
 
-function prepare_rates(rates, coupling, rindices)
-    r = Vector{Float64}(undef, length(rindices))
-    noiseparams = similar(r)
-    couplingStrength = similar(r)
-    for i in eachindex(rindices)
-        r[i] = rates[rindices[i].rates]
-        couplingStrength[i] = rates[rindices[i].coupling]
-    end
-    rateset = (rate=r, coupling=couplingStrength)
-    if :noise ∈ keys(rindices)
-        noiseparams = similar(r)
-        for i in eachindex(rindices)
-            noiseparams[i] = rates[rindices[i].noise]
-        end
-        rateset = merge(rateset, (noise=noiseparams,))
-    end
+# function prepare_rates(rates, coupling, rindices)
+#     r = Vector{Float64}(undef, length(rindices))
+#     noiseparams = similar(r)
+#     couplingStrength = similar(r)
+#     for i in eachindex(rindices)
+#         r[i] = rates[rindices[i].rates]
+#         couplingStrength[i] = rates[rindices[i].coupling]
+#     end
+#     rateset = (rate=r, coupling=couplingStrength)
+#     if :noise ∈ keys(rindices)
+#         noiseparams = similar(r)
+#         for i in eachindex(rindices)
+#             noiseparams[i] = rates[rindices[i].noise]
+#         end
+#         rateset = merge(rateset, (noise=noiseparams,))
+#     end
 
-end
+# end
 
 function reshape_rates(r, htrait::HierarchicalTrait)
     reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
@@ -385,10 +385,6 @@ function prepare_rates(allparams, ctrait::CouplingTrait)
 end
 
 
-function prepare_rates(allparams, gtrait::GridTrait)
-
-end
-
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     traits = keys(model.traits)
@@ -408,85 +404,32 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel)
         else
             r, noiseparams = prepare_rates(r, model)
         end
-        if :grid ∈ traits
-            rateset = merge(rateset, (grid = rates[rindices.grid]))
-        end
-
     end
     if :grid ∈ traits
-        merge(rateset, (grid=r[model.gridindices],))
+        merge(rateset, (grid=r[model.traits.gridindices],))
     end
     return rateset
 end
-"""
-    prepare_rates_traits(r::NamedTuple)
 
-Prepare rates and parameters for trait model calculations by extracting fields from the NamedTuple.
-
-# Arguments
-- `r::NamedTuple`: NamedTuple containing fields like rates, couplingStrength, noiseparams, and pgrid.
-
-# Returns
-- `Tuple`: A tuple containing prepared rates, coupling strengths, noise parameters, and pgrid.
-
-# Description
-This function extracts the necessary fields from the NamedTuple and prepares them for use in trait model calculations.
-
-# Example
-```julia
-r = (rates=[1.0, 2.0], couplingStrength=[0.5], noiseparams=[0.1, 0.2], pgrid=0.3)
-prepared = prepare_rates_traits(r)
-```
-"""
-function prepare_rates_traits(r::NamedTuple, traits::NamedTuple)
-    # Initialize an empty NamedTuple
-    prepared = NamedTuple()
-
-    # Check for hierarchical trait
-    if :hierarchical in keys(traits)
-        # Prepare hierarchical rates
-        rshared, rindividual, pindividual, phyper = prepare_rates(r.rates, traits.hierarchical)
-        prepared = merge(prepared, (rateshared = rshared, rateindividual = rindividual, pindividual = pindividual, phyper = phyper))
-
-        # Check for coupled trait within hierarchical
-        if :coupled in keys(traits)
-            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, traits.coupled)
-            prepared = merge(prepared, (coupling = couplingStrength, noiseparams = noiseparams))
-        end
+function prepare_nstates(tcomponents, traits)
+    if :grid ∈ keys(traits)
+        return tcomponents.nT
     else
-        # Non-hierarchical case
-        rates = r.rates
-        noiseparams = r.noiseparams
-        prepared = merge(prepared, (rates = rates, noiseparams = noiseparams))
-
-        # Check for coupled trait
-        if :coupled in keys(traits)
-            r, noiseparams, couplingStrength = prepare_rates(rates, traits.coupled)
-            prepared = merge(prepared, (rates = r, noiseparams = noiseparams, coupling = couplingStrength))
-        end
+        return tcomponents.nT, traits.grid.Ngrid
     end
-
-    # Check for grid trait
-    if :grid in keys(traits)
-        grid = r.pgrid
-        prepared = merge(prepared, (grid = grid))
-    end
-
-    return prepared
 end
-
 
 
 function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
-    nstates = prepare_nstates(param, model)
-    ll_hmm_trait(r, nstates, model.components, model.reporter, data.interval, data.trace, model.method)
+    N = prepare_nstates(model.component, model.traits)
+    ll_hmm_trait(r, N, model.components, model.reporter, data.interval, data.trace, model.method)
 end
 
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
-    nstates = prepare_nstates(param, model)
-    llg, llgp = ll_hmm_trai(r, nstates, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+    N = prepare_nstates(model.components.tcomponents, model.traits)
+    llg, llgp = ll_hmm_trai(r, N, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces

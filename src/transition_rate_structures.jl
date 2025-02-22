@@ -53,8 +53,11 @@ abstract type for components of transition matrices
 """
 abstract type AbstractTComponents <: AbstractComponents end
 
-
 abstract type AbstractTDComponents <: AbstractTComponents end
+
+abstract type AbstractMComponents <: AbstractComponents end
+
+abstract type AbstractMTComponents <: AbstractComponents end
 
 """
 	struct TComponents
@@ -202,7 +205,7 @@ fields:
     Uminus::SparseMatrixCSC
     Uplus::SparseMatrixCSC
 """
-struct MComponents <: AbstractComponents
+struct MComponents <: AbstractMComponents
     elementsT::Vector{Element}
     elementsB::Vector{Element}
     nT::Int
@@ -213,7 +216,7 @@ end
 
 
 
-struct MTComponents{MType,Ttype} <: AbstractComponents
+struct MTComponents{MType,Ttype} <: AbstractMTComponents
     mcomponents::MType
     tcomponents::Ttype
 end
@@ -227,7 +230,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TComponents
 """
-struct MT0Components <: AbstractComponents
+struct MT0Components <: AbstractMTComponents
     mcomponents::MComponents
     tcomponents::TComponents
 end
@@ -241,7 +244,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TAIComponents
 """
-struct MTAIComponents{elementType} <: AbstractComponents
+struct MTAIComponents{elementType} <: AbstractMTComponents
     mcomponents::MComponents
     tcomponents::TAIComponents{elementType}
 end
@@ -254,7 +257,7 @@ fields:
 mcomponents::MComponents
 tcomponents::TDComponents
 """
-struct MTDComponents <: AbstractComponents
+struct MTDComponents <: AbstractMTComponents
     mcomponents::MComponents
     tcomponents::TDComponents
 end
