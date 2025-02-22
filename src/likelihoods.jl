@@ -162,9 +162,6 @@ function prepare_rates(rates, sourceStates::Vector, transitions, G::Tuple, R, S,
     return r, couplingStrength, noiseparams
 end
 
-
-
-
 """
     prepare_rates(param, model::GRSMcoupledmodel)
 
@@ -220,8 +217,6 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     return rshared, rindividual, pindividual, phyper
 end
 
-
-
 """
     prepare_rates(param, model::GRSMgridmodel)
 
@@ -232,125 +227,6 @@ function prepare_rates(param, model::GRSMgridmodel)
     r[model.raterange], r[model.noiserange], r[model.gridrange]
 end
 
-function extract_rates(r, rindices)
-    extracted = Dict{Symbol,Any}()
-
-    # Possible keys
-    possible_keys = (:rates, :noiseparams, :coupling, :grid)
-
-    for key in possible_keys
-        if hasfield(typeof(rindices), key)
-            extracted[key] = r[rindices[key]]
-        end
-    end
-    return extracted
-end
-
-
-function prepare_rates(rates, coupling, rindices)
-    r = Vector{Float64}(undef, length(rindices))
-    noiseparams = similar(r)
-    couplingStrength = similar(r)
-    for i in eachindex(rindices)
-        r[i] = rates[rindices[i].rates]
-        couplingStrength[i] = rates[rindices[i].coupling]
-    end
-    rateset = (rate=r, coupling=couplingStrength)
-    if :noise ∈ keys(rindices)
-        noiseparams = similar(r)
-        for i in eachindex(rindices)
-            noiseparams[i] = rates[rindices[i].noise]
-        end
-        rateset = merge(rateset, (noise=noiseparams,))
-    end
-
-end
-
-
-function reshape_rates(r, htrait::HierarchicalTrait)
-    reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
-end
-
-function prepare_rates(r, htrait::HierarchicalTrait)
-    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    rshared = reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
-    rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
-    rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
-    pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
-    phyper = Vector{Float64}[]
-    for i in htrait.hyperindices
-        push!(phyper, r[i])
-    end
-    return rshared, rindividual, pindividual, phyper
-end
-
-function prepare_rates(allparams, ctrait::CouplingTrait)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    for i in ctrait.raterange
-        push!(r, allparams[i, :])
-    end
-    for i in ctrait.noiserange
-        push!(noiseparams, allparams[i, :])
-    end
-    for i in ctrait.couplingrange
-        push!(couplingStrength, allparams[i, :])
-    end
-end
-
-
-function prepare_rates(allparams, gtrait::GridTrait)
-
-end
-
-function prepare_rates(param, model::AbstractGRSMtraitmodel)
-    r = get_rates(param, model)
-    if :hierarchical ∈ traits
-        rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
-        if :coupled ∈ traits
-            r, noiseparams, couplingStrength = prepare_rates(rshared, coupled)
-        end
-        if :grid ∈ traits
-
-        end
-
-    else
-
-        rindices = model.rateindices
-        traits = keys(model.traits)
-        # rates = extract_rates(get_rates(param, model), rindices)
-
-
-        rates = get_rates(param, model)
-        if :coupled ∈ traits
-            r = Vector{Float64}(undef, length(rindices))
-            noiseparams = similar(r)
-            couplingStrength = similar(r)
-            for i in eachindex(rindices)
-                r[i] = rates[rindices[i].rates]
-                couplingStrength[i] = rates[rindices[i].coupling]
-            end
-            rateset = (rate=r, coupling=couplingStrength)
-            if :noise ∈ keys(model.rateindices)
-                noiseparams = similar(r)
-                for i in eachindex(model.rateindices)
-                    noiseparams[i] = rates[reindices[i].noise]
-                end
-                rateset = merge(rateset, (noise=noiseparams,))
-            end
-        else
-            rateset = (rate = rates[r])
-            if :noise ∈ keys(model.rateindices)
-                rateset = merge(rateset, (noise=rates[rindices[i].noise],))
-            end
-        end
-        if :grid ∈ traits
-            rateset = merge(rateset, (grid = rates[rindices.grid]))
-        end
-    end
-end
 
 
 # Model loglikelihoods
@@ -439,6 +315,128 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
+#### Trait model
+
+function extract_rates(r, rindices)
+    extracted = Dict{Symbol,Any}()
+
+    # Possible keys
+    possible_keys = (:rates, :noiseparams, :coupling, :grid)
+
+    for key in possible_keys
+        if hasfield(typeof(rindices), key)
+            extracted[key] = r[rindices[key]]
+        end
+    end
+    return extracted
+end
+
+
+function prepare_rates(rates, coupling, rindices)
+    r = Vector{Float64}(undef, length(rindices))
+    noiseparams = similar(r)
+    couplingStrength = similar(r)
+    for i in eachindex(rindices)
+        r[i] = rates[rindices[i].rates]
+        couplingStrength[i] = rates[rindices[i].coupling]
+    end
+    rateset = (rate=r, coupling=couplingStrength)
+    if :noise ∈ keys(rindices)
+        noiseparams = similar(r)
+        for i in eachindex(rindices)
+            noiseparams[i] = rates[rindices[i].noise]
+        end
+        rateset = merge(rateset, (noise=noiseparams,))
+    end
+
+end
+
+function reshape_rates(r, htrait::HierarchicalTrait)
+    reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
+end
+
+function prepare_rates(r, htrait::HierarchicalTrait)
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    rshared = reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
+    rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
+    rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
+    pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
+    phyper = Vector{Float64}[]
+    for i in htrait.hyperindices
+        push!(phyper, r[i])
+    end
+    return rshared, rindividual, pindividual, phyper
+end
+
+function prepare_rates(allparams, ctrait::CouplingTrait)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    for i in ctrait.raterange
+        push!(r, allparams[i, :])
+    end
+    for i in ctrait.noiserange
+        push!(noiseparams, allparams[i, :])
+    end
+    for i in ctrait.couplingrange
+        push!(couplingStrength, allparams[i, :])
+    end
+end
+
+
+function prepare_rates(allparams, gtrait::GridTrait)
+
+end
+
+function prepare_rates(param, model::AbstractGRSMtraitmodel)
+    r = get_rates(param, model)
+    if :hierarchical ∈ traits
+        rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
+        if :coupled ∈ traits
+            r, noiseparams, couplingStrength = prepare_rates(rshared, coupled)
+        end
+        if :grid ∈ traits
+
+        end
+
+    else
+
+        rindices = model.rateindices
+        traits = keys(model.traits)
+        # rates = extract_rates(get_rates(param, model), rindices)
+
+
+        rates = get_rates(param, model)
+        if :coupled ∈ traits
+            r = Vector{Float64}(undef, length(rindices))
+            noiseparams = similar(r)
+            couplingStrength = similar(r)
+            for i in eachindex(rindices)
+                r[i] = rates[rindices[i].rates]
+                couplingStrength[i] = rates[rindices[i].coupling]
+            end
+            rateset = (rate=r, coupling=couplingStrength)
+            if :noise ∈ keys(model.rateindices)
+                noiseparams = similar(r)
+                for i in eachindex(model.rateindices)
+                    noiseparams[i] = rates[reindices[i].noise]
+                end
+                rateset = merge(rateset, (noise=noiseparams,))
+            end
+        else
+            rateset = (rate = rates[r])
+            if :noise ∈ keys(model.rateindices)
+                rateset = merge(rateset, (noise=rates[rindices[i].noise],))
+            end
+        end
+        if :grid ∈ traits
+            rateset = merge(rateset, (grid = rates[rindices.grid]))
+        end
+    end
+end
+
+
 function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
     nstates = prepare_nstates(param, model)
@@ -453,7 +451,7 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
-
+#####
 
 
 # Predicted histogram functions
@@ -1123,7 +1121,7 @@ This function calculates the total number of parameters for the provided model. 
 """
     num_all_parameters(transitions, R, S, insertstep
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
-    num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
+    num_rates(transitions, R, S, insertstep) + n
 
 TBW
 """
@@ -1145,3 +1143,226 @@ function num_all_parameters(model::AbstractGmodel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_rates(model.Gtransitions, model.R, model.S, model.insertstep) + n
 end
+
+"""
+    prepare_rates(rates, components::TTraitComponents, transitions, G, R, S, insertstep, n_noise)
+
+Prepare rate parameters based on model traits.
+"""
+function prepare_rates(rates, components::TTraitComponents, transitions, G, R, S, insertstep, n_noise)
+    traits = components.traits
+    r = (rates = rates,)
+    
+    if traits.coupled !== nothing && traits.hierarchical !== nothing && traits.grid !== nothing
+        # Coupled + Hierarchical + Grid
+        coupled = prepare_coupled_rates(rates, traits.coupled.sourceStates, n_noise)
+        hier = prepare_hierarchical_rates(coupled.rates, traits.hierarchical.shared_indices, traits.hierarchical.individual_indices)
+        r = merge(coupled, hier, (pgrid = rates[end],))
+    
+    elseif traits.coupled !== nothing && traits.hierarchical !== nothing
+        # Coupled + Hierarchical
+        coupled = prepare_coupled_rates(rates, traits.coupled.sourceStates, n_noise)
+        hier = prepare_hierarchical_rates(coupled.rates, traits.hierarchical.shared_indices, traits.hierarchical.individual_indices)
+        r = merge(coupled, hier)
+    
+    elseif traits.coupled !== nothing && traits.grid !== nothing
+        # Coupled + Grid
+        coupled = prepare_coupled_rates(rates, traits.coupled.sourceStates, n_noise)
+        r = merge(coupled, (pgrid = rates[end],))
+    
+    elseif traits.hierarchical !== nothing && traits.grid !== nothing
+        # Hierarchical + Grid
+        hier = prepare_hierarchical_rates(rates[1:end-1], traits.hierarchical.shared_indices, traits.hierarchical.individual_indices)
+        r = merge(hier, (pgrid = rates[end],))
+    
+    elseif traits.coupled !== nothing
+        # Just Coupled
+        r = prepare_coupled_rates(rates, traits.coupled.sourceStates, n_noise)
+    
+    elseif traits.hierarchical !== nothing
+        # Just Hierarchical
+        r = prepare_hierarchical_rates(rates, traits.hierarchical.shared_indices, traits.hierarchical.individual_indices)
+    
+    elseif traits.grid !== nothing
+        # Just Grid
+        r = prepare_grid_rates(rates, traits.grid.grid_indices)
+    end
+
+    return r
+end
+
+"""
+    prepare_nstates(components::TTraitComponents, base_states::Int)
+
+Prepare nstates parameter based on model traits.
+"""
+function prepare_nstates(components::TTraitComponents, base_states::Int)
+    traits = components.traits
+    
+    if traits.grid !== nothing
+        return (base_states, traits.grid.Ngrid)
+    else
+        return base_states
+    end
+end
+
+"""
+    prepare_coupled_rates(rates, sourceStates, n_noise)
+
+Prepare rates for coupled trait models.
+"""
+function prepare_coupled_rates(rates, sourceStates, n_noise)
+    n_coupling = length(sourceStates)
+    n_rates = length(rates) - n_coupling - n_noise
+    
+    (
+        rates = rates[1:n_rates],
+        couplingStrength = rates[n_rates+1:n_rates+n_coupling],
+        noiseparams = rates[end-n_noise+1:end]
+    )
+end
+
+"""
+    prepare_hierarchical_rates(rates, shared_indices, individual_indices)
+
+Prepare rates for hierarchical trait models.
+"""
+function prepare_hierarchical_rates(rates, shared_indices, individual_indices)
+    (
+        rshared = rates[shared_indices],
+        rindividual = rates[individual_indices]
+    )
+end
+
+"""
+    prepare_grid_rates(rates, grid_indices)
+
+Prepare rates for grid trait models.
+"""
+function prepare_grid_rates(rates, grid_indices)
+    (
+        rates = rates[1:end-1],
+        pgrid = rates[end]
+    )
+end
+
+### NEW TRAIT-BASED RATE PREPARATION (EXPERIMENTAL) ###
+#=
+The following code implements trait-based rate preparation functions.
+This is currently separate from the main implementation to allow for testing.
+=#
+
+"""
+    prepare_rates_trait(rates, components::TTraitComponents, transitions, G, R, S, insertstep, n_noise)
+
+Prepare rate parameters based on model traits.
+"""
+function prepare_rates_trait(rates, components::TTraitComponents, transitions, G, R, S, insertstep, n_noise)
+    traits = components.traits
+    
+    # Start with base rates
+    r = (rates = rates,)
+    
+    # Handle trait combinations
+    if traits.coupled !== nothing && traits.hierarchical !== nothing && traits.grid !== nothing
+        # Split rates for coupled trait
+        n_coupling = length(traits.coupled.sourceStates)
+        n_base = length(rates) - n_coupling - n_noise - 1  # -1 for grid param
+        coupled = (
+            rates = rates[1:n_base],
+            couplingStrength = rates[n_base+1:n_base+n_coupling],
+            noiseparams = rates[n_base+n_coupling+1:end-1]
+        )
+        
+        # Split remaining rates for hierarchical
+        hier = (
+            rshared = coupled.rates[traits.hierarchical.shared_indices],
+            rindividual = coupled.rates[traits.hierarchical.individual_indices]
+        )
+        
+        # Combine all with grid parameter
+        r = merge(coupled, hier, (pgrid = rates[end],))
+        
+    elseif traits.coupled !== nothing && traits.hierarchical !== nothing
+        # Handle coupled + hierarchical
+        n_coupling = length(traits.coupled.sourceStates)
+        n_base = length(rates) - n_coupling - n_noise
+        
+        coupled = (
+            rates = rates[1:n_base],
+            couplingStrength = rates[n_base+1:n_base+n_coupling],
+            noiseparams = rates[n_base+n_coupling+1:end]
+        )
+        
+        hier = (
+            rshared = coupled.rates[traits.hierarchical.shared_indices],
+            rindividual = coupled.rates[traits.hierarchical.individual_indices]
+        )
+        
+        r = merge(coupled, hier)
+        
+    elseif traits.coupled !== nothing && traits.grid !== nothing
+        # Handle coupled + grid
+        n_coupling = length(traits.coupled.sourceStates)
+        n_base = length(rates) - n_coupling - n_noise - 1
+        
+        r = (
+            rates = rates[1:n_base],
+            couplingStrength = rates[n_base+1:n_base+n_coupling],
+            noiseparams = rates[n_base+n_coupling+1:end-1],
+            pgrid = rates[end]
+        )
+        
+    elseif traits.hierarchical !== nothing && traits.grid !== nothing
+        # Handle hierarchical + grid
+        r = (
+            rshared = rates[traits.hierarchical.shared_indices],
+            rindividual = rates[traits.hierarchical.individual_indices],
+            pgrid = rates[end]
+        )
+        
+    elseif traits.coupled !== nothing
+        # Just coupled
+        n_coupling = length(traits.coupled.sourceStates)
+        n_base = length(rates) - n_coupling - n_noise
+        
+        r = (
+            rates = rates[1:n_base],
+            couplingStrength = rates[n_base+1:n_base+n_coupling],
+            noiseparams = rates[n_base+n_coupling+1:end]
+        )
+        
+    elseif traits.hierarchical !== nothing
+        # Just hierarchical
+        r = (
+            rshared = rates[traits.hierarchical.shared_indices],
+            rindividual = rates[traits.hierarchical.individual_indices]
+        )
+        
+    elseif traits.grid !== nothing
+        # Just grid
+        r = (
+            rates = rates[1:end-1],
+            pgrid = rates[end]
+        )
+    end
+    
+    return r
+end
+
+"""
+    prepare_nstates_trait(components::TTraitComponents, base_states::Int)
+
+Prepare nstates parameter based on model traits.
+"""
+function prepare_nstates_trait(components::TTraitComponents, base_states::Int)
+    traits = components.traits
+    
+    if traits.grid !== nothing
+        return (base_states, traits.grid.Ngrid)
+    else
+        return base_states
+    end
+end
+
+### END NEW TRAIT-BASED RATE PREPARATION ###

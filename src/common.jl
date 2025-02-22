@@ -182,28 +182,6 @@ struct Hierarchy
     fittedshared::Vector{Int}
 end
 
-struct HierarchicalTrait
-    nhypersets::Int
-    nrates::Int
-    nparams::Int
-    nindividuals::Int
-    sharedindices:: Vector{Int}
-    fittedshared::Vector{Int}
-    individualindices:: Vector{Int}
-    paramindices::Vector{Int}
-    hyperindices::Vector{Vector}
-end
-
-struct GridTrait
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-end
-
-struct CouplingTrait
-
-end
 
 """
     HMMReporter
@@ -291,8 +269,31 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     reporter::ReporterType
 end
 
-### To be replaced with new code
+### Trait model
 
+
+struct HierarchicalTrait
+    nhypersets::Int
+    nrates::Int
+    nparams::Int
+    nindividuals::Int
+    sharedindices::Vector{Int}
+    fittedshared::Vector{Int}
+    individualindices::Vector{Int}
+    paramindices::Vector{Int}
+    hyperindices::Vector{Vector}
+end
+
+struct GridTrait
+    raterange::UnitRange
+    noiserange::UnitRange
+    gridrange::UnitRange
+    Ngrid::Int
+end
+
+struct CouplingTrait
+
+end
 
 """
     GRSMtraitmodel{TraitType, RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType} <: AbstractGRSMtraitmodel{TraitType}
@@ -335,6 +336,7 @@ struct GRSMtraitmodel{TraitType,RateType,PriorType,ProposalType,ParamType,Method
     components::ComponentType
     reporter::ReporterType
 end
+####
 
 """
     GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}

@@ -588,7 +588,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 end
 
-### Under construction
+### Trait model
 function load_modeltrait(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     if !isnothing(grid)

@@ -797,7 +797,7 @@ function ll_hmm(rates::@NamedTuple{r::Vector{Float64}, noiseparams::Vector{Float
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical_trait(rates::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64}, N::Tuple, components::TComponents, reporters, interval, trace)
+function ll_hmm(rates::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64}, N::Tuple, components::TComponents, reporters, interval, trace)
     rshared, rindividual, noiseparams, pgrid = rates
     Nstate, Ngrid = N
     a_grid = make_a_grid(pgrid, Ngrid)
@@ -1217,3 +1217,74 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
     end
     states, observation_dist
 end
+
+### NEW TRAIT-BASED IMPLEMENTATION (EXPERIMENTAL) ###
+#=
+The following code implements a new trait-based approach for handling 
+different model combinations. This is currently separate from the main
+implementation to allow for testing and validation.
+=#
+
+"""
+    ll_hmm_trait(r::Vector, nstates::Int, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+
+Compute log-likelihood for basic model without traits (trait-based implementation).
+"""
+function ll_hmm_trait(r::Vector, nstates::Int, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+    a, p0 = make_ap(r, interval, components, method)
+    d = probfn(r[reporters.noiseparams], reporters.per_state, nstates)
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(a, p0, d, trace[1], nstates)
+    ll + lb, logpredictions
+end
+
+"""
+    ll_hmm_trait(r::@NamedTuple{rates::Vector, couplingStrength::Vector, noiseparams::Vector}, nstates::Int, components::TCoupledComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method)
+
+Compute log-likelihood for coupled trait models (trait-based implementation).
+"""
+function ll_hmm_trait(r::@NamedTuple{rates::Vector, couplingStrength::Vector, noiseparams::Vector}, nstates::Int, components::TCoupledComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method)
+    a, p0 = make_ap_coupled(r.rates, r.couplingStrength, interval, components, method[1])
+    d = set_d(r.noiseparams, reporter, nstates)
+    lb = trace[3] > 0 ? length(trace[1]) * ll_background([n[1] for n in r.noiseparams], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    ll, logpredictions = ll_hmm(a, p0, d, trace[1], nstates)
+    ll + lb, logpredictions
+end
+
+"""
+    ll_hmm_trait(r::@NamedTuple{rshared::Vector, rindividual::Vector}, nstates::Int, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+
+Compute log-likelihood for hierarchical trait models (trait-based implementation).
+"""
+function ll_hmm_trait(r::@NamedTuple{rshared::Vector, rindividual::Vector}, nstates::Int, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+    a, p0 = make_ap(r.rshared[:, 1], interval, components, method[1])
+    d = probfn(r.rshared[reporters.noiseparams, 1], reporters.per_state, nstates)
+    lb = trace[3] > 0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    if method[2]
+        ll, logpredictions = ll_hmm(r.rindividual, a, p0, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
+    else
+        ll, logpredictions = ll_hmm(r.rindividual, interval, components, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates, method[1])
+    end
+    ll + lb, logpredictions
+end
+
+"""
+    ll_hmm_trait(r::@NamedTuple{rates::Vector, pgrid::Float64}, nstates::Tuple, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+
+Compute log-likelihood for grid trait models (trait-based implementation).
+"""
+function ll_hmm_trait(r::@NamedTuple{rates::Vector, pgrid::Float64}, nstates::Tuple, components::TComponents, reporters::HMMReporter, interval::Float64, trace::Tuple, method)
+    Nstate, Ngrid = nstates
+    a_grid = make_a_grid(r.pgrid, Ngrid)
+    a, p0 = make_ap(r.rates, interval, components)
+    d = probfn(r.rates[end-reporters.noiseparams+1:end], reporters.per_state, Nstate, Ngrid)
+    logpredictions = Array{Float64}(undef, length(trace[1]))
+    for (i, t) in enumerate(trace[1])
+        b = set_b_grid(t, d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+### END NEW TRAIT-BASED IMPLEMENTATION ###
