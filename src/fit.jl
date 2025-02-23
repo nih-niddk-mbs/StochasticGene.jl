@@ -394,7 +394,7 @@ function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, in
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep),collect(n+1:n+nnoise))
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep), collect(n+1:n+nnoise))
     components = TComponents(transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
@@ -408,7 +408,7 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
         nnoise = length(noisepriors[i])
         n = num_rates(transitions[i], R[i], S[i], insertstep[i])
         weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]),collect(n+1:n+nnoise)))
+        push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
     end
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     return reporter, components
@@ -501,13 +501,19 @@ hyper parameters specify the hyper distribution for the individual parameters. C
 shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
 """
 function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
-    f = [fittedshared; fittedindividual] # shared parameters come first followed by hyper parameters and individual parameters
+    f = union(fittedshared, fittedindividual) # shared parameters come first followed by hyper parameters and individual parameters
     f = sort(f)
+    println(fittedshared)
+    println(fittedindividual)
+    println(f)
+    println(nallparams)
     fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
+    println(fhyper)
     for i in 1:nhypersets-1
         append!(f, fittedindividual .+ i * nallparams)
         push!(fhyper, fittedindividual .+ i * nallparams)
     end
+    println(f)
     fpriors = copy(f) # priors only apply to shared and hyper parameters
     for i in 1:nindividuals
         append!(f, fittedindividual .+ (i + nhypersets - 1) * nallparams)
@@ -515,9 +521,9 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter)
+function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), grid=nothing)
     nhypersets = hierarchical[1]
-    n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter)
+    n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
     nindividuals = length(data.trace[1])
     nparams = length(hierarchical[2])
     ratestart = nhypersets * n_all_params + 1
@@ -530,23 +536,23 @@ function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions,
     return hyper, fittedparam, fixedeffects, priord
 end
 
-function make_hierarchicaltrait(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, ncoupling=0, ngrid=0)
-    nhypersets = hierarchical[1]
-    n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter) + ncoupling + ngrid
-    nindividuals = length(data.trace[1])
-    nparams = length(hierarchical[2])
-    sharedindices = 1:nhypersets*n_all_params
-    individualindices = nhypersets*n_all_params+1:(nhypersets+nindividuals)*n_all_params
-    paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedshared)+(nhypersets+nindividuals)*nparams
-    # ratestart = nhypersets * n_all_params + 1
-    # paramstart = length(fittedparam) + nhypersets * nparams + 1
-    fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
-    fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
-    rprior = rmean[1:nhypersets*n_all_params]
-    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
-    hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
-    return hyper, fittedparam, fixedeffects, priord, fittedshared
-end
+# function make_hierarchicaltrait(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), grid=nothing)
+#     nhypersets = hierarchical[1]
+#     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
+#     nindividuals = length(data.trace[1])
+#     nparams = length(hierarchical[2])
+#     sharedindices = 1:nhypersets*n_all_params
+#     individualindices = nhypersets*n_all_params+1:(nhypersets+nindividuals)*n_all_params
+#     paramindices = length(fittedparam)+nhypersets*nparams+1:length(fittedshared)+(nhypersets+nindividuals)*nparams
+#     # ratestart = nhypersets * n_all_params + 1
+#     # paramstart = length(fittedparam) + nhypersets * nparams + 1
+#     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
+#     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
+#     rprior = rmean[1:nhypersets*n_all_params]
+#     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors)
+#     hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, sharedindices, individualindices, paramindices, fittedhyper)
+#     return hyper, fittedparam, fixedeffects, priord, fittedshared
+# end
 
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1)
@@ -555,7 +561,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
     end
     if !isempty(hierarchical)
-        hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
+        hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, grid)
     else
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
     end
@@ -640,7 +646,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]))
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
@@ -670,16 +676,16 @@ end
 
 TBW
 """
-function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
+function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors, coupling=nothing)
     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
 end
 
-function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors)
+function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupling)
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
     end
-    rm
+    [rm; fill(1.0, coupling[5])]
 end
 
 """
@@ -689,7 +695,7 @@ default priors for hierarchical models, arranged into a single vector, shared an
 """
 function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
     r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-    hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
+    hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
     # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
     append!(r, hypercv)
     for i in 3:nhypersets
@@ -829,12 +835,14 @@ end
 
 set rinit for hierarchical models
 """
-function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals)
+function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing)
     if isempty(r)
         println("No rate file, set rate to prior")
         r = copy(priormean)
+        c = isempty(coupling) ? 0 : coupling[5]
+        g = isnothing(grid) ? 0 : grid
         # n_all_params = num_rates(transitions, R, S, insertstep) + length(noisepriors)
-        n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors)
+        n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
         for i in 1:nindividuals
             append!(r, priormean[1:n_all_params])
         end

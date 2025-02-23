@@ -851,6 +851,7 @@ transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = tran
 
 transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
+
 # function transform_rates(pin, model::GRSMcoupledmodel)
 #     p = copy(pin)
 #     for f in model.transformations
@@ -886,6 +887,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}
 
 inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
+inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
 
 """
@@ -1168,23 +1170,25 @@ This function calculates the total number of parameters for the provided model. 
 
 TBW
 """
-function num_all_parameters(transitions, R::Int, S, insertstep, reporter)
+function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
     if typeof(reporter) <: HMMReporter
         n = reporter.n
-    elseif typeof(reporter) <: Vector{Float64}
+    elseif typeof(reporter) <: Vector
         n = length(reporter)
     else
         n = 0
     end
+    c = isempty(coupling) ? 0 : coupling[5]
+    g = isnothing(grid) ? 0 : grid
     # n = typeof(reporter) <: HMMReporter ? reporter.n : 0
     # num_rates(transitions, R, S, insertstep) + n
-    num_rates(transitions, R, S, insertstep) + n
+    num_rates(transitions, R, S, insertstep) + n + c + g
 end
 
-function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter)
+function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter, coupling=tuple(), grid=nothing)
     n = 0
     for i in eachindex(R)
-        n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
+        n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i], coupling, grid)
     end
     n
 end
