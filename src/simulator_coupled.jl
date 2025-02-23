@@ -390,16 +390,16 @@ function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles
         noiseparams = fill(noiseparams, length(G))
     end
     coupling = (coupling..., targets(coupling))
-    return coupling, nalleles, noiseparams, prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+    return coupling, nalleles, noiseparams, prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
 end
 
 
 """
-    prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+    prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
 
 TBW
 """
-# function prepare_rates(r, coupling, transitions, R, S, insertstep, noiseparams)
+# function prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
 #     rv = Vector[]
 #     n = 0
 #     for i in eachindex(R)
@@ -411,7 +411,7 @@ TBW
 #     rv
 # end
 
-function prepare_rates(rates, coupling, transitions, R, S, insertstep, n_noise)
+function prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noise)
     r = Vector[]
     couplingStrength = Float64[]
     j = 1

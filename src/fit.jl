@@ -515,11 +515,13 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedshared, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), grid=nothing)
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), grid=nothing)
+    fittedindividual = hierarchical[2]
+    fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
     nindividuals = length(data.trace[1])
-    nparams = length(hierarchical[2]) # number of fitted params per individual
+    nparams = length(fittedindividual) # number of fitted params per individual
     ratestart = nhypersets * n_all_params + 1
     paramstart = length(fittedshared) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
