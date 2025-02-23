@@ -171,6 +171,11 @@ end
 
 ### end of functions used in runtest
 
+function test_trait_model
+
+
+end
+
 
 # function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.2, 0.05, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, 0.1, 0.5, 0.5, 0.1, 0.01, 50, 30, 100, 20, -0.9], totalsteps=500000, verbose=false)
 function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 4), 1), G=(2, 2), R=(1, 1), S=(0, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), interval=1.0, rates=[0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, 0.1, 0.1, 0.1, 0.1, 0.01, 50, 30, 100, 20, -0.9], totalsteps=500000, verbose=false)
@@ -621,118 +626,6 @@ function conditional_distribution(joint_prob::Array, dist_index::Int, cond_indic
     return cond_prob
 end
 
-### NEW TRAIT-BASED TESTS (EXPERIMENTAL) ###
-#=
-The following code implements test functions for the trait-based model system.
-This is currently separate from the main implementation to allow for testing.
-=#
-
-"""
-    test_trait_basic(;
-        r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231],
-        transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
-        G=3, R=2, S=2, insertstep=1,
-        nalleles=2)
-
-Test basic model without traits.
-"""
-function test_trait_basic(;
-    r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231],
-    transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
-    G=3, R=2, S=2, insertstep=1,
-    nalleles=2)
-    
-    traits = (coupled=nothing, hierarchical=nothing, grid=nothing)
-    components = TTraitComponents(transitions, G, R, S, insertstep, traits)
-    reporter = make_reporter(G, R, S)
-    
-    trace = simulate_trace(r, components, reporter, nalleles)
-    ll, _ = ll_hmm_trait(r, G, components, reporter, 1.0, trace, Tsit5())
-    return ll
-end
-
-"""
-    test_trait_coupled(;
-        r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, -0.5],
-        transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
-        G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
-        coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
-
-Test coupled trait model.
-"""
-function test_trait_coupled(;
-    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, -0.5],
-    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
-    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
-    coupling=((1, 2), (Int[], [1]), [2, 0], [0, 3], 1))
-    
-    traits = (
-        coupled=(sourceStates=coupling[3], targetStates=coupling[4]),
-        hierarchical=nothing,
-        grid=nothing
-    )
-    components = TTraitComponents(transitions, G, R, S, insertstep, traits)
-    reporter = make_reporter(G, R, S)
-    
-    prepared_rates = prepare_rates_trait(r, components, transitions, G, R, S, insertstep, reporter.n)
-    trace = simulate_trace_coupled(prepared_rates, components, reporter)
-    ll, _ = ll_hmm_trait(prepared_rates, G[1], components, reporter, 1.0, trace, Tsit5())
-    return ll
-end
-
-"""
-    test_trait_grid(;
-        r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70],
-        transitions=([1, 2], [2, 1]),
-        G=2, R=1, S=1, insertstep=1,
-        Ngrid=4)
-
-Test grid trait model.
-"""
-function test_trait_grid(;
-    r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70],
-    transitions=([1, 2], [2, 1]),
-    G=2, R=1, S=1, insertstep=1,
-    Ngrid=4)
-    
-    traits = (
-        coupled=nothing,
-        hierarchical=nothing,
-        grid=(Ngrid=Ngrid, grid_indices=[length(r)])
-    )
-    components = TTraitComponents(transitions, G, R, S, insertstep, traits)
-    reporter = make_reporter(G, R, S)
-    
-    prepared_rates = prepare_rates_trait(r, components, transitions, G, R, S, insertstep, reporter.n)
-    nstates = prepare_nstates_trait(components, G)
-    trace = simulate_trace_grid(prepared_rates, nstates, components, reporter)
-    ll, _ = ll_hmm_trait(prepared_rates, nstates, components, reporter, 1.0, trace, Tsit5())
-    return ll
-end
-
-"""
-    test_trait_compare(;
-        r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231],
-        transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
-        G=3, R=2, S=2, insertstep=1)
-
-Compare trait-based implementation with original implementation.
-"""
-function test_trait_compare(;
-    r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231],
-    transitions=([1, 2], [2, 1], [2, 3], [3, 2]),
-    G=3, R=2, S=2, insertstep=1)
-    
-    # Run trait-based implementation
-    ll_trait = test_trait_basic(r=r, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep)
-    
-    # Run original implementation
-    ll_orig = test_sim(r, transitions, G, R, S, insertstep)
-    
-    return ll_trait, ll_orig, abs(ll_trait - ll_orig)
-end
-
-### END NEW TRAIT-BASED TESTS ###
 
 
 

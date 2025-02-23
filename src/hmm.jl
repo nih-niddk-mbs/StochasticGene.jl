@@ -118,13 +118,6 @@ end
 
 TBW
 """
-function prob_Gaussian_ind(par, reporters_per_state, N)
-    d = Array{Distribution{Univariate,Continuous}}(undef, N)
-    for i in 1:N
-        d[i] = prob_Gaussian_ind(par, reporters_per_state[i])
-    end
-    d
-end
 function prob_Gaussian_ind(par, reporters)
     if reporters > 0
         return Normal(reporters * par[3], sqrt(reporters) * par[4])
@@ -132,6 +125,15 @@ function prob_Gaussian_ind(par, reporters)
         return Normal(par[1], par[2])
     end
 end
+
+function prob_Gaussian_ind(par, reporters_per_state, N)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_Gaussian_ind(par, reporters_per_state[i])
+    end
+    d
+end
+
 
 
 """
@@ -162,6 +164,10 @@ function prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function
     return d
 end
 
+function prob_Gaussian_grid(par, reporters_per_state, N::Tuple, f::Function=kronecker_delta)
+    Nstate, Ngrid = N
+    prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f)
+end
 
 """
     make_ap_coupled(r, couplingStrength, interval, components)
@@ -244,7 +250,12 @@ end
 
 TBW
 """
-function set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector, N::Int)
+
+function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::Function, N)
+    probfn(noiseparams, reporters_per_state, N)
+end
+
+function set_d(noiseparams, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
     d = Vector[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
@@ -252,7 +263,11 @@ function set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector,
     return d
 end
 
-function set_d(noiseparams, reporter::Vector, N)
+function set_d(noiseparams, reporter::HMMReporter, N)
+    set_d(noiseparams, reporter.per_state, reporter.probfn, N)
+end
+
+function set_d(noiseparams, reporter::Vector{HMMReporter}, N)
     ps = [r.per_state for r in reporter]
     pf = [r.probfn for r in reporter]
     set_d(noiseparams, ps, pf, N)
@@ -261,29 +276,7 @@ end
 """
 set_b
 """
-function set_b(trace::Vector, d::Vector, N)
-    b = Matrix{Float64}(undef, N, length(trace))
-    for (t, obs) in enumerate(trace)
-        for j in 1:N
-            b[j, t] = pdf(d[j], obs)
-        end
-    end
-    return b
-end
 
-function set_b(trace::Matrix, d::Vector{Vector}, N)
-    b = ones(N, size(trace, 1))
-    t = 1
-    for obs in eachrow(trace)
-        for j in 1:N
-            for i in eachindex(d)
-                b[j, t] *= pdf(d[i][j], obs[i])
-            end
-        end
-        t += 1
-    end
-    return b
-end
 
 function set_b_coupled(trace, d::Vector{Vector}, N)
     b = ones(N, size(trace, 1))
@@ -315,18 +308,43 @@ function set_b_grid(trace, d, Nstate, Ngrid)
     return b
 end
 
-function set_b_coupled(trace, params, reporters_per_state::Vector, probfn::Vector, N)
+function set_b(trace::Vector, d::Vector, N)
+    b = Matrix{Float64}(undef, N, length(trace))
+    for (t, obs) in enumerate(trace)
+        for j in 1:N
+            b[j, t] = pdf(d[j], obs)
+        end
+    end
+    return b
+end
+
+function set_b(trace::Matrix, d::Vector{Vector}, N)
+    set_b_coupled(trace, d, N)
+    # b = ones(N, size(trace, 1))
+    # t = 1
+    # for obs in eachrow(trace)
+    #     for j in 1:N
+    #         for i in eachindex(d)
+    #             b[j, t] *= pdf(d[i][j], obs[i])
+    #         end
+    #     end
+    #     t += 1
+    # end
+    # return b
+end
+
+function set_b(trace, d, N::Tuple)
+    Nstate, Ngrid = N
+    set_b_grid(trace, d, Nstate, Ngrid)
+end
+
+function set_b_coupled(trace, params, reporters_per_state::Vector{Vector}, probfn::Vector, N)
     d = set_d(params, reporters_per_state, probfn, N)
     set_b_coupled(trace, d, N)
 end
 
-function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
-    d = Vector[]
-    for i in eachindex(params)
-        rep = reporter[i]
-        push!(d, rep.probfn(params[i], rep.per_state, N))
-    end
-    set_b_coupled(trace, d, N)
+function set_b(trace, params, reporters_per_state::Vector{Vector}, probfn::Vector{Function}, N)
+    set_b_coupled(trace, params, reporters_per_state, probfn, N)
 end
 
 
@@ -335,7 +353,12 @@ function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate
     set_b_grid(trace, d, Nstate, Ngrid)
 end
 
-function set_b(trace, params, reporters_per_state, probfn::Function, N)
+function set_b(trace, params, reporters_per_state, probfn, N::Tuple)
+    Nstate, Ngrid = N
+    set_b_grid(trace, params, reporters_per_state, probfn, Nstate, Ngrid)
+end
+
+function set_b(trace, params, reporters_per_state::Vector{Int}, probfn::Function, N::Int)
     # N = length(reporters_per_state)
     d = probfn(params, reporters_per_state, N)
     b = Matrix{Float64}(undef, N, length(trace))
@@ -349,7 +372,14 @@ function set_b(trace, params, reporters_per_state, probfn::Function, N)
     return b
 end
 
-
+function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
+    d = Vector[]
+    for i in eachindex(params)
+        rep = reporter[i]
+        push!(d, rep.probfn(params[i], rep.per_state, N))
+    end
+    set_b_coupled(trace, d, N)
+end
 
 """
     set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
@@ -814,7 +844,9 @@ function ll_hmm_trait(rates, noiseparams, interval::Float64, components::Abstrac
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         a, p0 = make_ap(rates[:, i], interval, components, method)
-        b = set_b(traces[i], noiseparams[:, i], reporters.per_state, reporters.probfn, nT)
+        # b = set_b(traces[i], noiseparams[:, i], reporters.per_state, reporters.probfn, nT)
+        d = set_d(noiseparams[:, i], reporter, nT)
+        b = set_b(traces[i], d, nT)
         _, C = forward(a, b, p0, nT, size(traces[i], 1))
         @inbounds logpredictions[i] = sum(log.(C))
     end
@@ -838,9 +870,9 @@ end
 
 Compute log-likelihood for GRSM model
 """
-function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, noiseparams::Vector{Float64}}, 
-                     nstates::Int, components::TComponents, reporters::HMMReporter, 
-                     interval::Float64, trace::Tuple, method)
+function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, noiseparams::Vector{Float64}},
+    nstates::Int, components::TComponents, reporters::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rates, noiseparams = r
     a, p0 = make_ap(rates, interval, components, method)
     d = probfn(noiseparams, reporters.per_state, nstates)
@@ -854,9 +886,9 @@ end
 
 Compute log-likelihood for hierarchical GRSM model
 """
-function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64}, noiseparams::Vector{Float64}}, 
-                     nstates::Int, components::TComponents, reporters::HMMReporter,
-                     interval::Float64, trace::Tuple, method)
+function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64}, noiseparams::Vector{Float64}},
+    nstates::Int, components::TComponents, reporters::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rshared, rindividual, noiseparams = r
     a, p0 = make_ap(rshared, interval, components, method[1])
     d = probfn(noiseparams, reporters.per_state, nstates)
@@ -875,8 +907,8 @@ end
 Compute log-likelihood for coupled GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}},
-                     nstates::Int, components::TCoupledComponents, reporter::HMMReporter,
-                     interval::Float64, trace::Tuple, method)
+    nstates::Int, components::TCoupledComponents, reporter::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rates, couplingStrength, noiseparams = r
     a, p0 = make_ap_coupled(rates, couplingStrength, interval, components, method[1])
     d = set_d(noiseparams, reporter, nT)
@@ -891,8 +923,8 @@ end
 Compute log-likelihood for grid GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64},
-                     nstates::Tuple{Int,Int}, components::TComponents, reporters::HMMReporter,
-                     interval::Float64, trace::Tuple, method)
+    nstates::Tuple{Int,Int}, components::TComponents, reporters::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rates, noiseparams, pgrid = r
     Nstate, Ngrid = nstates
     a_grid = make_a_grid(pgrid, Ngrid)
@@ -914,9 +946,9 @@ end
 Compute log-likelihood for coupled, hierarchical GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64},
-                                    couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}},
-                     nstates::Int, components::TCoupledComponents, reporter::Vector{HMMReporter},
-                     interval::Float64, trace::Tuple, method)
+        couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}},
+    nstates::Int, components::TCoupledComponents, reporter::Vector{HMMReporter},
+    interval::Float64, trace::Tuple, method)
     rshared, rindividual, couplingStrength, noiseparams = r
     a, p0 = make_ap_coupled(rshared, couplingStrength, interval, components, method[1])
     d = set_d(noiseparams.shared, reporter, nT)
@@ -940,9 +972,9 @@ end
 Compute log-likelihood for hierarchical, grid GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64},
-                                    noiseparams::Vector{Float64}, pgrid::Float64},
-                     nstates::Tuple{Int,Int}, components::TComponents, reporters::HMMReporter,
-                     interval::Float64, trace::Tuple, method)
+        noiseparams::Vector{Float64}, pgrid::Float64},
+    nstates::Tuple{Int,Int}, components::TComponents, reporters::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rshared, rindividual, noiseparams, pgrid = r
     Nstate, Ngrid = nstates
     a_grid = make_a_grid(pgrid, Ngrid)
@@ -966,10 +998,10 @@ end
 
 Compute log-likelihood for coupled, grid GRSM model
 """
-function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, couplingStrength::Vector{Float64}, 
-                                    noiseparams::Vector{Float64}, pgrid::Float64},
-                     nstates::Tuple{Int,Int}, components::TCoupledComponents, reporter::HMMReporter,
-                     interval::Float64, trace::Tuple, method)
+function ll_hmm_trait(r::@NamedTuple{rates::Vector{Float64}, couplingStrength::Vector{Float64},
+        noiseparams::Vector{Float64}, pgrid::Float64},
+    nstates::Tuple{Int,Int}, components::TCoupledComponents, reporter::HMMReporter,
+    interval::Float64, trace::Tuple, method)
     rates, couplingStrength, noiseparams, pgrid = r
     Nstate, Ngrid = nstates
     a_grid = make_a_grid(pgrid, Ngrid)
@@ -994,9 +1026,9 @@ end
 Compute log-likelihood for coupled, hierarchical, grid GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64},
-                                    couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64},
-                     nstates::Tuple{Int,Int}, components::TCoupledComponents, reporter::Vector{HMMReporter},
-                     interval::Float64, trace::Tuple, method)
+        couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}, pgrid::Float64},
+    nstates::Tuple{Int,Int}, components::TCoupledComponents, reporter::Vector{HMMReporter},
+    interval::Float64, trace::Tuple, method)
     rshared, rindividual, couplingStrength, noiseparams, pgrid = r
     Nstate, Ngrid = nstates
     a_grid = make_a_grid(pgrid, Ngrid)

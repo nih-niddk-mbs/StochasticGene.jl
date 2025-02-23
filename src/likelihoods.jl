@@ -332,24 +332,24 @@ end
 # end
 
 
-# function prepare_rates(rates, coupling, rindices)
-#     r = Vector{Float64}(undef, length(rindices))
-#     noiseparams = similar(r)
-#     couplingStrength = similar(r)
-#     for i in eachindex(rindices)
-#         r[i] = rates[rindices[i].rates]
-#         couplingStrength[i] = rates[rindices[i].coupling]
-#     end
-#     rateset = (rate=r, coupling=couplingStrength)
-#     if :noise ∈ keys(rindices)
-#         noiseparams = similar(r)
-#         for i in eachindex(rindices)
-#             noiseparams[i] = rates[rindices[i].noise]
-#         end
-#         rateset = merge(rateset, (noise=noiseparams,))
-#     end
+function prepare_rates(rates, coupling, rindices)
+    r = Vector{Float64}(undef, length(rindices))
+    noiseparams = similar(r)
+    couplingStrength = similar(r)
+    for i in eachindex(rindices)
+        r[i] = rates[rindices[i].rates]
+        couplingStrength[i] = rates[rindices[i].coupling]
+    end
+    rateset = (rate=r, coupling=couplingStrength)
+    if :noise ∈ keys(rindices)
+        noiseparams = similar(r)
+        for i in eachindex(rindices)
+            noiseparams[i] = rates[rindices[i].noise]
+        end
+        rateset = merge(rateset, (noise=noiseparams,))
+    end
 
-# end
+end
 
 function reshape_rates(r, htrait::HierarchicalTrait)
     reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
