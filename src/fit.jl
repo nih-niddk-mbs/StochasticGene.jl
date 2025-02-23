@@ -665,6 +665,11 @@ function checklength(r, transitions, R, S, insertstep, reporter)
     nothing
 end
 
+"""
+    prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
+
+TBW
+"""
 function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
 end
@@ -675,29 +680,6 @@ function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors)
         append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
     end
     rm
-end
-
-
-"""
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-default priors for rates (includes all parameters, fitted or not)
-"""
-function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
-    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
-end
-
-"""
-    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-
-TBW
-"""
-function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
-    rm = Float64[]
-    for i in eachindex(R)
-        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
-    end
-    [rm; fill(0.0, coupling[5])]
 end
 
 """
@@ -727,6 +709,28 @@ function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noiseprio
 end
 
 """
+    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
+
+default priors for rates (includes all parameters, fitted or not)
+"""
+function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
+    [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
+end
+
+"""
+    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+
+TBW
+"""
+function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+    rm = Float64[]
+    for i in eachindex(R)
+        append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
+    end
+    [rm; fill(0.0, coupling[5])]
+end
+
+"""
     set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
 
 set priormean if empty
@@ -749,6 +753,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
         end
     end
 end
+
 
 """
     prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor=10)
@@ -824,11 +829,12 @@ end
 
 set rinit for hierarchical models
 """
-function set_rinit(r, priormean, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
+function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals)
     if isempty(r)
         println("No rate file, set rate to prior")
         r = copy(priormean)
-        n_all_params = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+        # n_all_params = num_rates(transitions, R, S, insertstep) + length(noisepriors)
+        n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors)
         for i in 1:nindividuals
             append!(r, priormean[1:n_all_params])
         end

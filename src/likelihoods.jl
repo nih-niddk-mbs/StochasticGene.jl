@@ -238,11 +238,11 @@ function prepare_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
     j = 1
     for i in eachindex(R)
         n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1,:])
+        push!(r, rates[j:j+n-1, :])
         j += n
     end
     for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end,:])
+        push!(noiseparams, r[i][end-n_noise[i]+1:end, :])
     end
     return r, noiseparams
 end
@@ -268,7 +268,7 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     rshared, noiseshared = prepare_rates(rshared, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
     rindividual, noiseindividual = prepare_rates(rindividual, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
     couplingStrength = prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
-    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noise,individual 
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noise, individual
 end
 
 """
@@ -914,6 +914,7 @@ get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedpa
 
 get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
 
+get_param(model::GRSMcoupledhierarchicalmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 """
     get_rates(param, model)
@@ -1168,7 +1169,14 @@ This function calculates the total number of parameters for the provided model. 
 TBW
 """
 function num_all_parameters(transitions, R::Int, S, insertstep, reporter)
-    n = typeof(reporter) <: HMMReporter ? reporter.n : 0
+    if typeof(reporter) <: HMMReporter
+        n = reporter.n
+    elseif typeof(reporter) <: Vector{Float64}
+        n = length(reporter)
+    else
+        n = 0
+    end
+    # n = typeof(reporter) <: HMMReporter ? reporter.n : 0
     # num_rates(transitions, R, S, insertstep) + n
     num_rates(transitions, R, S, insertstep) + n
 end

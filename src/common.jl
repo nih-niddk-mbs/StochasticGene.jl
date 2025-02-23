@@ -73,10 +73,6 @@ struct DwellTimeData <: AbstractHistogramData
     DTtypes::Vector
 end
 
-
-
-
-
 """
     RNAOnOffData
 
