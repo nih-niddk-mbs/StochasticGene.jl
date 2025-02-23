@@ -315,6 +315,11 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
+function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
+    r, couplingStrength, noiseparams = prepare_rates(param, model)
+    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+end
+
 #### Trait model
 
 # function extract_rates(r, rindices)
@@ -388,7 +393,6 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     traits = keys(model.traits)
-
     if :hierarchical ∈ traits
         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
         if :coupled ∈ traits

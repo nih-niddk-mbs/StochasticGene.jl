@@ -946,7 +946,7 @@ end
 Compute log-likelihood for coupled, hierarchical GRSM model
 """
 function ll_hmm_trait(r::@NamedTuple{rshared::Vector{Float64}, rindividual::Vector{Float64},
-        couplingStrength::Vector{Float64}, noiseparams::Vector{Float64}},
+        couplingStrength::Vector{Float64}, noiseparams},
     nstates::Int, components::TCoupledComponents, reporter::Vector{HMMReporter},
     interval::Float64, trace::Tuple, method)
     rshared, rindividual, couplingStrength, noiseparams = r
