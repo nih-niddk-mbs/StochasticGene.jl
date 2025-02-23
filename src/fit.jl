@@ -503,17 +503,11 @@ shared and hyper parameters have priors, whereas individual parameters are drawn
 function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
     f = union(fittedshared, fittedindividual) # shared parameters come first followed by hyper parameters and individual parameters
     f = sort(f)
-    println(fittedshared)
-    println(fittedindividual)
-    println(f)
-    println(nallparams)
     fhyper = [fittedindividual] # fitted hyper parameters correspond to fitted individual parameters
-    println(fhyper)
     for i in 1:nhypersets-1
         append!(f, fittedindividual .+ i * nallparams)
         push!(fhyper, fittedindividual .+ i * nallparams)
     end
-    println(f)
     fpriors = copy(f) # priors only apply to shared and hyper parameters
     for i in 1:nindividuals
         append!(f, fittedindividual .+ (i + nhypersets - 1) * nallparams)
@@ -699,7 +693,7 @@ function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, n
     # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
     append!(r, hypercv)
     for i in 3:nhypersets
-        append!(r, cv .* rm)
+        append!(r, fill(cv, length(rm)))
     end
     r
 end

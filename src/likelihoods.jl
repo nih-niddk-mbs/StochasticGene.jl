@@ -1188,9 +1188,11 @@ end
 function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter, coupling=tuple(), grid=nothing)
     n = 0
     for i in eachindex(R)
-        n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i], coupling, grid)
+        n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
     end
-    n
+    c = isempty(coupling) ? 0 : coupling[5]
+    g = isnothing(grid) ? 0 : grid
+    n + c + g
 end
 
 function num_all_parameters(model::AbstractGmodel)
