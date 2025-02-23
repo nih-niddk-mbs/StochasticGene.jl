@@ -891,6 +891,11 @@ function make_mat_TC(components::TCoupledComponents{Vector{TCoupledUnitComponent
     make_mat_TC(coupling_strength, T, Source, Target, IT, components.sources, components.model)
 end
 
+function make_mat_T(components::TCoupledComponents{Vector{TCoupledUnitComponents}}, r::Tuple)
+    rates, coupling_strength = r
+    make_mat_TC(components, rates, coupling_strength)
+end
+
 function make_mat_TC(unit::Int, Tin::SparseMatrixCSC, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     U = copy(Gs)
     V = copy(Gt)
