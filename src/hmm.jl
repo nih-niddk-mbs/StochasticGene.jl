@@ -775,6 +775,19 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ll + lb, logpredictions
 end
 
+function ll_hmm_coupled_hierarchical(r, nstates::Int, components::TCoupledComponents, reporter::Vector{HMMReporter},interval::Float64, trace::Tuple, method = (Tsit5(), true))
+    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
+    a, p0 = make_ap_coupled(rshared, couplingStrength, interval, components, method[1])
+    d = set_d(noiseshared, reporter, nT)
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    if method[2]
+        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
+    else
+        ll, logpredictions = ll_hmm((rindividual, couplingStrength), interval, components, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
+    end
+    ll + lb, logpredictions
+end
+
 """
     ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 

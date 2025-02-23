@@ -119,63 +119,6 @@ function datapdf(data::RNADwellTimeData)
 end
 
 """
-    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
-
-convert MCMC params into form to compute likelihood for coupled model
-
-# Arguments
-- `rates`: The model rates.
-- `sourceStates`: The source states.
-- `transitions`: The transitions.
-- `G::Tuple`: The G steps.
-- `R`: The R steps.
-- `S`: The splicing indicator.
-- `insertstep`: The R step where the reporter is inserted.
-- `n_noise`: The number of noise parameters.
-
-# Returns
-- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
-
-"""
-function prepare_rates(rates, sourceStates::Vector, transitions, G::Tuple, R, S, insertstep, n_noise)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    j = 1
-    for i in eachindex(G)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(G)
-        s = sourceStates[i]
-        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end])
-    end
-    return r, couplingStrength, noiseparams
-end
-
-"""
-    prepare_rates(param, model::GRSMcoupledmodel)
-
-convert MCMC params into form to compute likelihood for coupled model
-"""
-function prepare_rates(param, model::GRSMcoupledmodel)
-    rates = get_rates(param, model)
-    n_noise = [r.n for r in model.reporter]
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    prepare_rates(rates, sourceStates, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
-end
-
-
-"""
     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
 
 Prepare rates and parameters for hierarchical model calculations by reshaping vectors into matrices.
@@ -202,6 +145,20 @@ model = GRSMhierarchicalmodel(...)
 r, p, h = prepare_rates(param, model)
 ```
 """
+function prepare_rates(r, param, hierarchy::Hierarchy)
+    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+    rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
+    rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
+    pindividual = reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)
+    return rshared, rindividual, pindividual, phyper
+end
+
 function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
@@ -215,6 +172,103 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return rshared, rindividual, pindividual, phyper
+end
+
+"""
+    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+
+convert MCMC params into form to compute likelihood for coupled model
+
+# Arguments
+- `rates`: The model rates.
+- `sourceStates`: The source states.
+- `transitions`: The transitions.
+- `G::Tuple`: The G steps.
+- `R`: The R steps.
+- `S`: The splicing indicator.
+- `insertstep`: The R step where the reporter is inserted.
+- `n_noise`: The number of noise parameters.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
+
+"""
+function prepare_rates(rates, sourceStates::Vector, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(R)
+        s = sourceStates[i]
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
+
+function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
+    couplingStrength = Float64[]
+    j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
+    for s in sourceStates
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    couplingStrength
+end
+
+function prepare_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1,:])
+        j += n
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end,:])
+    end
+    return r, noiseparams
+end
+
+"""
+    prepare_rates(param, model::GRSMcoupledmodel)
+
+convert MCMC params into form to compute likelihood for coupled model
+"""
+function prepare_rates(param, model::GRSMcoupledmodel)
+    rates = get_rates(param, model)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    prepare_rates(rates, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+end
+
+# rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
+    r = get_rates(param, model)
+    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    rshared, noiseshared = prepare_rates(rshared, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+    rindividual, noiseindividual = prepare_rates(rindividual, model.Gtransitions, model.G, model.R, model.S, model.insertstep, n_noise)
+    couplingStrength = prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noise,individual 
 end
 
 """
@@ -271,26 +325,6 @@ function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
-    r, noiseparams, pgrid = prepare_rates(param, model)
-    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
-
-
-
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
-    r = get_rates(param, model)
-    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
-    logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-end
-
 function ll_hierarchy(pindividual, phyper)
     d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
     lhp = Float64[]
@@ -316,8 +350,29 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-    r, couplingStrength, noiseparams = prepare_rates(param, model)
-    ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+    llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, couplingStrength, noiseshared, noiseindividual), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    lhp = ll_hierarchy(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+
+function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+    r, noiseparams, pgrid = prepare_rates(param, model)
+    ll_hmm_grid_hierarchical(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
+    r = get_rates(param, model)
+    llg, llgp = ll_hmm(r, model.components.tcomponents.nT, model.components.tcomponents, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+    logpredictions = log.(max.(predictions, eps()))
+    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
 #### Trait model
