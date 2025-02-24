@@ -163,16 +163,37 @@ function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insert
     couplingStrength
 end
 
+# function prepare_rates(r, param, hierarchy::Hierarchy)
+#     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+
+#     rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+#     # rshared = collect(eachcol(reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)))
+
+#     rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
+#     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
+#     rindividual = collect(eachcol(rindividual))
+#     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+
+#     phyper = Vector{Float64}[]
+#     for i in hierarchy.hyperindices
+#         push!(phyper, r[i])
+#     end
+
+#     return rshared, rindividual, pindividual, phyper
+# end
+
+
 function prepare_rates(r, param, hierarchy::Hierarchy)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 
-    # rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
-    rshared = collect(eachcol(reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)))
+    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+    # rshared = collect(eachcol(reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)))
 
     rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
-    rindividual = collect(eachcol(rindividual))
+    # rindividual = collect(eachcol(rindividual))
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
 
     phyper = Vector{Float64}[]
@@ -182,37 +203,21 @@ function prepare_rates(r, param, hierarchy::Hierarchy)
 
     return rshared, rindividual, pindividual, phyper
 end
-
-
-function prepare_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
+function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, reporter)
     r = Matrix{Float64}[]
     noiseparams = Matrix{Float64}[]
     j = 1
     for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
         push!(r, rates[j:j+n-1, :])
         j += n
     end
     for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end, :])
+        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
     end
     return r, noiseparams
 end
 
-function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
-    r = Vector{Vector{Float64}}[]
-    noiseparams = Vector{Vector{Float64}}[]
-    j = 1
-    for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end, :])
-    end
-    return r, noiseparams
-end
 
 # rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
 function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
@@ -220,11 +225,39 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
     n_noise = [r.n for r in model.reporter]
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    rshared, noiseshared = prepare_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-    rindividual, noiseindividual = prepare_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+    rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
     couplingStrength = prepare_coupling(r, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+    rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
+    noiseshared = [[p[:, j] for p in noiseshared] for j in 1:size(noiseshared[1], 2)]
+    rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
+    noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
     rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual
 end
+
+
+function ll_hierarchy_c(pindividual, phyper)
+    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+    lhp = Float64[]
+    for pc in pindividual
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    lhp
+end
+function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+    llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, couplingStrength, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
+    lhp = ll_hierarchy_c(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+
+
+
 """
     prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
 
@@ -378,12 +411,7 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
-    llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, couplingStrength, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
-    lhp = ll_hierarchy(pindividual, phyper)
-    return llg + sum(lhp), vcat(llgp, lhp)
-end
+
 
 function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
     r, noiseparams, pgrid = prepare_rates(param, model)
@@ -1092,6 +1120,9 @@ function logprior(param, model::AbstractGmodel)
     p = 0
     for i in eachindex(d)
         p -= logpdf(d[i], param[i])
+        println(d[i])
+        println(param[i])
+        println(logpdf(d[i], param[i]))
     end
     return p
 end
