@@ -147,6 +147,21 @@ function split_matrix(mat::Matrix{Float64}, idx1::Vector{Int}, idx2::Vector{Int}
         [mat[idx2, j] for j in 1:size(mat, 2)]...)
 end
 
+function split_matrix2(mat::Matrix{Float64})
+    N, M = size(mat)
+    half = div(N, 2)  # Divide N into two equal parts (assuming even N)
+
+    return [mat[1:half, j] for j in 1:M],  # First row: first half
+    [mat[half+1:N, j] for j in 1:M] # Second row: second half
+end
+
+
+function convert_to_m_dim(mat::Matrix{Float64})
+    row1, row2 = split_matrix2(mat)
+    return [[row1[j], row2[j]] for j in 1:size(mat, 2)]  # Each element is a vector of two vectors
+end
+
+
 function prepare_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
     r = Matrix{Float64}[]
     noiseparams = Matrix{Float64}[]
