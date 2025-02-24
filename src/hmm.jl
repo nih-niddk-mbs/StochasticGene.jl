@@ -255,7 +255,7 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::Function, 
     probfn(noiseparams, reporters_per_state, N)
 end
 
-function set_d(noiseparams, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
+function set_d(noiseparams::Vector{Vector{Float64}}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
     d = Vector[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
@@ -702,8 +702,8 @@ end
 function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
-        d = set_d(noiseparams, reporter, N)
-        b = set_b(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
+        d = set_d(noiseparams[i], reporter, nT)
+        b = set_b(traces[i], d, nT)
         _, C = forward(a, b, p0, nT, size(traces[i], 1))
         @inbounds logpredictions[i] = sum(log.(C))
     end
@@ -777,14 +777,13 @@ end
 
 function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter},interval::Float64, trace::Tuple, method = (Tsit5(), true))
     nstates = components.N
-    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = r
+    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
     rsharedmean = [c[:,1] for c in rshared]
     a, p0 = make_ap_coupled(rsharedmean, couplingStrength, interval, components, method[1])
-    println(noiseshared)
-    d = set_d(noiseshared, reporter, nstates)
+    d = set_d(noiseshared[1], reporters, nstates)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     if method[2]
-        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
+        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
     else
         ll, logpredictions = ll_hmm((rindividual, couplingStrength), interval, components, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
     end

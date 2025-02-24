@@ -246,8 +246,10 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
     n_noise = [r.n for r in model.reporter]
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    rshared, noiseshared = prepare_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-    rindividual, noiseindividual = prepare_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    rshared, ns = prepare_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    noiseshared = [[m[:, j] for m in ns] for j in 1:size(ns[1], 2)]
+    rindividual, ni = prepare_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    noiseindividual = [[m[:, j] for m in ni] for j in 1:size(ni[1], 2)]
     couplingStrength = prepare_coupling(r, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
     rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual
 end
@@ -331,13 +333,11 @@ function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmo
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-    r = prepare_rates(param, model)
-    # llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, couplingStrength, noiseshared, noiseindividual), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-    ll_hmm_coupled_hierarchical(r, model.components, model.reporter, data.interval, data.trace, model.method)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+    llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, couplingStrength, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
     lhp = ll_hierarchy(pindividual, phyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
-
 
 function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
     r, noiseparams, pgrid = prepare_rates(param, model)
