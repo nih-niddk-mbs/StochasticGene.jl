@@ -320,17 +320,6 @@ end
 
 function set_b(trace::Matrix, d::Vector{Vector}, N)
     set_b_coupled(trace, d, N)
-    # b = ones(N, size(trace, 1))
-    # t = 1
-    # for obs in eachrow(trace)
-    #     for j in 1:N
-    #         for i in eachindex(d)
-    #             b[j, t] *= pdf(d[i][j], obs[i])
-    #         end
-    #     end
-    #     t += 1
-    # end
-    # return b
 end
 
 function set_b(trace, d, N::Tuple)
@@ -704,6 +693,17 @@ function ll_hmm(r, a::Matrix, p0::Vector, n_noiseparams, reporters_per_state, pr
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        _, C = forward(a, b, p0, nT, size(traces[i], 1))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        d = set_d(noiseparams, reporter, N)
+        b = set_b(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
         _, C = forward(a, b, p0, nT, size(traces[i], 1))
         @inbounds logpredictions[i] = sum(log.(C))
     end
