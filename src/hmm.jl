@@ -775,11 +775,13 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ll + lb, logpredictions
 end
 
-function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporter::Vector{HMMReporter},interval::Float64, trace::Tuple, method = (Tsit5(), true))
+function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter},interval::Float64, trace::Tuple, method = (Tsit5(), true))
     nstates = components.N
-    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
-    a, p0 = make_ap_coupled(rshared, couplingStrength, interval, components, method[1])
-    d = set_d(noiseshared, reporter, nT)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = r
+    rsharedmean = [c[:,1] for c in rshared]
+    a, p0 = make_ap_coupled(rsharedmean, couplingStrength, interval, components, method[1])
+    println(noiseshared)
+    d = set_d(noiseshared, reporter, nstates)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters.n, reporters.per_state, reporters.probfn, trace[1], nstates)
