@@ -118,54 +118,16 @@ function datapdf(data::RNADwellTimeData)
     return v
 end
 
-
-
-
-
 """
-    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+    prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
 
-convert MCMC params into form to compute likelihood for coupled model
+Prepare the coupling strength for the coupled model.
 
 # Arguments
-- `rates`: The model rates.
+- `rates`: The rates.
 - `sourceStates`: The source states.
 - `transitions`: The transitions.
-- `G::Tuple`: The G steps.
-- `R`: The R steps.
-- `S`: The splicing indicator.
-- `insertstep`: The R step where the reporter is inserted.
-- `n_noise`: The number of noise parameters.
-
-# Returns
-- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
-
 """
-function prepare_rates(rates, sourceStates::Vector, transitions, R::Tuple, S, insertstep, n_noise)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    j = 1
-    for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-        push!(r, rates[j:j+n-1])
-        j += n
-    end
-    for i in eachindex(R)
-        s = sourceStates[i]
-        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-n_noise[i]+1:end])
-    end
-    return r, couplingStrength, noiseparams
-end
-
 function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
     couplingStrength = Float64[]
     j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
@@ -178,6 +140,11 @@ function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insert
         end
     end
     couplingStrength
+end
+
+function split_matrix(mat::Matrix{Float64}, idx1::Vector{Int}, idx2::Vector{Int})
+    return hcat([mat[idx1, j] for j in 1:size(mat, 2)]...,
+        [mat[idx2, j] for j in 1:size(mat, 2)]...)
 end
 
 function prepare_rates(rates, transitions, R::Tuple, S, insertstep, n_noise)
@@ -208,6 +175,73 @@ function prepare_rates(r, param, hierarchy::Hierarchy)
     pindividual = reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)
     return rshared, rindividual, pindividual, phyper
 end
+# rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
+    r = get_rates(param, model)
+    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    rshared, ns = prepare_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    noiseshared = [[m[:, j] for m in ns] for j in 1:size(ns[1], 2)]
+    rindividual, ni = prepare_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+    noiseindividual = [[m[:, j] for m in ni] for j in 1:size(ni[1], 2)]
+    couplingStrength = prepare_coupling(r, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual
+end
+"""
+    prepare_rates(rates, sourceStates, transitions, G::Tuple, R, S, insertstep, n_noise)
+
+convert MCMC params into form to compute likelihood for coupled model
+
+# Arguments
+- `rates`: The model rates.
+- `sourceStates`: The source states.
+- `transitions`: The transitions.
+- `G::Tuple`: The G steps.
+- `R`: The R steps.
+- `S`: The splicing indicator.
+- `insertstep`: The R step where the reporter is inserted.
+- `n_noise`: The number of noise parameters.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}, Vector{Vector{Float64}}}`: Prepared rates, coupling strength, and noise parameters.
+
+"""
+function prepare_rates_coupled(rates, sourceStates::Vector, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(R)
+        s = sourceStates[i]
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
+"""
+    prepare_rates(param, model::GRSMcoupledmodel)
+
+convert MCMC params into form to compute likelihood for coupled model
+"""
+function prepare_rates(param, model::GRSMcoupledmodel)
+    rates = get_rates(param, model)
+    n_noise = [r.n for r in model.reporter]
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+    prepare_rates_coupled(rates, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
+end
 
 """
     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
@@ -227,31 +261,6 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return rshared, rindividual, pindividual, phyper
-end
-"""
-    prepare_rates(param, model::GRSMcoupledmodel)
-
-convert MCMC params into form to compute likelihood for coupled model
-"""
-function prepare_rates(param, model::GRSMcoupledmodel)
-    rates = get_rates(param, model)
-    n_noise = [r.n for r in model.reporter]
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    prepare_rates(rates, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-end
-
-# rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
-function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
-    r = get_rates(param, model)
-    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
-    n_noise = [r.n for r in model.reporter]
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
-    rshared, ns = prepare_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-    noiseshared = [[m[:, j] for m in ns] for j in 1:size(ns[1], 2)]
-    rindividual, ni = prepare_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-    noiseindividual = [[m[:, j] for m in ni] for j in 1:size(ni[1], 2)]
-    couplingStrength = prepare_coupling(r, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual
 end
 
 """

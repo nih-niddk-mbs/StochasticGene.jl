@@ -660,7 +660,7 @@ function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, nstates, n
 end
 
 
-
+### Called by other ll_hmm functions
 """
     ll_hmm(a::Matrix, p0::Vector, d, traces, nT)
 
@@ -679,7 +679,7 @@ the equilibrium probabilities `p0`, and the observation distributions `d`.
 - `Array{Float64}`: An array of log-likelihoods for each trace.
 """
 # rates and noise shared
-function ll_hmm(a::Matrix, p0::Vector, d, traces, nT)
+function ll_hmm_loop(a::Matrix, p0::Vector, d, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         _, C = forward(a, set_b(traces[i], d, nT), p0, nT, size(traces[i], 1))
@@ -689,7 +689,7 @@ function ll_hmm(a::Matrix, p0::Vector, d, traces, nT)
 end
 
 # rates shared, noise individual
-function ll_hmm(r, a::Matrix, p0::Vector, n_noiseparams, reporters_per_state, probfn, traces, nT)
+function ll_hmm_loop(r, a::Matrix, p0::Vector, n_noiseparams::Int, reporters_per_state, probfn, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
@@ -698,6 +698,21 @@ function ll_hmm(r, a::Matrix, p0::Vector, n_noiseparams, reporters_per_state, pr
     end
     sum(logpredictions), logpredictions
 end
+
+# rates and noise individual
+function ll_hmm_loop(r, interval::Float64, components::AbstractComponents, n_noiseparams::Int, reporters_per_state, probfn, traces, nT, method=Tsit5())
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[:, i], interval, components, method)
+        b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        _, C = forward(a, b, p0, nT, size(traces[i], 1))
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+
+### Called by other ll_hmm functions, reporter as argument
 
 function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
     logpredictions = Array{Float64}(undef, length(traces))
@@ -710,18 +725,20 @@ function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
     sum(logpredictions), logpredictions
 end
 
-# rates and noise individual
-function ll_hmm(r, interval::Float64, components::AbstractComponents, n_noiseparams::Int, reporters_per_state, probfn, traces, nT, method=Tsit5())
+function ll_hmm(r, interval::Float64, components::AbstractComponents, reporter, traces, nT, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         a, p0 = make_ap(r[:, i], interval, components, method)
-        b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
+        d = set_d(noiseparams[:, i], reporter, nT)
+        b = set_b(traces[i], d, nT)
+        # b = set_b(traces[i], r[end-n_noiseparams+1:end, i], reporters_per_state, probfn, nT)
         _, C = forward(a, b, p0, nT, size(traces[i], 1))
         @inbounds logpredictions[i] = sum(log.(C))
     end
     sum(logpredictions), logpredictions
 end
 
+### Called by loglikelihood functions
 """
     ll_hmm(r, nstates, components::TComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 
