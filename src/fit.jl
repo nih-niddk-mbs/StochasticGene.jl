@@ -520,7 +520,6 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    println(n_all_params)
     nindividuals = length(data.trace[1])
     nparams = length(fittedindividual) # number of fitted params per individual
     ratestart = nhypersets * n_all_params + 1
@@ -805,7 +804,6 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        println(transform_array(rm[fittedparam], couplingindex, fittedparam, logv, log_shift1))
         return distribution_array(transform_array(rm[fittedparam], couplingindex, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
     else
         throw("priorcv not the same length as prior mean")

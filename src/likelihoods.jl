@@ -855,15 +855,15 @@ This function applies the transformation functions `f1` and `f2` to an array or 
 # Returns
 - `Array` or `Vector`: The transformed array or vector.
 """
-function transform_array(v::Array, index::Int, f1::Function, f2::Function)
-    vcat(f1(v[1:index-1, :]), f2(v[index:end, :]))
+function transform_array(v::Array, index, f1::Function, f2::Function)
+    vcat(f1(v[1:index-1, :]), f2(v[index, :]))
 end
 
-function transform_array(v::Vector, index::Int, f1::Function, f2::Function)
+function transform_array(v::Vector, index, f1::Function, f2::Function)
     vcat(f1(v[1:index-1]), f2(v[index:end]))
 end
 
-function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::Function)
+function transform_array(v::Array, index, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
         return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
@@ -872,14 +872,26 @@ function transform_array(v::Array, index::Int, mask::Vector, f1::Function, f2::F
     end
 end
 
-function transform_array(v::Vector, index::Int, mask::Vector, f1::Function, f2::Function)
+function transform_array(v::Vector, index, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
-        return vcat(f1(v[1:n-1]), f2(v[n:end]))
+        return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
     else
         return f1(v)
     end
 end
+
+# function transform_array(v::Vector, index, mask::Vector, f1::Function, f2::Function)
+#     if all(x -> x > 0, index) && index ∈ mask
+#         f = f1(v)
+#         f[index] = f2(v[index])
+#         return f[mask]
+#         # n = findfirst(index .== mask)
+#         # return vcat(f1(v[1:n-1]), f2(v[n:end]))
+#     else
+#         return f1(v)
+#     end
+# end
 
 """
     transform_rates(r, model)
@@ -943,7 +955,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}
 
 inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
-inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
+inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, 21, model.fittedparam, expv, invlog_shift1)
 
 
 """
@@ -1120,9 +1132,6 @@ function logprior(param, model::AbstractGmodel)
     p = 0
     for i in eachindex(d)
         p -= logpdf(d[i], param[i])
-        println(d[i])
-        println(param[i])
-        println(logpdf(d[i], param[i]))
     end
     return p
 end
