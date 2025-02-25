@@ -507,14 +507,14 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel)
     if :hierarchical ∈ traits
         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
         if :coupled ∈ traits
-            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling)
+            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling[1])
             rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, phyper=phyper, coupling=couplingStrength, noiseparams=noiseparams)
         else
             rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, phyper=phyper)
         end
     else
         if :coupled ∈ traits
-            r, noiseparams, couplingStrength = prepare_rates(r, model.coupling)
+            r, noiseparams, couplingStrength = prepare_rates(r, model.coupling[1])
             rateset = (rates=r, noiseparams=noiseparams, coupling=couplingStrength)
         else
             r, noiseparams = prepare_rates(r, model)
@@ -919,6 +919,8 @@ transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = tran
 
 transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
+transform_rates(r, model::GRSMcoupledhierarchicalmodel) = transform_array(r, model.coupling[2], model.fittedparam, logv, log_shift1)
+
 
 # function transform_rates(pin, model::GRSMcoupledmodel)
 #     p = copy(pin)
@@ -955,7 +957,7 @@ inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}
 
 inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
-inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, 21, model.fittedparam, expv, invlog_shift1)
+inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, model.coupling[2], model.fittedparam, expv, invlog_shift1)
 
 
 """

@@ -553,7 +553,7 @@ function rlabels(model::GRSMcoupledmodel)
     for i in eachindex(model.G)
         labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
     end
-    for i in 1:model.coupling
+    for i in 1:model.coupling[1]
         labels = hcat(labels, ["Coupling_$i"])
     end
     reshape(labels, 1, :)
