@@ -684,7 +684,7 @@ function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporter
     rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
     d = set_d(noiseshared[1], reporters, nstates)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
     else

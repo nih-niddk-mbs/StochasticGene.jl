@@ -752,7 +752,7 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
                 return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
             end
         else
-            return prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, hierarchical[1], elongationtime, coupling)
+            return prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical[1], coupling)
         end
     end
 end
