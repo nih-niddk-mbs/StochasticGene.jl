@@ -521,7 +521,7 @@ function compute_stats(paramin::Array{Float64,2}, model)
     Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
 end
 
-function compute_stats(paramin::Array{Float64,2}, model::GRSMhierarchicalmodel)
+function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchicalmodel)
     param = inverse_transform_rates(paramin, model)
     meanparam = mean(param, dims=2)
     stdparam = std(param, dims=2)
