@@ -189,7 +189,7 @@ julia> simulate_trace_data("data/testtraces/")
 
 ```
 
-which generates 10 mock trk files in folder "data/testraces". See API below for the parameters used in the simulated data.
+which generates 10 mock trk files in folder "data/testtraces". See API below for the parameters used in the simulated data.  We fit a model with a G=3, R=2, S=2, insertstep=1 model using the command below. This model assumes that there are 3 Gene states and 2 pre-RNA steps with the reporter inserted at the first step. The reporter can also be spliced out at any step. If S < R then splicing will only occur in the first S available slots, starting from 1. Insertstep attempts to account for the fact that the reporter could be inserted anywhere along the gene (e.g. 3' or 5' end). If the signal intensity indicates more than one reporter is present during a burst then choose insertstep to be smaller than R. However, if bursts seem to only contain one reporter then use insertstep = R. The `transitions` keyword takes a tuple of vectors where each vector indicates a G transition to be included. For example [1, 2] means that there exists a transition from G state 1 to G state 2.
 
 ```
 
@@ -218,9 +218,9 @@ rhat: 2.541388750409241
 
 
 ```
-In this run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. Either `maxtime` or `samplesteps` needs to be increased.
+The results will be found in a folder called results/HCT116_test, which you can set using the `resultfolder` keyword (see the API for fit below). Each time you run fit, it will first check 'infolder' for a "rate" file to load in the results of previous fits. Thus, setting `infolder` and `resultfolder` to the same folder will allow you to iterate the fits. When fitting traces, it is imperative that you give very good priors for the background and signal mean intensities.  These are specified by the `noisepriors` keyword. The default is to fit both the background and the signal intensities with a Gaussian distribution and thus the 4 parameters in `noisepriors` corresponds to the [mean of the background, S.D. of the background, mean of the signal, S.D. of the signal]. The default distribution assumes that the signal intensities are additive so if two reporters are present, the the signal distribution will have a mean twice as large and variance twice as large. Other distributions can be selected using the `probfn` keyword. Options include nonadditive Gaussians and mixed Gaussians. Some will require more parameters. Generally, the default will be sufficient. It is also sometimes beneficial to not fit the signal intensities. Which parameters are to be fit can be specified by the `fittedparam` keyword.
 
-Note that transitions is a tuple of vectors where each vector indicates a transition to be included. For example [1,2] means that there exists a transition from G state 1 to G state 2._
+In this example run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. Either `maxtime` or `samplesteps` needs to be increased.
 
 
 ### Batch fitting on Biowulf using `swarm`.
@@ -379,7 +379,6 @@ Fit steady state or transient GM model to RNA data for a single gene, write the 
 
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
 then G = (2,3). 
-
 #Arguments
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
@@ -387,8 +386,10 @@ then G = (2,3).
 - `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
     1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
     2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
-    3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
-    4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
+    3. source states: tuple of vectors of strings, e.g. (["G3","R1"], []) means that model 1 influences other units whenever it is in G state 3 or R step 1 (if a number is not included (e.g. (R,0)) then all the Gstates or R steps are included), 
+        while model 2 does not influence any other unit
+    4. target transitions:tuple, e.g. ([], 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at transition 4. Transitions
+        are number consecutively by order of the transition rates. So for a G=2 model, transition 1 is the G1 to G2 transition and transition 3 is the initiation transition
     5. Int indicating number of coupling parameters
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -396,11 +397,15 @@ then G = (2,3).
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
 - `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
-- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models)
+- `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models, fitted hyper parameters are specified by individual fittedparams)
 - `fixedeffects::String`: if "fixed" is included after a hyphen, then fixedeffects Tuple will be created such that R transitions are fixed to be identical
 - `fixedeffects::Tuple=tuple()`: tuple of vectors of rates that are fixed where first index is fit and others are fixed to first, e.g. ([3,8],) means index 8 is fixed to index 3 (only first parameter should be included in fittedparam) (applies to shared rates for hierarchical models)
+- `gene::String="MYC"`: gene name
+- `grid=nothing`: Int number of grid points for grid model
 - `G=2`: number of gene states, for coupled models G, R, S, and insertstep are vectors (vector for coupled models)
-- `hierarchical=tuple()`: empty tuple for nonhierarchical; for hierarchical model use 3-tuple of hierarchical model parameters (pop.nhypersets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple)
+- `hierarchical=tuple()`: empty tuple for nonhierarchical model; 3-tuple for hierarchical: hierarchical=(number of hyper parameter sets::Int, individual fittedparams::Vector, individual fixedeffects::Tuple),
+    for hierarchical models the keywords `fittedparam` and `fixedeffects` pertain to shared rates.  rates are given by a single vector that can be reshaped into a matrix where the columns correspond to the model rates and noise params, the first nhyper rows pertain to the shared and hyper parameter rates (whether fit or not), 
+    usually the first row is the shared and mean hyper parameters and the 2nd are the standard deviations, the rest of the rows are the individual rates and noise params
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
@@ -425,7 +430,7 @@ then G = (2,3).
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple of frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), and fraction of observed active traces for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
+- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple = (frame interval of intensity traces, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces); for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
