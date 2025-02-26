@@ -492,9 +492,7 @@ ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
 TBW
 """
-function rlabels(model::AbstractGRSMmodel)
-    rlabels_GRSM(model)
-end
+
 
 function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     labels = String[]
@@ -518,37 +516,11 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     reshape(labels, 1, :)
 end
 
-function rlabels_GRSM(model)
+function rlabels_GRSM(model::AbstractGRSMmodel)
     rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
-    # labels = String[]
-    # for t in model.Gtransitions
-    #     push!(labels, "Rate$(t[1])$(t[2])")
-    # end
-    # push!(labels, "Initiate")
-    # for i in 1:model.R-1
-    #     push!(labels, "Rshift$i")
-    # end
-    # push!(labels, "Eject")
-    # for i in 1:model.S
-    #     push!(labels, "Splice$i")
-    # end
-    # push!(labels, "Decay")
-    # if typeof(model.reporter) == HMMReporter
-    #     for i in 1:model.reporter.n
-    #         push!(labels, "noiseparam$i")
-    #     end
-    #     # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
-    #     #     push!(labels, "noise_mean$i")
-    #     #     push!(labels, "noise_std$i")
-    #     # end
-    #     # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
-    #     #     push!(labels, "bias$i")
-    #     # end
-    # end
-    # reshape(labels, 1, :)
 end
 
-function rlabels(model::GRSMcoupledmodel)
+function rlabels_GRSM(model::Union{GRSMcoupledmodel,GRSMcoupledhierarchicalmodel})
     labels = Array{String}(undef, 1, 0)
     for i in eachindex(model.G)
         labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
@@ -559,7 +531,11 @@ function rlabels(model::GRSMcoupledmodel)
     reshape(labels, 1, :)
 end
 
-function rlabels(model::GRSMhierarchicalmodel)
+function rlabels(model::AbstractGRSMmodel)
+    rlabels_GRSM(model)
+end
+
+function rlabels(model::AbstractGRSMhierarchicalmodel)
     labels = String[]
     l = rlabels_GRSM(model)
     for i in 1:model.hierarchy.nhypersets
@@ -586,13 +562,6 @@ function rlabels(model::AbstractGMmodel)
         for i in 1:model.reporter.n
             push!(labels, "noiseparam$i")
         end
-        # for i in 1:div(model.reporter.weightind - num_rates(model) - 1, 2)
-        #     push!(labels, "noise_mean$i")
-        #     push!(labels, "noise_std$i")
-        # end
-        # for i in 1:num_rates(model)+model.reporter.n-model.reporter.weightind+1
-        #     push!(labels, "bias$i")
-        # end
     end
     reshape(labels, 1, :)
 end
