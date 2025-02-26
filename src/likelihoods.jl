@@ -866,7 +866,8 @@ end
 function transform_array(v::Array, index, mask::Vector, f1::Function, f2::Function)
     if index > 0 && index ∈ mask
         n = findfirst(index .== mask)
-        return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
+        # return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
+        return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f1(v[n+1:end, :]))
     else
         return f1(v)
     end
