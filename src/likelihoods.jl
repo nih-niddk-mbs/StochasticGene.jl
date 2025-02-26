@@ -129,26 +129,6 @@ Prepare the coupling strength for the coupled model.
 - `transitions`: The transitions.
 """
 
-
-function split_matrix(mat::Matrix{Float64}, idx1::Vector{Int}, idx2::Vector{Int})
-    return hcat([mat[idx1, j] for j in 1:size(mat, 2)]...,
-        [mat[idx2, j] for j in 1:size(mat, 2)]...)
-end
-
-function split_matrix2(mat::Matrix{Float64})
-    N, M = size(mat)
-    half = div(N, 2)  # Divide N into two equal parts (assuming even N)
-
-    return [mat[1:half, j] for j in 1:M],  # First row: first half
-    [mat[half+1:N, j] for j in 1:M] # Second row: second half
-end
-
-
-function convert_to_m_dim(mat::Matrix{Float64})
-    row1, row2 = split_matrix2(mat)
-    return [[row1[j], row2[j]] for j in 1:size(mat, 2)]  # Each element is a vector of two vectors
-end
-
 function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
     couplingStrength = Float64[]
     j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
@@ -163,46 +143,8 @@ function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insert
     couplingStrength
 end
 
-# function prepare_rates(r, param, hierarchy::Hierarchy)
-#     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-
-#     rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
-#     # rshared = collect(eachcol(reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)))
-
-#     rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
-#     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
-#     rindividual = collect(eachcol(rindividual))
-#     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-
-#     phyper = Vector{Float64}[]
-#     for i in hierarchy.hyperindices
-#         push!(phyper, r[i])
-#     end
-
-#     return rshared, rindividual, pindividual, phyper
-# end
 
 
-function prepare_rates(r, param, hierarchy::Hierarchy)
-    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-
-    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
-    # rshared = collect(eachcol(reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)))
-
-    rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
-    rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
-    # rindividual = collect(eachcol(rindividual))
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-
-    phyper = Vector{Float64}[]
-    for i in hierarchy.hyperindices
-        push!(phyper, r[i])
-    end
-
-    return rshared, rindividual, pindividual, phyper
-end
 function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, reporter)
     r = Matrix{Float64}[]
     noiseparams = Matrix{Float64}[]
@@ -219,11 +161,28 @@ function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, repo
 end
 
 
-# rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(param, model)
+function prepare_rates(r, param, hierarchy::Hierarchy)
+    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+
+    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+
+    rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
+    rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
+
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+
+    return rshared, rindividual, pindividual, phyper
+end
+
 function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     r = get_rates(param, model)
     rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
-    n_noise = [r.n for r in model.reporter]
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
     rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
     rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)

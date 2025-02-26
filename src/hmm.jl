@@ -492,21 +492,6 @@ function forward(atuple::Tuple, b::Array, p0)
     a, a_grid = atuple
     Nstate, Ngrid, T = size(b)
     forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    # α = zeros(Nstate, Ngrid, T)
-    # C = Vector{Float64}(undef, T)
-    # α[:, :, 1] = p0 .* b[:, :, 1]
-    # C[1] = 1 / sum(α[:, :, 1])
-    # α[:, :, 1] *= C[1]
-    # for t in 2:T
-    #     for l in 1:Ngrid, k in 1:Nstate
-    #         for j in 1:Ngrid, i in 1:Nstate
-    #             α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-    #         end
-    #     end
-    #     C[t] = 1 / sum(α[:, :, t])
-    #     α[:, :, t] *= C[t]
-    # end
-    # return α, C
 end
 
 
@@ -675,9 +660,6 @@ function ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components:
     end
     sum(logpredictions), logpredictions
 end
-
-
-
 
 function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
     nstates = components.N

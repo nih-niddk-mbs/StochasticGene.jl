@@ -146,8 +146,8 @@ function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
-    rfit= StochasticGene.get_rates(fits.parml, model), rtarget
-    return  rfit, rtarget, fits, stats, measures, data, model, options
+    rfit = StochasticGene.get_rates(fits.parml, model), rtarget
+    return rfit, rtarget, fits, stats, measures, data, model, options
 end
 
 function test_fit_trace_grid(; Ngrid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 20, 0.2], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [50, 15, 200, 20]; 0.1], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4, 5, 6, 7, 8, 11], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70], maxtime=10.0)
@@ -171,7 +171,19 @@ end
 
 ### end of functions used in runtest
 
-function test_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0)
+function test_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0, method=Tsit5())
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
+    # coupling = ((1, 2), (tuple(), tuple(1)), (["G2"], String[]), (0, 1), 1)
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], coupling)
+    rinit = set_rinit(rinit, rm)
+    fittedparam = StochasticGene.set_fittedparam(fittedparam, data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
+    model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
+    return data, model, options, rinit, rtarget
+end
+
+function test_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0, totalsteps=500000,)
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
     rm = StochasticGene.prior_ratemean_hierarchical(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], hierarchical[1], coupling)
@@ -179,13 +191,14 @@ function test_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (
     fittedparam = StochasticGene.set_fittedparam(fittedparam, data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
-    # fits, stats, measures = run_mh(data, model, options)
-    # StochasticGene.get_rates(fits.parml, model), rtarget
-    # return fits, stats, measures, rm, rtarget
-    # return fits, stats, measures, data, model, options
-    hyper, fittedparam, fixedeffects, priord = StochasticGene.make_hierarchical(data, rm, fittedparam, tuple(), transitions, R, S, insertstep, 10., noisepriors, hierarchical, model.reporter, coupling, nothing)
-    fittedindividual = hierarchical[2]
-    return data, model, options, rm, rinit, fittedparam, priord
+    sshist = simulator_ss(rm, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps, verbose=false)
+
+    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(get_param(model), model)
+
+    a, p0 = make_ap(rshared[1], couplingStrength, data.interval, model.components, method[1])
+
+    return sshist / sum(sshist), p0, a
+
 end
 
 function test_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, [6], tuple()), method=(Tsit5(), true), maxtime=180.0)
@@ -204,9 +217,9 @@ function test_coupling(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 4), 
     sshist = simulator_ss(rates, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps, verbose=verbose)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
-    r, couplingStrength, _ = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    r, couplingStrength, _ = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, [4, 4])
     println(couplingStrength)
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    a, p0 = make_ap(r, couplingStrength, interval, components)
     return sshist / sum(sshist), p0, a
 end
 
@@ -410,4 +423,21 @@ end
 
 
 
+function split_matrix(mat::Matrix{Float64}, idx1::Vector{Int}, idx2::Vector{Int})
+    return hcat([mat[idx1, j] for j in 1:size(mat, 2)]...,
+        [mat[idx2, j] for j in 1:size(mat, 2)]...)
+end
 
+function split_matrix2(mat::Matrix{Float64})
+    N, M = size(mat)
+    half = div(N, 2)  # Divide N into two equal parts (assuming even N)
+
+    return [mat[1:half, j] for j in 1:M],  # First row: first half
+    [mat[half+1:N, j] for j in 1:M] # Second row: second half
+end
+
+
+function convert_to_m_dim(mat::Matrix{Float64})
+    row1, row2 = split_matrix2(mat)
+    return [[row1[j], row2[j]] for j in 1:size(mat, 2)]  # Each element is a vector of two vectors
+end
