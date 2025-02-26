@@ -757,6 +757,35 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     end
 end
 
+"""
+    prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindex, factor=10)
+
+TBW
+"""
+function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindex, factor=10)
+    if isempty(rm)
+        throw("No prior mean")
+        # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
+    end
+    if priorcv isa Number
+        rcv = fill(priorcv, length(rm))
+        s = 0
+        for i in eachindex(R)
+            lnp = isempty(noisepriors) ? 0 : length(noisepriors[i])
+            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+            rcv[s+n] = 0.1
+            rcv[s+n+1:s+n+lnp] ./= factor
+            s += n + lnp
+        end
+    else
+        rcv = priorcv
+    end
+    if length(rcv) == length(rm)
+        return distribution_array(transform_array(rm[fittedparam], couplingindex, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
+    else
+        throw("priorcv not the same length as prior mean")
+    end
+end
 
 """
     prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor=10)
@@ -784,32 +813,14 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     end
 end
 
-prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindex, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindex, factor)
+prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors::Vector, couplingindex, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindex, factor)
 
-function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindex, factor=10)
-    if isempty(rm)
-        throw("No prior mean")
-        # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
-    end
-    if priorcv isa Number
-        rcv = fill(priorcv, length(rm))
-        s = 0
-        for i in eachindex(R)
-            lnp = isempty(noisepriors) ? 0 : length(noisepriors[i])
-            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
-            rcv[s+n] = 0.1
-            rcv[s+n+1:s+n+lnp] ./= factor
-            s += n + lnp
-        end
-    else
-        rcv = priorcv
-    end
-    if length(rcv) == length(rm)
-        return distribution_array(transform_array(rm[fittedparam], couplingindex, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
-    else
-        throw("priorcv not the same length as prior mean")
-    end
+function prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors)
+    couplingindex = num_all_parameters(transitions, R, S, insertstep, noisepriors)
+    println(couplingindex)
+    prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindex)
 end
+
 
 # function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
 """

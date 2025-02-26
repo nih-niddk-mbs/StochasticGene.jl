@@ -794,7 +794,7 @@ TBW
 """
 function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    a, p0 = make_ap(r, couplingStrength, interval, components)
     d = set_d(noiseparams, reporter, nT)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, nT, trace[4], trace[3]) : 0.0
     ll, logpredictions = ll_hmm_loop(a, p0, d, trace[1], nT)
