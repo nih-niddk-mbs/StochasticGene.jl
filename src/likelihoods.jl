@@ -407,107 +407,107 @@ end
 # end
 
 
-function prepare_rates(rates, coupling, rindices)
-    r = Vector{Float64}(undef, length(rindices))
-    noiseparams = similar(r)
-    couplingStrength = similar(r)
-    for i in eachindex(rindices)
-        r[i] = rates[rindices[i].rates]
-        couplingStrength[i] = rates[rindices[i].coupling]
-    end
-    rateset = (rate=r, coupling=couplingStrength)
-    if :noise ∈ keys(rindices)
-        noiseparams = similar(r)
-        for i in eachindex(rindices)
-            noiseparams[i] = rates[rindices[i].noise]
-        end
-        rateset = merge(rateset, (noise=noiseparams,))
-    end
+# function prepare_rates(rates, coupling, rindices)
+#     r = Vector{Float64}(undef, length(rindices))
+#     noiseparams = similar(r)
+#     couplingStrength = similar(r)
+#     for i in eachindex(rindices)
+#         r[i] = rates[rindices[i].rates]
+#         couplingStrength[i] = rates[rindices[i].coupling]
+#     end
+#     rateset = (rate=r, coupling=couplingStrength)
+#     if :noise ∈ keys(rindices)
+#         noiseparams = similar(r)
+#         for i in eachindex(rindices)
+#             noiseparams[i] = rates[rindices[i].noise]
+#         end
+#         rateset = merge(rateset, (noise=noiseparams,))
+#     end
 
-end
+# end
 
-function reshape_rates(r, htrait::HierarchicalTrait)
-    reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
-end
+# function reshape_rates(r, htrait::HierarchicalTrait)
+#     reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
+# end
 
-function prepare_rates(r, htrait::HierarchicalTrait)
-    # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-    rshared = reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
-    rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
-    rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
-    pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
-    phyper = Vector{Float64}[]
-    for i in htrait.hyperindices
-        push!(phyper, r[i])
-    end
-    return rshared, rindividual, pindividual, phyper
-end
+# function prepare_rates(r, htrait::HierarchicalTrait)
+#     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
+#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+#     rshared = reshape(r[1:htrait.sharedindices], h.nrates, htrait.nhypersets)
+#     rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
+#     rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
+#     pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
+#     phyper = Vector{Float64}[]
+#     for i in htrait.hyperindices
+#         push!(phyper, r[i])
+#     end
+#     return rshared, rindividual, pindividual, phyper
+# end
 
-function prepare_rates(allparams, ctrait::CouplingTrait)
-    r = Vector{Float64}[]
-    noiseparams = Vector{Float64}[]
-    couplingStrength = Float64[]
-    for i in ctrait.raterange
-        push!(r, allparams[i, :])
-    end
-    for i in ctrait.noiserange
-        push!(noiseparams, allparams[i, :])
-    end
-    for i in ctrait.couplingrange
-        push!(couplingStrength, allparams[i, :])
-    end
-end
-
-
-function prepare_rates(param, model::AbstractGRSMtraitmodel)
-    r = get_rates(param, model)
-    traits = keys(model.traits)
-    if :hierarchical ∈ traits
-        rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
-        if :coupled ∈ traits
-            rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling[1])
-            rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, phyper=phyper, coupling=couplingStrength, noiseparams=noiseparams)
-        else
-            rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, phyper=phyper)
-        end
-    else
-        if :coupled ∈ traits
-            r, noiseparams, couplingStrength = prepare_rates(r, model.coupling[1])
-            rateset = (rates=r, noiseparams=noiseparams, coupling=couplingStrength)
-        else
-            r, noiseparams = prepare_rates(r, model)
-        end
-    end
-    if :grid ∈ traits
-        merge(rateset, (grid=r[model.traits.gridindices],))
-    end
-    return rateset
-end
-
-function prepare_nstates(tcomponents, traits)
-    if :grid ∈ keys(traits)
-        return tcomponents.nT
-    else
-        return tcomponents.nT, traits.grid.Ngrid
-    end
-end
+# function prepare_rates(allparams, ctrait::CouplingTrait)
+#     r = Vector{Float64}[]
+#     noiseparams = Vector{Float64}[]
+#     couplingStrength = Float64[]
+#     for i in ctrait.raterange
+#         push!(r, allparams[i, :])
+#     end
+#     for i in ctrait.noiserange
+#         push!(noiseparams, allparams[i, :])
+#     end
+#     for i in ctrait.couplingrange
+#         push!(couplingStrength, allparams[i, :])
+#     end
+# end
 
 
-function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
-    r = prepare_rates(param, model)
-    N = prepare_nstates(model.component, model.traits)
-    ll_hmm_trait(r, N, model.components, model.reporter, data.interval, data.trace, model.method)
-end
+# function prepare_rates(param, model::AbstractGRSMtraitmodel)
+#     r = get_rates(param, model)
+#     traits = keys(model.traits)
+#     if :hierarchical ∈ traits
+#         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
+#         if :coupled ∈ traits
+#             rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling[1])
+#             rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, phyper=phyper, coupling=couplingStrength, noiseparams=noiseparams)
+#         else
+#             rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, phyper=phyper)
+#         end
+#     else
+#         if :coupled ∈ traits
+#             r, noiseparams, couplingStrength = prepare_rates(r, model.coupling[1])
+#             rateset = (rates=r, noiseparams=noiseparams, coupling=couplingStrength)
+#         else
+#             r, noiseparams = prepare_rates(r, model)
+#         end
+#     end
+#     if :grid ∈ traits
+#         merge(rateset, (grid=r[model.traits.gridindices],))
+#     end
+#     return rateset
+# end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
-    r = prepare_rates(param, model)
-    N = prepare_nstates(model.components.tcomponents, model.traits)
-    llg, llgp = ll_hmm_trai(r, N, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
-    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
-    logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
-end
+# function prepare_nstates(tcomponents, traits)
+#     if :grid ∈ keys(traits)
+#         return tcomponents.nT
+#     else
+#         return tcomponents.nT, traits.grid.Ngrid
+#     end
+# end
+
+
+# function loglikelihood(param, data::TraceData, model::AbstractGRSMtraitmodel)
+#     r = prepare_rates(param, model)
+#     N = prepare_nstates(model.component, model.traits)
+#     ll_hmm_trait(r, N, model.components, model.reporter, data.interval, data.trace, model.method)
+# end
+
+# function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
+#     r = prepare_rates(param, model)
+#     N = prepare_nstates(model.components.tcomponents, model.traits)
+#     llg, llgp = ll_hmm_trai(r, N, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+#     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+#     logpredictions = log.(max.(predictions, eps()))
+#     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+# end
 #####
 
 

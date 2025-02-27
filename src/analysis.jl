@@ -1084,6 +1084,10 @@ end
 TBW
 """
 function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+    if hierarchical
+        nrates = num_all_parameters(transitions, R, S, insertstep, reporter, coupling)
+        rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
+    end
     probfn = make_vector(probfn, length(G))
     noiseparams = make_vector(noiseparams, length(G))
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
@@ -1157,13 +1161,19 @@ end
 
 TBW
 """
-function write_traces_coupling(folder, datapath, datacond, interval, sources=1:3, targets=1:4, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, pattern="gene")
-    for source in sources, target in targets
-        for (root, dirs, files) in walkdir(folder)
-            for f in files
-                # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-                if occursin("rates", f) && occursin("$pattern$source$target", f)
-                    write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), sources=1:3, targets=1:5, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, pattern="gene")
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            for target in targets
+                for source in sources
+                    # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+                    if occursin("rates", f) && occursin("$pattern$source$target", f)
+                        write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+                    end
+                end
+                if occursin("rates", f) && occursin("R$target", f)
+                    coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+                    write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
                 end
             end
         end

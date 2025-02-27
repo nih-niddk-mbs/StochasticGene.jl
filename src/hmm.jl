@@ -1231,7 +1231,7 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
         push!(max_intensity, mmax)
         push!(mean_intensity, mi / mmax)
     end
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    a, p0 = make_ap(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
     cc12 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
@@ -1331,9 +1331,9 @@ end
 
 function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
-    r, couplingStrength, noiseparams = prepare_rates(rates, sourceStates, transitions, G, R, S, insertstep, n_noise)
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
     nT = components.N
-    a, p0 = make_ap_coupled(r, couplingStrength, interval, components)
+    a, p0 = make_ap(r, couplingStrength, interval, components)
     states = Array[]
     d = []
     for i in eachindex(noiseparams)
