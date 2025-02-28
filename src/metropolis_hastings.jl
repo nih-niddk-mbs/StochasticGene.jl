@@ -60,6 +60,29 @@ struct Measures
     rhat::Vector
 end
 
+struct MeasuresEnhanced
+    waic::Tuple
+    rhat::Vector
+    ess::Vector
+    geweke::Vector
+    mcse::Vector
+    trace_analysis::Dict
+end
+
+function compute_measures(fits)
+    # Existing code
+    waic = compute_waic(fits.lppd, fits.pwaic, data)
+    rhat = compute_rhat([fits])
+
+    # New diagnostics
+    ess = compute_ess(fits.param)
+    geweke = compute_geweke(fits.param)
+    mcse = compute_mcse(fits.param)
+    trace_analysis = analyze_traces(fits.param)
+
+    return Measures(waic, vec(rhat), ess, geweke, mcse, trace_analysis)
+end
+
 """
 run_mh(data,model,options)
 
@@ -102,6 +125,8 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGmodel, options::
         return fits, stats, Measures(waic, vec(rhat))
     end
 end
+
+
 """
 run_chains(data,model,options,nchains)
 
@@ -237,6 +262,131 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     pwaic = step > 1 ? pwaic[3] / (step - 1) : pwaic[3]
     lppd .-= log(step)
     Fit(parout[:, 1:step], llout[1:step], parml, llml, lppd, pwaic, prior, accepttotal, step)
+end
+
+function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
+    # Number of samples to keep after thinning
+    kept_samples = div(samplesteps, thin_interval)
+
+    llout = Array{Float64,1}(undef, kept_samples)
+    parout = Array{Float64,2}(undef, length(param), kept_samples)
+
+    # WAIC components
+    pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
+    lppd = fill(-Inf, length(logpredictions))
+
+    accepttotal = 0
+    prior = logprior(param, model)
+    total_step = 0
+    saved_step = 0
+
+    while total_step < samplesteps && time() - t1 < maxtime
+        total_step += 1
+
+        # MCMC step
+        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
+
+        # Update maximum likelihood
+        if ll < llml
+            llml, parml = ll, param
+        end
+
+        # Save only every thin_interval steps
+        if total_step % thin_interval == 0
+            saved_step += 1
+            parout[:, saved_step] = param
+            llout[saved_step] = ll
+            lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
+        end
+
+        accepttotal += accept
+    end
+
+    # Adjust for actual number of samples saved
+    if saved_step < kept_samples
+        parout = parout[:, 1:saved_step]
+        llout = llout[1:saved_step]
+    end
+
+    # Adjust WAIC components
+    pwaic = saved_step > 1 ? pwaic[3] / (saved_step - 1) : pwaic[3]
+    lppd .-= log(saved_step)
+
+    return Fit(parout, llout, parml, llml, lppd, pwaic, prior, accepttotal, total_step)
+end
+
+function compute_ess(params)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+    ess = zeros(n_params)
+
+    for i in 1:n_params
+        # Calculate autocorrelation
+        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+        # Find where autocorrelation drops below 0.05
+        cutoff = findfirst(x -> abs(x) < 0.05, acf)
+        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+
+        # Sum of autocorrelations with appropriate cutoff
+        tau = 1 + 2 * sum(acf[2:cutoff])
+        ess[i] = n_samples / tau
+    end
+
+    return ess
+end
+
+function compute_geweke(params; first_frac=0.1, last_frac=0.5)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+
+    first_end = Int(floor(first_frac * n_samples))
+    last_start = Int(floor((1 - last_frac) * n_samples))
+
+    z_scores = zeros(n_params)
+
+    for i in 1:n_params
+        first_mean = mean(params[i, 1:first_end])
+        last_mean = mean(params[i, last_start:end])
+
+        # Spectral density estimates for variance
+        first_var = spectrum0(params[i, 1:first_end])
+        last_var = spectrum0(params[i, last_start:end])
+
+        # Z-score
+        z_scores[i] = (first_mean - last_mean) /
+                      sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
+    end
+
+    return z_scores
+end
+
+# Helper for spectral density estimate
+function spectrum0(x)
+    n = length(x)
+    spec = abs.(fft(x .- mean(x))) .^ 2 / n
+    return sum(spec[2:Int(floor(n / 2))]) * 2 / n
+end
+
+function compute_mcse(params)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+    mcse = zeros(n_params)
+
+    for i in 1:n_params
+        # Calculate autocorrelation
+        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+        # Find where autocorrelation drops below 0.05
+        cutoff = findfirst(x -> abs(x) < 0.05, acf)
+        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+
+        # Sum of autocorrelations
+        tau = 1 + 2 * sum(acf[2:cutoff])
+
+        # Standard error
+        mcse[i] = sqrt(tau * var(params[i, :]) / n_samples)
+    end
+
+    return mcse
 end
 
 """
