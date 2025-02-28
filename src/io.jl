@@ -821,7 +821,7 @@ function write_info(file::String, model)
     writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
-    writedlm(f, [model.transitions], ',')
+    writedlm(f, [model.Gtransitions], ',')
     close(f)
 end
 
