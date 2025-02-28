@@ -657,6 +657,9 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
         mkpath(path)
     end
     name = filename(data, model)
+    if typeof(model) <: AbstractGRSMhierarchicalmodel
+        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
+    end
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
@@ -673,28 +676,29 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     end
 end
 
-function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
-    name = filename(data, model)
-    write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-    if ~isdir(path)
-        mkpath(path)
-    end
-    name = filename(data, model)
-    write_rates(joinpath(path, "rates" * name), fits, stats, model)
-    write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-    write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-    if optimized != 0
-        write_optimized(joinpath(path, "optimized" * name), optimized)
-    end
-    if burst != 0
-        write_burstsize(joinpath(path, "burst" * name), burst)
-    end
-    if writesamples
-        write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
-        write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_rates(fits.param, model)))
-    end
-end
+# function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
+#     name = filename(data, model)
+#     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
+#     if ~isdir(path)
+#         mkpath(path)
+#     end
+#     name = filename(data, model)
+#     write_rates(joinpath(path, "rates" * name), fits, stats, model)
+#     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
+#     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
+#     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
+#     write_info(joinpath(path, "info" * name), model)
+#     if optimized != 0
+#         write_optimized(joinpath(path, "optimized" * name), optimized)
+#     end
+#     if burst != 0
+#         write_burstsize(joinpath(path, "burst" * name), burst)
+#     end
+#     if writesamples
+#         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
+#         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_rates(fits.param, model)))
+#     end
+# end
 
 """
 write_rates(file::String,fits)
@@ -713,7 +717,16 @@ function write_rates(file::String, fits::Fit, stats, model)
     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
     close(f)
+end
 
+function write_rates(file::String, fits::Fit, stats, model::AbstractGRSMhierarchicalmodel)
+    f = open(file, "w")
+    writedlm(f, rlabels(model), ',')  # labels
+    writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
+    writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
+    writedlm(f, [get_rates_hierarchical(stats.medparam, model, false)], ',')  # median posterior
+    writedlm(f, [get_rates_hierarchical(fits.param[:, end], model)], ',')  # last sample
+    close(f)
 end
 
 function remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
@@ -808,6 +821,7 @@ function write_info(file::String, model)
     writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
+    writedlm(f, [model.transitions], ',')
     close(f)
 end
 

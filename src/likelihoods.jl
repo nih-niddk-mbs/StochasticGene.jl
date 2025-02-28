@@ -1008,6 +1008,12 @@ function get_rates(param, model::GRSMcoupledmodel, inverse=true)
     fixed_rates(r, model.fixedeffects)
 end
 
+function get_rates_hierarchical(param, model::AbstractGRSMhierarchicalmodel, inverse=true)
+    r = get_rates(param, model, inverse)
+    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    vcat(vec(rshared), vec(rindividual))
+end
+
 # function get_rates(param, model::GRSMModel, inverse=true)
 #     r = copy(model.rates)
 #     if inverse

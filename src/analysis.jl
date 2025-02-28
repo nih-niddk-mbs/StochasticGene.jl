@@ -1055,7 +1055,9 @@ TBW
 function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
     if hierarchical
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
+        rshared = reshape(rin[1:nrates], nrates,1)
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
+        rin = hcat(rin, rshared)
     end
     components = TComponents(transitions, G, R, S, insertstep, splicetype)
     ts, td = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
@@ -1086,7 +1088,9 @@ TBW
 function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
     if hierarchical
         nrates = num_all_parameters(transitions, R, S, insertstep, reporter, coupling)
+        rshared = reshape(rin[1:nrates], nrates,1)
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
+        rin = hcat(rin, rshared)
     end
     probfn = make_vector(probfn, length(G))
     noiseparams = make_vector(noiseparams, length(G))
