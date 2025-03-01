@@ -146,15 +146,16 @@ function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
-    rfit = StochasticGene.get_rates(fits.parml, model), rtarget
-    return rfit, rtarget, fits, stats, measures, data, model, options
+    rfit = StochasticGene.get_rates(fits.parml, model)
+    return rfit[1:length(rtarget)], rtarget
 end
 
 function test_fit_trace_grid(; Ngrid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 20, 0.2], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [50, 15, 200, 20]; 0.1], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4, 5, 6, 7, 8, 11], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70], maxtime=10.0)
     traces = sim_grid(r=rtarget[1:end-1], p=rtarget[end], Ngrid=Ngrid, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, totaltime=totaltime, interval=interval, ntrials=ntrials)
     data = StochasticGene.TraceData("tracegrid", "test", interval, (traces, [], weight, nframes))
-    model = load_model(data, [rinit; 0.1], [rinit; 0.1], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, 1, tuple(), tuple(), Ngrid)
+    model = load_model(data, rinit, rinit, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian_grid, noisepriors, 1, tuple(), tuple(), Ngrid)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
+    # return data, model, options
     fits, stats, measures = run_mh(data, model, options)
     fits, stats, measures, data, model, options
 end
