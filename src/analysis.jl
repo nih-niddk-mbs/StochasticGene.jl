@@ -1272,7 +1272,7 @@ plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
-    _, _, _, _, ac1, ac2, cc_theory, lags = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:stride:lag))
+    _, _, _, _, ac1, ac2, cc_theory, _ = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:stride:lag))
     simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag, stride)
 end
 
@@ -1292,8 +1292,8 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, t
     for n in 1:ntrials
         t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=col)
         vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
-        ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:60), demean=true))
-        ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:60), demean=true))
+        ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:stride:lag), demean=true))
+        ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:stride:lag), demean=true))
         push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
         push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
     end
@@ -1302,38 +1302,6 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, t
     counts2, ac2_mean, ac2_var = ac2tuple
     return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
 end
-
-# function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, probfn=prob_Gaussian)
-#     println(probfn)
-#     _, _, ac1, ac2, cc_theory, lags = covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:lag))
-#     simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lags)
-# end
-
-# function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(-60:60))
-#     cc_mean = zeros(length(lags))
-#     cc_var = zeros(length(lags))
-#     ac1_mean = zeros(61)
-#     ac1_var = zeros(61)
-#     ac2_mean = zeros(61)
-#     ac2_var = zeros(61)
-#     linf_norm = Float64[]
-#     l2_norm = Float64[]
-#     ac1tuple = (0, ac1_mean, ac1_var)
-#     ac2tuple = (0, ac2_mean, ac2_var)
-#     vartuple = (0, cc_mean, cc_var)
-#     for n in 1:ntrials
-#         t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1)
-#         vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
-#         ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:60), demean=true))
-#         ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:60), demean=true))
-#         push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
-#         push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
-#     end
-#     counts, cc_mean, cc_var = vartuple
-#     counts1, ac1_mean, ac1_var = ac1tuple
-#     counts2, ac2_mean, ac2_var = ac2tuple
-#     return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
-# end
 
 function data_covariance(traces, lags)
     ac1 = zeros(length(lags))

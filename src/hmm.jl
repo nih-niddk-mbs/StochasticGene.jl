@@ -1218,15 +1218,15 @@ end
 TBW
 """
 function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
-    components2 = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
-    r, couplingStrength, noiseparams = prepare_rates(rin, sourceStates, transitions, G, R, S, insertstep, [4, 4])
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
     max_intensity = Float64[]
     for i in eachindex(noiseparams)
-        mi = mean.(probfn(noiseparams[i], num_per_state[i], components.nT))
+        mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
         mmax = max(maximum(mi), 1.0)
         push!(max_intensity, mmax)
         push!(mean_intensity, mi / mmax)
