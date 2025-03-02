@@ -838,18 +838,18 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TComponen
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm_grid_hierarchical(rshared, noiseparams, pgrid, Nstate, Ngrid, components::TComponents, reporters_per_state, probfn, interval, trace)
-    a_grid = make_a_grid(pgrid, Ngrid)
-    a, p0 = make_ap(rshared, interval, components)
-    logpredictions = Array{Float64}(undef, length(trace[1]))
-    for t in trace[1]
-        d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
-        b = set_b_grid(t, d, Nstate, Ngrid)
-        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
-        @inbounds logpredictions[i] = sum(log.(C))
-    end
-    sum(logpredictions), logpredictions
-end
+# function ll_hmm_grid_hierarchical(rshared, noiseparams, pgrid, Nstate, Ngrid, components::TComponents, reporters_per_state, probfn, interval, trace)
+#     a_grid = make_a_grid(pgrid, Ngrid)
+#     a, p0 = make_ap(rshared, interval, components)
+#     logpredictions = Array{Float64}(undef, length(trace[1]))
+#     for t in trace[1]
+#         d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+#         b = set_b_grid(t, d, Nstate, Ngrid)
+#         _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, size(t, 2))
+#         @inbounds logpredictions[i] = sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
 
 function ll_hmm_grid_hierarchical(r, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
     rshared, rindividual, noiseparams, pgrid = r
@@ -1140,7 +1140,7 @@ function predicted_states(r::Matrix, nT, components::TComponents, n_noiseparams:
 end
 
 
-function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
+function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
     r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
     nT = components.N
@@ -1151,6 +1151,30 @@ function predicted_states(rates, coupling, transitions, G::Tuple, R, S, insertst
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], nT))
     end
     for t in traces
+        T = size(t, 1)
+        b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
+        push!(states, viterbi(a, b, p0, nT, T))
+    end
+    units = Vector[]
+    observation_dist = Vector[]
+    for s in states
+        push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+        push!(observation_dist, [[d[i] for d in d] for i in s])
+    end
+    units, observation_dist
+end
+
+function predicted_states(rates::Matrix, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
+    sourceStates = coupling[3]
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
+    nT = components.N
+    a, p0 = make_ap(r, couplingStrength, interval, components)
+    states = Array[]
+    for t in traces
+        d = []
+        for i in eachindex(noiseparams)
+            push!(d, probfn[i](noiseparam[i], reporters_per_state[i], nT))
+        end
         T = size(t, 1)
         b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
         push!(states, viterbi(a, b, p0, nT, T))

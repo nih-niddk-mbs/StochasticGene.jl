@@ -516,17 +516,20 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    couplingindex = n_all_params - Int(!isnothing(grid))
-    nindividuals = length(data.trace[1])
     nparams = length(fittedindividual) # number of fitted params per individual
+    nindividuals = length(data.trace[1])
     ratestart = nhypersets * n_all_params + 1
     paramstart = length(fittedshared) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
+    hierarchy = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
+
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
+
     rprior = rmean[1:nhypersets*n_all_params]
+    couplingindex = n_all_params - Int(!isnothing(grid))
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindex)
-    hyper = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
-    return hyper, fittedparam, fixedeffects, priord, couplingindex
+
+    return hierarchy, fittedparam, fixedeffects, priord, couplingindex
 end
 
 
@@ -568,67 +571,6 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         # return GRSMcoupledgridhierarchicalmodel()
     end
 end
-# struct GRSMgridmodel{RateType,CouplingType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{RateType,ReporterType}
-#     rates::RateType
-#     raterange::UnitRange
-#     noiserange::UnitRange
-#     gridrange::UnitRange
-#     Ngrid::Int
-#     Gtransitions::Tuple
-#     G::Int
-#     R::Int
-#     S::Int
-#     insertstep::Int
-#     nalleles::Int
-#     splicetype::String
-#     rateprior::PriorType
-#     proposal::ProposalType
-#     fittedparam::ParamType
-#     fixedeffects::Tuple
-#     method::MethodType
-#     components::ComponentType
-#     reporter::ReporterType
-# end
-### Trait model
-# function load_modeltrait(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1)
-#     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
-#     if !isnothing(grid)
-#         gridtrait = make_gridtrait(transitions, R, S, insertstep, noisepriors, grid)
-#     end
-#     if !isempty(hierarchical)
-#         hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter)
-#     else
-#         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors)
-#     end
-
-#     CBool = isempty(coupling)
-#     GBool = isnothing(grid)
-#     HBool = isempty(hierarchical)
-
-#     if CBool && GBool && HBool
-#         if R == 0
-#             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         else
-#             traits = Namedtuple()
-#         end
-#     elseif CBool && GBool && !HBool
-#         traits = (hierarchical = hyper)
-#     elseif CBool && !GBool && HBool
-#         traits = (grid = gridtrait)
-#     elseif CBool && !GBool && !HBool
-#         traits = (grid=gridtrait, hierarchical=hyper)
-#     elseif !CBool && GBool && HBool
-#         traits = (coupled = coupling[5])
-#     elseif !CBool && GBool && !HBool
-#         traits = (coupled=coupling[5], hierarchical=hyper)
-#     elseif !CBool && !GBool && HBool
-#         traits = (coupled=coupling[5], grid=gridtrait)
-#     elseif !CBool && !GBool && !HBool
-#         traits = (coupled=coupling[5], grid=gridtrait, hierarchical=hyper)
-#     end
-#     return GRSMtraitmodel{typeof(traits),typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(traits, r, transitions, GBool, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-
-# end
 
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), ejectnumber=1, datacol=3)
     gene = check_genename(gene, "[")

@@ -90,6 +90,7 @@ export
     new_FISHfolder,
     norm,
     normalize_histogram,
+    num_all_parameters,
     num_rates,
     on_states,
     plot,

@@ -185,7 +185,16 @@ function prepare_rates_coupled(rates, sourceStates::Vector, transitions, R::Tupl
     return r, couplingStrength, noiseparams
 end
 
-function prepare_rates(r, param, hierarchy::Hierarchy)
+function prepare_hyper(r, param, hierarchy::Hierarchy)
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+    return pindividual, phyper
+end
+
+function prepare_rates(r, hierarchy::Hierarchy)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 
@@ -194,12 +203,15 @@ function prepare_rates(r, param, hierarchy::Hierarchy)
     rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
 
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    return rshared, rindividual
+end
 
-    phyper = Vector{Float64}[]
-    for i in hierarchy.hyperindices
-        push!(phyper, r[i])
-    end
+function prepare_rates(r, param, hierarchy::Hierarchy)
+    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))\
+
+    rshared, rindividual = prepare_rates(r, hierarchy)
+    pindividual, phyper = prepare_hyper(r, param, hierarchy)
 
     return rshared, rindividual, pindividual, phyper
 end
@@ -1202,6 +1214,8 @@ function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupli
         n = reporter.n
     elseif typeof(reporter) <: Vector
         n = length(reporter)
+    elseif typeof(reporter) == Int
+        n = reporter
     else
         n = 0
     end

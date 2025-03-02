@@ -265,74 +265,6 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     reporter::ReporterType
 end
 
-### Trait model
-
-
-struct HierarchicalTrait
-    nhypersets::Int
-    nrates::Int
-    nparams::Int
-    nindividuals::Int
-    sharedindices::Vector{Int}
-    fittedshared::Vector{Int}
-    individualindices::Vector{Int}
-    paramindices::Vector{Int}
-    hyperindices::Vector{Vector}
-end
-
-struct GridTrait
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
-end
-
-struct CouplingTrait
-
-end
-
-"""
-    GRSMtraitmodel{TraitType, RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType} <: AbstractGRSMtraitmodel{TraitType}
-
-Structure for GRSM trait model.
-
-# Fields
-- `trait::TraitType`:: NamedTuple of traits, possibilities include coupled, grid, and hierarchical
-- `rates::RateType`: Transition rates.
-- `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
-- `G::Int`: Number of G steps.
-- `R::Int`: Number of R steps.
-- `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
-- `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
-- `nalleles::Int`: Number of alleles producing RNA.
-- `splicetype::String`: Choices are "", "offeject", "offdecay".
-- `rateprior::PriorType`: Prior distribution for rates.
-- `proposal::ProposalType`: MCMC proposal distribution.
-- `fittedparam::ParamType`: Indices of rates to be fitted.
-- `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
-- `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
-- `components::ComponentType`: Components of the model.
-- `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
-"""
-struct GRSMtraitmodel{TraitType,RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
-    traits::TraitType
-    rates::RateType
-    Gtransitions::Tuple
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    nalleles::Int
-    splicetype::String
-    rateprior::PriorType
-    proposal::ProposalType
-    fittedparam::ParamType
-    fixedeffects::Tuple
-    method::MethodType
-    components::ComponentType
-    reporter::ReporterType
-end
-####
 
 """
     GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}
@@ -582,3 +514,71 @@ Abstract Option types for fitting methods
 abstract type Options end
 abstract type Results end
 
+### Trait model
+
+
+# struct HierarchicalTrait
+#     nhypersets::Int
+#     nrates::Int
+#     nparams::Int
+#     nindividuals::Int
+#     sharedindices::Vector{Int}
+#     fittedshared::Vector{Int}
+#     individualindices::Vector{Int}
+#     paramindices::Vector{Int}
+#     hyperindices::Vector{Vector}
+# end
+
+# struct GridTrait
+#     raterange::UnitRange
+#     noiserange::UnitRange
+#     gridrange::UnitRange
+#     Ngrid::Int
+# end
+
+# struct CouplingTrait
+
+# end
+
+# """
+#     GRSMtraitmodel{TraitType, RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType} <: AbstractGRSMtraitmodel{TraitType}
+
+# Structure for GRSM trait model.
+
+# # Fields
+# - `trait::TraitType`:: NamedTuple of traits, possibilities include coupled, grid, and hierarchical
+# - `rates::RateType`: Transition rates.
+# - `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+# - `G::Int`: Number of G steps.
+# - `R::Int`: Number of R steps.
+# - `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+# - `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+# - `nalleles::Int`: Number of alleles producing RNA.
+# - `splicetype::String`: Choices are "", "offeject", "offdecay".
+# - `rateprior::PriorType`: Prior distribution for rates.
+# - `proposal::ProposalType`: MCMC proposal distribution.
+# - `fittedparam::ParamType`: Indices of rates to be fitted.
+# - `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
+# - `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
+# - `components::ComponentType`: Components of the model.
+# - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
+# """
+# struct GRSMtraitmodel{TraitType,RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMtraitmodel{TraitType}
+#     traits::TraitType
+#     rates::RateType
+#     Gtransitions::Tuple
+#     G::Int
+#     R::Int
+#     S::Int
+#     insertstep::Int
+#     nalleles::Int
+#     splicetype::String
+#     rateprior::PriorType
+#     proposal::ProposalType
+#     fittedparam::ParamType
+#     fixedeffects::Tuple
+#     method::MethodType
+#     components::ComponentType
+#     reporter::ReporterType
+# end
+# ####
