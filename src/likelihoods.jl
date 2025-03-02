@@ -1214,7 +1214,7 @@ function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupli
         n = reporter.n
     elseif typeof(reporter) <: Vector
         n = length(reporter)
-    elseif typeof(reporter) == Int
+    elseif typeof(reporter) <: Int
         n = reporter
     else
         n = 0

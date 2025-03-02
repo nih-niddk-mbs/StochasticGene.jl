@@ -470,7 +470,7 @@ end
 
 function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
     nT = T_dimension.(G, R, S)
-    reporters = Vector[]
+    reporters = Vector{Int}[]
     for m in unit_model
         rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], f)
         for j in 1:m-1

@@ -269,7 +269,6 @@ end
 set_b
 """
 
-
 function set_b_coupled(trace, d::Vector{Vector}, N)
     b = ones(N, size(trace, 1))
     t = 1
@@ -282,6 +281,16 @@ function set_b_coupled(trace, d::Vector{Vector}, N)
         t += 1
     end
     return b
+end
+
+
+function set_b_coupled(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
+    d = set_d(params, reporters_per_state, probfn, N)
+    set_b_coupled(trace, d, N)
+end
+
+function set_b(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
+    set_b_coupled(trace, params, reporters_per_state, probfn, N)
 end
 
 function set_b_grid(trace, d, Nstate, Ngrid)
@@ -310,26 +319,20 @@ function set_b(trace::Vector, d::Vector, N)
     return b
 end
 
-function set_b(trace::Matrix, d::Vector{Vector}, N)
-    set_b_coupled(trace, d, N)
-end
 
 function set_b(trace, d, N::Tuple)
     Nstate, Ngrid = N
     set_b_grid(trace, d, Nstate, Ngrid)
 end
 
-function set_b_coupled(trace, params, reporters_per_state::Vector{Vector}, probfn::Vector, N)
-    d = set_d(params, reporters_per_state, probfn, N)
+
+
+
+function set_b(trace::Matrix, d::Vector{Vector}, N)
     set_b_coupled(trace, d, N)
 end
 
-function set_b(trace, params, reporters_per_state::Vector{Vector}, probfn::Vector{Function}, N)
-    set_b_coupled(trace, params, reporters_per_state, probfn, N)
-end
-
-
-function set_b_grid(trace, params, reporters_per_state, probfn::Function, Nstate, Ngrid)
+function set_b_grid(trace, params, reporters_per_state, probfn, Nstate, Ngrid)
     d = probfn(params, reporters_per_state, Nstate, Ngrid)
     set_b_grid(trace, d, Nstate, Ngrid)
 end
@@ -1164,20 +1167,15 @@ function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, 
     units, observation_dist
 end
 
-function predicted_states(rates::Matrix, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
+function predicted_states(rates::Tuple, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
     nT = components.N
-    a, p0 = make_ap(r, couplingStrength, interval, components)
+    rshared, noiseparams, couplingStrength = rates
+    a, p0 = make_ap(rshared[1], couplingStrength, interval, components)
     states = Array[]
-    for t in traces
-        d = []
-        for i in eachindex(noiseparams)
-            push!(d, probfn[i](noiseparam[i], reporters_per_state[i], nT))
-        end
-        T = size(t, 1)
-        b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
-        push!(states, viterbi(a, b, p0, nT, T))
+    for i in eachindex(traces)
+        b = set_b_coupled(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
+        push!(states, viterbi(a, b, p0, nT, size(traces[i], 1)))
     end
     units = Vector[]
     observation_dist = Vector[]

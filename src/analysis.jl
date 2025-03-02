@@ -1086,17 +1086,28 @@ end
 TBW
 """
 function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
-    if hierarchical
-        nrates = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
-        rshared = reshape(rin[1:nrates], nrates,1)
-        rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
-        rin = hcat(rin, rshared)
-    end
     noiseparams = make_vector(noiseparams, length(G))
     probfn = make_vector(probfn, length(G))
+    if hierarchical
+        nall = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
+        rates = reshape(rin, nall, length(traces)+2)
+        noiseindividual = Matrix{Float64}[]
+        rshared = Matrix{Float64}[]
+        j = 1
+        for i in eachindex(R)
+            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+            push!(noiseindividual, rates[j+n:j+n+noiseparams[i]-1, :])
+            push!(rshared, rates[j:j+n-1, 1:1])
+            j += n + noiseparams[i]
+        end
+        noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
+        rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
+        couplingStrength = rin[nall:nall]
+        r = (rshared, noiseindividual, couplingStrength)
+    end
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
-    ts, tp = predicted_states(rin, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
+    ts, tp = predicted_states(r, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
     l = maximum(length.(traces))
     cols = Matrix(undef, length(traces), 0)
     for k in coupling[1]
