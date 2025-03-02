@@ -1173,16 +1173,23 @@ function predicted_states(rates::Tuple, coupling, transitions, G::Tuple, R, S, i
     rshared, noiseparams, couplingStrength = rates
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components)
     states = Array[]
-    for i in eachindex(traces)
-        b = set_b_coupled(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
-        push!(states, viterbi(a, b, p0, nT, size(traces[i], 1)))
-    end
     units = Vector[]
     observation_dist = Vector[]
-    for s in states
-        push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
-        push!(observation_dist, [[d[i] for d in d] for i in s])
+    for i in eachindex(traces)
+        T = size(traces[i], 1)
+        b = set_b_coupled(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
+        spath = viterbi(a, b, p0, nT, T)
+        push!(states, spath)
+        d = set_d(noiseparams[i], reporters_per_state, probfn, nT)
+        push!(units, [unit_state(i, G, R, S, coupling[1]) for i in spath])
+        push!(observation_dist, [[d[i] for d in d] for i in spath])
     end
+    # units = Vector[]
+    # observation_dist = Vector[]
+    # for s in states
+    #     push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+    #     push!(observation_dist, [[d[i] for d in d] for i in s])
+    # end
     units, observation_dist
 end
 
