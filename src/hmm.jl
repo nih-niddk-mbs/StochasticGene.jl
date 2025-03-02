@@ -716,19 +716,6 @@ end
 
 
 ### Called by loglikelihood functions
-function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
-    nstates = components.N
-    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
-    a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
-    d = set_d(noiseshared[1], reporters, nstates)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0
-    if method[2]
-        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
-    else
-        ll, logpredictions = ll_hmm(rindividual, couplingStrength, noiseindividual, interval, components, reporters, trace[1], nstates)
-    end
-    ll + lb, logpredictions
-end
 
 """
     ll_hmm(r, nstates, components::TComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
@@ -783,7 +770,19 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
     ll + lb, logpredictions
 end
 
-
+function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
+    nstates = components.N
+    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
+    a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
+    d = set_d(noiseshared[1], reporters, nstates)
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0
+    if method[2]
+        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
+    else
+        ll, logpredictions = ll_hmm(rindividual, couplingStrength, noiseindividual, interval, components, reporters, trace[1], nstates)
+    end
+    ll + lb, logpredictions
+end
 """
     ll_hmm_grid(r, p, Nstate, Ngrid, components::StochasticGene.TComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, trace)
 
