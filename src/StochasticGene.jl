@@ -133,6 +133,7 @@ export
     TraceRNAData,
     Tsit5,
     write_augmented,
+    write_cov,
     write_dataframes,
     write_dataframes_only,
     write_histograms,

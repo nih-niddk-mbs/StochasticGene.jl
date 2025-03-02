@@ -1190,12 +1190,12 @@ function extract_source_target(pattern::String, filepath::String)
 
     # Escape special characters in pattern and build regex
     escaped_pattern = replace(pattern, r"([.*+?^\$()[]{}|\\])" => s"\\\1")
-    regex = Regex("$(escaped_pattern)(\\d)(\\d)")
+    regex = Regex("$(escaped_pattern)(\\d|R)(\\d)")
 
     # Find pattern## in filename
     m = match(regex, filename)
     if m !== nothing
-        source = parse(Int, m[1])
+        source = m[1] == "R" ? "R" : parse(Int, m[1])
         target = parse(Int, m[2])
         return source, target
     end
@@ -1206,6 +1206,7 @@ function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1
     println(file)
     r = readrates(file, get_row(ratetype))
     source, target = extract_source_target(pattern, file)
+    (source == "R") && (source = collect(G[1]+1:G[1]+R[1]))
     coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
     covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
 end
