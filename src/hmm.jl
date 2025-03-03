@@ -243,7 +243,7 @@ end
 TBW
 """
 
-function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::Function, N)
+function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N) where {T<:Function}
     probfn(noiseparams, reporters_per_state, N)
 end
 
@@ -253,6 +253,15 @@ function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}},
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
     end
     return d
+end
+
+function set_d(noiseparams, reporters_per_state, probfn, Nstate, Ngrid)
+    probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+end
+
+function set_d(noiseparams, reporters_per_state, probfn, N::Tuple)
+    Nstate, Ngrid = N
+    probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
 end
 
 function set_d(noiseparams, reporter::HMMReporter, N)
@@ -265,11 +274,23 @@ function set_d(noiseparams, reporter::Vector{HMMReporter}, N)
     set_d(noiseparams, ps, pf, N)
 end
 
+
+
 """
 set_b
 """
 
-function set_b_coupled(trace, d::Vector{Vector}, N)
+function set_b(trace::Vector, d::Vector, N)
+    b = Matrix{Float64}(undef, N, length(trace))
+    for (t, obs) in enumerate(trace)
+        for j in 1:N
+            b[j, t] = pdf(d[j], obs)
+        end
+    end
+    return b
+end
+
+function set_b(trace, d::Vector{Vector}, N)
     b = ones(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
@@ -283,17 +304,7 @@ function set_b_coupled(trace, d::Vector{Vector}, N)
     return b
 end
 
-
-function set_b_coupled(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
-    d = set_d(params, reporters_per_state, probfn, N)
-    set_b_coupled(trace, d, N)
-end
-
-function set_b(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
-    set_b_coupled(trace, params, reporters_per_state, probfn, N)
-end
-
-function set_b_grid(trace, d, Nstate, Ngrid)
+function set_b(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, size(trace, 2))
     t = 1
     for obs in eachcol(trace)
@@ -309,41 +320,23 @@ function set_b_grid(trace, d, Nstate, Ngrid)
     return b
 end
 
-function set_b(trace::Vector, d::Vector, N)
-    b = Matrix{Float64}(undef, N, length(trace))
-    for (t, obs) in enumerate(trace)
-        for j in 1:N
-            b[j, t] = pdf(d[j], obs)
-        end
-    end
-    return b
-end
-
-
 function set_b(trace, d, N::Tuple)
     Nstate, Ngrid = N
-    set_b_grid(trace, d, Nstate, Ngrid)
+    set_b(trace, d, Nstate, Ngrid)
 end
 
+"""
+    set_b(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
 
+TBW
+"""
 
-
-function set_b(trace::Matrix, d::Vector{Vector}, N)
-    set_b_coupled(trace, d, N)
+function set_b(trace, params, reporters_per_state, probfn, N)
+    d = set_d(params, reporters_per_state, probfn, N)
+    set_b(trace, d, N)
 end
 
-function set_b_grid(trace, params, reporters_per_state, probfn, Nstate, Ngrid)
-    d = probfn(params, reporters_per_state, Nstate, Ngrid)
-    set_b_grid(trace, d, Nstate, Ngrid)
-end
-
-function set_b(trace, params, reporters_per_state, probfn, N::Tuple)
-    Nstate, Ngrid = N
-    set_b_grid(trace, params, reporters_per_state, probfn, Nstate, Ngrid)
-end
-
-function set_b(trace, params, reporters_per_state::Vector{Int}, probfn::Function, N::Int)
-    # N = length(reporters_per_state)
+function set_b(trace, params, reporters_per_state::Vector{Int}, probfn::T, N::Int) where {T<:Function}
     d = probfn(params, reporters_per_state, N)
     b = Matrix{Float64}(undef, N, length(trace))
     t = 1
@@ -356,14 +349,12 @@ function set_b(trace, params, reporters_per_state::Vector{Int}, probfn::Function
     return b
 end
 
-function set_b_coupled(trace, params, reporter::Vector{HMMReporter}, N)
-    d = Vector[]
-    for i in eachindex(params)
-        rep = reporter[i]
-        push!(d, rep.probfn(params[i], rep.per_state, N))
-    end
-    set_b_coupled(trace, d, N)
+function set_b(trace, params, reporters_per_state, probfn, N::Tuple)
+    Nstate, Ngrid = N
+    d = probfn(params, reporters_per_state, Nstate, Ngrid)
+    set_b(trace, d, Nstate, Ngrid)
 end
+
 
 """
     set_logb(trace, params, reporters_per_state, probfn=prob_Gaussian)
@@ -811,7 +802,7 @@ end
 
 function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
     nstates = components.N
-    rshared, rindividual, couplingStrength, noiseshared, noiseindividual = r
+    rshared, rindividual, couplingStrength, noiseshared, noiseindividual, couplingStrength = r
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
     d = set_d(noiseshared[1], reporters, nstates)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0
@@ -827,10 +818,11 @@ end
 
 TBW
 """
-function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TComponents, reporters_per_state, probfn, interval, trace)
+
+function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(r, interval, components)
-    d = probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+    d = set_d_grid(noiseparams, reporter, Nstate, Ngrid)
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = size(t, 2)
@@ -1155,7 +1147,7 @@ function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, 
     end
     for t in traces
         T = size(t, 1)
-        b = set_b_coupled(t, noiseparams, reporters_per_state, probfn, nT)
+        b = set_b(t, noiseparams, reporters_per_state, probfn, nT)
         push!(states, viterbi(a, b, p0, nT, T))
     end
     units = Vector[]
@@ -1177,7 +1169,7 @@ function predicted_states(rates::Tuple, coupling, transitions, G::Tuple, R, S, i
     observation_dist = Vector[]
     for i in eachindex(traces)
         T = size(traces[i], 1)
-        b = set_b_coupled(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
+        b = set_b(traces[i], noiseparams[i], reporters_per_state, probfn, nT)
         spath = viterbi(a, b, p0, nT, T)
         push!(states, spath)
         d = set_d(noiseparams[i], reporters_per_state, probfn, nT)
