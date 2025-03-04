@@ -802,7 +802,7 @@ end
 
 function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
     nstates = components.N
-    rshared, rindividual, couplingStrength, noiseshared, noiseindividual, couplingStrength = r
+    rshared, rindividual, noiseshared, noiseindividual, couplingStrength = r
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
     d = set_d(noiseshared[1], reporters, nstates)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0

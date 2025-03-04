@@ -477,30 +477,22 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
     end
     trace
 end
-# function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple())
-#     trace = Array{Array{Float64}}(undef, ntrials)
-#     r = copy(rin)
-#     for i in eachindex(trace)
-#         if !isempty(hierarchical)
-#             r[hierarchical[1]] = hierarchical[2][i]
-#         end
-#         if isnothing(a_grid)
-#             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, 2]
-#         else
-#             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
-#         end
-#     end
-#     trace
-# end
+
 
 """
     simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
 
 TBW
 """
-function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, col=2)
+# function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
+
     trace = Array{Array{Float64}}(undef, ntrials)
+    r = copy(rin)
     for i in eachindex(trace)
+        if !isempty(hierarchical)
+            r[hierarchical[1]] = hierarchical[2][i]
+        end
         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
         tr = Vector[]
         for t in t
@@ -510,23 +502,7 @@ function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupl
     end
     trace
 end
-# function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
-#     trace = Array{Array{Float64}}(undef, ntrials)
-#     for i in eachindex(trace)
-#         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
-#         tr = Vector[]
-#         for t in t
-#             tr = push!(tr, t[1:end-1, 2])
-#         end
-#         trace[i] = hcat(tr...)
-#     end
-#     trace
-# end
 
-function simulate_trace_hierarchical()
-
-
-end
 
 """
     make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
@@ -885,7 +861,7 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose = false)
+function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose=false)
     !isempty(coupling) && (initialstate = copy(state[index[1], 1]))
     if action < 5
         if action < 3
@@ -939,12 +915,12 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     newstate = findall(!iszero, vec(state[unit, 1]))
 
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
-    verbose && println("tau1: ",tau)
+    verbose && println("tau1: ", tau)
 
     # unit as source
     # new state moves into or out of a primed source state
     for target in targets
-        verbose && println(isdisjoint(oldstate, sstate[unit])," : ", !isdisjoint(newstate, sstate[unit]))
+        verbose && println(isdisjoint(oldstate, sstate[unit]), " : ", !isdisjoint(newstate, sstate[unit]))
         if isfinite(tau[target][ttrans[target], 1])
             if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
                 tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
@@ -965,7 +941,7 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
             end
         end
     end
-    verbose && println("tau2: ",tau)
+    verbose && println("tau2: ", tau)
 end
 
 """
@@ -1440,21 +1416,21 @@ Compute the state-to-state transition probability matrix from frame-to-frame usi
 
 function compute_transition_matrix(states, nstates::Int)
     states = Int.(states)
-    a = zeros(nstates,nstates)
+    a = zeros(nstates, nstates)
     p0 = zeros(nstates)
     for i in 1:length(states)-1
-        a[states[i],states[i+1]] += 1.
-        p0[states[i]] += 1.
+        a[states[i], states[i+1]] += 1.0
+        p0[states[i]] += 1.0
     end
-    a ./ max.(sum(a, dims=2),eps()),  p0 / sum(p0)
+    a ./ max.(sum(a, dims=2), eps()), p0 / sum(p0)
 end
 
 
 function compute_transition_matrix(trace, G::Tuple, R, S)
-    states=[trace[1][1][:,4] trace[1][2][:,4]]
-    jointstates = [StochasticGene.coupled_state_index(collect(r),G,R,S) for r in eachrow(states)]
+    states = [trace[1][1][:, 4] trace[1][2][:, 4]]
+    jointstates = [StochasticGene.coupled_state_index(collect(r), G, R, S) for r in eachrow(states)]
     nstates = prod(T_dimension.(G, R, S))
-    compute_transition_matrix(jointstates,nstates)
+    compute_transition_matrix(jointstates, nstates)
 end
 
 # function compute_transition_matrixa(trace, G, R, S, insertstep; coupling=tuple())
@@ -1462,34 +1438,34 @@ end
 #         # Single unit case
 #         n_states = T_dimension(G, R, S)
 #         P = zeros(n_states, n_states)
-        
+
 #         # Get state indices from trace data
 #         gstates = trace[:, "Gstate1"]
 #         rstates = trace[:, "Rstate1"]
-        
+
 #         # Count transitions
 #         for i in 1:(length(gstates)-1)
 #             # Create state vectors for current and next states
 #             current_state = zeros(Int, G + R, 1)
 #             next_state = zeros(Int, G + R, 1)
-            
+
 #             # Set G states
 #             current_state[gstates[i], 1] = 1
 #             next_state[gstates[i+1], 1] = 1
-            
+
 #             # Set R states if they exist
 #             if R > 0
 #                 current_state[G+1:end, 1] = rstates[i]
 #                 next_state[G+1:end, 1] = rstates[i+1]
 #             end
-            
+
 #             # Convert to indices
 #             from_state = state_index(current_state, G, R, S)
 #             to_state = state_index(next_state, G, R, S)
-            
+
 #             P[from_state, to_state] += 1
 #         end
-        
+
 #         # Normalize to get probabilities
 #         for i in 1:n_states
 #             row_sum = sum(P[i,:])
@@ -1497,29 +1473,29 @@ end
 #                 P[i,:] ./= row_sum
 #             end
 #         end
-        
+
 #         return P
 #     else
 #         # Coupled model case
 #         if !(G isa Tuple)
 #             error("G must be a tuple for coupled models")
 #         end
-        
+
 #         # Calculate total number of combined states
 #         n_states = prod(T_dimension.(G, R, S))
 #         P = zeros(n_states, n_states)
-        
+
 #         # For coupled models, process each unit's states
 #         for i in 1:length(trace)-1
 #             # Create state matrices for both units
 #             current_states = Vector{Matrix{Int}}()
 #             next_states = Vector{Matrix{Int}}()
-            
+
 #             for unit in 1:length(G)
 #                 # Get state data for current unit
 #                 gstate_col = Symbol("Gstate1_$unit")
 #                 rstate_col = Symbol("Rstate1_$unit")
-                
+
 #                 # Create current state matrix
 #                 current_state = zeros(Int, G[unit] + R[unit], 1)
 #                 current_state[trace[i, gstate_col], 1] = 1
@@ -1527,7 +1503,7 @@ end
 #                     current_state[G[unit]+1:end, 1] = trace[i, rstate_col]
 #                 end
 #                 push!(current_states, current_state)
-                
+
 #                 # Create next state matrix
 #                 next_state = zeros(Int, G[unit] + R[unit], 1)
 #                 next_state[trace[i+1, gstate_col], 1] = 1
@@ -1536,14 +1512,14 @@ end
 #                 end
 #                 push!(next_states, current_state)
 #             end
-            
+
 #             # Convert to indices using the coupled state_index
 #             from_state = state_index(current_states, G, R, S)
 #             to_state = state_index(next_states, G, R, S)
-            
+
 #             P[from_state, to_state] += 1
 #         end
-        
+
 #         # Normalize to get probabilities
 #         for i in 1:n_states
 #             row_sum = sum(P[i,:])
@@ -1551,7 +1527,7 @@ end
 #                 P[i,:] ./= row_sum
 #             end
 #         end
-        
+
 #         return P
 #     end
 # end
