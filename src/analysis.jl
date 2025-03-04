@@ -1195,6 +1195,164 @@ function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R
     end
 end
 
+########### Parallelized functions ###########
+"""
+    write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), 
+                                   sources=1:3, targets=1:5, ratetype::String="median", 
+                                   start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, 
+                                   splicetype=""; hlabel="-h", state=true, pattern="gene")
+
+Parallelized version of write_traces_coupling using Julia's multi-threading.
+"""
+function write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+    sources=1:3, targets=1:5, ratetype::String="median",
+    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+    splicetype=""; hlabel="-h", state=true, pattern="gene")
+
+    # Collect all tasks that need to be executed
+    tasks = []
+
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                # Tasks for pattern$source$target files
+                for target in targets
+                    for source in sources
+                        if occursin("$pattern$source$target", f)
+                            coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+                            task_args = (
+                                joinpath(root, f), datapath, datacond, interval, ratetype,
+                                start, stop, probfn, noiseparams, splicetype,
+                                hlabel, state, coupling
+                            )
+                            push!(tasks, task_args)
+                        end
+                    end
+
+                    # Tasks for R$target files
+                    if occursin("R$target", f)
+                        coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+                        task_args = (
+                            joinpath(root, f), datapath, datacond, interval, ratetype,
+                            start, stop, probfn, noiseparams, splicetype,
+                            hlabel, state, coupling
+                        )
+                        push!(tasks, task_args)
+                    end
+                end
+            end
+        end
+    end
+
+    # Process each task in parallel using threads
+    @info "Processing $(length(tasks)) files in parallel using $(Threads.nthreads()) threads"
+
+    Threads.@threads for task_args in tasks
+        file_path, datapath, datacond, interval, ratetype, start, stop, probfn,
+        noiseparams, splicetype, hlabel, state, coupling = task_args
+
+        try
+            write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+                start, stop, probfn, noiseparams, splicetype,
+                hlabel=hlabel, state=state, coupling=coupling)
+            @info "Successfully processed: $(basename(file_path))"
+        catch e
+            @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+        end
+    end
+end
+
+# Alternative implementation using Threads.@spawn for more dynamic scheduling
+"""
+    write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+                               sources=1:3, targets=1:5, ratetype::String="median",
+                               start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+                               splicetype=""; hlabel="-h", state=true, pattern="gene")
+
+Parallelized version of write_traces_coupling using Julia's task-based parallelism with Threads.@spawn.
+This provides more dynamic scheduling which can be beneficial for workloads with varying execution times.
+"""
+function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+    sources=1:3, targets=1:5, ratetype::String="median",
+    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+    splicetype=""; hlabel="-h", state=true, pattern="gene")
+
+    # Collect all tasks that need to be executed
+    tasks = []
+
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                # Tasks for pattern$source$target files
+                for target in targets
+                    for source in sources
+                        if occursin("$pattern$source$target", f)
+                            file_path = joinpath(root, f)
+                            coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+
+                            # Create a task for this file
+                            t = Threads.@spawn begin
+                                try
+                                    write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+                                        start, stop, probfn, noiseparams, splicetype,
+                                        hlabel=hlabel, state=state, coupling=coupling)
+                                    @info "Successfully processed: $(basename(file_path))"
+                                catch e
+                                    @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+                                end
+                            end
+
+                            push!(tasks, t)
+                        end
+                    end
+
+                    # Tasks for R$target files
+                    if occursin("R$target", f)
+                        file_path = joinpath(root, f)
+                        coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+
+                        # Create a task for this file
+                        t = Threads.@spawn begin
+                            try
+                                write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+                                    start, stop, probfn, noiseparams, splicetype,
+                                    hlabel=hlabel, state=state, coupling=coupling)
+                                @info "Successfully processed: $(basename(file_path))"
+                            catch e
+                                @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+                            end
+                        end
+
+                        push!(tasks, t)
+                    end
+                end
+            end
+        end
+    end
+
+    @info "Scheduled $(length(tasks)) files for processing using $(Threads.nthreads()) threads"
+
+    # Wait for all tasks to complete
+    for t in tasks
+        wait(t)
+    end
+
+    @info "All files processed"
+end
+
+# Usage example:
+# First set the number of threads via environment variable or command line:
+# $ julia -t 8 your_script.jl
+# Or within Julia:
+# using Base.Threads
+# @show nthreads()
+#
+# Then call either of the parallel functions:
+# write_traces_coupling_parallel(folder, datapath, datacond, interval)
+# write_traces_coupling_spawn(folder, datapath, datacond, interval)
+
+
+
 function extract_source_target(pattern::String, filepath::String)
     # Get filename from path
     filename = basename(filepath)

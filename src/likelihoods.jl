@@ -822,22 +822,22 @@ function transform_array(v::Vector, index, f1::Function, f2::Function)
     vcat(f1(v[1:index-1]), f2(v[index:end]))
 end
 
-function transform_array(v::Array, index, mask::Vector, f1::Function, f2::Function)
+function transform_array(v::Vector, index, mask::Vector, f1::Function, f2::Function)
     # if index > 0 && index ∈ mask
-    if index ∈ mask
+    if !isdisjoint(index, mask)
         n = findfirst(index .== mask)
-        # return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
-        return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f1(v[n+1:end, :]))
+        return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
     else
         return f1(v)
     end
 end
 
-function transform_array(v::Vector, index, mask::Vector, f1::Function, f2::Function)
+function transform_array(v::Array, index, mask::Vector, f1::Function, f2::Function)
     # if index > 0 && index ∈ mask
-    if index ∈ mask
+    if !isdisjoint(index, mask)
         n = findfirst(index .== mask)
-        return vcat(f1(v[1:n-1]), f2(v[n]), f1(v[n+1:end]))
+        # return vcat(f1(v[1:n-1, :]), f2(v[n:n:end, :]))
+        return vcat(f1(v[1:n-1, :]), f2(v[n:n, :]), f1(v[n+1:end, :]))
     else
         return f1(v)
     end

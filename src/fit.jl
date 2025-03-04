@@ -479,7 +479,7 @@ end
 function coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
     n = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
     g = isnothing(grid) ? 0 : 1
-    return n-coupling[5]-g+1:n+g
+    return collect(n-coupling[5]-g+1:n+g)
 end
 
 
@@ -548,6 +548,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     else
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, cindices, factor)
     end
+
     CBool = isempty(coupling)
     GBool = isnothing(grid)
     HBool = isempty(hierarchical)
@@ -724,7 +725,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_array(rm[fittedparam], collect(cindices), fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
+        return distribution_array(transform_array(rm[fittedparam], cindices, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
     else
         throw("priorcv not the same length as prior mean")
     end

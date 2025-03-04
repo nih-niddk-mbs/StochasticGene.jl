@@ -789,8 +789,6 @@ function ll_hmm_hierarchical(r, components::TComponents, reporters::Vector{HMMRe
     ll + lb, logpredictions
 end
 
-
-
 function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, reporter::Vector{HMMReporter}, interval, trace)
     nT = components.N
     a, p0 = make_ap(r, couplingStrength, interval, components)
