@@ -141,7 +141,7 @@ export
     write_RNAhistogram,
     write_traces,
     write_traces_coupling,
-    write_traces_coupling_spawn
+    write_traces_coupling_spawn,
     write_winners
     
 
