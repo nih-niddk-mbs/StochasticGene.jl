@@ -1269,7 +1269,7 @@ end
                                start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
                                splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-Parallelized version of write_traces_coupling using Julia's task-based parallelism with Threads.@spawn.
+Parallelized version of write_traces_coupling using Julia's task-based parallelism with @spawn.
 This provides more dynamic scheduling which can be beneficial for workloads with varying execution times.
 """
 function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
@@ -1291,7 +1291,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
 
                             # Create a task for this file
-                            t = Threads.@spawn begin
+                            t = @spawn begin
                                 try
                                     write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
                                         start, stop, probfn, noiseparams, splicetype,
@@ -1312,7 +1312,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
 
                         # Create a task for this file
-                        t = Threads.@spawn begin
+                        t = @spawn begin
                             try
                                 write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
                                     start, stop, probfn, noiseparams, splicetype,
