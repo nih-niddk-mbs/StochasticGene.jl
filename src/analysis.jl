@@ -1334,7 +1334,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
 
     # Wait for all tasks to complete
     for t in tasks
-        wait(t)
+        fetch(t)
     end
 
     @info "All files processed"
