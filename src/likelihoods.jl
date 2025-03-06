@@ -160,7 +160,7 @@ function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, repo
     return r, noiseparams
 end
 
-function prepare_rates_coupled(rates, sourceStates::Vector, transitions, R::Tuple, S, insertstep, n_noise)
+function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]
     couplingStrength = Float64[]
@@ -354,13 +354,20 @@ function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+function loglikelihoodold(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
     if model.method[2]
         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     else
         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end
+    lhp = ll_hierarchy(pindividual, phyper)
+    return llg + sum(lhp), vcat(llgp, lhp)
+end
+
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates(param, model)
+    ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
     lhp = ll_hierarchy(pindividual, phyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
