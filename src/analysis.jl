@@ -1103,7 +1103,9 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
         noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
         rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
         couplingStrength = rin[nall:nall]
-        r = (rshared, noiseindividual, couplingStrength)
+        r = (rshared, noiseindividual, couplingStrength) 
+    else
+        r = copy(rin)
     end
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
