@@ -66,7 +66,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
     3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
     4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
     5. Int indicating number of coupling parameters
-- `nalleles`: Number of alleles, set to 1 if coupling nonempty
+- `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
 - `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
 - `probfn`=prob_Gaussian: reporter distribution

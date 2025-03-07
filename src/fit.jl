@@ -170,7 +170,7 @@ then G = (2,3).
 - `label::String=""`: label of output files produced
 - `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
 - `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), lsoda(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
-- `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, always set to 1 if coupling nonempty (multiple alleles handled as extra identical units)
+- `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
 - `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
@@ -233,7 +233,7 @@ end
 """
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), ejectnumber=1, datacol=3)
     S = reset_S(S, R, insertstep)
-    nalleles = reset_nalleles(nalleles, coupling)
+    # nalleles = reset_nalleles(nalleles, coupling)
     fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol)
 end
 
