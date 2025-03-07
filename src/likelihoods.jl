@@ -354,7 +354,7 @@ function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
 end
 
-function loglikelihoodold(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
     if model.method[2]
         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
@@ -365,7 +365,7 @@ function loglikelihoodold(param, data::AbstractTraceData, model::GRSMhierarchica
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+function loglikelihoodnew(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates(param, model)
     ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
     lhp = ll_hierarchy(pindividual, phyper)
