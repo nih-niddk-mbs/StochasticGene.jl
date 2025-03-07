@@ -128,38 +128,6 @@ Prepare the coupling strength for the coupled model.
 - `sourceStates`: The source states.
 - `transitions`: The transitions.
 """
-
-function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
-    couplingStrength = Float64[]
-    j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
-    for s in sourceStates
-        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
-            push!(couplingStrength, rates[j])
-            j += 1
-        else
-            push!(couplingStrength, 0.0)
-        end
-    end
-    couplingStrength
-end
-
-
-
-function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, reporter)
-    r = Matrix{Float64}[]
-    noiseparams = Matrix{Float64}[]
-    j = 1
-    for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
-        push!(r, rates[j:j+n-1, :])
-        j += n
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
-    end
-    return r, noiseparams
-end
-
 function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]
@@ -184,6 +152,37 @@ function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, in
     end
     return r, couplingStrength, noiseparams
 end
+
+
+function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
+    couplingStrength = Float64[]
+    j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
+    for s in sourceStates
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    couplingStrength
+end
+
+function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, reporter)
+    r = Matrix{Float64}[]
+    noiseparams = Matrix{Float64}[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
+        push!(r, rates[j:j+n-1, :])
+        j += n
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
+    end
+    return r, noiseparams
+end
+
 
 function prepare_hyper(r, param, hierarchy::Hierarchy)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
@@ -227,7 +226,11 @@ function prepare_rates(param, model::GRSMcoupledmodel)
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
     prepare_rates_coupled(rates, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
 end
-
+function prepare_rates_new(param, model::GRSMhierarchicalmodel)
+    r = get_rates(param, model)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper
+end
 """
     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
 
@@ -260,6 +263,49 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
     noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, phyper
+end
+
+function prepare_rates_noiseparams(rates, transitions, R::Tuple, S, insertstep, reporter)
+    r = Matrix{Float64}[]
+    noiseparams = Matrix{Float64}[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
+        push!(r, rates[j:j+n-1, :])
+        j += n
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
+    end
+    return r, noiseparams
+end
+
+function prepare_rates_noiseparams(rates, transitions, R, S, insertstep, reporter)
+    r = Matrix{Float64}[]
+    noiseparams = Matrix{Float64}[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
+        push!(r, rates[j:j+n-1, :])
+        push!(noiseparams, rates[end-reporter[i].n+1:end, :])
+        j += n
+    end
+    return r, noiseparams
+end
+
+function prepare_rates_new(param, model::AbstractGRSMhierarchicalmodel)
+    r = get_rates(param, model)
+    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    sourceStates = [c.sourceState for c in model.components.modelcomponents]
+
+    rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+    rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+
+    rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
+    noiseshared = [[p[:, j] for p in noiseshared] for j in 1:size(noiseshared[1], 2)]
+    rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
+    noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper
 end
 
 """
