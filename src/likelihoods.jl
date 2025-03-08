@@ -118,6 +118,64 @@ function datapdf(data::RNADwellTimeData)
     return v
 end
 
+
+
+####### trait system
+
+"""
+1. if hierarchical trait is present then, reshape rates into matrix with rows pertaining to rate/parameter and columns pertaining to shared, hyper, or individuals
+2. if coupled trait is present then divide rows into each unit, extract out coupling strength row
+3. if reporter type is HMMReprter then divide unit rates into rates and noise parameters
+4. if grid trait is present then extract out grid rows
+"""
+
+
+
+function prepare_rates(r, hierarchy::HierarchicalTrait)
+    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+
+    rshared = reshape(r[1:hierarchy.individualstart-1], hierarchy.allparams, hierarchy.nhypersets)
+
+    rindividual = reshape(r[hierarchy.individualstart:end], hierarchy.allparams, hierarchy.nindividuals)
+    rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
+
+    return rshared, rindividual
+end
+
+function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, r[i])
+    end
+    return pindividual, phyper
+end
+
+function prepare_rates(r, param, hierarchy::HierarchicalTrait)
+
+    rshared, rindividual = prepare_rates(r, hierarchy)
+    pindividual, phyper = prepare_hyper(r, param, hierarchy)
+
+    return rshared, rindividual, pindividual, phyper
+end
+
+function prepare_coupled(rates, nrates, reporter)
+    r = Matrix{Float64}[]
+    noiseparams = Matrix{Float64}[]
+    j = 1
+    for i in eachindex(nrates)
+        n = nrates[i] + reporter[i].n
+        push!(r, rates[j:j+n-1, :])
+        j += n
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
+    end
+    return r, noiseparams
+end
+#####
+
 """
     prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
 
@@ -197,9 +255,9 @@ function prepare_rates(r, hierarchy::Hierarchy)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 
-    rshared = reshape(r[1:hierarchy.ratestart-1], hierarchy.nrates, hierarchy.nhypersets)
+    rshared = reshape(r[1:hierarchy.individualstart-1], hierarchy.nrates, hierarchy.nhypersets)
 
-    rindividual = reshape(r[hierarchy.ratestart:end], hierarchy.nrates, hierarchy.nindividuals)
+    rindividual = reshape(r[hierarchy.individualstart:end], hierarchy.nrates, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
 
     return rshared, rindividual
@@ -240,12 +298,12 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
-    rshared = reshape(r[1:model.hierarchy.ratestart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
+    rshared = reshape(r[1:model.hierarchy.individualstart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
     phyper = Vector{Float64}[]
     for i in model.hierarchy.hyperindices
         push!(phyper, r[i])
     end
-    rindividual = reshape(r[model.hierarchy.ratestart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
+    rindividual = reshape(r[model.hierarchy.individualstart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
     rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
     return rshared, rindividual, pindividual, phyper

@@ -516,28 +516,53 @@ abstract type Results end
 
 ### Trait model
 
+"""
+Trait system
+each trait keeps track of its indices
+model keeps track of number of model rates
+reporter keeps track of noise parameter indices
+
+
+nallparams it total number of parameters per individual of all types including transition rates, noise parameters, coupling parameters, and grid parameters
+nrates is number of transition rates per individual
+nparams is number of fitted parameters per individual
+
+"""
 
 struct HierarchicalTrait
     nhypersets::Int
-    nrates::Int
+    nallparams::Int
     nparams::Int
     nindividuals::Int
-    sharedindices::Vector{Int}
-    fittedshared::Vector{Int}
-    individualindices::Vector{Int}
-    paramindices::Vector{Int}
+    individualstart::Int
+    paramstart::Int
     hyperindices::Vector{Vector}
+    fittedshared::Vector{Int}
 end
+# struct HierarchicalTrait
+#     nhypersets::Int
+#     nrates::Int
+#     nparams::Int
+#     nindividuals::Int
+#     rateindices::Vector
+#     individualindices::Vector
+#     hyperindices::Vector
+#     sharedindices::Vector{Int}
+#     fittedshared::Vector{Int}
+#     individualindices::Vector{Int}
+#     paramindices::Vector{Int}
+#     hyperindices::Vector{Vector}
+#     noiseindices::Vector
+# end
 
 struct GridTrait
-    raterange::UnitRange
-    noiserange::UnitRange
-    gridrange::UnitRange
-    Ngrid::Int
+    ngrid::Int
+    gridindices::Vector
 end
 
 struct CouplingTrait
-
+    ncoupling::Int
+    couplingindices::Vector
 end
 
 """
