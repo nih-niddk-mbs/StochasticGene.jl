@@ -152,6 +152,21 @@ function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
     return pindividual, phyper
 end
 
+function prepare_hyper(param, hierarchy::HierarchicalTrait)
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    phyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(phyper, param[i])
+    end
+    return pindividual, phyper
+end
+
+# function prepare_params(param, hierarchy::Hierarchy)
+#     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+#     phyper = collect(eachcol(reshape(param[1:hierarchy.paramstart-1], 2, hierarchy.nhypersets)))
+#     return pindividual, phyper
+# end
+
 function prepare_rates(r, param, hierarchy::HierarchicalTrait)
 
     rshared, rindividual = prepare_rates(r, hierarchy)
@@ -159,6 +174,17 @@ function prepare_rates(r, param, hierarchy::HierarchicalTrait)
 
     return rshared, rindividual, pindividual, phyper
 end
+
+function prepare_noiseparams(r, reporter::Vector)
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
+    end
+end
+
+function prepare_noiseparams(r, reporter::HMMReporter)
+    return r[end-reporter.n+1:end]
+end
+
 
 function prepare_coupled(rates, nrates, reporter)
     r = Matrix{Float64}[]
