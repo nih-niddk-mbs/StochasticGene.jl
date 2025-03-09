@@ -65,6 +65,7 @@ export
     fit,
     folder_path,
     folder_setup,
+    get_param,
     get_rates,
     GMmodel,
     GRSMcoupledmodel,

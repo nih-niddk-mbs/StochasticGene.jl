@@ -172,7 +172,7 @@ struct Hierarchy
     nrates::Int
     nparams::Int
     nindividuals::Int
-    ratestart::Int
+    individualstart::Int
     paramstart::Int
     hyperindices::Vector{Vector}
     fittedshared::Vector{Int}

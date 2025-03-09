@@ -409,6 +409,7 @@ function ll_hierarchy_c(pindividual, phyper)
     lhp = Float64[]
     for pc in pindividual
         lhpc = 0
+        println(pc)
         for i in eachindex(pc)
             lhpc -= logpdf(d[i], pc[i])
         end
