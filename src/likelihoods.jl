@@ -129,21 +129,21 @@ end
 4. if grid trait is present then extract out grid rows
 """
 
-
-
-function prepare_rates(r, hierarchy::HierarchicalTrait)
+function prepare_rates_trait(r, hierarchy::Hierarchy)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 
-    rshared = reshape(r[1:hierarchy.individualstart-1], hierarchy.allparams, hierarchy.nhypersets)
+    nallparams = hierarchy.nrates 
 
-    rindividual = reshape(r[hierarchy.individualstart:end], hierarchy.allparams, hierarchy.nindividuals)
+    rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
+
+    rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
 
-    return rshared, rindividual
+    return collect(eachcol(rshared)), collect(eachcol(rindividual))
 end
 
-function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+function prepare_hyper_trait(r, param, hierarchy::Hierarchy)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
     phyper = Vector{Float64}[]
     for i in hierarchy.hyperindices
@@ -152,22 +152,8 @@ function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
     return pindividual, phyper
 end
 
-function prepare_hyper(param, hierarchy::HierarchicalTrait)
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-    phyper = Vector{Float64}[]
-    for i in hierarchy.hyperindices
-        push!(phyper, param[i])
-    end
-    return pindividual, phyper
-end
 
-# function prepare_params(param, hierarchy::Hierarchy)
-#     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-#     phyper = collect(eachcol(reshape(param[1:hierarchy.paramstart-1], 2, hierarchy.nhypersets)))
-#     return pindividual, phyper
-# end
-
-function prepare_rates(r, param, hierarchy::HierarchicalTrait)
+function prepare_rates_trait(r, param, hierarchy::Hierarchy)
 
     rshared, rindividual = prepare_rates(r, hierarchy)
     pindividual, phyper = prepare_hyper(r, param, hierarchy)
@@ -175,23 +161,13 @@ function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     return rshared, rindividual, pindividual, phyper
 end
 
-function prepare_noiseparams(r, reporter::Vector)
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
-    end
-end
 
-function prepare_noiseparams(r, reporter::HMMReporter)
-    return r[end-reporter.n+1:end]
-end
-
-
-function prepare_coupled(rates, nrates, reporter)
+function prepare_rates_noiseparams(rates, transitions, R::Tuple, S, insertstep, reporter)
     r = Matrix{Float64}[]
     noiseparams = Matrix{Float64}[]
     j = 1
-    for i in eachindex(nrates)
-        n = nrates[i] + reporter[i].n
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
         push!(r, rates[j:j+n-1, :])
         j += n
     end
@@ -200,6 +176,21 @@ function prepare_coupled(rates, nrates, reporter)
     end
     return r, noiseparams
 end
+
+function prepare_rates_noiseparams(rates, transitions, R, S, insertstep, reporter)
+    r = Matrix{Float64}[]
+    noiseparams = Matrix{Float64}[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
+        push!(r, rates[j:j+n-1, :])
+        push!(noiseparams, rates[end-reporter[i].n+1:end, :])
+        j += n
+    end
+    return r, noiseparams
+end
+
+
 #####
 
 """
@@ -349,48 +340,6 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, phyper
 end
 
-function prepare_rates_noiseparams(rates, transitions, R::Tuple, S, insertstep, reporter)
-    r = Matrix{Float64}[]
-    noiseparams = Matrix{Float64}[]
-    j = 1
-    for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
-        push!(r, rates[j:j+n-1, :])
-        j += n
-    end
-    for i in eachindex(r)
-        push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
-    end
-    return r, noiseparams
-end
-
-function prepare_rates_noiseparams(rates, transitions, R, S, insertstep, reporter)
-    r = Matrix{Float64}[]
-    noiseparams = Matrix{Float64}[]
-    j = 1
-    for i in eachindex(R)
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
-        push!(r, rates[j:j+n-1, :])
-        push!(noiseparams, rates[end-reporter[i].n+1:end, :])
-        j += n
-    end
-    return r, noiseparams
-end
-
-function prepare_rates_new(param, model::AbstractGRSMhierarchicalmodel)
-    r = get_rates(param, model)
-    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
-    sourceStates = [c.sourceState for c in model.components.modelcomponents]
-
-    rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-    rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-
-    rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
-    noiseshared = [[p[:, j] for p in noiseshared] for j in 1:size(noiseshared[1], 2)]
-    rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
-    noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper
-end
 
 """
     prepare_rates(param, model::GRSMgridmodel)

@@ -529,30 +529,15 @@ nparams is number of fitted parameters per individual
 
 """
 
-struct HierarchicalTrait
-    nhypersets::Int
-    nallparams::Int
-    nparams::Int
-    nindividuals::Int
-    individualstart::Int
-    paramstart::Int
-    hyperindices::Vector{Vector}
-    fittedshared::Vector{Int}
-end
 # struct HierarchicalTrait
 #     nhypersets::Int
-#     nrates::Int
+#     nallparams::Int
 #     nparams::Int
 #     nindividuals::Int
-#     rateindices::Vector
-#     individualindices::Vector
-#     hyperindices::Vector
-#     sharedindices::Vector{Int}
-#     fittedshared::Vector{Int}
-#     individualindices::Vector{Int}
-#     paramindices::Vector{Int}
+#     individualstart::Int
+#     paramstart::Int
 #     hyperindices::Vector{Vector}
-#     noiseindices::Vector
+#     fittedshared::Vector{Int}
 # end
 
 struct GridTrait
