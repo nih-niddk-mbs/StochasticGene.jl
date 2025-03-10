@@ -468,18 +468,14 @@ function make_grid(transitions, R::Int, S, insertstep, noisepriors, grid)
     raterange, noiserange, gridrange
 end
 
-function grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid::Int)
-    n = num_rates(transitions, R, S, insertstep)
-    raterange = 1:n
-    noiserange = n+1:n+length(noisepriors)
-    gridrange = n+length(noisepriors)+1:n+length(noisepriors)+grid
-    (rates=raterange, noise=noiserange, gridrange=gridrange)
+function grid_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+    [num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)]
 end
 
 function coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
     n = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
     g = isnothing(grid) ? 0 : 1
-    return collect(n-coupling[5]-g+1:n+g)
+    collect(n-g-coupling[5]+1:n-g)
 end
 
 
@@ -512,7 +508,7 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), cindices=nothing, grid=nothing, factor=10)
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10)
     fittedindividual = hierarchical[2]
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
@@ -522,12 +518,12 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     ratestart = nhypersets * n_all_params + 1
     paramstart = length(fittedshared) + nhypersets * nparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
-    hierarchy = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
-
+    hierarchyold = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
+    hierarchy = HierarchicalTrait(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
 
     rprior = rmean[1:nhypersets*n_all_params]
-    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, cindices, factor)
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor)
 
     return hierarchy, fittedparam, fixedeffects, priord
 end
@@ -536,17 +532,17 @@ end
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     if !isempty(coupling)
-        cindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
     else
-        cindices = nothing
+        couplingindices = nothing
     end
     if !isnothing(grid)
         raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
     end
     if !isempty(hierarchical)
-        hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, cindices, grid, factor)
+        hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor)
     else
-        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, cindices, factor)
+        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
     end
 
     CBool = isempty(coupling)
@@ -566,16 +562,76 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     elseif CBool && !GBool && !HBool
         return GRSMgridhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, raterange, noiserange, gridrange, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && GBool && HBool
-        return GRSMcoupledmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], cindices), transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMcoupledmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && GBool && !HBool
-        return GRSMcoupledhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], cindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMcoupledhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && !GBool && HBool
-        return GRSMcoupledgridmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], cindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMcoupledgridmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         # return GRSMcoupledgridmodel()
     elseif !CBool && !GBool && !HBool
-        return GRSMcoupledgridhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], cindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMcoupledgridhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         # return GRSMcoupledgridhierarchicalmodel()
     end
+end
+
+function load_model_trait(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
+    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+    if !isempty(coupling)
+        couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        ncoupling = coupling[5]
+        couplingtrait = CouplingTrait(ncoupling, couplingindices)
+    else
+        couplingindices = nothing
+    end
+    if !isnothing(grid)
+        gridindices = grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid)
+        gridtrait = GridTrait(grid, gridindices)
+    else
+        gridindices = nothing
+    end
+    if !isempty(hierarchical)
+        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor)
+    else
+        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
+    end
+
+    CBool = isempty(coupling)
+    GBool = isnothing(grid)
+    HBool = isempty(hierarchical)
+
+    nrates = num_rates(transitions, R, S, insertstep)
+
+    if CBool && GBool && HBool
+        if R == 0
+            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        else
+            return GRSMtraitmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        end
+    elseif CBool && GBool && !HBool
+        trait = (hierarchical=hierarchicaltrait,)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif CBool && !GBool && HBool
+        trait = (grid=gridtrait,)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif CBool && !GBool && !HBool
+        trait = (hierarchical=hierarchicaltrait, grid=gridtrait)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif !CBool && GBool && HBool
+        trait = (coupling=couplingtrait,)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif !CBool && GBool && !HBool
+        trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+    elseif !CBool && !GBool && HBool
+        trait = (coupling=couplingtrait, grid=gridtrait)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        # return GRSMcoupledgridmodel()
+    elseif !CBool && !GBool && !HBool
+        trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait, grid=gridtrait)
+        return GRSMtraitmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        # return GRSMcoupledgridhierarchicalmodel()
+    end
+
 end
 
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), ejectnumber=1, datacol=3)
@@ -702,11 +758,11 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
 end
 
 """
-    prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, cindices, factor=10)
+    prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10)
 
 TBW
 """
-function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, cindices, factor=10)
+function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10)
     if isempty(rm)
         throw("No prior mean")
         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
@@ -725,7 +781,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_array(rm[fittedparam], cindices, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
+        return distribution_array(transform_array(rm[fittedparam], couplingindices, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
     else
         throw("priorcv not the same length as prior mean")
     end
@@ -757,13 +813,13 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     end
 end
 
-# prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, cindices, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, cindices, factor)
+# prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
 
-function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vector, priorcv, noisepriors, cindices, factor)
-    if isnothing(cindices)
+function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor)
+    if isnothing(couplingindices)
         prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, factor)
     else
-        prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, cindices, factor)
+        prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
     end
 end
 

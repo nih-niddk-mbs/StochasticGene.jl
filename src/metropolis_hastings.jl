@@ -679,7 +679,7 @@ function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchica
     np = size(param, 1)
     madparam = Array{Float64,1}(undef, np)
     qparam = Matrix{Float64}(undef, 3, 0)
-    nrates = num_rates(model)
+    nrates = num_all_parameters(model)
     corparam = cor(param[1:nrates, :]')
     covparam = cov(param[1:nrates, :]')
     covlogparam = cov(paramin[1:nrates, :]')
