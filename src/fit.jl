@@ -505,6 +505,7 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     for i in 1:nindividuals
         append!(f, fittedindividual .+ (i + nhypersets - 1) * nallparams)
     end
+    fhyper =[findall(x -> x in sub_target, f) for sub_target in fhyper]
     f, fhyper, fpriors
 end
 

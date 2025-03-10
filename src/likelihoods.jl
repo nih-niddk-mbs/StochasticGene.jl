@@ -447,8 +447,8 @@ end
 
 Loglikelihood for coupled hierarchical model individual parameters.
 """
-function ll_hierarchy_c(pindividual, phyper)
-    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+function ll_hierarchy_trait(pindividual, phyper)
+    d = distribution_array(phyper[1], phyper[2])
     lhp = Float64[]
     for pc in pindividual
         lhpc = 0
