@@ -145,17 +145,17 @@ end
 
 function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-    phyper = Vector{Float64}[]
+    rhyper = Vector{Float64}[]
     for i in hierarchy.hyperindices
-        push!(phyper, r[i])
+        push!(rhyper, r[i])
     end
-    return pindividual, phyper
+    return pindividual, rhyper
 end
 
 function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     rshared, rindividual = prepare_rates(r, hierarchy)
-    pindividual, phyper = prepare_hyper(r, param, hierarchy)
-    return rshared, rindividual, pindividual, phyper
+    pindividual, rhyper = prepare_hyper(r, param, hierarchy)
+    return rshared, rindividual, pindividual, rhyper
 end
 
 function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, reporter::Vector{HMMReporter}) where T <: AbstractArray
@@ -213,12 +213,12 @@ function prepare_grid(rates, ngrid)
 end
 
 function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
-    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, hierarchy)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
     println(typeof(rindividual))
     println(length(rindividual))
     rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
 end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
@@ -240,9 +240,9 @@ end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
     couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper, couplingStrength
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingStrength
 end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
@@ -254,9 +254,9 @@ end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
     pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper, pgrid
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgrid
 end
 
 #####
@@ -329,11 +329,11 @@ end
 
 function prepare_hyper(r, param, hierarchy::Hierarchy)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-    phyper = Vector{Float64}[]
+    rhyper = Vector{Float64}[]
     for i in hierarchy.hyperindices
-        push!(phyper, r[i])
+        push!(rhyper, r[i])
     end
-    return pindividual, phyper
+    return pindividual, rhyper
 end
 
 function prepare_rates(r, hierarchy::Hierarchy)
@@ -353,9 +353,9 @@ function prepare_rates(r, param, hierarchy::Hierarchy)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))\
 
     rshared, rindividual = prepare_rates(r, hierarchy)
-    pindividual, phyper = prepare_hyper(r, param, hierarchy)
+    pindividual, rhyper = prepare_hyper(r, param, hierarchy)
 
-    return rshared, rindividual, pindividual, phyper
+    return rshared, rindividual, pindividual, rhyper
 end
 
 """
@@ -371,8 +371,8 @@ function prepare_rates(param, model::GRSMcoupledmodel)
 end
 function prepare_rates_new(param, model::GRSMhierarchicalmodel)
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
 end
 """
     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
@@ -384,19 +384,19 @@ function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     r = get_rates(param, model)
     rshared = reshape(r[1:model.hierarchy.individualstart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-    phyper = Vector{Float64}[]
+    rhyper = Vector{Float64}[]
     for i in model.hierarchy.hyperindices
-        push!(phyper, r[i])
+        push!(rhyper, r[i])
     end
     rindividual = reshape(r[model.hierarchy.individualstart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
     rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-    return rshared, rindividual, pindividual, phyper
+    return rshared, rindividual, pindividual, rhyper
 end
 
 function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     r = get_rates(param, model)
-    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
     sourceStates = [c.sourceState for c in model.components.modelcomponents]
     rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
     rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
@@ -405,7 +405,7 @@ function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
     noiseshared = [[p[:, j] for p in noiseshared] for j in 1:size(noiseshared[1], 2)]
     rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
     noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
-    rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, phyper
+    rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper
 end
 
 
@@ -425,12 +425,12 @@ end
 
 
 """
-    ll_hierarchy(pindividual, phyper)
+    ll_hierarchy(pindividual, rhyper)
 
 Loglikelihood for hierarchical model individual parameters.
 """
-function ll_hierarchy(pindividual, phyper)
-    d = distribution_array(mulognormal(phyper[1], phyper[2]), sigmalognormal(phyper[2]))
+function ll_hierarchy(pindividual, rhyper)
+    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
     lhp = Float64[]
     for pc in eachcol(pindividual)
         lhpc = 0
@@ -443,12 +443,13 @@ function ll_hierarchy(pindividual, phyper)
 end
 
 """
-    ll_hierarchy_c(pindividual, phyper)
+    ll_hierarchy_c(pindividual, rhyper)
 
 Loglikelihood for coupled hierarchical model individual parameters.
+    lognormal distribution constructed from hyper untransformed noise parameters
 """
-function ll_hierarchy_trait(pindividual, phyper)
-    d = distribution_array(phyper[1], phyper[2])
+function ll_hierarchy_trait(pindividual, rhyper)
+    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
     lhp = Float64[]
     for pc in pindividual
         lhpc = 0
@@ -503,27 +504,27 @@ function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
 end
 
 function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rshared, rindividual, pindividual, phyper = prepare_rates(param, model)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(param, model)
     if model.method[2]
         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     else
         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
     end
-    lhp = ll_hierarchy(pindividual, phyper)
+    lhp = ll_hierarchy(pindividual, rhyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
 function loglikelihoodnew(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, phyper = prepare_rates(param, model)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(param, model)
     ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
-    lhp = ll_hierarchy(pindividual, phyper)
+    lhp = ll_hierarchy(pindividual, rhyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-    rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, phyper = prepare_rates(param, model)
+    rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper = prepare_rates(param, model)
     llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, noiseshared, noiseindividual, couplingStrength), model.components, model.reporter, data.interval, data.trace, model.method)
-    lhp = ll_hierarchy_c(pindividual, phyper)
+    lhp = ll_hierarchy_c(pindividual, rhyper)
     return llg + sum(lhp), vcat(llgp, lhp)
 end
 
@@ -592,11 +593,11 @@ end
 #     rindividual = reshape(r[htrait.individualindices], htrait.nrates, htrait.nindividuals)
 #     rindividual[htrait.fittedshared, :] .= rshared[htrait.fittedshared, 1]
 #     pindividual = reshape(param[htrait.paramindices], htrait.nparams, htrait.nindividuals)
-#     phyper = Vector{Float64}[]
+#     rhyper = Vector{Float64}[]
 #     for i in htrait.hyperindices
-#         push!(phyper, r[i])
+#         push!(rhyper, r[i])
 #     end
-#     return rshared, rindividual, pindividual, phyper
+#     return rshared, rindividual, pindividual, rhyper
 # end
 
 # function prepare_rates(allparams, ctrait::CouplingTrait)
@@ -619,12 +620,12 @@ end
 #     r = get_rates(param, model)
 #     traits = keys(model.traits)
 #     if :hierarchical ∈ traits
-#         rshared, rindividual, pindividual, phyper = prepare_rates(r, model.hierarchical)
+#         rshared, rindividual, pindividual, rhyper = prepare_rates(r, model.hierarchical)
 #         if :coupled ∈ traits
 #             rshared, rindividual, noiseparams, couplingStrength = prepare_rates(rshared, rindividual, model.coupling[1])
-#             rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, phyper=phyper, coupling=couplingStrength, noiseparams=noiseparams)
+#             rateset = (rateshared=rshared, rindividual=rindividual, pindividual=pindividual, rhyper=rhyper, coupling=couplingStrength, noiseparams=noiseparams)
 #         else
-#             rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, phyper=phyper)
+#             rateset = (rateshared=rshared, rateindividual=rindividual, pindividual=pindividual, rhyper=rhyper)
 #         end
 #     else
 #         if :coupled ∈ traits
@@ -1167,7 +1168,7 @@ end
 
 function get_rates_hierarchical(param, model::AbstractGRSMhierarchicalmodel, inverse=true)
     r = get_rates(param, model, inverse)
-    rshared, rindividual, pindividual, phyper = prepare_rates(r, param, model.hierarchy)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
     vcat(vec(rshared), vec(rindividual))
 end
 

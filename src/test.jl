@@ -234,7 +234,7 @@ function test_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     sshist = simulator_ss(rm, transitions, G, R, S, insertstep, coupling=coupling, totalsteps=totalsteps, verbose=false)
 
-    rshared, rindividual, pindividual, phyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(get_param(model), model)
+    rshared, rindividual, pindividual, rhyper, couplingStrength, noiseshared, noiseindividual = prepare_rates(get_param(model), model)
 
     a, p0 = make_ap(rshared[1], couplingStrength, data.interval, model.components, method[1])
 
