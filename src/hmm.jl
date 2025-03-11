@@ -196,6 +196,12 @@ function make_ap(rates, couplingStrength, interval, components::TCoupledComponen
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
+function make_ap(r::Tuple, interval, components::TComponents, method=Tsit5())
+    r, couplingStrength = r
+    Qtr = make_mat_TC(components, r, couplingStrength)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+end
+
 """
     make_ap(r, interval, elementsT::Vector, N)
 
@@ -477,14 +483,10 @@ function forward(a::Matrix, b, p0, N, T)
     return α, C
 end
 
-function forward(a::Matrix, b, p0)
-    N, T = size(b)
-    forward(a, b, p0, N, T)
-end
 
-function forward(atuple::Tuple, b::Array, p0)
+function forward(atuple::Tuple, b::Array, p0, N::Tuple, T::Int)
     a, a_grid = atuple
-    Nstate, Ngrid, T = size(b)
+    Nstate, Ngrid = N
     forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
 end
 
@@ -718,14 +720,14 @@ end
 
 function ll_hmm_coupled_hierarchical(r, components::TCoupledComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
     nstates = components.N
-    rshared, rindividual, noiseshared, noiseindividual, couplingStrength = r
+    rshared, rindividual, noiseshared, noiseindividual, couplingStrength, couplingStrengthindividual = r
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components, method[1])
     d = set_d(noiseshared[1], reporters, nstates)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, nstates, trace[4], trace[3]) : 0.0
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
     else
-        ll, logpredictions = ll_hmm(rindividual, couplingStrength, noiseindividual, interval, components, reporters, trace[1], nstates)
+        ll, logpredictions = ll_hmm(rindividual, couplingStrengthindividual, noiseindividual, interval, components, reporters, trace[1], nstates)
     end
     ll + lb, logpredictions
 end
@@ -736,8 +738,8 @@ end
 TBW
 """
 
-function ll_hmm_gridt(r, pgrid, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
-    r, noiseparams = r
+function ll_hmm_gridt(r, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
+    r, noiseparams, pgrid = r
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(r, interval, components)
     d = set_d_grid(noiseparams, reporter, Nstate, Ngrid)
@@ -745,9 +747,21 @@ function ll_hmm_gridt(r, pgrid, Nstate, Ngrid, components::TComponents, reporter
 
 end
 
+function ll_hmm_grid_hierarchical(r, components::TComponents, reporters::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true))
+    rshared, rindividual, noiseshared, noiseindividual, pgrid = r
+    nstates = components.nT
+    if method[2]
+        a, p0 = make_ap(rshared[1], interval, components, method[1])
+        a_grid = make_a_grid(pgrid, Ngrid)
+        ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporters, trace[1], nstates)
+    else
+        ll, logpredictions = ll_hmm(rindividual, noiseindividual, interval, components, reporters, trace[1], nstates, method[1])
+    end
+    ll + lb, logpredictions
+end
 
 function ll_hmm_grid_hierarchicalt(r, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
-    rshared, noiseindividual,rindividual, noiseindividual, pgrid = r  
+    rshared, noiseindividual, rindividual, noiseindividual, pgrid, pgridindividual = r
     a_grid = make_a_grid(pgrid, Ngrid)
     a, p0 = make_ap(rshared, interval, components)
     logpredictions = Array{Float64}(undef, length(trace[1]))
