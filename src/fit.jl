@@ -400,7 +400,6 @@ function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, in
 end
 
 function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, probfn, noisepriors, coupling)
-    println(coupling)
     reporter = HMMReporter[]
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
     n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
@@ -522,7 +521,6 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     # hierarchy = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
     hierarchy = HierarchicalTrait(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
-
     rprior = rmean[1:nhypersets*n_all_params]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor)
 
@@ -575,7 +573,7 @@ end
 #     end
 # end
 
-function load_model_trait(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
@@ -674,24 +672,28 @@ end
 
 TBW
 """
-function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors, coupling=nothing, grid=nothing)
+function prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
     [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.1, length(noisepriors))]
-    if !isnothing(grid)
-        append!(rm, fill(1.0, grid[5]))
-    end
-    rm
 end
 
-function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupling, grid)
+function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupling)
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
     end
     [rm; fill(1.0, coupling[5])]
-    if !isnothing(grid)
-        append!(rm, fill(1.0, grid[5]))
+end
+
+function prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if isempty(coupling)
+        pcv = prior_hypercv(transitions, R, S, insertstep, noisepriors)
+    else
+        pcv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
     end
-    rm
+    if !isnothing(grid)
+        append!(pcv, fill(1.0, grid))
+    end
+    pcv
 end
 
 """
@@ -699,16 +701,16 @@ end
 
 default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
 """
-function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
-    r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-    hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
-    # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
-    append!(r, hypercv)
-    for i in 3:nhypersets
-        append!(r, fill(cv, length(rm)))
-    end
-    r
-end
+# function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
+#     r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
+#     hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
+#     # hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.1, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(.1,length(noisepriors))]
+#     append!(r, hypercv)
+#     for i in 3:nhypersets
+#         append!(r, fill(cv, length(rm)))
+#     end
+#     r
+# end
 
 function prior_ratemean_hierarchical(priormean, hypercv, nhypersets, cv::Float64=1.0)
     r = copy(priormean)
@@ -724,10 +726,10 @@ end
 
 TBW
 """
-function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-    [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
-    # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
-end
+# function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+#     [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
+#     # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
+# end
 
 function prior_ratemean_grid(priormean)
     [priormean; 0.5]
@@ -764,17 +766,16 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     if !isempty(priormean)
         return priormean
     else
-        if !isnothing(coupling)
-            priormean = prior_ratemean_coupling(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
+        if !isempty(coupling)
+            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
         else
             priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
         end
         if !isnothing(grid)
             priormean = prior_ratemean_grid(priormean)
         end
-        if isempty(hierarchical)
-            # priormean = prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical[1], coupling, grid)
-            priormean = prior_ratemean_hierarchical(priormean, hierarchical[1], coupling, grid)
+        if !isempty(hierarchical)
+            priormean = prior_ratemean_hierarchical(priormean, prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid), hierarchical[1])
         end
     end
     priormean
