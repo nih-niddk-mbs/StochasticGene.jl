@@ -129,6 +129,21 @@ end
 4. if grid trait is present then extract out grid rows
 """
 
+"""
+    prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+"""
+function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    rhyper = Vector{Float64}[]
+    for i in hierarchy.hyperindices
+        push!(rhyper, r[i])
+    end
+    return pindividual, rhyper
+end
+
+"""
+    prepare_rates(r, hierarchy::HierarchicalTrait)
+"""
 function prepare_rates(r, hierarchy::HierarchicalTrait)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
@@ -143,22 +158,46 @@ function prepare_rates(r, hierarchy::HierarchicalTrait)
     return collect(eachcol(rshared)), collect(eachcol(rindividual))
 end
 
-function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-    rhyper = Vector{Float64}[]
-    for i in hierarchy.hyperindices
-        push!(rhyper, r[i])
-    end
-    return pindividual, rhyper
-end
-
+"""
+    prepare_rates(r, param, hierarchy::HierarchicalTrait)
+"""
 function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     rshared, rindividual = prepare_rates(r, hierarchy)
     pindividual, rhyper = prepare_hyper(r, param, hierarchy)
     return rshared, rindividual, pindividual, rhyper
 end
+"""
+prepare_rates_noiseparams(rates, nrates, reporter)
+"""
+function prepare_rates_noiseparams(rates::AbstractArray, nrates::Int, reporter::HMMReporter)
+    rates[1:nrates], rates[nrates+1:nrates+reporter.n]
+end
 
-function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, reporter::Vector{HMMReporter}) where T <: AbstractArray
+function prepare_rates_noiseparams(rates::Vector{T}, nrates::Int, reporter::HMMReporter) where {T<:AbstractArray}
+    r = Vector{Vector{Float64}}(undef, length(rates))
+    noiseparams = Vector{Vector{Float64}}(undef, length(rates))
+    k = 1
+    for i in eachindex(r)
+        r[i], noiseparams[i] = prepare_rates_noiseparams(rates[i], nrates, reporter)
+    end
+    return r, noiseparams
+end
+
+function prepare_rates_noiseparams(rates::Vector, nrates::Vector{Int}, reporter::Vector{HMMReporter})
+    r = Vector{Vector{Float64}}(undef, length(nrates))
+    noiseparams = Vector{Vector{Float64}}(undef, length(nrates))
+    k = 1
+    for i in eachindex(r)
+        n = nrates[i]
+        r[i] = rates[k:k+n-1]
+        k += n
+        noiseparams[i] = rates[k:k+reporter[i].n-1]
+        k += reporter[i].n
+    end
+    return r, noiseparams
+end
+
+function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, reporter::Vector{HMMReporter}) where {T<:AbstractArray}
     r = Vector{Vector{Vector{Float64}}}(undef, length(rates))
     noiseparams = Vector{Vector{Vector{Float64}}}(undef, length(rates))
     for i in eachindex(r)
@@ -176,37 +215,17 @@ function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, report
     return r, noiseparams
 end
 
-# function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, reporter::Vector{HMMReporter}) where T <: AbstractArray 
-#     r = Vector{Vector{Float64}}(undef, length(nrates))
-#     noiseparams = Vector{Vector{Float64}}(undef, length(nrates))
-#     k = 1
-#     for i in eachindex(r)
-#         n = nrates[i]
-#         r[i] = rates[i][k:k+n-1]
-#         k += n
-#         noiseparams[i] = rates[i][k:k+reporter[i].n-1]
-#         k += reporter[i].n
-#     end
-#     return r, noiseparams
-# end
 
-function prepare_rates_noiseparams(rates::Vector{T}, nrates::Int, reporter::HMMReporter) where T <: AbstractArray
-    r = Vector{Vector{Float64}}(undef, length(rates))
-    noiseparams = Vector{Vector{Float64}}(undef, length(rates))
-    k = 1
-    for i in eachindex(r)
-        r[i], noiseparams[i] = prepare_rates_noiseparams(rates[i], nrates, reporter)
-    end
-    return r, noiseparams
-end
 
-function prepare_rates_noiseparams(rates::AbstractArray, nrates::Int, reporter::HMMReporter)
-    rates[1:nrates], rates[nrates+1:nrates+reporter.n]
-end
+"""
+    prepare_coupling(rates, couplingindices)
+    
+"""
 
 function prepare_coupling(rates::Vector{Float64}, couplingindices)
     rates[couplingindices]
 end
+
 function prepare_coupling(rates::Vector{Vector{Float64}}, couplingindices)
     coupling = Vector{Float64}[]
     for i in eachindex(rates)
@@ -215,6 +234,9 @@ function prepare_coupling(rates::Vector{Vector{Float64}}, couplingindices)
     return coupling
 end
 
+"""
+    prepare_grid(rates, ngrid)
+"""
 function prepare_grid(rates, ngrid)
     rates[ngrid]
 end
@@ -227,6 +249,9 @@ function prepare_grid(rates::Vector{Vector{Float64}}, ngrid)
     return grid
 end
 
+"""
+    prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
+"""
 function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
@@ -234,11 +259,17 @@ function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel)
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel)
     r = get_rates(param, model)
     prepare_rates_noiseparams(r, model.nrates, model.reporter)
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
@@ -246,19 +277,28 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     return rates, noiseparams, couplingStrength
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
     r = get_rates(param, model)
     prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    couplingshared  = prepare_coupling(rshared, model.trait.coupling.couplingindices)
-    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)    
+    couplingshared = prepare_coupling(rshared, model.trait.coupling.couplingindices)
+    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
@@ -266,6 +306,9 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     return rates, noiseparams, pgrid
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
@@ -273,6 +316,10 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
     return rates, noiseparams, pgrid, couplingStrength
 end
+
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
@@ -281,6 +328,9 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
 end
 
+"""
+    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
+"""
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
@@ -299,7 +349,7 @@ end
 
 Loglikelihood for hierarchical model individual parameters.
 """
-function ll_hierarchy(pindividual, rhyper)
+function ll_hierarchy1(pindividual, rhyper)
     d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
     lhp = Float64[]
     for pc in eachcol(pindividual)
@@ -318,7 +368,7 @@ end
 Loglikelihood for coupled hierarchical model individual parameters.
     lognormal distribution constructed from hyper untransformed noise parameters
 """
-function ll_hierarchy_c(pindividual, rhyper)
+function ll_hierarchy(pindividual, rhyper)
     d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
     lhp = Float64[]
     for pc in pindividual
@@ -369,7 +419,7 @@ end
 
 function ll_hmm_trace(param, data, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
-    if haskey(model.trait, :grid)
+    if !isnothing(model.trait) && haskey(model.trait, :grid)
         ll_hmm(r, model.trait.grid.Ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
     else
         ll_hmm(r, model.components, model.reporter, data.interval, data.trace, model.method)

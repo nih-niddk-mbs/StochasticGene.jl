@@ -642,7 +642,6 @@ function forward_grid(a, a_grid, b, p0)
     return α, C
 end
 
-
 """
     forward(a, b, p0)
 
@@ -697,10 +696,6 @@ function forward(a::Matrix, b, p0, N, T)
     end
     return α, C
 end
-
-
-
-
 
 """
     forward_matrixmult(a, b, p0, N, T)
@@ -844,7 +839,12 @@ end
 
 ### Called by trait likelihoods
 
+"""
+    ll_hmm(a::Matrix, p0::Vector, d, traces)
+
+"""
 function ll_hmm(a::Matrix, p0::Vector, d, traces)
+    println(d)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         _, C = forward(a, set_b(traces[i], d), p0)
@@ -853,6 +853,10 @@ function ll_hmm(a::Matrix, p0::Vector, d, traces)
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces)
+
+"""
 function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -864,6 +868,10 @@ function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces)
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
 function ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -876,6 +884,10 @@ function ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractC
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
 function ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -889,6 +901,11 @@ function ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components:
 end
 
 ### grid trait likelihoods
+
+"""
+    ll_hmm(a, a_grid, p0::Vector, d, traces)
+
+"""
 function ll_hmm(a, a_grid, p0::Vector, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -898,6 +915,10 @@ function ll_hmm(a, a_grid, p0::Vector, d, traces)
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(noiseparams, a, a_grid, p0::Vector, reporter, traces)
+
+"""
 function ll_hmm(noiseparams, a, a_grid, p0::Vector, reporter, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -909,6 +930,10 @@ function ll_hmm(noiseparams, a, a_grid, p0::Vector, reporter, traces)
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
 function ll_hmm(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -922,6 +947,10 @@ function ll_hmm(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, compone
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hmm(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
 function ll_hmm(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
@@ -934,11 +963,13 @@ function ll_hmm(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float6
     end
     sum(logpredictions), logpredictions
 end
-####
 
 
 ###  trait likelihoods
+"""
+    ll_hmm(r, components, reporter, interval, trace, method)
 
+"""
 function ll_hmm(r, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5())
     r, noiseparams = r
     a, p0 = make_ap(r, interval, components, method)
@@ -949,8 +980,8 @@ function ll_hmm(r, components::TComponents, reporter::HMMReporter, interval, tra
 end
 
 function ll_hmm(r, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5())
-    r, couplingStrength, noiseparams = r
-    a, p0 = make_ap(r, couplingStrength, interval, components, method)
+    rates, noiseparams, couplingStrength = r
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, trace[3]) : 0.0
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
@@ -985,8 +1016,11 @@ function ll_hmm(r, components::TCoupledComponents, reporter::Vector{HMMReporter}
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
 
-### grid
-
+### grid trait likelihoods
+"""
+    ll_hmm(r, pgrid, Ngrid, components, reporter, interval, trace, method)
+    
+"""
 function ll_hmm(r, pgrid, Ngrid, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5())
     r, noiseparams = r
     nstates = components.nT
@@ -999,7 +1033,7 @@ function ll_hmm(r, pgrid, Ngrid, components::TComponents, reporter::HMMReporter,
 end
 
 function ll_hmm(r, pgrid, Ngrid, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5())
-    r, couplingStrength, noiseparams = r
+    r, noiseparams, couplingStrength = r
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
     a_grid = make_a_grid(pgrid, Ngrid)
     d = set_d(noiseparams, reporter)

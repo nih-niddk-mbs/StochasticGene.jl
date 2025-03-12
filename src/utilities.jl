@@ -1680,7 +1680,7 @@ This function calculates the mean elongation time for a given model and rates. I
 # Returns
 - `Float64`: The mean elongation time.
 """
-function mean_elongationtime(r, transitions, R)
+function mean_elongationtime(r, transitions, R::Int)
     if R > 0
         n = length(transitions)
         return meantime(r[n+2:n+R+1])
@@ -1689,6 +1689,13 @@ function mean_elongationtime(r, transitions, R)
     end
 end
 
+function mean_elongationtime(r, transitions, R::Tuple)
+    m = Vector{Float64}(undef, length(R))
+    for i in eachindex(R)
+        m[i] = mean_elongationtime(r, transitions, R[i])
+    end
+    return m
+end
 """
     make_array(v)
 
