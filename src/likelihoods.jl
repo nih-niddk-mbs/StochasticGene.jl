@@ -226,13 +226,14 @@ function prepare_coupling(rates::Vector{Float64}, couplingindices)
     rates[couplingindices]
 end
 
-function prepare_coupling(rates::Vector{Vector{Float64}}, couplingindices)
+function prepare_coupling(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
     coupling = Vector{Float64}[]
     for i in eachindex(rates)
         push!(coupling, rates[i][couplingindices])
     end
     return coupling
 end
+
 
 """
     prepare_grid(rates, ngrid)
@@ -241,7 +242,7 @@ function prepare_grid(rates, ngrid)
     rates[ngrid]
 end
 
-function prepare_grid(rates::Vector{Vector{Float64}}, ngrid)
+function prepare_grid(rates::Vector{T}, ngrid) where {T<:AbstractArray}
     grid = Vector{Float64}[]
     for i in eachindex(rates)
         push!(grid, rates[i][ngrid])
@@ -257,6 +258,35 @@ function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
     rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
     rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
+end
+
+function prepare_rates_coupled_hierarchical(r, param, nrates, coupling, hierarchy, reporter)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
+    couplingshared = prepare_coupling(rshared, coupling.couplingindices)
+    couplingindividual = prepare_coupling(rindividual, coupling.couplingindices)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
+end
+
+function prepare_rates_hierarchical_grid(r, param, nrates, hierarchy, grid, reporter)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
+    pgridshared = prepare_grid(rshared, grid)
+    pgridindividual = prepare_grid(rindividual, grid)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
+end
+
+function prepare_rates_coupled_hierarchical_grid(r, param, nrates, coupling, hierarchy, grid, reporter)
+    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
+    couplingshared = prepare_coupling(rshared, coupling.couplingindices)
+    couplingindividual = prepare_coupling(rindividual, coupling.couplingindices)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
+    pgridshared = prepare_grid(rshared, grid)
+    pgridindividual = prepare_grid(rindividual, grid)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual
 end
 
 """
@@ -290,10 +320,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    couplingshared = prepare_coupling(rshared, model.trait.coupling.couplingindices)
-    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
+    prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.   hierarchical, model.reporter)
 end
 
 """
@@ -302,7 +329,7 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
-    pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
+    pgrid = prepare_grid(r, model.trait.grid.ngrid)
     return rates, noiseparams, pgrid
 end
 
@@ -313,8 +340,8 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
     couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
-    return rates, noiseparams, pgrid, couplingStrength
+    pgrid = prepare_grid(r, model.trait.grid.ngrid)
+    return rates, noiseparams, couplingStrength, pgrid
 end
 
 """
@@ -323,8 +350,8 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
-    pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
+    pgridshared = prepare_grid(rshared, model.trait.grid.ngrid)
+    pgridindividual = prepare_grid(rindividual, model.trait.grid.ngrid)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
 end
 
@@ -333,9 +360,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    couplingshared = prepare_coupling(rshared, model.trait.coupling.couplingindices)
-    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.reporter)
     pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
     pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual
@@ -344,23 +369,23 @@ end
 # Model loglikelihoods
 
 
-"""
-    ll_hierarchy(pindividual, rhyper)
+# """
+#     ll_hierarchy(pindividual, rhyper)
 
-Loglikelihood for hierarchical model individual parameters.
-"""
-function ll_hierarchy1(pindividual, rhyper)
-    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
-    lhp = Float64[]
-    for pc in eachcol(pindividual)
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc -= logpdf(d[i], pc[i])
-        end
-        push!(lhp, lhpc)
-    end
-    lhp
-end
+# Loglikelihood for hierarchical model individual parameters.
+# """
+# function ll_hierarchy1(pindividual, rhyper)
+#     d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
+#     lhp = Float64[]
+#     for pc in eachcol(pindividual)
+#         lhpc = 0
+#         for i in eachindex(pc)
+#             lhpc -= logpdf(d[i], pc[i])
+#         end
+#         push!(lhp, lhpc)
+#     end
+#     lhp
+# end
 
 """
     ll_hierarchy_c(pindividual, rhyper)
@@ -420,7 +445,7 @@ end
 function ll_hmm_trace(param, data, model::AbstractGRSMtraitmodel)
     r = prepare_rates(param, model)
     if !isnothing(model.trait) && haskey(model.trait, :grid)
-        ll_hmm(r, model.trait.grid.Ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
+        ll_hmm(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
     else
         ll_hmm(r, model.components, model.reporter, data.interval, data.trace, model.method)
     end
