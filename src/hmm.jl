@@ -57,7 +57,7 @@ function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
 end
 
 
-function prob_Gaussian(par, reporters)
+function prob_Gaussian(par, reporters::Int)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
 """
@@ -71,7 +71,16 @@ variance = sum of variances of background and reporters_per_state
 - `reporters_per_state`: number of reporters per HMM state
 -`N`: number of HMM states
 """
-function prob_Gaussian(par, reporters_per_state, N)
+function prob_Gaussian(par, reporters_per_state::T, N) where {T<:Vector}
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_Gaussian(par, reporters_per_state[i])
+    end
+    d
+end
+
+function prob_Gaussian(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
         d[i] = prob_Gaussian(par, reporters_per_state[i])
@@ -85,22 +94,37 @@ end
 return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight parameter
 
 """
-function prob_GaussianMixture(par, reporters_per_state, N)
+function prob_GaussianMixture(par, reporters::Int)
+    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
+end
+
+function prob_GaussianMixture(par, reporters_per_state::T, N) where {T<:Vector}
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
         d[i] = prob_GaussianMixture(par, reporters_per_state[i])
     end
     d
 end
-function prob_GaussianMixture(par, reporters)
-    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
+
+function prob_GaussianMixture(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_GaussianMixture(par, reporters_per_state[i])
+    end
+    d
 end
+
 
 """
     prob_GaussianMixture_6(par, reporters_per_state, N)
 
 Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
 """
+function prob_GaussianMixture_6(par, reporters)
+    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+end
+
 function prob_GaussianMixture_6(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
@@ -108,8 +132,14 @@ function prob_GaussianMixture_6(par, reporters_per_state, N)
     end
     d
 end
-function prob_GaussianMixture_6(par, reporters)
-    MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
+
+function prob_GaussianMixture_6(par, reporters_per_state::T_dimension) where {T<:Vector}
+    N = length(reporters_per_state)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_GaussianMixture_6(par, reporters_per_state[i])
+    end
+    d
 end
 
 
@@ -118,7 +148,7 @@ end
 
 TBW
 """
-function prob_Gaussian_ind(par, reporters)
+function prob_Gaussian_ind(par, reporters::Int)
     if reporters > 0
         return Normal(reporters * par[3], sqrt(reporters) * par[4])
     else
@@ -134,7 +164,14 @@ function prob_Gaussian_ind(par, reporters_per_state, N)
     d
 end
 
-
+function prob_Gaussian_ind(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_Gaussian_ind(par, reporters_per_state[i])
+    end
+    d
+end
 
 """
     prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function=kronecker_delta)
@@ -151,7 +188,7 @@ Generates a 3D array of Normal distributions based on the given parameters and r
 # Returns
 - `Array{Distribution{Univariate,Continuous}}`: A 3D array of Normal distributions.
 """
-function prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f::Function=kronecker_delta)
+function prob_Gaussian_grid(par, reporters_per_state, Nstate::Int, Ngrid::Int, f::Function=kronecker_delta)
     d = Array{Distribution{Univariate,Continuous}}(undef, Nstate, Ngrid, Ngrid)
     for j in 1:Nstate
         for k in 1:Ngrid
@@ -169,7 +206,19 @@ function prob_Gaussian_grid(par, reporters_per_state, N::Tuple, f::Function=kron
     prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f)
 end
 
-
+function prob_Gaussian_grid(par, reporters_per_state, Ngrid::Int, f::Function=kronecker_delta)
+    Nstate = length(reporters_per_state)
+    d = Array{Distribution{Univariate,Continuous}}(undef, Nstate, Ngrid, Ngrid)
+    for j in 1:Nstate
+        for k in 1:Ngrid
+            for l in 1:Ngrid
+                σ = sqrt(par[2]^2 + reporters_per_state[j] * par[4]^2 * f(k, l))
+                d[j, k, l] = Normal(par[1] + reporters_per_state[j] * par[3] * f(k, l), σ)
+            end
+        end
+    end
+    return d
+end
 
 """
     make_ap(r, interval, components, method)
@@ -243,17 +292,18 @@ function make_a_grid(param, Ngrid)
     as ./ sum(as, dims=2)
 end
 
+
 """
-    set_d(noiseparams::Vector, reporters_per_state::Vector, probfn::Vector, N::Int)
+    set_d(noiseparams, reporters_per_state, probfn, N)
 
 TBW
 """
 
-function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N) where {T<:Function}
+function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int) where {T<:Function}
     probfn(noiseparams, reporters_per_state, N)
 end
 
-function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N) where {T<:AbstractVector}
+function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
     d = Vector[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
@@ -261,7 +311,7 @@ function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}},
     return d
 end
 
-function set_d(noiseparams, reporters_per_state, probfn, Nstate, Ngrid)
+function set_d(noiseparams, reporters_per_state, probfn, Nstate::Int, Ngrid::Int)
     probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
 end
 
@@ -270,11 +320,18 @@ function set_d(noiseparams, reporters_per_state, probfn, N::Tuple)
     probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
 end
 
-function set_d(noiseparams, reporter::HMMReporter, N)
+
+"""
+    set_d(noiseparams, reporter, N)
+
+
+TBW
+"""
+function set_d(noiseparams, reporter::HMMReporter, N::Int)
     set_d(noiseparams, reporter.per_state, reporter.probfn, N)
 end
 
-function set_d(noiseparams, reporter::Vector{HMMReporter}, N)
+function set_d(noiseparams, reporter::Vector{HMMReporter}, N::Int)
     ps = [r.per_state for r in reporter]
     pf = [r.probfn for r in reporter]
     set_d(noiseparams, ps, pf, N)
@@ -283,10 +340,50 @@ end
 
 
 """
-set_b
+    set_d(noiseparams, reporters_per_state, probfn)
+
+TBW
 """
 
-function set_b(trace::Vector, d::Vector, N)
+function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T) where {T<:Function}
+    probfn(noiseparams, reporters_per_state)
+end
+
+function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
+    d = Vector[]
+    for i in eachindex(noiseparams)
+        push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
+    end
+    return d
+end
+
+
+
+"""
+    set_d(noiseparams, reporter)
+
+
+TBW
+"""
+function set_d(noiseparams, reporter::HMMReporter)
+    set_d(noiseparams, reporter.per_state, reporter.probfn)
+end
+
+function set_d(noiseparams, reporter::Vector{HMMReporter})
+    ps = [r.per_state for r in reporter]
+    pf = [r.probfn for r in reporter]
+    set_d(noiseparams, ps, pf)
+end
+
+
+
+"""
+    set_b(trace, d)
+
+TBW
+"""
+function set_b(trace::Vector, d::Vector)
+    N = length(d)
     b = Matrix{Float64}(undef, N, length(trace))
     for (t, obs) in enumerate(trace)
         for j in 1:N
@@ -296,7 +393,8 @@ function set_b(trace::Vector, d::Vector, N)
     return b
 end
 
-function set_b(trace, d::Vector{Vector}, N)
+function set_b(trace, d::Vector{T}) where {T<:Vector}
+    N = size(d, 2)
     b = ones(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
@@ -309,6 +407,57 @@ function set_b(trace, d::Vector{Vector}, N)
     end
     return b
 end
+
+function set_b(trace, d)
+    Nstate, Ngrid, _ = size(d)
+    b = ones(Nstate, Ngrid, size(trace, 2))
+    t = 1
+    for obs in eachcol(trace)
+        for j in 1:Nstate
+            for k in 1:Ngrid
+                for l in 1:Ngrid
+                    b[j, k, t] *= pdf(d[j, k, l], obs[l])
+                end
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
+"""
+set_b(trace, d, N)
+
+"""
+
+function set_b(trace::Vector, d::Vector, N)
+    b = Matrix{Float64}(undef, N, length(trace))
+    for (t, obs) in enumerate(trace)
+        for j in 1:N
+            b[j, t] = pdf(d[j], obs)
+        end
+    end
+    return b
+end
+
+
+
+
+function set_b(trace, d::Vector{T}, N) where {T<:Vector}
+    b = ones(N, size(trace, 1))
+    t = 1
+    for obs in eachrow(trace)
+        for j in 1:N
+            for i in eachindex(d)
+                b[j, t] *= pdf(d[i][j], obs[i])
+            end
+        end
+        t += 1
+    end
+    return b
+end
+
+
 
 function set_b(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, size(trace, 2))
@@ -332,7 +481,7 @@ function set_b(trace, d, N::Tuple)
 end
 
 """
-    set_b(trace, params, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N)
+    set_b(trace, params, reporters_per_state, probfn, N)
 
 TBW
 """
@@ -458,6 +607,60 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
 end
 
 """
+    forward_grid(a, a_grid, b, p0)
+
+TBW
+"""
+function forward_grid(a, a_grid, b, p0)
+    Nstate, Ngrid, T = size(b)
+    α = zeros(Nstate, Ngrid, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
+end
+
+
+"""
+    forward(a, b, p0)
+
+TBW
+"""
+function forward(a::Matrix, b, p0)
+    N, T = size(b)
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                forward_inner_operation!(α, a, b, i, j, t)
+            end
+        end
+        C[t] = 1 / sum(α[:, t])
+        α[:, t] *= C[t]
+    end
+    return α, C
+end
+
+function forward(atuple::Tuple, b::Array, p0)
+    a, a_grid = atuple
+    forward_grid(a, a_grid, b, p0)
+end
+
+"""
 forward(a, b, p0, N, T)
 
 returns forward variable α, and scaling parameter array C using scaled forward algorithm
@@ -484,11 +687,6 @@ function forward(a::Matrix, b, p0, N, T)
 end
 
 
-function forward(atuple::Tuple, b::Array, p0, N::Tuple, T::Int)
-    a, a_grid = atuple
-    Nstate, Ngrid = N
-    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-end
 
 
 
@@ -608,46 +806,89 @@ function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
 end
 
 """
-    ll_background(a::Matrix, b::Vector, p0, N, T)
+    ll_background(obs, d, a, p0, weight)
 
 TBW
 """
-function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes, weight)
-    _, C = forward(a, set_b_background(obs, d), p0, nstates, nframes)
+function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+    _, C = forward(a, set_b_background(obs, d), p0)
     weight * sum(log.(C))
 end
 
-function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, nstates, nframes, weight)
-    _, C = forward(a, set_b(obs, d, nstates), p0, nstates, nframes)
+function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+    _, C = forward(a, set_b(obs, d), p0)
     weight * sum(log.(C))
 end
 
-function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, nstates, nframes, weight)
+function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, weight)
     l = 0
     for i in eachindex(obs)
-        b = set_b_background(obs[i], d, i, nstates)
-        _, C = forward(a, b, p0, nstates, nframes)
+        b = set_b_background(obs[i], d[i])
+        _, C = forward(a, b, p0)
         l += weight[i] * sum(log.(C))
     end
     l
 end
 
-
-
-
-
 ### Called by other ll_hmm functions
 
-function ll_hmm(a::Matrix, p0::Vector, d, traces, nT)
+function ll_hmm(a::Matrix, p0::Vector, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
-        _, C = forward(a, set_b(traces[i], d, nT), p0, nT, size(traces[i], 1))
+        _, C = forward(a, set_b(traces[i], d), p0)
         @inbounds logpredictions[i] = sum(log.(C))
     end
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
+function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        _, C = forward(a, b, p0)
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporters, traces, method=Tsit5())
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength, interval, components, method)
+        d = set_d(noiseparams[i], reporters)
+        b = set_b(traces[i], d)
+        _, C = forward(a, b, p0)
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm(r::Tuple, noiseparams, interval::Float64, components::AbstractComponents, reporters, traces, method=Tsit5())
+    r, couplingStrength = r
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
+        d = set_d(noiseparams[i], reporters)
+        b = set_b(traces[i], d)
+        _, C = forward(a, b, p0)
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm(a::Tuple, p0::Vector, d, traces, N::Tuple)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        T = size(t, 2)
+        b = set_b_grid(t, d, N)
+        _, C = forward(a, b, p0, N, T)
+        @inbounds logpredictions[i] = sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function ll_hmm(noiseparams, a::Tuple, p0::Vector, reporter, traces, nT::Tuple)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter, nT)
@@ -659,28 +900,36 @@ function ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces, nT)
 end
 
 function ll_hmm(r, noiseparams, interval::Float64, components::AbstractComponents, reporters, traces, nT, method=Tsit5())
+    r, pgrid = r
+    Nstate, Ngrid = nT
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
+        T = size(traces[i], 1)
         a, p0 = make_ap(r[i], couplingStrength, interval, components, method)
+        a_grid = make_a_grid(pgrid, Ngrid)
         d = set_d(noiseparams[i], reporters, nT)
-        b = set_b(traces[i], d, nT)
-        _, C = forward(a, b, p0, nT, size(traces[i], 1))
+        b = set_b_grid(traces[i], d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
         @inbounds logpredictions[i] = sum(log.(C))
     end
     sum(logpredictions), logpredictions
 end
 
-function ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporters, traces, nT, method=Tsit5())
-    logpredictions = Array{Float64}(undef, length(traces))
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], couplingStrength, interval, components, method)
-        d = set_d(noiseparams[i], reporters, nT)
-        b = set_b(traces[i], d, nT)
-        _, C = forward(a, b, p0, nT, size(traces[i], 1))
-        @inbounds logpredictions[i] = sum(log.(C))
+function ll_hmm(r, noiseparams, pgrid, Nstate, Ngrid, components::TComponents, reporter, interval, trace)
+    a_grid = make_a_grid(pgrid, Ngrid)
+    a, p0 = make_ap(r, interval, components)
+    d = set_d_grid(noiseparams, reporter, Nstate, Ngrid)
+    logpredictions = Array{Float64}(undef, 0)
+    for t in trace[1]
+        T = size(t, 2)
+        b = set_b_grid(t, d, Nstate, Ngrid)
+        _, C = forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+        push!(logpredictions, sum(log.(C)))
     end
     sum(logpredictions), logpredictions
 end
+
+
 
 ### trait components reporter style
 

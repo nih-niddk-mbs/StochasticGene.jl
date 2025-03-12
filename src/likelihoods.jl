@@ -346,13 +346,21 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel
     return crossentropy(logpredictions, hist), -logpredictions
 end
 
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
+    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+end
+
+function ll_hmm_trace(param, data, model::AbstractGRSMtraitmodel)
+    r = get_rates(param, model)
+
+
+end
+
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
     ll_hmm_trait(get_rates(param, model), model.components.nT, model.components, model.reporter, data.interval, data.trace, model.method)
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
+
 
 function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
     r, couplingStrength, noiseparams = prepare_rates(param, model)
