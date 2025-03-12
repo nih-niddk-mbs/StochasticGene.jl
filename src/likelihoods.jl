@@ -266,12 +266,29 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     return rates, noiseparams, pgrid
 end
 
+function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
+    r = get_rates(param, model)
+    rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
+    couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
+    pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
+    return rates, noiseparams, pgrid, couplingStrength
+end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
     pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
     pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
+end
+
+function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
+    r = get_rates(param, model)
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
+    couplingshared = prepare_coupling(rshared, model.trait.coupling.couplingindices)
+    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)
+    pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
+    pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual
 end
 
 # Model loglikelihoods
