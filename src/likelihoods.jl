@@ -204,12 +204,27 @@ function prepare_rates_noiseparams(rates::AbstractArray, nrates::Int, reporter::
     rates[1:nrates], rates[nrates+1:nrates+reporter.n]
 end
 
-function prepare_coupling(rates, couplingindices)
+function prepare_coupling(rates::Vector{Float64}, couplingindices)
     rates[couplingindices]
+end
+function prepare_coupling(rates::Vector{Vector{Float64}}, couplingindices)
+    coupling = Vector{Float64}[]
+    for i in eachindex(rates)
+        push!(coupling, rates[i][couplingindices])
+    end
+    return coupling
 end
 
 function prepare_grid(rates, ngrid)
     rates[ngrid]
+end
+
+function prepare_grid(rates::Vector{Vector{Float64}}, ngrid)
+    grid = Vector{Float64}[]
+    for i in eachindex(rates)
+        push!(grid, rates[i][ngrid])
+    end
+    return grid
 end
 
 function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
@@ -239,8 +254,9 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingStrength
+    couplingshared  = prepare_coupling(rshared, model.trait.coupling.couplingindices)
+    couplingindividual = prepare_coupling(rindividual, model.trait.coupling.couplingindices)    
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
 end
 
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
@@ -253,171 +269,10 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    pgrid = prepare_rates_grid(r, model.trait.grid.ngrid, model.reporter)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgrid
+    pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
+    pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
 end
-
-#####
-
-# """
-#     prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
-
-# Prepare the coupling strength for the coupled model.
-
-# # Arguments
-# - `rates`: The rates.
-# - `sourceStates`: The source states.
-# - `transitions`: The transitions.
-# """
-# function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
-#     r = Vector{Float64}[]
-#     noiseparams = Vector{Float64}[]
-#     couplingStrength = Float64[]
-#     j = 1
-#     for i in eachindex(R)
-#         n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
-#         push!(r, rates[j:j+n-1])
-#         j += n
-#     end
-#     for i in eachindex(R)
-#         s = sourceStates[i]
-#         if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
-#             push!(couplingStrength, rates[j])
-#             j += 1
-#         else
-#             push!(couplingStrength, 0.0)
-#         end
-#     end
-#     for i in eachindex(r)
-#         push!(noiseparams, r[i][end-n_noise[i]+1:end])
-#     end
-#     return r, couplingStrength, noiseparams
-# end
-
-
-# function prepare_coupling(rates, sourceStates::Vector, transitions, R, S, insertstep, reporter)
-#     couplingStrength = Float64[]
-#     j = num_all_parameters(transitions, R, S, insertstep, reporter) + 1
-#     for s in sourceStates
-#         if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
-#             push!(couplingStrength, rates[j])
-#             j += 1
-#         else
-#             push!(couplingStrength, 0.0)
-#         end
-#     end
-#     couplingStrength
-# end
-
-# function prepare_coupled_rates(rates, transitions, R::Tuple, S, insertstep, reporter)
-#     r = Matrix{Float64}[]
-#     noiseparams = Matrix{Float64}[]
-#     j = 1
-#     for i in eachindex(R)
-#         n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + reporter[i].n
-#         push!(r, rates[j:j+n-1, :])
-#         j += n
-#     end
-#     for i in eachindex(r)
-#         push!(noiseparams, r[i][end-reporter[i].n+1:end, :])
-#     end
-#     return r, noiseparams
-# end
-
-
-# function prepare_hyper(r, param, hierarchy::Hierarchy)
-#     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-#     rhyper = Vector{Float64}[]
-#     for i in hierarchy.hyperindices
-#         push!(rhyper, r[i])
-#     end
-#     return pindividual, rhyper
-# end
-
-# function prepare_rates(r, hierarchy::Hierarchy)
-#     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-
-#     rshared = reshape(r[1:hierarchy.individualstart-1], hierarchy.nrates, hierarchy.nhypersets)
-
-#     rindividual = reshape(r[hierarchy.individualstart:end], hierarchy.nrates, hierarchy.nindividuals)
-#     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
-
-#     return rshared, rindividual
-# end
-
-# function prepare_rates(r, param, hierarchy::Hierarchy)
-#     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))\
-
-#     rshared, rindividual = prepare_rates(r, hierarchy)
-#     pindividual, rhyper = prepare_hyper(r, param, hierarchy)
-
-#     return rshared, rindividual, pindividual, rhyper
-# end
-
-# """
-#     prepare_rates(param, model::GRSMcoupledmodel)
-
-# convert MCMC params into form to compute likelihood for coupled model
-# """
-# function prepare_rates(param, model::GRSMcoupledmodel)
-#     rates = get_rates(param, model)
-#     n_noise = [r.n for r in model.reporter]
-#     sourceStates = [c.sourceState for c in model.components.modelcomponents]
-#     prepare_rates_coupled(rates, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, n_noise)
-# end
-# function prepare_rates_new(param, model::GRSMhierarchicalmodel)
-#     r = get_rates(param, model)
-#     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
-#     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
-# end
-# """
-#     prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
-
-# TBW
-# """
-# function prepare_rates(param, model::AbstractGRSMhierarchicalmodel)
-#     # rates reshaped from a vector into a matrix with columns pertaining to shared params, hyper params and individual params 
-#     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-#     r = get_rates(param, model)
-#     rshared = reshape(r[1:model.hierarchy.individualstart-1], model.hierarchy.nrates, model.hierarchy.nhypersets)
-#     rhyper = Vector{Float64}[]
-#     for i in model.hierarchy.hyperindices
-#         push!(rhyper, r[i])
-#     end
-#     rindividual = reshape(r[model.hierarchy.individualstart:end], model.hierarchy.nrates, model.hierarchy.nindividuals)
-#     rindividual[model.hierarchy.fittedshared, :] .= rshared[model.hierarchy.fittedshared, 1]
-#     pindividual = reshape(param[model.hierarchy.paramstart:end], model.hierarchy.nparams, model.hierarchy.nindividuals)
-#     return rshared, rindividual, pindividual, rhyper
-# end
-
-# function prepare_rates(param, model::GRSMcoupledhierarchicalmodel)
-#     r = get_rates(param, model)
-#     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
-#     sourceStates = [c.sourceState for c in model.components.modelcomponents]
-#     rshared, noiseshared = prepare_coupled_rates(rshared, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-#     rindividual, noiseindividual = prepare_coupled_rates(rindividual, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-#     couplingStrength = prepare_coupling(r, sourceStates, model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
-#     rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
-#     noiseshared = [[p[:, j] for p in noiseshared] for j in 1:size(noiseshared[1], 2)]
-#     rindividual = [[p[:, j] for p in rindividual] for j in 1:size(rindividual[1], 2)]
-#     noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
-#     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper
-# end
-
-
-# """
-#     prepare_rates(param, model::GRSMgridmodel)
-
-# TBW
-# """
-# function prepare_rates(param, model::GRSMgridmodel)
-#     r = get_rates(param, model)
-#     r[model.raterange], r[model.noiserange], r[model.gridrange]
-# end
-
-
 
 # Model loglikelihoods
 
