@@ -358,7 +358,7 @@ end
 # Model loglikelihoods
 
 """
-    ll_hierarchy_c(pindividual, rhyper)
+    ll_hierarchy(pindividual, rhyper)
 
 Loglikelihood for coupled hierarchical model individual parameters.
     lognormal distribution constructed from hyper untransformed noise parameters
@@ -432,6 +432,48 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
+
+# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
+#     r, couplingStrength, noiseparams = prepare_rates(param, model)
+#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+#     rshared, rindividual, pindividual, rhyper = prepare_rates(param, model)
+#     if model.method[2]
+#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     else
+#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+#     end
+#     lhp = ll_hierarchy(pindividual, rhyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+
+# function loglikelihoodnew(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
+#     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(param, model)
+#     ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
+#     lhp = ll_hierarchy(pindividual, rhyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+
+# function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
+#     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper = prepare_rates(param, model)
+#     llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, noiseshared, noiseindividual, couplingStrength), model.components, model.reporter, data.interval, data.trace, model.method)
+#     lhp = ll_hierarchy_c(pindividual, rhyper)
+#     return llg + sum(lhp), vcat(llgp, lhp)
+# end
+
+# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
+# end
+
+# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
+#     r, noiseparams, pgrid = prepare_rates(param, model)
+#     ll_hmm_grid_hierarchical((r, noiseparams, pgrid[1]), model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
+# end
+
+
 
 
 
@@ -561,8 +603,8 @@ function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionMod
     predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
-function predictedarray(r, data::DwellTimeData, model::GRSMcoupledmodel)
-    r, coupling_strength, _ = prepare_rates(r, model)
+function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+    r, _, coupling_strength = prepare_rates(r, model)
     predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
 end
 """
@@ -861,17 +903,17 @@ function get_rates(fits, stats, model, ratetype)
     end
 end
 
-function get_rates(param, model::GRSMcoupledmodel, inverse=true)
-    r = copy_r(model)
-    get_rates!(r, param, model, inverse)
-    fixed_rates(r, model.fixedeffects)
-end
+# function get_rates(param, model::GRSMcoupledmodel, inverse=true)
+#     r = copy_r(model)
+#     get_rates!(r, param, model, inverse)
+#     fixed_rates(r, model.fixedeffects)
+# end
 
-function get_rates_hierarchical(param, model::AbstractGRSMhierarchicalmodel, inverse=true)
-    r = get_rates(param, model, inverse)
-    rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
-    vcat(vec(rshared), vec(rindividual))
-end
+# function get_rates_hierarchical(param, model::AbstractGRSMhierarchicalmodel, inverse=true)
+#     r = get_rates(param, model, inverse)
+#     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, model.hierarchy)
+#     vcat(vec(rshared), vec(rindividual))
+# end
 
 """
     fixed_rates(r, fixedeffects)

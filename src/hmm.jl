@@ -1285,7 +1285,7 @@ return predicted state path using Viterbi algorithm
 #     predicted_statepath(trace, interval, r, tcomponents.nT, tcomponents.elementsT, reporter.n, reporter.per_state, reporter.probfn)
 # end
 
-# function predicted_statepath(trace, interval, model::AbstractGmodel)
+# function predicted_statepath(trace, interval, model::AbstractGeneTransitionModel)
 #     tcomponents = tcomponent(model)
 #     predicted_statepath(trace, interval, model.rates, tcomponents.nT, tcomponents.elementsT, model.reporter.n, model.reporter.per_state, model.reporter.probfn)
 # end

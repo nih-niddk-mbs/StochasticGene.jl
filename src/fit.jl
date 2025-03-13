@@ -528,51 +528,6 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
 end
 
 
-# function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
-#     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
-#     if !isempty(coupling)
-#         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-#     else
-#         couplingindices = nothing
-#     end
-#     if !isnothing(grid)
-#         raterange, noiserange, gridrange = make_grid(transitions, R, S, insertstep, noisepriors, grid)
-#     end
-#     if !isempty(hierarchical)
-#         hyper, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor)
-#     else
-#         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
-#     end
-
-#     CBool = isempty(coupling)
-#     GBool = isnothing(grid)
-#     HBool = isempty(hierarchical)
-
-#     if CBool && GBool && HBool
-#         if R == 0
-#             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         else
-#             return GRSMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         end
-#     elseif CBool && GBool && !HBool
-#         return GRSMhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     elseif CBool && !GBool && HBool
-#         return GRSMgridmodel{typeof(r),Nothing,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, raterange, noiserange, gridrange, grid, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     elseif CBool && !GBool && !HBool
-#         return GRSMgridhierarchicalmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, hyper, raterange, noiserange, gridrange, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     elseif !CBool && GBool && HBool
-#         return GRSMcoupledmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     elseif !CBool && GBool && !HBool
-#         return GRSMcoupledhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#     elseif !CBool && !GBool && HBool
-#         return GRSMcoupledgridmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         # return GRSMcoupledgridmodel()
-#     elseif !CBool && !GBool && !HBool
-#         return GRSMcoupledgridhierarchicalmodel{typeof(r),Tuple,typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, (coupling[5], couplingindices), hyper, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
-#         # return GRSMcoupledgridhierarchicalmodel()
-#     end
-# end
-
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     if !isempty(coupling)

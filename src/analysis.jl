@@ -601,20 +601,33 @@ function deviance(fits, data::AbstractTraceData, model)
     end
 end
 
-function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)
-    s = 0
-    for t in data.trace[1]
-        s += sum(sum.(t))
+function deviance(fits, data::AbstractTraceData,
+    model::AbstractGRSMmodel{TraitType}) where {TraitType<:NamedTuple}
+    if haskey(TraitType, :coupling)
+        # Coupling-specific logic
+        s = 0
+        for t in data.trace[1]
+            s += sum(sum.(t))
+        end
+        return fits.llml / s
+    else
+        # Default logic
+        s = 0
+        for t in data.trace[1]
+            s += sum(sum.(t))
+        end
+        return fits.llml / s
     end
-    fits.llml / s
 end
 
-"""
-    deviance(data::AbstractHistogramData, model::AbstractGmodel)
 
 
 """
-function deviance(data::AbstractHistogramData, model::AbstractGmodel)
+    deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
+
+
+"""
+function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     h = predictedfn(model.rates[model.fittedparam], data, model)
     println(h)
     deviance(h, datapdf(data))
@@ -1055,7 +1068,7 @@ TBW
 function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
     if hierarchical
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        rshared = reshape(rin[1:nrates], nrates,1)
+        rshared = reshape(rin[1:nrates], nrates, 1)
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
         rin = hcat(rin, rshared)
     end
@@ -1090,7 +1103,7 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
     probfn = make_vector(probfn, length(G))
     if hierarchical
         nall = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
-        rates = reshape(rin, nall, length(traces)+2)
+        rates = reshape(rin, nall, length(traces) + 2)
         noiseindividual = Matrix{Float64}[]
         rshared = Matrix{Float64}[]
         j = 1
@@ -1103,7 +1116,7 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
         noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
         rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
         couplingStrength = rin[nall:nall]
-        r = (rshared, noiseindividual, couplingStrength) 
+        r = (rshared, noiseindividual, couplingStrength)
     else
         r = copy(rin)
     end
@@ -1642,7 +1655,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
     return h
 end
 
-function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
+function plot_histogram(data::RNAOnOffData, model::AbstractGeneTransitionModel, filename="")
     h = predictedarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))
@@ -1658,7 +1671,7 @@ function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
     return h
 end
 
-function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
+function plot_histogram(data::TraceRNAData, model::AbstractGeneTransitionModel, filename="")
     M = make_mat_M(model.components.mcomponents, model.rates)
     h = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     plt = plot(h)
@@ -1695,25 +1708,3 @@ function plot_histogram(data::RNAData, model::AbstractGMmodel)
     return h
 end
 
-
-# Usage example:
-# (norms, theory, sims, means, errors) = simulate_trials(...)
-# plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
-
-"""
-    deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
-
-Compute deviance between data and model prediction.
-"""
-function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
-    h = predictedfn(model.rates, data, model)
-    return deviance(h, data.histRNA)
-end
-
-function plot_histogram(data::RNAOnOffData, model::AbstractGeneTransitionModel, filename="")
-    # ... rest of the function implementation ...
-end
-
-function plot_histogram(data::TraceRNAData, model::AbstractGeneTransitionModel, filename="")
-    # ... rest of the function implementation ...
-end
