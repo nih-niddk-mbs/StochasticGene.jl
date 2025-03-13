@@ -357,25 +357,6 @@ end
 
 # Model loglikelihoods
 
-
-# """
-#     ll_hierarchy(pindividual, rhyper)
-
-# Loglikelihood for hierarchical model individual parameters.
-# """
-# function ll_hierarchy1(pindividual, rhyper)
-#     d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
-#     lhp = Float64[]
-#     for pc in eachcol(pindividual)
-#         lhpc = 0
-#         for i in eachindex(pc)
-#             lhpc -= logpdf(d[i], pc[i])
-#         end
-#         push!(lhp, lhpc)
-#     end
-#     lhp
-# end
-
 """
     ll_hierarchy_c(pindividual, rhyper)
 
@@ -420,14 +401,14 @@ This function calculates the negative loglikelihood for different types of data 
 - `Float64`: The negative loglikelihood for the combined time series traces and each trace.
 - `Tuple{Float64, Vector{Float64}}`: The negative loglikelihood of all data and a vector of the prediction histogram negative loglikelihood.
 """
-function loglikelihood(param, data::AbstractHistogramData, model::AbstractGmodel)
+function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, hist), -logpredictions
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGeneTransitionModel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
@@ -452,48 +433,6 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
 
-# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
-#     r, couplingStrength, noiseparams = prepare_rates(param, model)
-#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-# end
-
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-#     rshared, rindividual, pindividual, rhyper = prepare_rates(param, model)
-#     if model.method[2]
-#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     else
-#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     end
-#     lhp = ll_hierarchy(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihoodnew(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-#     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(param, model)
-#     ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
-#     lhp = ll_hierarchy(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-#     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper = prepare_rates(param, model)
-#     llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, noiseshared, noiseindividual, couplingStrength), model.components, model.reporter, data.interval, data.trace, model.method)
-#     lhp = ll_hierarchy_c(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid_hierarchical((r, noiseparams, pgrid[1]), model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
-# end
-
-
-
 
 
 # Predicted histogram functions
@@ -505,19 +444,19 @@ end
 
 
 """
-    predictedfn(param, data::RNAData, model::AbstractGMmodel)
+    predictedfn(param, data::RNAData, model::AbstractGeneTransitionModel)
 
 Calculates the likelihood for a single RNA histogram.
 
 # Arguments
 - `param`: The model parameters.
 - `data::RNAData`: The RNA data.
-- `model::AbstractGMmodel`: The model.
+- `model::AbstractGeneTransitionModel`: The model.
 
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function predictedfn(param, data::RNAData, model::AbstractGmodel)
+function predictedfn(param, data::RNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
     steady_state(M, model.components.nT, model.nalleles, data.nRNA)
@@ -527,19 +466,19 @@ end
 
 
 """
-    predictedfn(param, data::AbstractHistogramData, model::AbstractGmodel)
+    predictedfn(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
 
 Calculates the likelihood for multiple histograms.
 
 # Arguments
 - `param`: The model parameters.
 - `data::AbstractHistogramData`: The histogram data.
-- `model::AbstractGmodel`: The model.
+- `model::AbstractGeneTransitionModel`: The model.
 
 # Returns
 - `Array{Float64,2}`: An array of likelihoods for the histograms.
 """
-function predictedfn(param, data::AbstractHistogramData, model::AbstractGmodel)
+function predictedfn(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     h = predictedarray(get_rates(param, model), data, model)
     make_array(h)
 end
@@ -569,19 +508,19 @@ end
 
 
 """
-    predictedarray(r, data::RNAOnOffData, model::AbstractGmodel)
+    predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionModel)
 
 Calculates the likelihood for RNA On/Off data.
 
 # Arguments
 - `r`: The rates.
 - `data::RNAOnOffData`: The RNA On/Off data.
-- `model::AbstractGmodel`: The model.
+- `model::AbstractGeneTransitionModel`: The model.
 
 # Returns
 - `Array{Float64,1}`: The likelihoods for the RNA On/Off data.
 """
-function predictedarray(r, data::RNAOnOffData, model::AbstractGmodel)
+function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionModel)
     #     if model.splicetype == "offdecay"
     #         # r[end-1] *= survival_fraction(nu, eta, model.R)
     #     end
@@ -598,14 +537,14 @@ end
 
 
 """
-    predictedarray(r, data::RNADwellTimeData, model::AbstractGmodel)
+    predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel)
 
 Calculates the likelihood array for RNA dwell time data.
 
 # Arguments
 - `r`: The rates.
 - `data::RNADwellTimeData`: The RNA dwell time data.
-- `model::AbstractGmodel`: The model.
+- `model::AbstractGeneTransitionModel`: The model.
 
 # Description
 This function calculates the likelihood array for RNA dwell time data using the specified model and rates. It constructs the transition matrices and calculates the probability density functions for the dwell times.
@@ -614,11 +553,11 @@ This function calculates the likelihood array for RNA dwell time data using the 
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods for the dwell times.
 
 """
-function predictedarray(r, data::RNADwellTimeData, model::AbstractGmodel)
+function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel)
     predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
 end
 
-function predictedarray(r, data::DwellTimeData, model::AbstractGmodel)
+function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel)
     predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes)
 end
 
@@ -841,145 +780,68 @@ end
 # end
 
 """
-    transform_rates(r, model)
+    transform_rates(r, model::AbstractGeneTransitionModel)
 
-Transforms rates to the real domain using log transformation.
-
-# Arguments
-- `r`: The rates to be transformed.
-- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function applies a log transformation to the rates to map them to the real domain. It supports various types of models, including `AbstractGmodel`, `AbstractGRSMmodel`, and `GRSMcoupledmodel`. The specific transformation method depends on the type of `model` provided.
-
-# Methods
-- `transform_rates(r, model::AbstractGmodel)`: Applies a log transformation to the rates.
-- `transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter})`: Applies a log transformation to the rates, with specific handling for HMM reporters.
-- `transform_rates(r, model::GRSMcoupledmodel)`: Applies a log transformation to the rates, with specific handling for coupled models.
-
-# Returns
-- `Vector{Float64}`: The transformed rates.
-"""
-transform_rates(r, model::AbstractGmodel) = log.(r)
-
-function transform_rates(r, model::AbstractGRSMmodel)
-    if haskey(model.trait, :coupling)
-        return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
-    elseif haskey(model.trait, :hierarchical)
-        return transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
-    end
-end
-
-transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
-
-transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
-
-transform_rates(r, model::GRSMcoupledhierarchicalmodel) = transform_array(r, model.coupling[2], model.fittedparam, logv, log_shift1)
-
-
-"""
-    inverse_transform_rates(x,model)
-
-Inverse transforms MH parameters on the real domain back to the rate domain.
+Transform rates to log space.
 
 # Arguments
-- `x`: The parameters to be inverse transformed.
-- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function applies an inverse transformation to the parameters to map them back to the rate domain. It supports various types of models, including `AbstractGmodel`, `AbstractGRSMmodel`, and `GRSMcoupledmodel`. The specific inverse transformation method depends on the type of `model` provided.
-
-# Methods
-- `inverse_transform_rates(x, model::AbstractGmodel)`: Applies an exponential transformation to the parameters.
-- `inverse_transform_rates(x, model::AbstractGRSMmodel{Vector{Float64},HMMReporter})`: Applies an inverse transformation to the parameters, with specific handling for HMM reporters.
-- `inverse_transform_rates(x, model::GRSMcoupledmodel)`: Applies an inverse transformation to the parameters, with specific handling for coupled models.
+- `r`: Vector of rates.
+- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
 
 # Returns
-- `Vector{Float64}`: The inverse transformed parameters.
+- Transformed rates.
+"""
+transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
 """
-inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
+    inverse_transform_rates(x, model::AbstractGeneTransitionModel)
 
-function inverse_transform_rates(p, model::AbstractGRSMmodel)
-    if haskey(model.trait, :coupling)
-        return transform_array(p, model.coupling.couplingindices, model.fittedparam, expv, invlog_shift1)
-    else
-        return transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
-    end
-end
-
-inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
-
-inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
-
-inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, model.coupling[2], model.fittedparam, expv, invlog_shift1)
-
-
-"""
-    get_param(model)
-
-Retrieves the fitted parameters from the model.
+Transform rates from log space back to original space.
 
 # Arguments
-- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function retrieves the fitted parameters from the model. It supports various types of models, including `AbstractGmodel`, `AbstractGRSMmodel`, and `GRSMcoupledmodel`. The specific retrieval method depends on the type of `model` provided.
-
-# Methods
-- `get_param(model::AbstractGmodel)`: Retrieves the log-transformed fitted parameters from the model.
-- `get_param(model::AbstractGRSMmodel)`: Retrieves the transformed fitted parameters from the model.
-- `get_param(model::GRSMcoupledmodel)`: Retrieves the transformed fitted parameters from the model.
+- `x`: Vector of log-transformed rates.
+- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
 
 # Returns
-- `Vector{Float64}`: The fitted parameters.
+- Transformed rates.
+"""
+inverse_transform_rates(p, model::AbstractGeneTransitionModel) = exp.(p)
 
 """
-get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
+    get_param(model::AbstractGeneTransitionModel)
 
-get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-# get_param(model::AbstractGRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-# get_param(model::GRSMcoupledhierarchicalmodel) = transform_rates(model.rates[model.fittedparam], model)
-
-"""
-    get_rates(param, model)
-
-Replaces fitted rates with new values and returns the updated rates.
+Get fitted parameters from model.
 
 # Arguments
-- `param`: The new parameter values.
-- `model`: The model, which can be of various types (e.g., `AbstractGmodel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function replaces the fitted rates in the model with the provided new parameter values and returns the updated rates. It supports various types of models, including `AbstractGmodel`, `AbstractGRSMmodel`, and `GRSMcoupledmodel`. The specific replacement method depends on the type of `model` provided.
-
-# Methods
-- `get_rates(param, model::AbstractGmodel)`: Replaces and returns the updated rates for an `AbstractGmodel`.
-- `get_rates(param, model::AbstractGRSMmodel)`: Replaces and returns the updated rates for an `AbstractGRSMmodel`.
-- `get_rates(param, model::GRSMcoupledmodel)`: Replaces and returns the updated rates for a `GRSMcoupledmodel`.
+- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
 
 # Returns
-- `Vector{Float64}`: The updated rates.
+- Log-transformed fitted parameters.
 """
+get_param(model::AbstractGeneTransitionModel) = log.(model.rates[model.fittedparam])
 
+"""
+    get_rates(param, model::AbstractGeneTransitionModel)
 
-function get_rates!(r, param, model, inverse)
+Get rates from parameters.
+
+# Arguments
+- `param`: Vector of parameters.
+- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
+
+# Returns
+- Updated rates.
+"""
+function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
     if inverse
-        r[model.fittedparam] = inverse_transform_rates(param, model)
+        r = inverse_transform_rates(param, model)
     else
-        r[model.fittedparam] = param
+        r = param
     end
+    r
 end
 
-function get_rates(param, model::AbstractGmodel, inverse=true)
-    r = copy_r(model)
-    get_rates!(r, param, model, inverse)
-    fixed_rates(r, model.fixedeffects)
-end
-
-function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)
+function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse=true)
     rv = copy_r(model)
     for r in rv
         get_rates!(r, param, model, inverse)
@@ -1064,21 +926,18 @@ copy_r(model) = copy(model.rates)
 #     r
 # end
 """
-    logprior(param, model::AbstractGmodel)
+    logprior(param, model::AbstractGeneTransitionModel)
 
-Computes the log of the prior distribution for the model parameters.
+Compute log prior of parameters.
 
 # Arguments
-- `param`: The model parameters.
-- `model::AbstractGmodel`: The model, which includes the prior distributions for the rates.
-
-# Description
-This function computes the log of the prior distribution for the provided model parameters. It iterates through each prior distribution specified in the model and calculates the log probability density function (logpdf) for each parameter. The sum of these logpdf values is returned as the log prior.
+- `param`: Vector of parameters.
+- `model::AbstractGeneTransitionModel`: The model, which includes the prior distributions for the rates.
 
 # Returns
-- `Float64`: The log of the prior distribution for the model parameters.
+- Log prior of parameters.
 """
-function logprior(param, model::AbstractGmodel)
+function logprior(param, model::AbstractGeneTransitionModel)
     d = model.rateprior
     p = 0
     for i in eachindex(d)
@@ -1126,7 +985,7 @@ end
 
 
 """
-    num_rates(model)
+    num_rates(model::AbstractGeneTransitionModel)
 
 compute number of transition rates
 
@@ -1171,7 +1030,7 @@ end
 
 
 """
-    num_parameters(model::AbstractGmodel)
+    num_parameters(model::AbstractGeneTransitionModel)
 
 total number of parameters
 
@@ -1182,7 +1041,7 @@ total number of parameters
 This function calculates the total number of parameters for the provided model. It includes the number of transition rates, R steps, S splicing indicator, insert step, and the number of reporters
 
 # Methods
-- `total_parameters(model::AbstractGmodel)`: Returns the total number of parameters for the model.
+- `total_parameters(model::AbstractGeneTransitionModel)`: Returns the total number of parameters for the model.
 
 # Returns
 - `Int`: The total number of parameters.
@@ -1226,7 +1085,7 @@ function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, 
     n + c + g
 end
 
-function num_all_parameters(model::AbstractGmodel)
+function num_all_parameters(model::AbstractGeneTransitionModel)
     n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
     num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
 end

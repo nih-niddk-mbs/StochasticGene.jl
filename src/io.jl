@@ -643,18 +643,10 @@ filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
-# function filename(data, model::GRSMcoupledmodel)
-#     m = ""
-#     for i in eachindex(model.G)
-#         m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
-#     end
-#     return filename(data.label, data.gene, m, model.nalleles)
-# end
-
 """
-writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
+writeall(path::String,fit,stats,measures,data,temp,model::AbstractGeneTransitionModel;optimized=0,burst=0)
 """
-function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGmodel; optimized=0, burst=0, writesamples=false)
+function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
     if ~isdir(path)
         mkpath(path)
     end

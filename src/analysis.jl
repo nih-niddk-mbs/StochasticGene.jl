@@ -1699,3 +1699,21 @@ end
 # Usage example:
 # (norms, theory, sims, means, errors) = simulate_trials(...)
 # plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
+
+"""
+    deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
+
+Compute deviance between data and model prediction.
+"""
+function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
+    h = predictedfn(model.rates, data, model)
+    return deviance(h, data.histRNA)
+end
+
+function plot_histogram(data::RNAOnOffData, model::AbstractGeneTransitionModel, filename="")
+    # ... rest of the function implementation ...
+end
+
+function plot_histogram(data::TraceRNAData, model::AbstractGeneTransitionModel, filename="")
+    # ... rest of the function implementation ...
+end

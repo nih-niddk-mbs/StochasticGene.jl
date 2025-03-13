@@ -1087,8 +1087,8 @@ end
 
 """
     onstate_prob(r::Vector, components::TComponents, reporter_per_state)
-    onstate_prob(param, model::AbstractGmodel)
-    onstate_prob(model::AbstractGmodel)
+    onstate_prob(param, model::AbstractGeneTransitionModel)
+    onstate_prob(model::AbstractGeneTransitionModel)
 
 Calculates the probability of being in the "on" state for a given model or rates.
 
@@ -1097,7 +1097,7 @@ Calculates the probability of being in the "on" state for a given model or rates
 - `components`: An instance of `TComponents`.
 - `reporter_per_state`: A vector indicating the reporter per state.
 - `param`: Parameters for the model.
-- `model`: An instance of `AbstractGmodel`.
+- `model`: An instance of `AbstractGeneTransitionModel`.
 
 # Methods
 
@@ -1105,11 +1105,11 @@ Calculates the probability of being in the "on" state for a given model or rates
 
 Calculates the probability of being in the "on" state given the rates, components, and reporter per state.
 
-## `onstate_prob(param, model::AbstractGmodel)`
+## `onstate_prob(param, model::AbstractGeneTransitionModel)`
 
 Calculates the probability of being in the "on" state given the parameters and model.
 
-## `onstate_prob(model::AbstractGmodel)`
+## `onstate_prob(model::AbstractGeneTransitionModel)`
 
 Calculates the probability of being in the "on" state for a given model.
 
@@ -1122,9 +1122,9 @@ function onstate_prob(r, components::TComponents, reporter_per_state)
     return sum(p0[reporter_per_state.>0]), p0
 end
 
-onstate_prob(param, model::AbstractGmodel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
+onstate_prob(param, model::AbstractGeneTransitionModel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
 
-onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
+onstate_prob(model::AbstractGeneTransitionModel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 
 """
     burstoccupancy(model::AbstractGRSMmodel)
