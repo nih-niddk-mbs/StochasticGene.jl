@@ -149,9 +149,7 @@ function prepare_rates(r, hierarchy::HierarchicalTrait)
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
 
     nallparams = hierarchy.nrates
-
     rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
-
     rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
 
@@ -215,8 +213,6 @@ function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, report
     return r, noiseparams
 end
 
-
-
 """
     prepare_coupling(rates, couplingindices)
     
@@ -233,7 +229,6 @@ function prepare_coupling(rates::Vector{T}, couplingindices) where {T<:AbstractA
     end
     return coupling
 end
-
 
 """
     prepare_grid(rates, ngrid)
@@ -271,9 +266,9 @@ end
 
 function prepare_rates_hierarchical_grid(r, param, nrates, hierarchy, grid, reporter)
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
-    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
     pgridshared = prepare_grid(rshared, grid)
     pgridindividual = prepare_grid(rindividual, grid)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
     rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
 end
@@ -282,10 +277,10 @@ function prepare_rates_coupled_hierarchical_grid(r, param, nrates, coupling, hie
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     couplingshared = prepare_coupling(rshared, coupling.couplingindices)
     couplingindividual = prepare_coupling(rindividual, coupling.couplingindices)
-    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
-    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
     pgridshared = prepare_grid(rshared, grid)
     pgridindividual = prepare_grid(rindividual, grid)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, reporter)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual
 end
 
@@ -329,7 +324,7 @@ end
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
-    pgrid = prepare_grid(r, model.trait.grid.ngrid)
+    pgrid = prepare_grid(r, model.trait.grid.gridindices)
     return rates, noiseparams, pgrid
 end
 
@@ -340,7 +335,7 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
     couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    pgrid = prepare_grid(r, model.trait.grid.ngrid)
+    pgrid = prepare_grid(r, model.trait.grid.gridindices)
     return rates, noiseparams, couplingStrength, pgrid
 end
 
@@ -349,10 +344,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
-    pgridshared = prepare_grid(rshared, model.trait.grid.ngrid)
-    pgridindividual = prepare_grid(rindividual, model.trait.grid.ngrid)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
+    prepare_rates_hierarchical_grid(r, param, model.nrates, model.trait.hierarchical, model.trait.grid.gridindices, model.reporter)
 end
 
 """
@@ -360,10 +352,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
     r = get_rates(param, model)
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.reporter)
-    pgridshared = prepare_rates_grid(rshared, model.trait.grid.ngrid, model.reporter)
-    pgridindividual = prepare_rates_grid(rindividual, model.trait.grid.ngrid, model.reporter)
-    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual
+    prepare_rates_coupled_hierarchical_grid(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.trait.grid.gridindices, model.reporter)
 end
 
 # Model loglikelihoods
@@ -873,20 +862,20 @@ This function applies a log transformation to the rates to map them to the real 
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
+function transform_rates(r, model::AbstractGRSMtraitmodel)
+    if haskey(model.trait, :coupling)
+        return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
+    elseif haskey(model.trait, :hierarchical)
+        return transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+    end
+end
+
 transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
 transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
 
 transform_rates(r, model::GRSMcoupledhierarchicalmodel) = transform_array(r, model.coupling[2], model.fittedparam, logv, log_shift1)
 
-
-# function transform_rates(pin, model::GRSMcoupledmodel)
-#     p = copy(pin)
-#     for f in model.transformations
-#         p[i] = f(p[i])
-#     end
-#     return p
-# end
 
 """
     inverse_transform_rates(x,model)
@@ -910,6 +899,14 @@ This function applies an inverse transformation to the parameters to map them ba
 
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
+
+function inverse_transform_rates(p, model::AbstractGRSMtraitmodel)
+    if haskey(model.trait, :coupling)
+        return transform_array(p, model.coupling.couplingindices, model.fittedparam, expv, invlog_shift1)
+    else
+        return transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+    end
+end
 
 inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
@@ -940,11 +937,11 @@ This function retrieves the fitted parameters from the model. It supports variou
 """
 get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
-get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
+get_param(model::AbstractGRSMtraitmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_param(model::GRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
+# get_param(model::AbstractGRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
 
-get_param(model::GRSMcoupledhierarchicalmodel) = transform_rates(model.rates[model.fittedparam], model)
+# get_param(model::GRSMcoupledhierarchicalmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 """
     get_rates(param, model)
@@ -966,11 +963,7 @@ This function replaces the fitted rates in the model with the provided new param
 # Returns
 - `Vector{Float64}`: The updated rates.
 """
-function get_rates(param, model::AbstractGmodel, inverse=true)
-    r = copy_r(model)
-    get_rates!(r, param, model, inverse)
-    fixed_rates(r, model.fixedeffects)
-end
+
 
 function get_rates!(r, param, model, inverse)
     if inverse
@@ -978,6 +971,12 @@ function get_rates!(r, param, model, inverse)
     else
         r[model.fittedparam] = param
     end
+end
+
+function get_rates(param, model::AbstractGmodel, inverse=true)
+    r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
 end
 
 function get_rates(param::Vector{Vector}, model::AbstractGmodel, inverse=true)

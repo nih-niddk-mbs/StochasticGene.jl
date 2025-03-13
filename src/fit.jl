@@ -691,7 +691,7 @@ function prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, gri
         pcv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
     end
     if !isnothing(grid)
-        append!(pcv, fill(1.0, grid))
+        append!(pcv, 1.0)
     end
     pcv
 end
