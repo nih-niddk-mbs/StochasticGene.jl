@@ -537,6 +537,24 @@ function rlabels(model::AbstractGRSMmodel)
     rlabels_GRSM(model)
 end
 
+"""
+    rlabels(model::AbstractGMmodel)
+"""
+function rlabels(model::AbstractGMmodel)
+    labels = String[]
+    for t in model.Gtransitions
+        push!(labels, "Rate$(t[1])$(t[2])")
+    end
+    push!(labels, "Eject")
+    push!(labels, "Decay")
+    if typeof(model.reporter) == HMMReporter
+        for i in 1:model.reporter.n
+            push!(labels, "noiseparam$i")
+        end
+    end
+    reshape(labels, 1, :)
+end
+
 function rlabels(model::GRSMmodel)
     if has_trait(model.trait, HierarchicalTrait)
         labels = String[]
@@ -554,7 +572,6 @@ function rlabels(model::GRSMmodel)
         rlabels_GRSM(model)
     end
 end
-
 """
     statlabels(model::String, conds, fittedparams)
 
