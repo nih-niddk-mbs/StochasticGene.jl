@@ -1045,20 +1045,20 @@ function residenceprob_G(r::Vector, G::Int)
 end
 
 """
-    splicesiteusage(model::GRSMmodel)
+    splicesiteusage(model::AbstractGRSMmodel)
     splicesiteusage(r::Vector, n::Int, nr::Int)
 
 Calculates the splice site usage for a GRSM model or given rates.
 
 # Arguments
-- `model`: An instance of `GRSMmodel`.
+- `model`: An instance of `AbstractGRSMmodel`.
 - `r`: Rates vector.
 - `G`: Number of states
 - `S`: Number of splice sites.
 
 # Methods
 
-## `splicesiteusage(model::GRSMmodel)`
+## `splicesiteusage(model::AbstractGRSMmodel)`
 
 Calculates the splice site usage for a GRSM model.
 
@@ -1069,7 +1069,7 @@ Calculates the splice site usage given rates, number of states, and number of sp
 # Returns
 - `Vector{Float64}`: Splice site usage probabilities.
 """
-splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G, model.R)
+splicesiteusage(model::AbstractGRSMmodel) = splicesiteusage(model.rates, model.G, model.R)
 
 function splicesiteusage(r::Vector, G::Int, S::Int)
     n = G - 1
@@ -1127,7 +1127,7 @@ onstate_prob(param, model::AbstractGmodel) = onstate_prob(get_rates(param, model
 onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 
 """
-    burstoccupancy(model::GRSMmodel)
+    burstoccupancy(model::AbstractGRSMmodel)
     burstoccupancy(n::Int, nr::Int, r::Vector)
 
 Calculates the burst size distribution of a GRS model for total pre-mRNA occupancy and unspliced (visible) occupancy.
@@ -1136,14 +1136,14 @@ Calculates the burst size distribution of a GRS model for total pre-mRNA occupan
 This function calculates the burst size distribution for a given GRS model. It computes the total pre-mRNA occupancy and unspliced (visible) occupancy distributions by marginalizing over the conditional steady-state distribution.
 
 # Arguments
-- `model`: An instance of `GRSMmodel`.
+- `model`: An instance of `AbstractGRSMmodel`.
 - `n`: The number of states.
 - `nr`: The number of splice sites.
 - `r`: A vector representing the rates.
 
 # Methods
 
-## `burstoccupancy(model::GRSMmodel)`
+## `burstoccupancy(model::AbstractGRSMmodel)`
 
 Calculates the burst size distribution for a given GRSM model.
 
@@ -1154,7 +1154,7 @@ Calculates the burst size distribution given the number of states, number of spl
 # Returns
 - `Tuple{Vector{Float64}, Vector{Float64}}`: The total pre-mRNA occupancy and unspliced (visible) occupancy distributions.
 """
-burstoccupancy(model::GRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
+burstoccupancy(model::AbstractGRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
 
 function burstoccupancy(n::Int, nr::Int, r::Vector)
     T = mat_GSR_T(r, n, nr)
@@ -1350,13 +1350,13 @@ function test_steadystatemodel(model::AbstractGMmodel, nhist)
 end
 
 """
-    test_model(data::RNAOnOffData, model::GRSMmodel)
+    test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
 
 Simulates the RNA on-off model with splicing and compares it to the provided data.
 
 # Arguments
 - `data`: An instance of `RNAOnOffData` containing the observed data.
-- `model`: An instance of `GRSMmodel` representing the model to be tested.
+- `model`: An instance of `AbstractGRSMmodel` representing the model to be tested.
 
 # Description
 This function simulates the RNA on-off model with splicing using the provided model parameters and compares the simulated results to the observed data. It uses the `telegraphsplice0` function to perform the simulation.
@@ -1364,7 +1364,7 @@ This function simulates the RNA on-off model with splicing using the provided mo
 # Returns
 - `Nothing`: The function performs the simulation and comparison but does not return a value.
 """
-function test_model(data::RNAOnOffData, model::GRSMmodel)
+function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 

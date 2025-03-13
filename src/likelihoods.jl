@@ -285,17 +285,17 @@ function prepare_rates_coupled_hierarchical_grid(r, param, nrates, coupling, hie
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel)
+    prepare_rates(param, model::AbstractGRSMmodel)
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel)
+function prepare_rates(param, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     prepare_rates_noiseparams(r, model.nrates, model.reporter)
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
     couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
@@ -303,25 +303,25 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
     r = get_rates(param, model)
     prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
     prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.   hierarchical, model.reporter)
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:grid,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:grid,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
     pgrid = prepare_grid(r, model.trait.grid.gridindices)
@@ -329,9 +329,9 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
     r = get_rates(param, model)
     rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
     couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
@@ -340,17 +340,17 @@ function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedT
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
     r = get_rates(param, model)
     prepare_rates_hierarchical_grid(r, param, model.nrates, model.trait.hierarchical, model.trait.grid.gridindices, model.reporter)
 end
 
 """
-    prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
+    prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
 """
-function prepare_rates(param, model::AbstractGRSMtraitmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
+function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical, :grid,)}}
     r = get_rates(param, model)
     prepare_rates_coupled_hierarchical_grid(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.trait.grid.gridindices, model.reporter)
 end
@@ -431,7 +431,7 @@ function loglikelihood(param, data::AbstractTraceData, model::AbstractGmodel)
     ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
 end
 
-function ll_hmm_trace(param, data, model::AbstractGRSMtraitmodel)
+function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
     r = prepare_rates(param, model)
     if !isnothing(model.trait) && haskey(model.trait, :grid)
         ll_hmm(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
@@ -440,11 +440,11 @@ function ll_hmm_trace(param, data, model::AbstractGRSMtraitmodel)
     end
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMtraitmodel)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
     ll_hmm_trace(param, data, model)
 end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMtraitmodel)
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     llg, llgp = ll_hmm_trace(param, data, model)
     r = get_rates(param, model)
     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
@@ -862,7 +862,7 @@ This function applies a log transformation to the rates to map them to the real 
 """
 transform_rates(r, model::AbstractGmodel) = log.(r)
 
-function transform_rates(r, model::AbstractGRSMtraitmodel)
+function transform_rates(r, model::AbstractGRSMmodel)
     if haskey(model.trait, :coupling)
         return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
     elseif haskey(model.trait, :hierarchical)
@@ -900,7 +900,7 @@ This function applies an inverse transformation to the parameters to map them ba
 """
 inverse_transform_rates(p, model::AbstractGmodel) = exp.(p)
 
-function inverse_transform_rates(p, model::AbstractGRSMtraitmodel)
+function inverse_transform_rates(p, model::AbstractGRSMmodel)
     if haskey(model.trait, :coupling)
         return transform_array(p, model.coupling.couplingindices, model.fittedparam, expv, invlog_shift1)
     else
@@ -937,7 +937,7 @@ This function retrieves the fitted parameters from the model. It supports variou
 """
 get_param(model::AbstractGmodel) = log.(model.rates[model.fittedparam])
 
-get_param(model::AbstractGRSMtraitmodel) = transform_rates(model.rates[model.fittedparam], model)
+get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 # get_param(model::AbstractGRSMcoupledmodel) = transform_rates(model.rates[model.fittedparam], model)
 
