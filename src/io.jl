@@ -520,7 +520,7 @@ end
 
 function rlabels_GRSM(model::GRSMmodel)
     labels = Array{String}(undef, 1, 0)
-    if has_trait(model.trait, CouplingTrait)
+    if haskey(model.trait, :coupling)
         for i in eachindex(model.G)
             labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
         end
@@ -556,7 +556,7 @@ function rlabels(model::AbstractGMmodel)
 end
 
 function rlabels(model::GRSMmodel)
-    if has_trait(model.trait, HierarchicalTrait)
+    if haskey(model.trait, :hierarchical)
         labels = String[]
         l = rlabels_GRSM(model)
         for i in 1:model.trait.hierarchical.nhypersets
@@ -566,7 +566,7 @@ function rlabels(model::GRSMmodel)
             append!(labels, l)
         end
         reshape(labels, 1, :)
-    elseif has_trait(model.trait, GridTrait)
+    elseif haskey(model.trait, :grid)
         hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter), "GridProb")
     else
         rlabels_GRSM(model)
@@ -651,7 +651,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
         mkpath(path)
     end
     name = filename(data, model)
-    if has_trait(model.trait, HierarchicalTrait)
+    if haskey(model.trait, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
     end
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
@@ -704,7 +704,7 @@ last accepted
 """
 function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
     f = open(file, "w")
-    if has_trait(model.trait, HierarchicalTrait)
+    if haskey(model.trait, :hierarchical)
         writedlm(f, rlabels(model), ',')  # labels
         writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
         writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
