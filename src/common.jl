@@ -314,6 +314,19 @@ struct CouplingTrait
     couplingindices::Vector
 end
 
+"""
+    hastrait(model, trait)
+
+Check if a trait is present in a model.
+
+# Arguments
+- `model::AbstractModel`: Model to check.
+- `trait::Symbol`: Trait to check.
+
+"""
+function hastrait(model, trait)
+    !isnothing(model.trait) && haskey(model.trait, trait)
+end
 
 """
     GRSMmodel{RateType, PriorType, ProposalType, ParamType, MethodType, ComponentType, ReporterType}

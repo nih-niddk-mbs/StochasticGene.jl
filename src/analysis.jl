@@ -602,9 +602,8 @@ function deviance(fits, data::AbstractTraceData, model)
     end
 end
 
-function deviance(fits, data::AbstractTraceData,
-    model::AbstractGRSMmodel{TraitType}) where {TraitType<:NamedTuple}
-    if haskey(model.trait, :coupling)
+function deviance(fits, data::AbstractTraceData, model::AbstractGRSMmodel{TraitType}) where {TraitType<:NamedTuple}
+    if hastrait(model, :coupling)
         # Coupling-specific logic
         s = 0
         for t in data.trace[1]

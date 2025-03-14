@@ -486,6 +486,23 @@ rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fitte
 
 ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
+"""
+    rlabels(model::AbstractGMmodel)
+"""
+function rlabels(model::AbstractGMmodel)
+    labels = String[]
+    for t in model.Gtransitions
+        push!(labels, "Rate$(t[1])$(t[2])")
+    end
+    push!(labels, "Eject")
+    push!(labels, "Decay")
+    if typeof(model.reporter) == HMMReporter
+        for i in 1:model.reporter.n
+            push!(labels, "noiseparam$i")
+        end
+    end
+    reshape(labels, 1, :)
+end
 
 """
     rlabels_GRSM(transitions, R, S, reporter, unit=:"")
@@ -511,67 +528,50 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
             push!(labels, "noiseparam$(unit)_$i")
         end
     end
-    reshape(labels, 1, :)
+    labels
 end
 
 function rlabels_GRSM(model::AbstractGRSMmodel)
-    rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
-end
-
-function rlabels_GRSM(model::GRSMmodel)
-    labels = Array{String}(undef, 1, 0)
-    if haskey(model.trait, :coupling)
+    if hastrait(model, :coupling)
+        labels = Array{String}(undef, 1, 0)
         for i in eachindex(model.G)
             labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
         end
-        for i in 1:model.trait.coupling.ncoupling
+        for i in 1:model.coupling[1]
             labels = hcat(labels, ["Coupling_$i"])
         end
     else
         labels = rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
     end
-    reshape(labels, 1, :)
+    labels
 end
 
-function rlabels(model::AbstractGRSMmodel)
-    rlabels_GRSM(model)
+function rlabels_GRSM_grid(labels)
+    hcat(labels, "GridProb")
 end
 
-"""
-    rlabels(model::AbstractGMmodel)
-"""
-function rlabels(model::AbstractGMmodel)
-    labels = String[]
-    for t in model.Gtransitions
-        push!(labels, "Rate$(t[1])$(t[2])")
+function rlabels_GRSM_hierarchical(labels, model)
+    for i in 1:model.hierarchy.nhypersets
+       labels = hcat(labels, "shared_" .* labels)
     end
-    push!(labels, "Eject")
-    push!(labels, "Decay")
-    if typeof(model.reporter) == HMMReporter
-        for i in 1:model.reporter.n
-            push!(labels, "noiseparam$i")
-        end
+    for i in 1:model.hierarchy.nindividuals
+        labels = hcat(labels, labels)
     end
-    reshape(labels, 1, :)
+    labels
 end
 
 function rlabels(model::GRSMmodel)
-    if haskey(model.trait, :hierarchical)
-        labels = String[]
-        l = rlabels_GRSM(model)
-        for i in 1:model.trait.hierarchical.nhypersets
-            append!(labels, "shared_" .* l)
-        end
-        for i in 1:model.trait.hierarchical.nindividuals
-            append!(labels, l)
-        end
-        reshape(labels, 1, :)
-    elseif haskey(model.trait, :grid)
-        hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter), "GridProb")
-    else
-        rlabels_GRSM(model)
+    labels = rlabels_GRSM(model)
+    if hastrait(model, :grid)
+        labels = rlabels_GRSM_grid(labels)
     end
+    if hastrait(model, :hierarchical)
+        labels = rlabels_GRSM_hierarchical(labels, model)
+    end
+    reshape(labels, 1, :)
 end
+
+
 """
     statlabels(model::String, conds, fittedparams)
 
@@ -636,11 +636,11 @@ filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, mode
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGeneTransitionModel;optimized=0,burst=0)
 """
 function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
-    if ~isdir(path)
+    if !isdir(path)
         mkpath(path)
     end
     name = filename(data, model)
-    if haskey(model.trait, :hierarchical)
+    if hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
     end
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
@@ -699,7 +699,7 @@ function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
-    
+
     # if haskey(model.trait, :hierarchical)
     #     writedlm(f, rlabels(model), ',')  # labels
     #     writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
@@ -811,7 +811,7 @@ function write_info(file::String, data, model)
     writedlm(f, [model.Gtransitions], ',')
     writedlm(f, [data.label], ',')
     writedlm(f, [data.gene], ',')
-    if typeof(data ) <: AbstractTraceData
+    if typeof(data) <: AbstractTraceData
         writedlm(f, [data.interval], ',')
     end
     close(f)
@@ -861,7 +861,7 @@ read in rna histograms
 """
 function read_rna(gene, cond, datapath)
     h = readfile(gene, cond, datapath)[:, 1]
-    h = truncate_histogram(h,.99, 1000)
+    h = truncate_histogram(h, 0.99, 1000)
     return length(h), h
 end
 """

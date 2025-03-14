@@ -945,7 +945,7 @@ function ll_hmm(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid:
 end
 
 
-###  trait likelihoods
+###  likelihoods
 """
     ll_hmm(r, components, reporter, interval, trace, method)
 
@@ -976,6 +976,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     a, p0 = make_ap(rshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
     lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, trace[3]) : 0.0
+    println(typeof(trace[1][1]))
+    println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
