@@ -605,17 +605,6 @@ optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fi
 
 optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds) "LL" "Convergence"]
 
-function get_all_rates(file::String, header::Bool)
-    r = readdlm(file, ',', header=header)
-    if header
-        r = r[1]
-    end
-    return r
-end
-
-
-
-
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$nalleles")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
@@ -817,6 +806,17 @@ function write_info(file::String, data, model)
     writedlm(f, [data.gene], ',')
     if typeof(data ) <: AbstractTraceData
         writedlm(f, [data.interval], ',')
+    end
+    close(f)
+end
+
+function write_residency_G(fileout::String, filein::String, G, header)
+    rates = read_all_rates_csv(filein, header)
+    n = G - 1
+    f = open(fileout, "w")
+    writedlm(f, ["gene" collect(0:n)'], ',')
+    for r in eachrow(rates)
+        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
     end
     close(f)
 end
@@ -1170,6 +1170,14 @@ function fix_tracefiles(path::String)
     end
 end
 
+function read_allrates_csv(file::String, header::Bool)
+    r = readdlm(file, ',', header=header)
+    if header
+        r = r[1]
+    end
+    return r
+end
+
 """
     readrates(infolder::String, label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, ratetype::String="median")
 
@@ -1365,17 +1373,6 @@ function read_optimized(file::String)
     ll = readrow(file, 2)
     conv = readrow(file, 3)
     [rates ll conv]
-end
-
-function write_residency_G(fileout::String, filein::String, G, header)
-    rates = get_all_rates(filein, header)
-    n = G - 1
-    f = open(fileout, "w")
-    writedlm(f, ["gene" collect(0:n)'], ',')
-    for r in eachrow(rates)
-        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n)], ',')
-    end
-    close(f)
 end
 
 """

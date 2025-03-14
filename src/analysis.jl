@@ -194,7 +194,8 @@ end
 """
     add_residenceprob!(df::DataFrame)
 
-TBW
+add residence probability of G states to dataframe
+Convention changed from original code. G states are now labeled starting from 1 rather than zero
 """
 function add_residenceprob!(df::DataFrame)
     n = df.Model[1] - 1
@@ -207,7 +208,7 @@ function add_residenceprob!(df::DataFrame)
             Symbol("Rate$(j-1)$j")
             r[2*j-1] = df[i, Symbol("Rate$j$(j-1)")]
             r[2*j] = df[i, Symbol("Rate$(j-1)$j")]
-            g[i, :] = residenceprob_G(r, n)
+            g[i, :] = residenceprob_G(r, n+1)
         end
     end
     for j in 1:n+1

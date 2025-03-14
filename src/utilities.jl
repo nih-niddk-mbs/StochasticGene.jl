@@ -991,33 +991,33 @@ function mediansmooth(xin, window)
     x
 end
 
-"""
-    residenceprob_G(file::String, G, header=false)
+# """
+#     residenceprob_G(file::String, G, header=false)
 
-Calculates the residence probability of G states from a file.
+# Calculates the residence probability of G states from a file.
 
-# Arguments
-- `file`: The file containing the data.
-- `G`: The number of G states.
-- `header`: A boolean indicating whether the file contains a header (default is false).
+# # Arguments
+# - `file`: The file containing the data.
+# - `G`: The number of G states.
+# - `header`: A boolean indicating whether the file contains a header (default is false).
 
-# Description
-This function calculates the residence probability of G states from the data in the specified file. It reads the rate matrix from the file and computes the residence probabilities for each row in the matrix.
+# # Description
+# This function calculates the residence probability of G states from the data in the specified file. It reads the rate matrix from the file and computes the residence probabilities for each row in the matrix.
 
-# Returns
-- `Array{Any,2}`: A 2D array where each row contains the residence probabilities for the corresponding row in the rate matrix.
-"""
-function residenceprob_G(file::String, G, header=false)
-    r = get_all_rates(file, header)
-    m = size(r)[1]
-    p = Array{Any,2}(undef, m, G + 1)
-    n = G - 1
-    for i in 1:m
-        p[i, 1] = r[i, 1]
-        p[i, 2:end] = residenceprob_G(r[i, 2:2*n+1], n)
-    end
-    return p
-end
+# # Returns
+# - `Array{Any,2}`: A 2D array where each row contains the residence probabilities for the corresponding row in the rate matrix.
+# """
+# function residenceprob_G(file::String, G, header=false)
+#     r = read_all_rates_csv(file, header)
+#     m = size(r)[1]
+#     p = Array{Any,2}(undef, m, G + 1)
+#     n = G - 1
+#     for i in 1:m
+#         p[i, 1] = r[i, 1]
+#         p[i, 2:end] = residenceprob_G(r[i, 2:2*n+1], n)
+#     end
+#     return p
+# end
 
 """
     residenceprob_G(r::Vector, n::Int)
