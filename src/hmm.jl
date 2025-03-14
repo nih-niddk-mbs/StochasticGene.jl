@@ -951,7 +951,7 @@ end
 
 """
 # no traits
-function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64}}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5())
+function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
     r, noiseparams = r
     a, p0 = make_ap(r, interval, components, method)
     d = set_d(noiseparams, reporter)
@@ -961,7 +961,7 @@ function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64}}, components::TComponen
 end
 
 # coupled
-function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Vector{Float64}}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5())
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
@@ -971,7 +971,7 @@ function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Vector{Float64}}, compo
 end
 
 # hierarchical
-function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64}}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true))
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
     a, p0 = make_ap(rshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
@@ -986,7 +986,7 @@ function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Vector{
 end
 
 # hierarchical, coupled
-function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64},Vector{Float64}}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true))
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
@@ -1006,7 +1006,7 @@ end
     
 """
 # grid
-function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Float64}, Ngrid, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5())
+function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
     r, noiseparams, pgrid = r
     a, p0 = make_ap(r, interval, components, method)
     a_grid = make_a_grid(pgrid, Ngrid)
@@ -1016,21 +1016,21 @@ function ll_hmm(r::Tuple{Vector{Float64},Vector{Float64},Float64}, Ngrid, compon
 end
 
 # grid, coupled
-function ll_hmm(r::NTuple{4,AbstractVector}, Ngrid, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5())
+function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
     r, noiseparams, couplingStrength, pgrid = r
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
-    a_grid = make_a_grid(pgrid[1][1], Ngrid)
+    a_grid = make_a_grid(pgrid[1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
     ll, logpredictions = ll_hmm(a, a_grid, p0, d, trace[1])
     ll, logpredictions
 end
 
 # grid, hierarchical
-function ll_hmm(r::NTuple{8,AbstractVector}, Ngrid, components::TComponents, reporter, interval::Float64, trace::Tuple, method=(Tsit5(), true))
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, _, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
     if method[2]
         a, p0 = make_ap(rshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+        a_grid = make_a_grid(pgridshared[1], Ngrid)
         ll, logpredictions = ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
     else
         ll, logpredictions = ll_hmm(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
@@ -1040,11 +1040,11 @@ function ll_hmm(r::NTuple{8,AbstractVector}, Ngrid, components::TComponents, rep
 end
 
 # grid, hierarchical, coupled
-function ll_hmm(r::NTuple{10,AbstractVector}, Ngrid, components::TCoupledComponents, reporter, interval::Float64, trace::Tuple, method=(Tsit5(), true))
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual = r
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+    rshared, rindividual, _, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual = r
     if method[2]
         a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+        a_grid = make_a_grid(pgridshared[1], Ngrid)
         ll, logpredictions = ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
     else
         ll, logpredictions = ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
