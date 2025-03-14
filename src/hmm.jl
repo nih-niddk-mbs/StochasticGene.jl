@@ -1009,7 +1009,7 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
     r, noiseparams, pgrid = r
     a, p0 = make_ap(r, interval, components, method)
-    a_grid = make_a_grid(pgrid, Ngrid)
+    a_grid = make_a_grid(pgrid[1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
     ll, logpredictions = ll_hmm(a, a_grid, p0, d, trace[1])
     ll, logpredictions
@@ -1019,7 +1019,7 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
     r, noiseparams, couplingStrength, pgrid = r
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
-    a_grid = make_a_grid(pgrid[1], Ngrid)
+    a_grid = make_a_grid(pgrid[1][1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
     ll, logpredictions = ll_hmm(a, a_grid, p0, d, trace[1])
     ll, logpredictions
@@ -1030,7 +1030,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComp
     rshared, rindividual, _, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
     if method[2]
         a, p0 = make_ap(rshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1], Ngrid)
+        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
         ll, logpredictions = ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
     else
         ll, logpredictions = ll_hmm(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])

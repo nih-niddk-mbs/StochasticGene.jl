@@ -1411,6 +1411,44 @@ function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
 end
 
 
+function write_residency_G_allgenes(fileout::String, filein::String, G, header)
+    rates = read_all_rates_csv(filein, header)
+    n = G - 1
+    f = open(fileout, "w")
+    writedlm(f, ["gene" collect(0:n)'], ',')
+    for r in eachrow(rates)
+        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
+    end
+    close(f)
+end
+
+function write_residency_G(file)
+    r = readrates(file, get_row(ratetype))
+    parts = fields(file)
+    G, R, S, insertstep = decompose_model(parts.model)
+    n = G - 1
+    f = open(fileout, "w")
+    writedlm(f, ["gene" collect(0:n)'], ',')
+    for r in eachrow(rates)
+        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
+    end
+    close(f)
+end
+
+function write_residency_G_all(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f) && occursin("tracejoint", f)
+                file = joinpath(root, f)
+
+                out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
+                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc))
+            end
+        end
+    end
+
+end
+
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
 

@@ -109,6 +109,7 @@ export
     RNAData,
     RNADwellTimeData,
     RNAOnOffData,
+    readrates,
     rna_setup,
     run_mh,
     set_indices,

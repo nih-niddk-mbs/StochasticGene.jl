@@ -817,16 +817,6 @@ function write_info(file::String, data, model)
     close(f)
 end
 
-function write_residency_G(fileout::String, filein::String, G, header)
-    rates = read_all_rates_csv(filein, header)
-    n = G - 1
-    f = open(fileout, "w")
-    writedlm(f, ["gene" collect(0:n)'], ',')
-    for r in eachrow(rates)
-        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
-    end
-    close(f)
-end
 
 """
 write_MHsamples(file::String,samples::Matrix)
