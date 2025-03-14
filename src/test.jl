@@ -35,9 +35,9 @@ end
 
 function sim_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0, ntrials=10)
     Nstate = num_rates(transitions, R, S, insertstep)
-    a_grid = make_a_grid(p, Ngrid)
+    a_grid = StochasticGene.make_a_grid(p, Ngrid)
     # traces = simulator(r, transitions, G, R, S, insertstep, traceinterval=interval, nhist=0, totaltime=totaltime, reporterfn=sum, a_grid=StochasticGene.make_a_grid(1.0, 4))[1]
-    simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, a_grid=a_grid)
+    StochasticGene.simulate_trace_vector(r, transitions, G, R, S, insertstep, interval, totaltime, ntrials, a_grid=a_grid)
 end
 
 ### functions used in runtest
@@ -53,7 +53,7 @@ function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
     h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
     for i in eachindex(hs)
-        hs[i] = normalize_histogram.(hs[i])
+        hs[i] = StochasticGene.normalize_histogram.(hs[i])
     end
     return make_array(vcat(h...)), make_array(vcat(hs...))
 end
@@ -64,7 +64,7 @@ function test_fit_simrna(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2],
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
-    get_rates(fits.parml, model), rtarget, data, model
+    StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
 function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), rinit=[0.01, 0.1, 1.0, 0.01006327034802035], datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".")
@@ -181,7 +181,11 @@ end
 
 ### end of functions used in runtest
 
+test_fit(nchains=1) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, [290.0, 140.0]), "test", "test", "trace-HBEC-nstate-h_gene", "trace-HBEC-nstate-h_gene",[1, 2, 3, 4, 5, 6], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", 120000.0, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 290.0, 290.0, 1200.0, 175.0, 1.0, 1.0, 1.0, 0.1, 0.1, 1.0, 1.0, 0.25, 0.25, 0.25, 0.25], [5.0, 5.0, 0.2, 0.1,0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0], 1, Int64[], 1.0, "", prob_Gaussian, [290.0, 290.0, 1200.0, 175.0], (2, [8, 9], ()), "ml", 0.004, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5(), true))
 
+test_fit_coupled(nchains=1) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.78, 0.48]), "test", "test", "tracejoint-HBEC-nstate_enhancer-geneR5", "tracejoint-HBEC-nstate_enhancer-geneR5",[1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 28], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (3, 3), (1, 0), (1, 1), ((1, 2), ((), (1,)), ([4, 5, 6], 0), (0, 5), 1), nothing, ".", 43000.0, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([25000.0, 15000.0, 80000.0, 10000.0], [25000.0, 15000.0, 80000.0, 10000.0]), (), "ml", 0.005, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5, true))
+
+test_fit_coupled_h(nchains=1) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.78, 0.48]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 28], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (3, 3), (1, 0),(1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", 43000.0, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([25000.0, 15000.0, 80000.0, 10000.0], [25000.0, 15000.0, 80000.0, 10000.0]), (2, [11, 10], ()), "ml", 0.005, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5(), true))
 
 
 marg(p, dims) = dropdims(sum(p, dims=dims), dims=dims)
