@@ -661,7 +661,6 @@ function compute_stats(paramin::Array{Float64,2}, model)
     np = size(param, 1)
     madparam = Array{Float64,1}(undef, np)
     qparam = Matrix{Float64}(undef, 3, 0)
-    println(typeof(model))
     if typeof(model) <: AbstractGRSMmodel
         nrates = length(model.fittedparam)
         corparam = cor(param[1:nrates, :]')

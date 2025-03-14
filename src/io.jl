@@ -693,19 +693,26 @@ last accepted
 """
 function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
     f = open(file, "w")
-    if haskey(model.trait, :hierarchical)
-        writedlm(f, rlabels(model), ',')  # labels
-        writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
-        writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
-        writedlm(f, [get_rates_hierarchical(stats.medparam, model, false)], ',')  # median posterior
-        writedlm(f, [get_rates_hierarchical(fits.param[:, end], model)], ',')  # last sample
-    else
-        writedlm(f, rlabels(model), ',')  # labels
-        writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
-        writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
-        writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
-        writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
-    end
+
+    writedlm(f, rlabels(model), ',')  # labels
+    writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
+    writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
+    writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
+    writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
+    
+    # if haskey(model.trait, :hierarchical)
+    #     writedlm(f, rlabels(model), ',')  # labels
+    #     writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
+    #     writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
+    #     writedlm(f, [get_rates_hierarchical(stats.medparam, model, false)], ',')  # median posterior
+    #     writedlm(f, [get_rates_hierarchical(fits.param[:, end], model)], ',')  # last sample
+    # else
+    #     writedlm(f, rlabels(model), ',')  # labels
+    #     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
+    #     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
+    #     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
+    #     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
+    # end
     close(f)
 end
 

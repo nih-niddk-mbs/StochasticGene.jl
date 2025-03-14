@@ -885,13 +885,19 @@ Get rates from parameters.
 # Returns
 - Updated rates.
 """
-function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
+
+function get_rates!(r, param, model, inverse)
     if inverse
-        r = inverse_transform_rates(param, model)
+        r[model.fittedparam] = inverse_transform_rates(param, model)
     else
-        r = param
+        r[model.fittedparam] = param
     end
-    r
+end
+
+function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
+    r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
 end
 
 function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse=true)
@@ -901,6 +907,7 @@ function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, in
     end
     fixed_rates(r, model.fixedeffects)
 end
+
 
 function get_rates(fits, stats, model, ratetype)
     if ratetype == "ml"
@@ -913,6 +920,7 @@ function get_rates(fits, stats, model, ratetype)
         println("ratetype unknown")
     end
 end
+
 
 # function get_rates(param, model::GRSMcoupledmodel, inverse=true)
 #     r = copy_r(model)
