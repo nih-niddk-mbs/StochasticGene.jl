@@ -164,6 +164,17 @@ function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     pindividual, rhyper = prepare_hyper(r, param, hierarchy)
     return rshared, rindividual, pindividual, rhyper
 end
+
+function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindices)
+    r = Vector{Vector{Float64}}(undef, length(nrates))
+    k = 1
+    for i in eachindex(r)
+        n = nrates[i]
+        r[i] = rates[k:k+n-1]
+        k += n
+    end
+    return r, rates[couplingindices]
+end
 """
 prepare_rates_noiseparams(rates, nrates, reporter)
 """
@@ -604,7 +615,7 @@ function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionMod
 end
 
 function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
-    r, _, coupling_strength = prepare_rates(r, model)
+    r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
     predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
 end
 """

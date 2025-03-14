@@ -657,7 +657,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     write_rates(joinpath(path, "rates" * name), fits, stats, model)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_info(joinpath(path, "info" * name), model)
+    write_info(joinpath(path, "info" * name), data, model)
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -806,13 +806,18 @@ end
 
 TBW
 """
-function write_info(file::String, model)
+function write_info(file::String, data, model)
     f = open(file, "w")
     writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
     writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
     writedlm(f, [model.Gtransitions], ',')
+    writedlm(f, [data.label], ',')
+    writedlm(f, [data.gene], ',')
+    if typeof(data ) <: AbstractTraceData
+        writedlm(f, [data.interval], ',')
+    end
     close(f)
 end
 

@@ -41,7 +41,8 @@ abstract type AbstractRNAData{hType} <: AbstractHistogramData end
     
 Abstract type for intensity time series data with RNA histogram data
 """
-abstract type AbstractTraceHistogramData <: AbstractExperimentalData end
+
+abstract type AbstractTraceHistogramData <: AbstractTraceData end
 
 # Data structures 
 #
