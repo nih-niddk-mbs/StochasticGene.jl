@@ -991,36 +991,8 @@ function mediansmooth(xin, window)
     x
 end
 
-# """
-#     residenceprob_G(file::String, G, header=false)
-
-# Calculates the residence probability of G states from a file.
-
-# # Arguments
-# - `file`: The file containing the data.
-# - `G`: The number of G states.
-# - `header`: A boolean indicating whether the file contains a header (default is false).
-
-# # Description
-# This function calculates the residence probability of G states from the data in the specified file. It reads the rate matrix from the file and computes the residence probabilities for each row in the matrix.
-
-# # Returns
-# - `Array{Any,2}`: A 2D array where each row contains the residence probabilities for the corresponding row in the rate matrix.
-# """
-# function residenceprob_G(file::String, G, header=false)
-#     r = read_all_rates_csv(file, header)
-#     m = size(r)[1]
-#     p = Array{Any,2}(undef, m, G + 1)
-#     n = G - 1
-#     for i in 1:m
-#         p[i, 1] = r[i, 1]
-#         p[i, 2:end] = residenceprob_G(r[i, 2:2*n+1], n)
-#     end
-#     return p
-# end
-
 """
-    residenceprob_G(r::Vector, n::Int)
+    residenceprob_G(r::Vector, G::Int)
 
 Calculates the residence probability of G states given the rates.
 
@@ -1042,6 +1014,65 @@ function residenceprob_G(r::Vector, G::Int)
         Gss[1, k+1] = Gss[1, k] * r[2*k-1] / r[2*k]
     end
     Gss ./= sum(Gss)
+end
+
+"""
+    residenceprob_G_dataframe(r::Vector, G::Int)
+
+Creates a DataFrame with residence probabilities for G states for a single gene.
+
+# Arguments
+- `r`: Vector of rates
+- `G`: Number of G states
+
+# Returns
+- DataFrame with columns for each G state and their residence probabilities
+"""
+function residenceprob_G_dataframe(r::Vector, G::Int)
+    # Calculate residence probabilities
+    probs = vec(residenceprob_G(r, G))
+    
+    # Create DataFrame with state labels as columns
+    df = DataFrame()
+    for j in 1:G
+        df[!, "G$j"] = [probs[j]]
+    end
+    
+    return df
+end
+
+"""
+    residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
+
+Creates a DataFrame with residence probabilities for G states across multiple genes.
+
+# Arguments
+- `r`: Vector of rates
+- `G`: Tuple containing number of G states for each gene
+- `nrates`: Vector containing number of rates for each gene
+
+# Returns
+- DataFrame with columns for each G state and their residence probabilities
+"""
+function residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
+    # Initialize DataFrame
+    df = DataFrame()
+    k = 1
+    
+    # Calculate residence probabilities for each gene using the Int version
+    for (i, g) in enumerate(G)
+        # Get single gene probabilities using the Int version
+        single_df = residenceprob_G_dataframe(r[k:k+nrates[i]-1], g)
+        
+        # Rename columns to include gene number
+        for col in names(single_df)
+            df[!, "$(col)_$(i)"] = single_df[!, col]
+        end
+        
+        k += nrates[i]
+    end
+    
+    return df
 end
 
 """

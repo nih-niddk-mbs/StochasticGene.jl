@@ -208,7 +208,7 @@ function add_residenceprob!(df::DataFrame)
             Symbol("Rate$(j-1)$j")
             r[2*j-1] = df[i, Symbol("Rate$j$(j-1)")]
             r[2*j] = df[i, Symbol("Rate$(j-1)$j")]
-            g[i, :] = residenceprob_G(r, n+1)
+            g[i, :] = residenceprob_G(r, n + 1)
         end
     end
     for j in 1:n+1
@@ -1417,32 +1417,32 @@ function write_residency_G_allgenes(fileout::String, filein::String, G, header)
     f = open(fileout, "w")
     writedlm(f, ["gene" collect(0:n)'], ',')
     for r in eachrow(rates)
-        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
+        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n + 1)], ',')
     end
     close(f)
 end
 
-function write_residency_G(file)
+function write_residency_G(file, ratetype="median", transitions = ([1,2], [2,1], [2,3], [3,2]), nnoiseparams = 4)
+    println(file)
     r = readrates(file, get_row(ratetype))
     parts = fields(file)
     G, R, S, insertstep = decompose_model(parts.model)
-    n = G - 1
-    f = open(fileout, "w")
-    writedlm(f, ["gene" collect(0:n)'], ',')
-    for r in eachrow(rates)
-        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n+1)], ',')
+    out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
+    if G isa Int
+        CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G)))
+    else
+        nrates = num_rates(transitions, R, S, insertstep) .+ nnoiseparams
+        CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G, nrates)))
     end
-    close(f)
 end
 
-function write_residency_G_all(folder)
+function write_residency_G_folder(folder, transitions = ([1,2], [2,1], [2,3], [3,2]), nnoiseparams = 4)
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) && occursin("tracejoint", f)
+            if occursin("rates", f)
                 file = joinpath(root, f)
-
-                out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
-                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc))
+                println(file)
+                write_residency_G(file)
             end
         end
     end
