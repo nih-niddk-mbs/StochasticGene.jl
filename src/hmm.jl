@@ -551,7 +551,7 @@ function set_b_background(obs::Float64, d::Vector{Distribution{Univariate,Contin
     for j in CartesianIndices(d)
         b[j] = pdf(d[j], obs)
     end
-    return b
+    return reshape(b, :, 1)
 end
 
 function set_b_background(obs::Float64, d::Vector{Vector}, k::Int, N)
@@ -559,7 +559,7 @@ function set_b_background(obs::Float64, d::Vector{Vector}, k::Int, N)
     for j in 1:N
         b[j] *= pdf(d[k][j], obs)
     end
-    return b
+    return reshape(b, :, 1)
 end
 
 """
