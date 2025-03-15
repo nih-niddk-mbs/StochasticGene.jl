@@ -483,6 +483,32 @@ function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple
     end
     reporters
 end
+
+
+"""
+    reduce_reporters_per_state(reporters::Vector{Int}, dims::Vector{Int}, unit_model)
+
+Reduce expanded reporter states by extracting components from the Kronecker product.
+For outer products (left), take the first block.
+For inner products (right), take strided elements.
+
+# Arguments
+- `reporters::Vector{Int}`: The expanded reporter states vector
+- `dims::Vector{Int}`: Vector of dimensions for each constituent part
+- `unit_model`: Vector indicating the order of units in the Kronecker product
+
+# Returns
+- Vector{Vector{Int}}: Vector of reduced reporter states for each constituent part
+"""
+function reduce_reporters_per_state(reporters::Vector{Int}, dims::Vector{Int}, unit_model::Int)
+    if unit_model == 2
+        return reporters[1:dims[2]]
+    else
+        return reporters[1:dims[2]:length(reporters)]
+    end
+end
+
+
 # function num_reporters_per_state_reduced(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, sources, f=sum)
 #     reporters = Vector[]
 #     for i in eachindex(R)
@@ -702,3 +728,4 @@ function classify_transitions(target, indices)
     end
     unique(Gts), unique(Init), unique(Rts)
 end
+

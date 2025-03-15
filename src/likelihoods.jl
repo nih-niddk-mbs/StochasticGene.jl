@@ -1166,7 +1166,6 @@ function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, 
 end
 
 function num_all_parameters(model::AbstractGeneTransitionModel)
-    n = typeof(model.reporter) <: HMMReporter ? model.reporter.n : 0
     num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
 end
 

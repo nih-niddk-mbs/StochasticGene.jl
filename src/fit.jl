@@ -282,6 +282,35 @@ end
 
 TBW
 """
+
+function set_trace_background(traceinfo, nframes)
+    if length(traceinfo) > 4
+        if eltype(traceinfo[5]) <: AbstractVector
+            background = Vector[]
+            for t in traceinfo[5]
+                push!(background, t[1] .+ randn(nframes) .* t[2])
+            end
+        else
+            background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
+        end
+    else
+        background = Vector[]
+    end
+    return background
+end
+
+function set_trace_weight(traceinfo)
+    if traceinfo[4] isa Vector
+        weight = Float64[]
+        for f in traceinfo[4]
+            push!(weight, (1 - f) / f)
+        end
+    else
+        weight = (1 - traceinfo[4]) / traceinfo[4]
+    end
+    return weight
+end
+
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, col=3)
     if typeof(datapath) <: String
         trace = read_tracefiles(datapath, datacond, traceinfo, col)
@@ -293,14 +322,15 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
     println(datapath)
     println(datacond)
     println(traceinfo)
-    weight = (1 - traceinfo[4]) / traceinfo[4]
+    weight = set_trace_weight(traceinfo)
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
-    if length(traceinfo) > 4
-        background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
-    else
-        background = Vector[]
-    end
-    if datatype == "trace"
+    background = set_trace_background(traceinfo, nframes)
+    # if length(traceinfo) > 4
+    #     background = set_trace_background(traceinfo, nframes)
+    # else
+    #     background = Vector[]
+    # end
+    if datatype == "trace" || datatype == "tracejoint"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
         len, h = read_rna(gene, datacond, datapath[2])
@@ -313,16 +343,16 @@ end
 
 data structure for joint traces
 """
-function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-    trace = read_tracefiles(datapath, datacond, traceinfo)
-    weight = Float64[]
-    for f in traceinfo[4]
-        # push!(weight, (1 - f) / f * length(trace))
-        push!(weight, 1 - f)
-    end
-    nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
-end
+# function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+#     trace = read_tracefiles(datapath, datacond, traceinfo)
+#     weight = Float64[]
+#     for f in traceinfo[4]
+#         # push!(weight, (1 - f) / f * length(trace))
+#         push!(weight, 1 - f)
+#     end
+#     nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
+#     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
+# end
 
 """
     load_data_grid(datapath, label, gene, datacond, traceinfo)
@@ -358,9 +388,10 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         bins, DT = read_dwelltimes(datapath)
         return DwellTimeData(label, gene, bins, DT, dttype)
     elseif occursin("trace", datatype)
-        if datatype == "tracejoint"
-            load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-        elseif datatype == "tracegrid"
+        # if datatype == "tracejoint"
+        #     load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
+        # elseif 
+        if datatype == "tracegrid"
             load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
         else
             load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, datacol)

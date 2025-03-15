@@ -546,7 +546,7 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
-function set_b_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}})
+function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
     b = Array{Float64}(undef, size(d))
     for j in CartesianIndices(d)
         b[j] = pdf(d[j], obs)
@@ -554,7 +554,7 @@ function set_b_background(obs::Float64, d::Vector{Distribution{Univariate,Contin
     return reshape(b, :, 1)
 end
 
-function set_b_background(obs::Float64, d::Vector{Vector}, k::Int, N)
+function set_b_background(obs, d::Vector{<:Vector}, k::Int, N)
     b = ones(N)
     for j in 1:N
         b[j] *= pdf(d[k][j], obs)
@@ -797,24 +797,61 @@ end
 
 TBW
 """
-function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
-    _, C = forward(a, set_b_background(obs, d), p0)
-    weight * sum(log.(C))
-end
+# function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+#     b = set_b_background(obs, d)
+#     _, C = forward(a, b, p0)
+#     weight * sum(log.(C))
+# end
 
 function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
-    _, C = forward(a, set_b(obs, d), p0)
+    b = set_b(obs, d)
+    _, C = forward(a, b, p0)
     weight * sum(log.(C))
 end
 
-function ll_background(obs::Vector, d::Vector{Vector}, a::Matrix, p0, weight)
-    l = 0
-    for i in eachindex(obs)
-        b = set_b_background(obs[i], d[i])
+function ll_background(trace, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
+    if trace[3] > 0.0
+        b = set_b(trace[2], d)
         _, C = forward(a, b, p0)
-        l += weight[i] * sum(log.(C))
+        sum(log.(C)) * trace[3] * length(trace[1])
+    else
+        0.0
     end
-    l
+end
+
+# function ll_background(obs::Vector, d::Vector{T}, a::Matrix, p0, weight) where {T<:Vector}
+#     l = 0
+#     for i in eachindex(obs)
+#         b = set_b(obs[i], d)
+#         _, C = forward(a, b, p0)
+#         l += weight[i] * sum(log.(C))
+#     end
+#     l
+# end
+
+# function ll_background(trace, rates, noiseparams, reporter, interval, components, method)
+#     a, p0 = make_ap(rates, interval, components.elementsT, components.nT, method)
+#     d = set_d(noiseparams, reporter, components.nT)
+#     b = set_b(trace[2], d)
+#     _, C = forward(a, b, p0)
+#     sum(log.(C)) * trace[3] * length(trace[1])
+# end
+
+function ll_background(trace, rates, noiseparams, reporter::Vector, interval, components, method)
+    l = 0.0
+    components = components.modelcomponents
+    dims = [components[i].nT for i in eachindex(components)]
+    for i in eachindex(rates)
+        if trace[3][i] > 0.0
+            a, p0 = make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method)
+            rps = reduce_reporters_per_state(reporter[i].per_state, dims, i)
+            d = set_d(noiseparams[i], rps, reporter[i].probfn, dims[i])
+            b = set_b(trace[2][i], d)
+            _, C = forward(a, b, p0)
+            l += sum(log.(C)) * trace[3][i]
+        end
+    end
+    l * length(trace[1])
 end
 
 ### Called by trait likelihoods
@@ -955,7 +992,8 @@ function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter,
     r, noiseparams = r
     a, p0 = make_ap(r, interval, components, method)
     d = set_d(noiseparams, reporter)
-    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_background(trace, d, a, p0)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -965,7 +1003,8 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseparams], d, a, p0, trace[3]) : 0.0
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_background(trace, rates, noiseparams, reporter, interval, components, method)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -975,7 +1014,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
     a, p0 = make_ap(rshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, trace[3]) : 0.0
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -990,7 +1030,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background([n[1] for n in noiseshared[1]], d, a, p0, trace[3]) : 0.0
+    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else

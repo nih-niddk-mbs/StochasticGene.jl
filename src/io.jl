@@ -550,12 +550,13 @@ function rlabels_GRSM_grid(labels)
     hcat(labels, "GridProb")
 end
 
-function rlabels_GRSM_hierarchical(labels, model)
+function rlabels_GRSM_hierarchical(labelsin, model)
+    labels = labelsin
     for i in 1:model.trait.hierarchical.nhypersets
-       labels = hcat(labels, "shared_" .* labels)
+        labels = hcat(labels, "shared_" .* labelsin)
     end
     for i in 1:model.trait.hierarchical.nindividuals
-        labels = hcat(labels, labels)
+        labels = hcat(labels, labelsin)
     end
     labels
 end
@@ -640,13 +641,14 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
         mkpath(path)
     end
     name = filename(data, model)
-    if hastrait(model, :hierarchical)
-        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-    end
-    write_rates(joinpath(path, "rates" * name), fits, stats, model)
+    labels = rlabels(model)
+    write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-    write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_info(joinpath(path, "info" * name), data, model)
+    write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
+    write_info(joinpath(path, "info" * name), data, model, labels)
+    if hastrait(model, :hierarchical)
+        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
+    end
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -691,10 +693,10 @@ mean
 median
 last accepted
 """
-function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+function write_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
 
-    writedlm(f, rlabels(model), ',')  # labels
+    writedlm(f, labels, ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
@@ -716,6 +718,10 @@ function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
     close(f)
 end
 
+function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_rates(file, fits, stats, model, rlabels(model))
+end
+
 function remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
     n = num_rates(transitions, R, S, insertstep) + nreporters
     removeset = n*(setnumber-1)+1:n*setnumber
@@ -728,14 +734,18 @@ end
 
 write hierarchy parameters into a file for hierarchical models
 """
-function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
+function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, 1:model.trait.hierarchical.nrates], ',')  # labels
+    writedlm(f, labels, ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)[1:model.trait.hierarchical.nrates]], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # median posterior
     writedlm(f, [get_rates(fits.param[:, end], model)[1:model.trait.hierarchical.nrates]], ',')  # last sample
     close(f)
+end
+
+function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_hierarchy(file, fits, stats, model, rlabels(model))
 end
 
 """
@@ -759,9 +769,9 @@ end
 
 write parameter statistics into a file
 """
-function write_param_stats(file, stats::Stats, model)
+function write_param_stats(file, stats::Stats, model, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
+    writedlm(f, labels, ',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
@@ -771,6 +781,10 @@ function write_param_stats(file, stats::Stats, model)
     writedlm(f, stats.covparam, ',')
     writedlm(f, stats.covlogparam, ',')
     close(f)
+end
+
+function write_param_stats(file, stats::Stats, model)
+    write_param_stats(file, stats, model, rlabels(model))
 end
 
 """
@@ -802,9 +816,9 @@ end
 
 TBW
 """
-function write_info(file::String, data, model)
+function write_info(file::String, data, model, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
+    writedlm(f, labels, ',')
     writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
@@ -815,6 +829,10 @@ function write_info(file::String, data, model)
         writedlm(f, [data.interval], ',')
     end
     close(f)
+end
+
+function write_info(file::String, data, model)
+    write_info(file, data, model, rlabels(model))
 end
 
 
