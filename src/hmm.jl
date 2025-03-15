@@ -996,7 +996,6 @@ function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter,
     d = set_d(noiseparams, reporter)
     # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, d, a, p0)
-    println(lb)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1008,7 +1007,6 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     d = set_d(noiseparams, reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, rates, noiseparams, reporter, interval, components, method)
-    println(lb)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1020,7 +1018,6 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     d = set_d(noiseshared[1], reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, d, a, p0)
-    println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1037,7 +1034,6 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
     d = set_d(noiseshared[1], reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
-    println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
