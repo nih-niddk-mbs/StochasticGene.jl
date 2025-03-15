@@ -405,8 +405,12 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
 end
 
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
+    # mhfactor not needed for symmetric proposal distribution
     # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
-    if rand() < exp((ll + prior - llt - priort) / temp)
+    # if rand() < exp((ll + prior - llt - priort) / temp)
+    # println(mhfactor(param,d,paramt,dt))
+    # println(ll + prior - llt - priort)
+    if log(rand()) < (ll + prior - llt - priort) / temp
         return 1, logpredictionst, paramt, llt, priort, dt
     else
         return 0, logpredictions, param, ll, prior, d
