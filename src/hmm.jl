@@ -803,21 +803,13 @@ TBW
 #     weight * sum(log.(C))
 # end
 
-function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
-    b = set_b(obs, d)
-    _, C = forward(a, b, p0)
-    weight * sum(log.(C))
-end
+# function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+#     b = set_b(obs, d)
+#     _, C = forward(a, b, p0)
+#     weight * sum(log.(C))
+# end
 
-function ll_background(trace, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
-    if trace[3] > 0.0
-        b = set_b(trace[2], d)
-        _, C = forward(a, b, p0)
-        sum(log.(C)) * trace[3] * length(trace[1])
-    else
-        0.0
-    end
-end
+
 
 # function ll_background(obs::Vector, d::Vector{T}, a::Matrix, p0, weight) where {T<:Vector}
 #     l = 0
@@ -837,7 +829,17 @@ end
 #     sum(log.(C)) * trace[3] * length(trace[1])
 # end
 
-function ll_background(trace, rates, noiseparams, reporter::Vector, interval, components, method)
+function ll_background(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
+    if trace[3] > 0.0
+        b = set_b(trace[2], d)
+        _, C = forward(a, b, p0)
+        sum(log.(C)) * trace[3] * length(trace[1])
+    else
+        0.0
+    end
+end
+
+function ll_background(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method)
     l = 0.0
     components = components.modelcomponents
     dims = [components[i].nT for i in eachindex(components)]
@@ -994,6 +996,7 @@ function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter,
     d = set_d(noiseparams, reporter)
     # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, d, a, p0)
+    println(lb)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1005,6 +1008,7 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     d = set_d(noiseparams, reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_background(trace, rates, noiseparams, reporter, interval, components, method)
+    println(lb)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1014,7 +1018,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
     a, p0 = make_ap(rshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_background(trace, d, a, p0)
     println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
@@ -1025,12 +1030,14 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
 
-# hierarchical, coupled
+# coupled, hierarchical
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_background(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
+    println(lb)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1055,7 +1062,7 @@ function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporte
     ll, logpredictions
 end
 
-# grid, coupled
+# coupled, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
     r, noiseparams, couplingStrength, pgrid = r
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
@@ -1065,7 +1072,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponent
     ll, logpredictions
 end
 
-# grid, hierarchical
+# hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, _, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
     if method[2]
@@ -1079,7 +1086,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComp
     ll + sum(lhp), vcat(logpredictions, lhp)
 end
 
-# grid, hierarchical, coupled
+# coupled, hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     rshared, rindividual, _, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual = r
     if method[2]

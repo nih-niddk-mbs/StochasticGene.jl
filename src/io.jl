@@ -528,7 +528,7 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
             push!(labels, "noiseparam$(unit)_$i")
         end
     end
-    labels
+    reshape(labels, 1, :)
 end
 
 function rlabels_GRSM(model::AbstractGRSMmodel)
@@ -537,7 +537,7 @@ function rlabels_GRSM(model::AbstractGRSMmodel)
         for i in eachindex(model.G)
             labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
         end
-        for i in 1:model.coupling[1]
+        for i in 1:model.trait.coupling.ncoupling
             labels = hcat(labels, ["Coupling_$i"])
         end
     else
@@ -569,7 +569,7 @@ function rlabels(model::GRSMmodel)
     if hastrait(model, :hierarchical)
         labels = rlabels_GRSM_hierarchical(labels, model)
     end
-    reshape(labels, 1, :)
+    labels
 end
 
 
