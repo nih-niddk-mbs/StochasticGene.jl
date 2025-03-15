@@ -551,10 +551,10 @@ function rlabels_GRSM_grid(labels)
 end
 
 function rlabels_GRSM_hierarchical(labels, model)
-    for i in 1:model.hierarchy.nhypersets
+    for i in 1:model.trait.hierarchical.nhypersets
        labels = hcat(labels, "shared_" .* labels)
     end
-    for i in 1:model.hierarchy.nindividuals
+    for i in 1:model.trait.hierarchical.nindividuals
         labels = hcat(labels, labels)
     end
     labels

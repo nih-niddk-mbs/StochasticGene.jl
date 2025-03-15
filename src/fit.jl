@@ -1042,6 +1042,7 @@ function print_ll(param, data, model, message)
     println(message, ll)
 end
 function print_ll(data, model, message="initial ll: ")
+    println(length(model.rates))
     ll, _ = loglikelihood(get_param(model), data, model)
     println(message, ll)
 end

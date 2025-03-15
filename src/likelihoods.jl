@@ -326,7 +326,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
-    prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.   hierarchical, model.reporter)
+    prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.reporter)
 end
 
 """
@@ -846,6 +846,23 @@ Transform rates to log space.
 """
 transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
+function transform_rates(r, model::AbstractGRSMmodel)
+    if hastrait(model, :coupling)
+        return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
+    else
+        return transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+    end
+end
+
+
+# transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+
+# transform_rates(r, model::GRSMcoupledmodel) = transform_array(r, length(model.rates), model.fittedparam, logv, log_shift1)
+
+# transform_rates(r, model::GRSMcoupledhierarchicalmodel) = transform_array(r, model.coupling[2], model.fittedparam, logv, log_shift1)
+
+
+
 """
     inverse_transform_rates(x, model::AbstractGeneTransitionModel)
 
@@ -872,6 +889,8 @@ Get fitted parameters from model.
 - Log-transformed fitted parameters.
 """
 get_param(model::AbstractGeneTransitionModel) = log.(model.rates[model.fittedparam])
+
+get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
 
 """
     get_rates(param, model::AbstractGeneTransitionModel)
