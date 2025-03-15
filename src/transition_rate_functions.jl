@@ -184,7 +184,6 @@ function on_states(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model)
     onstates = Vector[]
     for m in unit_model
         o = on_states(G[m], R[m], S[m], insertstep[m])
-        println(o)
         nbefore = prod(nT[1:m-1])
         nafter = prod(nT[m+1:end])
         enlarged_indices = [(j - 1) * nbefore + 1:j * nbefore for j in o]

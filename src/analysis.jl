@@ -1723,7 +1723,6 @@ end
 
 function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false) where {T1<:Array,T2<:Array}
     m = predictedarray(model.rates, data, model)
-    println("*")
     for i in eachindex(m)
         plt = plot(m[i])
         plot!(normalize_histogram(data.histRNA[i]), show=true)

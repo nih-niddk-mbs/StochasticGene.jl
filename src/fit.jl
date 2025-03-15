@@ -219,9 +219,9 @@ end
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), ejectnumber=1, datacol=3)
     transitions = get_transitions(G, TransitionType)
     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling, grid)
-    println(transitions)
-    println(fixedeffects)
-    println(fittedparam)
+    println("transitions: ", transitions)
+    println("fixedeffects: ", fixedeffects)
+    println("fittedparam: ", fittedparam)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, parse(Int, G), parse(Int, R), parse(Int, S), parse(Int, insertstep), tuple(), root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
         propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol)
 end
@@ -318,10 +318,10 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
         trace = read_tracefiles(datapath[1], datacond, traceinfo, col)
     end
     (length(trace) == 0) && throw("No traces")
-    println(length(trace))
-    println(datapath)
-    println(datacond)
-    println(traceinfo)
+    println("number of traces: ", length(trace))
+    println("datapath: ", datapath)
+    println("datacond: ", datacond)
+    println("traceinfo: ", traceinfo)
     weight = set_trace_weight(traceinfo)
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     background = set_trace_background(traceinfo, nframes)
@@ -845,7 +845,7 @@ function set_rinit(r, priormean)
         println("No rate file, set rate to prior")
         r = priormean
     end
-    println(r)
+    println("initial: ", r)
     r
 end
 
@@ -1073,7 +1073,7 @@ function print_ll(param, data, model, message)
     println(message, ll)
 end
 function print_ll(data, model, message="initial ll: ")
-    println(length(model.rates))
+    println("number of rates: ", length(model.rates))
     ll, _ = loglikelihood(get_param(model), data, model)
     println(message, ll)
 end
