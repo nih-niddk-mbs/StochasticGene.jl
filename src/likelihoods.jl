@@ -850,7 +850,8 @@ function transform_rates(r, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
     else
-        return transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
+        # future fix: include reporter.weightind
+        return transform_array(r, 0, model.fittedparam, logv, logit)
     end
 end
 
