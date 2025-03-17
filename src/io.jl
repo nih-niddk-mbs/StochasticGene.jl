@@ -771,7 +771,7 @@ write parameter statistics into a file
 """
 function write_param_stats(file, stats::Stats, model, labels)
     f = open(file, "w")
-    writedlm(f, labels, ',')
+    writedlm(f, labels[1:1, model.fittedparam], ',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
