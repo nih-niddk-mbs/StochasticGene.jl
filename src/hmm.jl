@@ -856,7 +856,7 @@ function ll_background(trace::Tuple, rates, noiseparams, reporter::Vector, inter
     l * length(trace[1])
 end
 
-### Called by trait likelihoods
+    ### Called by trait likelihoods
 
 """
     ll_hmm(a::Matrix, p0::Vector, d, traces)
@@ -1228,6 +1228,11 @@ function viterbi(a, b, p0, N, T)
     viterbi_log(loga, logb, logp0, N, T)
 end
 
+function viterbi(a, b, p0)
+    N, T = size(b)
+    viterbi(a, b, p0, N, T)
+end
+
 function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
     ϕ = similar(logb)
     ψ = similar(ϕ)
@@ -1254,6 +1259,10 @@ function viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
 end
 
+function viterbi_grid(a, a_grid, b, p0)
+    Nstate, Ngrid, T = size(b)
+    viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+end
 
 """
     covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
@@ -1355,7 +1364,6 @@ function predicted_states(r::Vector, nT, components::TComponents, n_noiseparams:
     states, observation_dist
 end
 
-
 function predicted_states(r::Matrix, nT, components::TComponents, n_noiseparams::Int, reporters_per_state, probfn, interval, traces)
     states = Vector{Int}[]
     observation_dist = Vector[]
@@ -1374,7 +1382,8 @@ end
 
 function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
+    # r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, nrates, reporter, couplingindices)
     nT = components.N
     a, p0 = make_ap(r, couplingStrength, interval, components)
     states = Array[]
@@ -1438,3 +1447,542 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
     end
     states, observation_dist
 end
+
+########################
+# New functions
+########################
+
+
+"""
+    predicted_states(a::Matrix, p0::Vector, d, traces)
+
+"""
+function predicted_states(a::Matrix, p0::Vector, d, traces)
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        b = set_b(traces[i], d)
+        spath = viterbi(a, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(noiseparams, a::Matrix, p0::Vector, reporter, traces)
+
+"""
+function predicted_states(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        spath = viterbi(a, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function predicted_states(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], interval, components, method)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        spath = viterbi(a, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function predicted_states(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        spath = viterbi(a, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+### grid trait likelihoods
+
+"""
+    predicted_states(a, a_grid, p0::Vector, d, traces)
+
+"""
+function predicted_states(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        b = set_b(traces[i], d)
+        spath = viterbi_grid(a, a_grid, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(noiseparams, a, a_grid, p0::Vector, reporter, traces)
+
+"""
+function predicted_states(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
+        spath = viterbi_grid(a, a_grid, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function predicted_states(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], interval, components, method)
+        a_grid = make_a_grid(pgrid, Ngrid)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
+        spath = viterbi_grid(a, a_grid, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+"""
+    predicted_states(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function predicted_states(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    observation_dist = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
+        a_grid = make_a_grid(pgrid, Ngrid)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
+        spath = viterbi_grid(a, a_grid, b, p0)
+        push!(states, spath)
+        push!(observation_dist, [d[s] for s in spath])
+    end
+    states, observation_dist
+end
+
+
+
+"""
+    predicted_states(r, components, reporter, interval, trace, method)
+
+"""
+# no traits
+function predicted_states(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
+    r, noiseparams = r
+    a, p0 = make_ap(r, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    predicted_states(a, p0, d, trace[1])
+end
+
+# coupled
+function predicted_states(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    predicted_states(a, p0, d, trace[1])
+end
+
+# hierarchical
+function predicted_states(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
+    rshared, rindividual, noiseshared, noiseindividual, _, _ = r
+    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        states, observation_dist = predicted_states(noiseindividual, a, p0, reporter, trace[1])
+    else
+        states, observation_dist = predicted_states(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1])
+    end
+    states, observation_dist
+end
+
+# coupled, hierarchical
+function predicted_states(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        states, observation_dist = predicted_states(noiseindividual, a, p0, reporter, trace[1])
+    else
+        states, observation_dist = predicted_states(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+    end
+    states, observation_dist
+end
+
+### grid trait likelihoods
+"""
+    predicted_states(r, pgrid, Ngrid, components, reporter, interval, trace, method)
+    
+"""
+# grid
+function predicted_states(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    r, noiseparams, pgrid = r
+    a, p0 = make_ap(r, interval, components, method)
+    a_grid = make_a_grid(pgrid[1], Ngrid)
+    d = set_d(noiseparams, reporter, Ngrid)
+    predicted_states(a, a_grid, p0, d, trace[1])
+end
+
+# coupled, grid
+function predicted_states(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
+    r, noiseparams, couplingStrength, pgrid = r
+    a, p0 = make_ap(r, couplingStrength, interval, components, method)
+    a_grid = make_a_grid(pgrid[1][1], Ngrid)
+    d = set_d(noiseparams, reporter, Ngrid)
+    predicted_states(a, a_grid, p0, d, trace[1])
+end
+
+# hierarchical, grid
+function predicted_states(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, _, noiseindividual, _, _, pgridshared, pgridindividual = r
+    if method[2]
+        a, p0 = make_ap(rshared[1], interval, components, method[1])
+        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+        states, observation_dist = predicted_states(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+    else
+        states, observation_dist = predicted_states(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
+    end
+    states, observation_dist
+end
+
+# coupled, hierarchical, grid
+function predicted_states(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+    rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
+    if method[2]
+        a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+        a_grid = make_a_grid(pgridshared[1], Ngrid)
+        states, observation_dist = predicted_states(noiseindividual, a, a_grid, p0, reporter, trace[1])
+    else
+        states, observation_dist = predicted_states(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
+    end
+    states, observation_dist
+end
+
+
+
+
+#########################################################
+#
+#   Predicted states for different model types
+#   Generated by Cursor
+#
+#########################################################
+
+# """
+#     predicted_states_basic(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+
+# Return predicted state paths using Viterbi algorithm for basic model type.
+# Returns both the state paths and observation distributions.
+
+# # Arguments
+# - `param`: Model parameters
+# - `data`: Trace data
+# - `model`: Basic model (no special traits)
+
+# # Returns
+# - Tuple of (state_paths, observation_distributions)
+# """
+# function predicted_states_basic(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     rates, noiseparams = r
+
+#     return predicted_states_basic(
+#         rates,
+#         noiseparams,
+#         data.interval,
+#         model.components.tcomponents.elementsT,
+#         model.components.tcomponents.nT,
+#         model.reporter.per_state,
+#         data.trace[1],
+#         model.method
+#     )
+# end
+
+# """
+#     predicted_states_grid(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+
+# Return predicted state paths for grid model type.
+# """
+# function predicted_states_grid(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     rates, noiseparams, pgrid = r
+
+#     return predicted_states_grid(
+#         rates,
+#         noiseparams,
+#         pgrid,
+#         model.grid,
+#         data.interval,
+#         model.components.tcomponents.elementsT,
+#         model.components.tcomponents.nT,
+#         model.reporter.per_state,
+#         data.trace[1],
+#         model.method
+#     )
+# end
+
+# """
+#     predicted_states_coupled(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+
+# Return predicted state paths for coupled model type.
+# """
+# function predicted_states_coupled(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     rates, noiseparams = r
+#     coupling_strength = prepare_coupling_strength(param, model)
+
+#     return predicted_states_coupled(
+#         rates,
+#         noiseparams,
+#         coupling_strength,
+#         model.components,
+#         model.reporter.per_state,
+#         data.trace[1],
+#         data.interval,
+#         model.method
+#     )
+# end
+
+# """
+#     predicted_states_hierarchical(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+
+# Return predicted state paths for hierarchical model type.
+# """
+# function predicted_states_hierarchical(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     rshared, rindividual, noiseshared, noiseindividual = r
+
+#     return predicted_states_hierarchical(
+#         rshared,
+#         rindividual,
+#         noiseshared,
+#         noiseindividual,
+#         data.interval,
+#         model.components.tcomponents.elementsT,
+#         model.components.tcomponents.nT,
+#         model.reporter.per_state,
+#         data.trace[1],
+#         model.method
+#     )
+# end
+
+# """
+#     predicted_states(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+
+# Main dispatch function for predicted states. Routes to appropriate method based on model traits.
+# """
+# function predicted_states(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     if !isnothing(model.trait)
+#         if haskey(model.trait, :grid)
+#             return predicted_states_grid(param, data, model)
+#         elseif haskey(model.trait, :coupling)
+#             if haskey(model.trait, :hierarchical)
+#                 # Handle combined coupling + hierarchical case
+#                 r = prepare_rates(param, model)
+#                 rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
+
+#                 return predicted_states_coupled_hierarchical(
+#                     rshared,
+#                     rindividual,
+#                     noiseshared,
+#                     noiseindividual,
+#                     couplingshared,
+#                     couplingindividual,
+#                     model.components,
+#                     model.reporter.per_state,
+#                     data.trace[1],
+#                     data.interval,
+#                     model.method
+#                 )
+#             else
+#                 return predicted_states_coupled(param, data, model)
+#             end
+#         elseif haskey(model.trait, :hierarchical)
+#             return predicted_states_hierarchical(param, data, model)
+#         end
+#     end
+#     return predicted_states_basic(param, data, model)
+# end
+
+# """
+#     predicted_states_basic(rates, noiseparams, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+
+# Direct version of predicted_states_basic that takes raw parameters instead of data/model objects.
+
+# # Arguments
+# - `rates`: Model transition rates
+# - `noiseparams`: Noise parameters
+# - `interval`: Time interval between observations
+# - `elementsT`: Transition matrix elements
+# - `nT`: Number of states
+# - `reporter_per_state`: Reporter states per model state
+# - `traces`: Vector of observation traces
+# - `method`: Integration method (default: Tsit5())
+
+# # Returns
+# - Tuple of (state_paths, observation_distributions)
+# """
+# function predicted_states_basic(rates, noiseparams, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+#     a, p0 = make_ap(rates, interval, elementsT, nT, method)
+#     d = set_d(noiseparams, reporter_per_state)
+
+#     states = Vector{Vector{Int}}()
+#     obs_dist = Vector{Vector{Float64}}()
+
+#     for obs in traces
+#         b = set_b(obs, d)
+#         path = viterbi(a, b, p0)
+#         push!(states, path)
+#         push!(obs_dist, b)
+#     end
+
+#     return states, obs_dist
+# end
+
+# """
+#     predicted_states_grid(rates, noiseparams, pgrid, ngrid, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+
+# Direct version of predicted_states_grid that takes raw parameters.
+# """
+# function predicted_states_grid(rates, noiseparams, pgrid, ngrid, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+#     a, p0 = make_ap(rates, interval, elementsT, nT, method)
+#     d = set_d(noiseparams, reporter_per_state)
+
+#     states = Vector{Vector{Int}}()
+#     obs_dist = Vector{Vector{Float64}}()
+
+#     for (i, obs) in enumerate(traces)
+#         grid_idx = div(i - 1, ngrid) + 1
+#         b = set_b(obs, d, pgrid[grid_idx])
+#         path = viterbi(a, b, p0)
+#         push!(states, path)
+#         push!(obs_dist, b)
+#     end
+
+#     return states, obs_dist
+# end
+
+# """
+#     predicted_states_coupled(rates, noiseparams, coupling_strength, components, reporter_per_state, traces, interval, method=Tsit5())
+
+# Direct version of predicted_states_coupled that takes raw parameters.
+# """
+# function predicted_states_coupled(rates, noiseparams, coupling_strength, components, reporter_per_state, traces, interval, method=Tsit5())
+#     states_all = Vector{Vector{Vector{Int}}}()
+#     obs_dist_all = Vector{Vector{Vector{Float64}}}()
+
+#     for α in eachindex(components.modelcomponents)
+#         states = Vector{Vector{Int}}()
+#         obs_dist = Vector{Vector{Float64}}()
+
+#         TC = make_mat_TC(components, rates, coupling_strength)
+#         p0 = normalized_nullspace(TC)
+#         d = set_d(noiseparams[α], reporter_per_state[α])
+
+#         for obs in traces[α]
+#             b = set_b(obs, d)
+#             path = viterbi(TC, b, p0)
+#             push!(states, path)
+#             push!(obs_dist, b)
+#         end
+
+#         push!(states_all, states)
+#         push!(obs_dist_all, obs_dist)
+#     end
+
+#     return states_all, obs_dist_all
+# end
+
+# """
+#     predicted_states_hierarchical(rshared, rindividual, noiseshared, noiseindividual, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+
+# Direct version of predicted_states_hierarchical that takes raw parameters.
+# """
+# function predicted_states_hierarchical(rshared, rindividual, noiseshared, noiseindividual, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
+#     states = Vector{Vector{Vector{Int}}}()
+#     obs_dist = Vector{Vector{Vector{Float64}}}()
+
+#     for i in eachindex(rindividual)
+#         a, p0 = make_ap(rindividual[i], interval, elementsT, nT, method)
+#         d = set_d(noiseindividual[i], reporter_per_state)
+
+#         individual_states = Vector{Vector{Int}}()
+#         individual_obs = Vector{Vector{Float64}}()
+
+#         for obs in traces[i]
+#             b = set_b(obs, d)
+#             path = viterbi(a, b, p0)
+#             push!(individual_states, path)
+#             push!(individual_obs, b)
+#         end
+
+#         push!(states, individual_states)
+#         push!(obs_dist, individual_obs)
+#     end
+
+#     return states, obs_dist
+# end
+
+# """
+#     predicted_states_coupled_hierarchical(rshared, rindividual, noiseshared, noiseindividual, coupling_shared, coupling_individual, components, reporter_per_state, traces, interval, method=Tsit5())
+
+# Direct version of the coupled hierarchical case that takes raw parameters.
+# """
+# function predicted_states_coupled_hierarchical(rshared, rindividual, noiseshared, noiseindividual, coupling_shared, coupling_individual, components, reporter_per_state, traces, interval, method=Tsit5())
+#     states_all = Vector{Vector{Vector{Vector{Int}}}}()
+#     obs_dist_all = Vector{Vector{Vector{Vector{Float64}}}}()
+
+#     for i in eachindex(rindividual)
+#         TC = make_mat_TC(components, rindividual[i], coupling_individual[i])
+#         individual_states, individual_obs = predicted_states_coupled(
+#             rindividual[i],
+#             noiseindividual[i],
+#             coupling_individual[i],
+#             components,
+#             reporter_per_state,
+#             traces[i],
+#             interval,
+#             method
+#         )
+#         push!(states_all, individual_states)
+#         push!(obs_dist_all, individual_obs)
+#     end
+
+#     return states_all, obs_dist_all
+# end
+
+

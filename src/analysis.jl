@@ -1060,6 +1060,37 @@ function make_vector(x, n)
     end
 end
 
+
+#########
+# New functions
+#########
+function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+    reporter, components = make_reporter_components(transitions, G, R, S, insertstep, splicetype, probfn, noiseparams, coupling)
+    if hierarchical
+        n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
+        nindividuals = length(trace[1])
+        ratestart = nhypersets * n_all_params + 1
+        hierarchy = HierarchicalTrait(nhypersets, n_all_params, 0, nindividuals, ratestart, ratestart, [], [])
+        rshared, rindividual = prepare_rates(rin, hierarchy)
+        rshared, noiseshared = prepare_rates_noiseparams(rshared, nrates, hierarchy)
+        rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, nrates, hierarchy)
+        r = (rshared, rindividual, noiseshared, noiseindividual)
+
+    end
+    ts, td = predicted_states(r, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
+
+    if !isempty(coupling)
+        units = []
+        for s in ts
+            push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+        end
+        return units
+    end
+
+end
+
+
+#########
 """
     make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 
@@ -1421,7 +1452,7 @@ function write_residency_G_allgenes(fileout::String, filein::String, G, header)
     close(f)
 end
 
-function write_residency_G(file, ratetype="median", transitions = ([1,2], [2,1], [2,3], [3,2]), nnoiseparams = 4)
+function write_residency_G(file, ratetype="median", transitions=([1, 2], [2, 1], [2, 3], [3, 2]), nnoiseparams=4)
     println(file)
     r = readrates(file, get_row(ratetype))
     parts = fields(file)
@@ -1435,7 +1466,7 @@ function write_residency_G(file, ratetype="median", transitions = ([1,2], [2,1],
     end
 end
 
-function write_residency_G_folder(folder, transitions = ([1,2], [2,1], [2,3], [3,2]), nnoiseparams = 4)
+function write_residency_G_folder(folder, transitions=([1, 2], [2, 1], [2, 3], [3, 2]), nnoiseparams=4)
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f)

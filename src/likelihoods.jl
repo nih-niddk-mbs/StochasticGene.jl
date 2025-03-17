@@ -120,7 +120,7 @@ end
 
 
 
-####### trait system
+####### GRMSmodel
 
 """
 1. if hierarchical trait is present then, reshape rates into matrix with rows pertaining to rate/parameter and columns pertaining to shared, hyper, or individuals
@@ -257,6 +257,15 @@ function prepare_grid(rates::Vector{T}, ngrid) where {T<:AbstractArray}
 end
 
 """
+    prepare_rates_coupled(r, nrates, reporter, couplingindices)
+"""
+function prepare_rates_coupled(r, nrates, reporter, couplingindices)
+    rates, noiseparams = prepare_rates_noiseparams(r, nrates, reporter)
+    couplingStrength = prepare_coupling(r, couplingindices)
+    return rates, noiseparams, couplingStrength
+end
+
+"""
     prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
 """
 function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
@@ -266,6 +275,9 @@ function prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
 end
 
+"""
+    prepare_rates_coupled_hierarchical(r, param, nrates, coupling, hierarchy, reporter)
+"""
 function prepare_rates_coupled_hierarchical(r, param, nrates, coupling, hierarchy, reporter)
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     couplingshared = prepare_coupling(rshared, coupling.couplingindices)
@@ -275,6 +287,28 @@ function prepare_rates_coupled_hierarchical(r, param, nrates, coupling, hierarch
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
 end
 
+"""
+    prepare_rates_grid(r, nrates, reporter, gridindices)
+"""
+function prepare_rates_grid(r, nrates, reporter, gridindices)
+    rates, noiseparams = prepare_rates_noiseparams(r, nrates, reporter)
+    pgrid = prepare_grid(r, gridindices)
+    return rates, noiseparams, pgrid
+end
+
+"""
+    prepare_rates_coupled_grid(r, nrates, reporter, couplingindices, gridindices)
+"""
+function prepare_rates_coupled_grid(r, nrates, reporter, couplingindices, gridindices)
+    rates, noiseparams = prepare_rates_noiseparams(r, nrates, reporter)
+    couplingStrength = prepare_coupling(r, couplingindices)
+    pgrid = prepare_grid(r, gridindices)
+    return rates, noiseparams, couplingStrength, pgrid
+end
+
+"""
+    prepare_rates_hierarchical_grid(r, param, nrates, hierarchy, grid, reporter)
+"""
 function prepare_rates_hierarchical_grid(r, param, nrates, hierarchy, grid, reporter)
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     pgridshared = prepare_grid(rshared, grid)
@@ -284,6 +318,9 @@ function prepare_rates_hierarchical_grid(r, param, nrates, hierarchy, grid, repo
     return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual
 end
 
+"""
+    prepare_rates_coupled_hierarchical_grid(r, param, nrates, coupling, hierarchy, grid, reporter)
+"""
 function prepare_rates_coupled_hierarchical_grid(r, param, nrates, coupling, hierarchy, grid, reporter)
     rshared, rindividual, pindividual, rhyper = prepare_rates(r, param, hierarchy)
     couplingshared = prepare_coupling(rshared, coupling.couplingindices)
@@ -308,9 +345,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
     r = get_rates(param, model)
-    rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
-    couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    return rates, noiseparams, couplingStrength
+    prepare_rates_coupled(r, model.nrates, model.reporter, model.trait.coupling.couplingindices)
 end
 
 """
@@ -334,21 +369,19 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
-    rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
-    pgrid = prepare_grid(r, model.trait.grid.gridindices)
-    return rates, noiseparams, pgrid
+    prepare_rates_grid(r, model.nrates, model.reporter, model.trait.grid.gridindices)   
 end
+
 
 """
     prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :grid,)}}
     r = get_rates(param, model)
-    rates, noiseparams = prepare_rates_noiseparams(r, model.nrates, model.reporter)
-    couplingStrength = prepare_coupling(r, model.trait.coupling.couplingindices)
-    pgrid = prepare_grid(r, model.trait.grid.gridindices)
-    return rates, noiseparams, couplingStrength, pgrid
+    prepare_rates_coupled_grid(r, model.nrates, model.reporter, model.trait.coupling.couplingindices, model.trait.grid.gridindices)
 end
+
+
 
 """
     prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
