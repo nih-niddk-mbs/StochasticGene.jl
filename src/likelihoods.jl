@@ -1066,7 +1066,7 @@ end
 
 compute number of transition rates (not counting noise parameters)
 """
-function num_rates(transitions, R, S, insertstep)
+function num_rates(transitions::Tuple, R, S, insertstep)
     if R > 0
         if insertstep > R
             throw("insertstep>R")
@@ -1083,7 +1083,7 @@ function num_rates(transitions, R, S, insertstep)
 end
 
 
-function num_rates(transitions, R::Tuple, S::Tuple, insertstep::Tuple)
+function num_rates(transitions::Tuple, R::Tuple, S::Tuple, insertstep::Tuple)
     n = Vector{Int}(undef, length(R))
     for i in eachindex(R)
         n[i] = num_rates(transitions[i], R[i], S[i], insertstep[i])

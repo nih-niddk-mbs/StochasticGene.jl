@@ -141,6 +141,7 @@ export
     write_dataframes,
     write_dataframes_only,
     write_histograms,
+    write_residency_G_folder,
     write_RNAhistogram,
     write_traces,
     write_traces_coupling,

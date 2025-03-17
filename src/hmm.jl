@@ -1379,11 +1379,34 @@ function predicted_states(r::Matrix, nT, components::TComponents, n_noiseparams:
     states, observation_dist
 end
 
-
+function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(R)
+        s = sourceStates[i]
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
+end
 function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
     sourceStates = coupling[3]
-    # r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, nrates, reporter, couplingindices)
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
+    # r, couplingStrength, noiseparams = prepare_rates_coupled(rates, nrates, reporter, couplingindices)
     nT = components.N
     a, p0 = make_ap(r, couplingStrength, interval, components)
     states = Array[]
@@ -1422,12 +1445,6 @@ function predicted_states(rates::Tuple, coupling, transitions, G::Tuple, R, S, i
         push!(units, [unit_state(i, G, R, S, coupling[1]) for i in spath])
         push!(observation_dist, [[d[i] for d in d] for i in spath])
     end
-    # units = Vector[]
-    # observation_dist = Vector[]
-    # for s in states
-    #     push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
-    #     push!(observation_dist, [[d[i] for d in d] for i in s])
-    # end
     units, observation_dist
 end
 

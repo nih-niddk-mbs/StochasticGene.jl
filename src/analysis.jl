@@ -1452,7 +1452,7 @@ function write_residency_G_allgenes(fileout::String, filein::String, G, header)
     close(f)
 end
 
-function write_residency_G(file, ratetype="median", transitions=([1, 2], [2, 1], [2, 3], [3, 2]), nnoiseparams=4)
+function write_residency_G(file, ratetype="median", transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), nnoiseparams=4)
     println(file)
     r = readrates(file, get_row(ratetype))
     parts = fields(file)
@@ -1461,12 +1461,15 @@ function write_residency_G(file, ratetype="median", transitions=([1, 2], [2, 1],
     if G isa Int
         CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G)))
     else
+        if G[1] == 2 && G[2] == 2
+            transitions = (([1, 2], [2, 1]), ([1, 2], [2, 1]))
+        end
         nrates = num_rates(transitions, R, S, insertstep) .+ nnoiseparams
         CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G, nrates)))
     end
 end
 
-function write_residency_G_folder(folder, transitions=([1, 2], [2, 1], [2, 3], [3, 2]), nnoiseparams=4)
+function write_residency_G_folder(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f)
