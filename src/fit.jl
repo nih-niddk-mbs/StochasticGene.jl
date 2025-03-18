@@ -784,7 +784,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
             lnp = isempty(noisepriors) ? 0 : length(noisepriors[i])
             n = num_rates(transitions[i], R[i], S[i], insertstep[i])
             rcv[s+n] = 0.1
-            rcv[s+n+1:s+n+lnp] ./= factor
+            rcv[couplingindices] ./= factor
             s += n + lnp
         end
     else

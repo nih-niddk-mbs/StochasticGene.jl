@@ -551,9 +551,9 @@ function rlabels_GRSM_grid(labels)
 end
 
 function rlabels_GRSM_hierarchical(labelsin, model)
-    labels = labelsin
-    for i in 1:model.trait.hierarchical.nhypersets
-        labels = hcat(labels, "shared_" .* labelsin)
+    labels = "hyper_" .* labelsin
+    for i in 2:model.trait.hierarchical.nhypersets
+        labels = hcat(labels, "hyper_" .* labelsin)
     end
     for i in 1:model.trait.hierarchical.nindividuals
         labels = hcat(labels, labelsin)
