@@ -622,13 +622,7 @@ function forward_grid(a, a_grid, b, p0)
     return α, C
 end
 
-"""
-    forward(a, b, p0)
-
-TBW
-"""
-function forward(a::Matrix, b, p0)
-    N, T = size(b)
+function forward(a::Matrix, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
     α[:, 1] = p0 .* b[:, 1]
@@ -644,6 +638,16 @@ function forward(a::Matrix, b, p0)
         α[:, t] *= C[t]
     end
     return α, C
+end
+
+"""
+    forward(a, b, p0)
+
+TBW
+"""
+function forward(a::Matrix, b, p0)
+    N, T = size(b)
+    forward(a, b, p0, N, T)
 end
 
 function forward(atuple::Tuple, b::Array, p0)
