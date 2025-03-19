@@ -232,9 +232,9 @@ function test_predicted_states(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), 
         n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + length(noisepriors[i])
         runit = rtarget[k+1:k+n]
         k += n
-        df[i] = StochasticGene.make_traces_dataframe(tracesingle[i], interval, runit, transitions[i], G[i], R[i], S[i], insertstep[i])
+        df[i] = StochasticGene.make_traces_dataframe_new(tracesingle[i], interval, runit, transitions[i], G[i], R[i], S[i], insertstep[i])
     end
-    dfjoint = StochasticGene.make_traces_dataframe(trace, interval, rtarget, transitions, G, R, S, insertstep, 1, -1, prob_Gaussian, 4, "", true, false, coupling)
+    dfjoint = StochasticGene.make_traces_dataframe_new(trace, interval, rtarget, transitions, G, R, S, insertstep, prob_Gaussian, 4, "", true, false, coupling)
      # println("*")
     #     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1))
     #     priormean = set_priormean([], transitions, R, S, insertstep, decayrate, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, coupling, nothing)
