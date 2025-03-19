@@ -681,6 +681,33 @@ function forward(a::Matrix, b, p0, N, T)
     return α, C
 end
 
+# using CUDA
+
+# function forward_gpu(A, B, O, α_init)
+#     T = length(O)        # Number of time steps
+#     N = size(A, 1)       # Number of states (60,000)
+    
+#     # Move data to GPU
+#     A_gpu = CuArray(A)
+#     B_gpu = CuArray(B)
+#     α_gpu = CuArray(α_init)
+#     O_gpu = CuArray(O)
+
+#     # Allocate space for alpha values
+#     α = CUDA.zeros(N, T) # (60,000 × T) matrix
+
+#     # Initialize first time step
+#     α[:, 1] .= α_gpu .* B_gpu[:, O_gpu[1]]
+
+#     # Compute forward probabilities
+#     for t in 2:T
+#         α[:, t] .= A_gpu' * α[:, t-1] .* B_gpu[:, O_gpu[t]]
+#     end
+
+#     return Array(α)  # Move results back to CPU
+# end
+
+
 """
     forward_matrixmult(a, b, p0, N, T)
 
