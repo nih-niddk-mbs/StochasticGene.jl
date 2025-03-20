@@ -16,7 +16,7 @@ return total loglikelihood of traces with reporter noise and loglikelihood of ea
 """
 function ll_hmm(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm(r, nT, n_noiseparams, reporters_per_state, probfn, trace[1], a, p0)
     return ll + lb, lp
 end
@@ -35,7 +35,7 @@ end
 function ll_hmm_2(r, nT, components::TRGComponents, n_noiseparams::Int, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
     d = probfn(r[end-n_noiseparams+1:end], reporters_per_state, nT)
-    lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
     logpredictions = Array{Float64}(undef, 0)
     for t in trace[1]
         T = length(t)
@@ -73,7 +73,7 @@ function ll_hmm_coupled_2(r, couplingStrength, noiseparams::Vector, components, 
         push!(logpredictions, sum(log.(C)))
     end
     offstates = [r.offstates for r in reporter]
-    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_off_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
     sum(logpredictions) + lb, logpredictions
 end
 
@@ -90,7 +90,7 @@ function ll_hmm_coupled(r, couplingStrength, noiseparams::Vector, components, re
         push!(logpredictions, sum(log.(C)))
     end
     offstates = [r.offstates for r in reporter]
-    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_background_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = prod(trace[3]) > 0.0 ? length(trace[1]) * ll_off_coupled(a, p0, offstates, trace[3], trace[4]) : 0.0
     sum(logpredictions) + lb, logpredictions
 end
 
@@ -114,11 +114,11 @@ function ll_hmm_grid(r, noiseparams, pgrid, Nstate, Ngrid, components::TRGCompon
     sum(logpredictions), logpredictions
 end
 """
-    ll_background(a, p0, offstates, weight, n)
+    ll_off(a, p0, offstates, weight, n)
 
 L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 """
-function ll_background(a, p0, offstates, poff, nframes)
+function ll_off(a, p0, offstates, poff, nframes)
     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
     -(1 - poff) * log(1 - p) - poff * log(p)
 end
@@ -126,14 +126,14 @@ end
 p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^nframes)
 
 """
-    ll_background_coupled(a, p0, offstates, weight, n)
+    ll_off_coupled(a, p0, offstates, weight, n)
 
 TBW
 """
-function ll_background_coupled(a, p0, offstates, weight::Vector, nframes)
+function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
     l = 0
     for i in eachindex(weight)
-        l += ll_background(a, p0, offstates[i], weight[i], nframes)
+        l += ll_off(a, p0, offstates[i], weight[i], nframes)
     end
     l
 end
@@ -180,7 +180,7 @@ TBW
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, elementsT, nT)
-    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
     for (i, t) in enumerate(trace[1])
         T = length(t)
         b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
@@ -198,7 +198,7 @@ TBW
 function ll_hmm_hierarchical_rateshared_background(r::Matrix, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     logpredictions = Array{Float64}(undef, 0)
     a, p0 = make_ap(r[:, 1], interval, components)
-    lb = trace[3] > 0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
     for (i, t) in enumerate(trace[1])
         T = length(t)
         b = set_b(t, r[end-noiseparams+1:end, i], reporters_per_state, probfn, nT)
@@ -212,7 +212,7 @@ end
 
 # function ll_hmm(r, nT, elementsT::Vector, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
 #     a, p0 = make_ap(r, interval, elementsT, nT)
-#     lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+#     lb = trace[3] > 0.0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
 #     ll, lp = ll_hmm(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
 #     return ll + lb, lp
 # end
@@ -223,7 +223,7 @@ end
 """
 function ll_hmm_log(r, nT, components::TRGComponents, noiseparams, reporters_per_state, probfn, offstates, interval, trace)
     a, p0 = make_ap(r, interval, components)
-    lb = trace[3] > 0.0 ? ll_background(a, p0, offstates, trace[3], trace[4]) : 0.0
+    lb = trace[3] > 0.0 ? ll_off(a, p0, offstates, trace[3], trace[4]) : 0.0
     ll, lp = ll_hmm_log(r, nT, noiseparams, reporters_per_state, probfn, trace[1], log.(max.(a, 0)), log.(max.(p0, 0)))
     return ll + lb, lp
 end

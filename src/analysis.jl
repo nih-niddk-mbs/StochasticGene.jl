@@ -1076,8 +1076,7 @@ function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, 
     end
     # model = load_model(data, rin, rin, [], (), transitions, G, R, S, insertstep, "", 1, ones(length(rin)), Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, grid)
     model = load_model(data, rin, rin, [1,2,3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1., .1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
-    # model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
-
+ 
     ts, td = predict_trace(get_param(model), data, model)
 
     # if !isempty(coupling)
@@ -1137,6 +1136,8 @@ end
 
 
 #########
+
+
 """
     make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 

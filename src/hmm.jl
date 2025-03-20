@@ -824,17 +824,17 @@ function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
 end
 
 """
-    ll_background(obs, d, a, p0, weight)
+    ll_off(obs, d, a, p0, weight)
 
 TBW
 """
-# function ll_background(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+# function ll_off(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
 #     b = set_b_background(obs, d)
 #     _, C = forward(a, b, p0)
 #     weight * sum(log.(C))
 # end
 
-# function ll_background(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
+# function ll_off(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
 #     b = set_b(obs, d)
 #     _, C = forward(a, b, p0)
 #     weight * sum(log.(C))
@@ -842,7 +842,7 @@ TBW
 
 
 
-# function ll_background(obs::Vector, d::Vector{T}, a::Matrix, p0, weight) where {T<:Vector}
+# function ll_off(obs::Vector, d::Vector{T}, a::Matrix, p0, weight) where {T<:Vector}
 #     l = 0
 #     for i in eachindex(obs)
 #         b = set_b(obs[i], d)
@@ -852,7 +852,7 @@ TBW
 #     l
 # end
 
-# function ll_background(trace, rates, noiseparams, reporter, interval, components, method)
+# function ll_off(trace, rates, noiseparams, reporter, interval, components, method)
 #     a, p0 = make_ap(rates, interval, components.elementsT, components.nT, method)
 #     d = set_d(noiseparams, reporter, components.nT)
 #     b = set_b(trace[2], d)
@@ -860,7 +860,7 @@ TBW
 #     sum(log.(C)) * trace[3] * length(trace[1])
 # end
 
-function ll_background(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
+function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
     if trace[3] > 0.0
         b = set_b(trace[2], d)
         _, C = forward(a, b, p0)
@@ -870,7 +870,7 @@ function ll_background(trace::Tuple, d::Vector{Distribution{Univariate,Continuou
     end
 end
 
-function ll_background(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method)
+function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method)
     l = 0.0
     components = components.modelcomponents
     dims = [components[i].nT for i in eachindex(components)]
@@ -1025,8 +1025,8 @@ function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter,
     r, noiseparams = r
     a, p0 = make_ap(r, interval, components, method)
     d = set_d(noiseparams, reporter)
-    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_background(trace, d, a, p0)
+    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_off(trace, d, a, p0)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1036,8 +1036,8 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_background(trace, rates, noiseparams, reporter, interval, components, method)
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
     ll, logpredictions = ll_hmm(a, p0, d, trace[1])
     ll + lb, logpredictions
 end
@@ -1047,8 +1047,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
     a, p0 = make_ap(rshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_background(trace, d, a, p0)
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_off(trace, d, a, p0)
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1063,8 +1063,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_background(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_background(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
+    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
+    lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
     if method[2]
         ll, logpredictions = ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1507,13 +1507,13 @@ end
 """
 function predict_trace(a::Matrix, p0::Vector, d, traces)
     states = Vector{Int}[]
-    observation_dist = Vector[]
+    # observation_dist = Vector[]
     for i in eachindex(traces)
         b = set_b(traces[i], d)
-        spath = viterbi(a, b, p0)
+        push!(states, viterbi(a, b, p0))
+        # spath = viterbi(a, b, p0)
         # push!(states, [unit_state(i, 3, 3, S, coupling[1]) for i in spath])
         # push!(observation_dist, [[d[i] for d in d] for i in spath])
-        push!(states, spath)
         # push!(observation_dist, [d[s] for s in spath])
     end
     # states, observation_dist
@@ -1526,15 +1526,12 @@ end
 """
 function predict_trace(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter)
         b = set_b(traces[i], d)
-        spath = viterbi(a, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi(a, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 """
@@ -1543,16 +1540,13 @@ end
 """
 function predict_trace(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], interval, components, method)
         d = set_d(noiseparams[i], reporter)
         b = set_b(traces[i], d)
-        spath = viterbi(a, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi(a, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 """
@@ -1561,16 +1555,13 @@ end
 """
 function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
         d = set_d(noiseparams[i], reporter)
         b = set_b(traces[i], d)
-        spath = viterbi(a, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi(a, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 ### grid trait likelihoods
@@ -1581,14 +1572,11 @@ end
 """
 function predict_trace(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         b = set_b(traces[i], d)
-        spath = viterbi_grid(a, a_grid, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi_grid(a, a_grid, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 """
@@ -1597,15 +1585,12 @@ end
 """
 function predict_trace(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter, Ngrid)
         b = set_b(traces[i], d)
-        spath = viterbi_grid(a, a_grid, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi_grid(a, a_grid, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 """
@@ -1614,17 +1599,14 @@ end
 """
 function predict_trace(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], interval, components, method)
         a_grid = make_a_grid(pgrid, Ngrid)
         d = set_d(noiseparams[i], reporter, Ngrid)
         b = set_b(traces[i], d)
-        spath = viterbi_grid(a, a_grid, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi_grid(a, a_grid, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 """
@@ -1633,17 +1615,14 @@ end
 """
 function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
-    observation_dist = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
         a_grid = make_a_grid(pgrid, Ngrid)
         d = set_d(noiseparams[i], reporter, Ngrid)
         b = set_b(traces[i], d)
-        spath = viterbi_grid(a, a_grid, b, p0)
-        push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        push!(states, viterbi_grid(a, a_grid, b, p0))
     end
-    states, observation_dist
+    states, d
 end
 
 
