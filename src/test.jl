@@ -210,7 +210,7 @@ end
 
 
 function test_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.02, 0.05, 0.2, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([100, 50, 200, 100], [100, 50, 200, 100]), maxtime=300.0, method=Tsit5())
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials; verbose=true)
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials; verbose=false)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], 0.0, 1))
     # coupling = ((1, 2), (tuple(), tuple(1)), (["G2"], String[]), (0, 1), 1)
     rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], coupling)
@@ -218,7 +218,7 @@ function test_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1)
     fittedparam = StochasticGene.set_fittedparam(fittedparam, data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
     model = load_model(data, rinit, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
-    return data, model, options, rinit, rtarget
+    return data, model, options
 end
 
 function test_predicted_states(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.1, 0.3, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 500, 20, 0.1, 0.2, 0.4, 0.2, 0.1, 50, 30, 500, 20, -0.5], rinit=Float64[], nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([50, 30, 500, 20], [50, 30, 500, 20]), maxtime=300.0, decayrate=1.0, totalsteps=20, verbose=false, hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true))
@@ -226,24 +226,23 @@ function test_predicted_states(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), 
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials, hierarchical=(6, rh))
     tracesingle = Vector{Vector{Vector{Float64}}}(undef, length(R))
     df = Vector{DataFrame}(undef, length(R))
-    k = 0
-    for i in eachindex(R)
-        tracesingle[i] = [t[:,i] for t in trace]
-        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + length(noisepriors[i])
-        runit = rtarget[k+1:k+n]
-        k += n
-        df[i] = StochasticGene.make_traces_dataframe_new(tracesingle[i], interval, runit, transitions[i], G[i], R[i], S[i], insertstep[i])
-    end
-    dfjoint = StochasticGene.make_traces_dataframe_new(trace, interval, rtarget, transitions, G, R, S, insertstep, prob_Gaussian, 4, "", true, false, coupling)
+    StochasticGene.make_traces_dataframe_new(trace, interval, rtarget, transitions, G, R, S, insertstep, prob_Gaussian, 4, "", true, false, coupling)
+    # k = 0
+    # for i in eachindex(R)
+    #     tracesingle[i] = [t[:,i] for t in trace]
+    #     n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + length(noisepriors[i])
+    #     runit = rtarget[k+1:k+n]
+    #     k += n
+    #     df[i] = StochasticGene.make_traces_dataframe_new(tracesingle[i], interval, runit, transitions[i], G[i], R[i], S[i], insertstep[i])
+    # end
+    # dfjoint = StochasticGene.make_traces_dataframe_new(trace, interval, rtarget, transitions, G, R, S, insertstep, prob_Gaussian, 4, "", true, false, coupling)
      # println("*")
-    #     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1))
-    #     priormean = set_priormean([], transitions, R, S, insertstep, decayrate, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, coupling, nothing)
-    #     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing)
-    #     fittedparam = set_fittedparam(fittedparam, "tracejoint", transitions, R, S, insertstep, noisepriors, coupling, nothing)
-    #     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
-    #     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
-    #     return data, model, options
-    return df, dfjoint
+    # return df, dfjoint
+end
+
+function test_load(;traceinfo=(1.0, 1., -1, 1.), datapath="data/inhibition/control/", label="", gene="MYC", datacond="gene", datatype="trace", zscoretrace=true)
+    data = load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, 3, zscoretrace)
+    return data
 end
 
 marg(p, dims) = dropdims(sum(p, dims=dims), dims=dims)

@@ -662,24 +662,24 @@ returns forward variable α, and scaling parameter array C using scaled forward 
 α[i,t] = P(O1,...,OT,qT=Si,λ)
 Ct = Prod_t 1/∑_i α[i,t]
 
-"""
-function forward(a::Matrix, b, p0, N, T)
-    α = zeros(N, T)
-    C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / sum(α[:, 1])
-    α[:, 1] *= C[1]
-    for t in 2:T
-        for j in 1:N
-            for i in 1:N
-                forward_inner_operation!(α, a, b, i, j, t)
-            end
-        end
-        C[t] = 1 / sum(α[:, t])
-        α[:, t] *= C[t]
-    end
-    return α, C
-end
+# """
+# function forward(a::Matrix, b, p0, N, T)
+#     α = zeros(N, T)
+#     C = Vector{Float64}(undef, T)
+#     α[:, 1] = p0 .* b[:, 1]
+#     C[1] = 1 / sum(α[:, 1])
+#     α[:, 1] *= C[1]
+#     for t in 2:T
+#         for j in 1:N
+#             for i in 1:N
+#                 forward_inner_operation!(α, a, b, i, j, t)
+#             end
+#         end
+#         C[t] = 1 / sum(α[:, t])
+#         α[:, t] *= C[t]
+#     end
+#     return α, C
+# end
 
 # using CUDA
 
@@ -1499,7 +1499,7 @@ end
 ########################
 # New functions
 ########################
-
+#### Return states and d (not observation_dist)
 
 """
     predict_trace(a::Matrix, p0::Vector, d, traces)
@@ -1511,10 +1511,13 @@ function predict_trace(a::Matrix, p0::Vector, d, traces)
     for i in eachindex(traces)
         b = set_b(traces[i], d)
         spath = viterbi(a, b, p0)
+        # push!(states, [unit_state(i, 3, 3, S, coupling[1]) for i in spath])
+        # push!(observation_dist, [[d[i] for d in d] for i in spath])
         push!(states, spath)
-        push!(observation_dist, [d[s] for s in spath])
+        # push!(observation_dist, [d[s] for s in spath])
     end
-    states, observation_dist
+    # states, observation_dist
+    states, d
 end
 
 """

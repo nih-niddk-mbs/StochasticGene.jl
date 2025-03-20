@@ -1068,27 +1068,27 @@ function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, 
 
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     if hierarchical
-        h = (2, [], ())
+        h = (2, [1], ())
         method = (Tsit5(), true)
     else
         h = ()
         method = Tsit5()
     end
     # model = load_model(data, rin, rin, [], (), transitions, G, R, S, insertstep, "", 1, ones(length(rin)), Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, grid)
-    model = load_model(data, rin, rin, [], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1., .1, probfn, ones(Int, noiseparams), method, h, coupling, nothing)
-    return model
+    model = load_model(data, rin, rin, [1,2,3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1., .1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
+    # model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
 
     ts, td = predict_trace(get_param(model), data, model)
 
-    if !isempty(coupling)
-        units = []
-        for s in ts
-            push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
-        end
-        make_traces_dataframe(ts, units, traces, G, R, S, insertstep, state)
-    else
-        make_traces_dataframe(ts, td, traces, G, R, S, insertstep, state)
-    end
+    # if !isempty(coupling)
+    #     units = []
+    #     for s in ts
+    #         push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+    #     end
+    #     make_traces_dataframe(ts, units, traces, G, R, S, insertstep, state)
+    # else
+    #     make_traces_dataframe(ts, td, traces, G, R, S, insertstep, state)
+    # end
 
 end
 
