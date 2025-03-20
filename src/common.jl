@@ -356,6 +356,7 @@ Structure for GRSM models.
 struct GRSMmodel{TraitType,RateType,nratesType,GType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{TraitType}
     trait::TraitType
     rates::RateType
+    ratetransforms::Vector{Function}
     nrates::nratesType
     Gtransitions::Tuple
     G::GType

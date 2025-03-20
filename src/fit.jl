@@ -277,11 +277,6 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     return fits, stats, measures, data, model, options
 end
 
-"""
-    load_data_trace(datapath, label, gene, datacond, traceinfo, datatype)
-
-TBW
-"""
 
 function set_trace_background(traceinfo, nframes)
     if length(traceinfo) > 4
@@ -299,17 +294,6 @@ function set_trace_background(traceinfo, nframes)
     return background
 end
 
-function set_trace_weight(traceinfo)
-    if traceinfo[4] isa Vector
-        weight = Float64[]
-        for f in traceinfo[4]
-            push!(weight, (1 - f) / f)
-        end
-    else
-        weight = (1 - traceinfo[4]) / traceinfo[4]
-    end
-    return weight
-end
 function set_trace_weight(traceinfo)
     if traceinfo[4] isa Vector
         weight = Float64[]
@@ -598,9 +582,48 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
+function make_ratetransforms(data, transitions, R::Int, S, insertstep, reporter, coupling, grid)
+    ratetransforms = Vector{Function}[]
+    # for i in 1:num_rates(transitions, R, S, insertstep)
+    #     push!(ratetransforms, log)
+    # end
+
+    # for i in eachindex(transitions)
+    #     push!(ratetransforms, make_ratetransforms(transitions[i], R[i], S[i], insertstep[i], reporter[i], coupling[i], grid[i]))
+    # end
+    ratetransforms
+end
+
+# function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
+#     if typeof(reporter) <: HMMReporter
+#         n = reporter.n
+#     elseif typeof(reporter) <: Vector
+#         n = length(reporter)
+#     elseif typeof(reporter) <: Int
+#         n = reporter
+#     else
+#         n = 0
+#     end
+#     c = isempty(coupling) ? 0 : coupling[5]
+#     g = isnothing(grid) ? 0 : 1
+#     # n = typeof(reporter) <: HMMReporter ? reporter.n : 0
+#     # num_rates(transitions, R, S, insertstep) + n
+#     num_rates(transitions, R, S, insertstep) + n + c + g
+# end
+
+# function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter, coupling=tuple(), grid=nothing)
+#     n = 0
+#     for i in eachindex(R)
+#         n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
+#     end
+#     c = isempty(coupling) ? 0 : coupling[5]
+#     g = isnothing(grid) ? 0 : 1
+#     n + c + g
+# end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+    ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, reporter, coupling, grid)
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         ncoupling = coupling[5]
@@ -630,30 +653,30 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         if R == 0
             return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         else
-            return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end
     elseif CBool && GBool && !HBool
         trait = (hierarchical=hierarchicaltrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif CBool && !GBool && HBool
         trait = (grid=gridtrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif CBool && !GBool && !HBool
         trait = (hierarchical=hierarchicaltrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && GBool && HBool
         trait = (coupling=couplingtrait,)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && GBool && !HBool
         trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
     elseif !CBool && !GBool && HBool
         trait = (coupling=couplingtrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         # return GRSMcoupledgridmodel()
     elseif !CBool && !GBool && !HBool
         trait = (coupling=couplingtrait, hierarchical=hierarchicaltrait, grid=gridtrait)
-        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+        return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         # return GRSMcoupledgridhierarchicalmodel()
     end
 
