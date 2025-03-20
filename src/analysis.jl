@@ -1064,6 +1064,24 @@ end
 #########
 # New functions
 #########
+
+function make_observation_dist(d, states, G, R, S, coupling=tuple)
+    observations = Vector[]
+    if typeof(d) <: Vector{<:Vector}
+        units = Vector[]
+        for s in states
+            push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
+            push!(observations, [[d[i] for d in d] for i in s])
+        end
+        return units, observations
+    else
+        for s in states
+            push!(observations, [d[s] for s in s])
+        end
+        return states, observations
+    end
+end
+
 function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing)
 
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
@@ -1074,10 +1092,14 @@ function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, 
         h = ()
         method = Tsit5()
     end
-    # model = load_model(data, rin, rin, [], (), transitions, G, R, S, insertstep, "", 1, ones(length(rin)), Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, grid)
-    model = load_model(data, rin, rin, [1,2,3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1., .1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
- 
-    ts, td = predict_trace(get_param(model), data, model)
+    model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
+
+    ts, d = predict_trace(get_param(model), data, model)
+
+    states, observations = make_observation_dist(d, ts, G, R, S, coupling)
+
+    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state)
+
 
     # if !isempty(coupling)
     #     units = []
@@ -1136,6 +1158,7 @@ end
 
 
 #########
+
 
 
 """
@@ -1230,7 +1253,7 @@ end
 """
 function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
     traces = read_tracefiles(datapath, datacond, start, stop)
-    df = make_traces_dataframe_new(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, nothing)
+    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling)
     CSV.write(outfile, df)
 end
 
