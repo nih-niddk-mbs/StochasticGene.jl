@@ -911,6 +911,21 @@ Transform rates from log space back to original space.
 """
 inverse_transform_rates(p, model::AbstractGeneTransitionModel) = exp.(p)
 
+function inverse_transform_rates(p, model::AbstractGRSMmodel)
+    if hastrait(model, :coupling)
+        return transform_array(p, model.trait.coupling.couplingindices, model.fittedparam, expv, invlog_shift1)
+    else
+        return exp.(p)
+    end
+end
+
+# inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+
+# inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
+
+# inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, model.coupling[2], model.fittedparam, expv, invlog_shift1)
+
+
 """
     get_param(model::AbstractGeneTransitionModel)
 
