@@ -582,7 +582,7 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, transitions, R::Int, S, insertstep, reporter, coupling, grid)
+function make_ratetransforms(data, transitions, R, S, insertstep, reporter, coupling, grid)
     ratetransforms = Vector{Function}[]
     # for i in 1:num_rates(transitions, R, S, insertstep)
     #     push!(ratetransforms, log)

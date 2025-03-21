@@ -1725,7 +1725,7 @@ end
 
 function predict_trace(param, data, model::AbstractGRSMmodel)
     r = prepare_rates(param, model)
-    if !isnothing(model.trait) && haskey(model.trait, :grid)
+    if hastrait(model, :grid)
         predict_trace(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
     else
         predict_trace(r, model.components, model.reporter, data.interval, data.trace, model.method)

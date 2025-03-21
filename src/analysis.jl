@@ -1082,38 +1082,7 @@ function make_observation_dist(d, states, G, R, S, coupling=tuple)
     end
 end
 
-function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing)
-
-    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
-    if hierarchical
-        h = (2, [1], ())
-        method = (Tsit5(), true)
-    else
-        h = ()
-        method = Tsit5()
-    end
-    model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
-
-    ts, d = predict_trace(get_param(model), data, model)
-
-    states, observations = make_observation_dist(d, ts, G, R, S, coupling)
-
-    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state)
-
-
-    # if !isempty(coupling)
-    #     units = []
-    #     for s in ts
-    #         push!(units, [unit_state(i, G, R, S, coupling[1]) for i in s])
-    #     end
-    #     make_traces_dataframe(ts, units, traces, G, R, S, insertstep, state)
-    # else
-    #     make_traces_dataframe(ts, td, traces, G, R, S, insertstep, state)
-    # end
-
-end
-
-function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool)
+function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool, coupling)
     l = maximum(length.(traces))
     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
     pred = ["model_mean$i" => [mean.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
@@ -1133,8 +1102,8 @@ function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertste
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
-function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool)
-    l = maximum(length.(traces))
+function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
+    l = maximum(size.(traces, 1))
     cols = Matrix(undef, length(traces), 0)
     for k in coupling[1]
         data = ["data$i" * "_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
@@ -1155,7 +1124,24 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
-
+function make_traces_dataframe_new(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing)
+    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    if hierarchical
+        h = (2, [1], ())
+        method = (Tsit5(), true)
+    else
+        h = ()
+        method = Tsit5()
+    end
+    if !isempty(coupling)
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
+    else
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, nothing)
+    end
+    ts, d = predict_trace(get_param(model), data, model)
+    states, observations = make_observation_dist(d, ts, G, R, S, coupling)
+    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, coupling)
+end
 
 #########
 
