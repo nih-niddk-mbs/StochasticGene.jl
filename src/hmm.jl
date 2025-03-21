@@ -1526,10 +1526,12 @@ end
 """
 function predict_trace(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
-        d = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], d)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
         push!(states, viterbi(a, b, p0))
+        push!(d, di)
     end
     states, d
 end
@@ -1540,11 +1542,13 @@ end
 """
 function predict_trace(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], interval, components, method)
-        d = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], d)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
         push!(states, viterbi(a, b, p0))
+        push!(d, di)
     end
     states, d
 end
@@ -1555,11 +1559,13 @@ end
 """
 function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
-        d = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], d)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
         push!(states, viterbi(a, b, p0))
+        push!(d, di)
     end
     states, d
 end
@@ -1585,10 +1591,12 @@ end
 """
 function predict_trace(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter, Ngrid)
         b = set_b(traces[i], d)
         push!(states, viterbi_grid(a, a_grid, b, p0))
+        push!(d, d)
     end
     states, d
 end
@@ -1599,12 +1607,14 @@ end
 """
 function predict_trace(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], interval, components, method)
         a_grid = make_a_grid(pgrid, Ngrid)
-        d = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], d)
+        di = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], di)
         push!(states, viterbi_grid(a, a_grid, b, p0))
+        push!(d, di)
     end
     states, d
 end
@@ -1615,12 +1625,14 @@ end
 """
 function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     states = Vector{Int}[]
+    d = Vector[]
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
         a_grid = make_a_grid(pgrid, Ngrid)
-        d = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], d)
+        di = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], di)
         push!(states, viterbi_grid(a, a_grid, b, p0))
+        push!(d, di)
     end
     states, d
 end
