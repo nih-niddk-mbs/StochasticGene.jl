@@ -300,7 +300,7 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int)
 end
 
 function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
-    d = Vector[]
+    d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
     end
@@ -345,7 +345,7 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T) where {
 end
 
 function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
-    d = Vector[]
+    d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
     end
@@ -1629,10 +1629,9 @@ function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector,
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
         a_grid = make_a_grid(pgrid, Ngrid)
-        di = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], di)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
         push!(states, viterbi_grid(a, a_grid, b, p0))
-        push!(d, di)
     end
     states, d
 end

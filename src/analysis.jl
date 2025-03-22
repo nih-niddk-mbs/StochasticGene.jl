@@ -1067,26 +1067,39 @@ end
 
 function make_observation_dist(d, states, G, R, S, coupling=tuple)
     observations = Vector[]
-    if typeof(d) <: Vector{<:Vector{<:Vector}}
-        units = Vector[]
-        for s in eachindex(states)
-            push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
-            push!(observations, [[d[i] for d in d[s]] for i in states[s]])
+    if isempty(coupling)
+        if typeof(d) <: Vector{<:Vector}
+            units = Vector[]
+            for s in eachindex(states)
+                push!(observations, [d[s][i] for i in states[s]])
+            end
+            return states, observations
+        else
+            for s in states
+                push!(observations, [d[s] for s in s])
+            end
+            return states, observations
         end
-        return units, observations
-    elseif typeof(d) <: Vector{<:Vector}
-        units = Vector[]
-        for s in eachindex(states)
-            push!(observations, [d[s][i] for i in states[s]])
-        end
-        return states, observations
     else
-        for s in states
-            push!(observations, [d[s] for s in s])
+        if typeof(d) <: Vector{<:Vector{<:Vector}}
+            units = []
+            for s in eachindex(states)
+                push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
+                push!(observations, [[d[i] for d in d[s]] for i in states[s]])
+            end
+            return units, observations
+        elseif typeof(d) <: Vector{<:Vector}
+            units = []
+            for s in eachindex(states)
+                push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
+                push!(observations, [[d[i] for d in d[s]] for i in states[s]])
+            end
+            return units, observations
         end
-        return states, observations
     end
+
 end
+
 
 function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool, coupling)
     l = maximum(length.(traces))
@@ -1133,7 +1146,7 @@ end
 function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing)
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     if hierarchical
-        h = (2, [1], ())
+        h = (2, [8], ())
         method = (Tsit5(), true)
     else
         h = ()
@@ -1142,7 +1155,7 @@ function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, inse
     if !isempty(coupling)
         model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
     else
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, nothing)
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, (), nothing)
     end
     ts, d = predict_trace(get_param(model), data, model)
     states, observations = make_observation_dist(d, ts, G, R, S, coupling)

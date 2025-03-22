@@ -462,7 +462,7 @@ end
 """
     simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
 
-- `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
+- `hierarchical`: tuple of (background mean index, vector of background means)
 """
 function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
