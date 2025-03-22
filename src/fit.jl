@@ -149,10 +149,12 @@ then G = (2,3).
     4. target transitions:tuple, e.g. ([], 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at transition 4. Transitions
         are number consecutively by order of the transition rates. So for a G=2 model, transition 1 is the G1 to G2 transition and transition 3 is the initiation transition
     5. Int indicating number of coupling parameters
+- `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
+- `ejectnumber=1`: number of mRNAs produced per burst, default is 1
 - `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models, fitted hyper parameters are specified by individual fittedparams)
@@ -193,6 +195,7 @@ then G = (2,3).
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
+- `zeromedian=false`: if true, subtract the median of each trace from each trace and add the maximum of the medians
 
 Example:
 
@@ -206,9 +209,9 @@ julia> fits, stats, measures, data, model, options = fit(nchains = 4)
 function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), ejectnumber=1, datacol=3, zeromedian=false)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if isnothing(rinit)
-        fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol)
+        fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol, zeromedian)
     else
-        fit(readrates(rinit, inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol)
+        fit(readrates(rinit, inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, ejectnumber, datacol, zeromedian)
     end
 end
 
@@ -306,8 +309,8 @@ function set_trace_weight(traceinfo)
     return weight
 end
 
-function zero_median(tracer::Vector{T}, zscoretrace) where T <: AbstractVector
-    if zscoretrace
+function zero_median(tracer::Vector{T}, zeromedian) where T <: AbstractVector
+    if zeromedian
         trace = similar(tracer)
         medians = [median(t) for t in tracer]
         for i in eachindex(tracer)
@@ -334,7 +337,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
     return trace
 end
 
-function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, col=3, zeromedian=true)
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, col=3, zeromedian=false)
     if typeof(datapath) <: String
         tracer = read_tracefiles(datapath, datacond, traceinfo, col)
     else
@@ -349,11 +352,6 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
     weight = set_trace_weight(traceinfo)
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     background = set_trace_background(traceinfo, nframes)
-    # if length(traceinfo) > 4
-    #     background = set_trace_background(traceinfo, nframes)
-    # else
-    #     background = Vector[]
-    # end
     if datatype == "trace" || datatype == "tracejoint"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
     elseif datatype == "tracerna"
@@ -362,21 +360,6 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
     end
 end
 
-"""
-    load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-
-data structure for joint traces
-"""
-# function load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-#     trace = read_tracefiles(datapath, datacond, traceinfo)
-#     weight = Float64[]
-#     for f in traceinfo[4]
-#         # push!(weight, (1 - f) / f * length(trace))
-#         push!(weight, 1 - f)
-#     end
-#     nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-#     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], weight, nframes))
-# end
 
 """
     load_data_grid(datapath, label, gene, datacond, traceinfo)
