@@ -881,6 +881,53 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     return Tc
 end
 
+function make_mat_TC_with_self_coupling(coupling_strength, T, U, V, IT, sources, unit_model)
+    n = length(unit_model)
+    N = prod(size.(IT, 2))
+    Tc = spzeros(N, N)
+    for α in 1:n
+        Tα = T[unit_model[α]]
+        Tα = kron_left(Tα, IT, unit_model, α - 1, 1)
+        Tα = kron_right(Tα, IT, unit_model, α + 1, n)
+        
+        # Add self-coupling case
+        if α ∈ sources[α]  # Check if unit α can couple to itself
+            Vα = V[unit_model[α]]
+            Vα = kron_right(Vα, IT, unit_model, α + 1, n)
+            Vα = kron_left(Vα, IT, unit_model, α - 1, 1)
+            Vα = kron(U[unit_model[α]], Vα)  # Use U matrix of same unit
+            Tα += coupling_strength[sources[α][findfirst(isequal(α), sources[α])]] * Vα
+        end
+        
+        # Original code for coupling from previous units
+        for β in 1:α-1
+            if β ∈ sources[α]
+                Vβ = V[unit_model[α]]
+                Vβ = kron_right(Vβ, IT, unit_model, α + 1, n)
+                Vβ = kron_left(Vβ, IT, unit_model, α - 1, β + 1)
+                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
+                Tα += coupling_strength[sources[α][findfirst(isequal(β), sources[α])]] * Vβ
+            end
+        end
+        
+        # Original code for coupling from later units
+        for β in α+1:n
+            if β ∈ sources[α]
+                Vβ = V[unit_model[α]]
+                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
+                Vβ = kron_right(Vβ, IT, unit_model, α + 1, β - 1)
+                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron_right(Vβ, IT, unit_model, β + 1, n)
+                Tα += coupling_strength[sources[α][findfirst(isequal(β), sources[α])]] * Vβ
+            end
+        end
+        
+        Tc += Tα
+    end
+    return Tc
+end
+
 function make_mat_TC(components::TCoupledComponents{Vector{TRGCoupledUnitComponents}}, rates, coupling_strength)
     T, _, Gt, Gs, _, IR, IT = make_matvec_C(components, rates)
     make_mat_TC(coupling_strength, T, kron.(IR, Gs), kron.(IR, Gt), IT, components.sources, components.model)
