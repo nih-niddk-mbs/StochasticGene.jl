@@ -313,13 +313,15 @@ function zero_median(tracer::Vector{T}, zeromedian) where T <: AbstractVector
     if zeromedian
         trace = similar(tracer)
         medians = [median(t) for t in tracer]
+        maxmedians = maximum(medians)
         for i in eachindex(tracer)
             trace[i] = tracer[i] .- medians[i] .+ maximum(medians)
         end
     else
         trace = tracer
+        maxmedians = 1.0
     end
-    return trace
+    return trace, maxmedians
 end
 
 function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
@@ -333,8 +335,9 @@ function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
         end
     else
         trace = tracer
+        maxmedians = 1.0
     end
-    return trace
+    return trace, maxmedians
 end
 
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, col=3, zeromedian=false)
@@ -344,7 +347,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
         tracer = read_tracefiles(datapath[1], datacond, traceinfo, col)
     end
     (length(tracer) == 0) && throw("No traces")
-    trace = zero_median(tracer, zeromedian)
+    trace, tracescale = zero_median(tracer, zeromedian)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)
     println("datacond: ", datacond)
@@ -353,7 +356,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
     background = set_trace_background(traceinfo, nframes)
     if datatype == "trace" || datatype == "tracejoint"
-        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes))
+        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale))
     elseif datatype == "tracerna"
         len, h = read_rna(gene, datacond, datapath[2])
         return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
@@ -565,8 +568,12 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, transitions, R, S, insertstep, reporter, coupling, grid)
+function make_ratetransforms(data, transitions, R, S, insertstep, nrates, reporter, couplingtrait, hierarchicaltrait, gridtrait)
     ratetransforms = Vector{Function}[]
+    for i in eachindex(nrates)
+        push!(ratetransforms, log)
+    end
+
     # for i in 1:num_rates(transitions, R, S, insertstep)
     #     push!(ratetransforms, log)
     # end
@@ -606,7 +613,6 @@ end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
-    ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, reporter, coupling, grid)
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         ncoupling = coupling[5]
@@ -626,11 +632,15 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
     end
 
+    nrates = num_rates(transitions, R, S, insertstep)
+    ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
+
+
     CBool = isempty(coupling)
     GBool = isnothing(grid)
     HBool = isempty(hierarchical)
 
-    nrates = num_rates(transitions, R, S, insertstep)
+   
 
     if CBool && GBool && HBool
         if R == 0
