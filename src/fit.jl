@@ -633,8 +633,8 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 
     nrates = num_rates(transitions, R, S, insertstep)
-    ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
-
+    # ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
+    ratetransforms = Vector{Function}[]
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
