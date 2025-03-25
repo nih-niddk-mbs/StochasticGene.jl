@@ -222,6 +222,15 @@ The results will be found in a folder called results/HCT116_test, which you can 
 
 In this example run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. Either `maxtime` or `samplesteps` needs to be increased.
 
+The fitted parameters can be used to segment the data traces with the Viterbi algorithm with
+
+```
+julia> write_traces("results/HCT116_test/","data/testtraces","",1.)
+results/HCT116_test/rates_trace-HCT116-nstate__test_3221_1.txt
+
+```
+
+The output will be in a file that begins with predictedtraces.
 
 ### Batch fitting on Biowulf using `swarm`.
 
