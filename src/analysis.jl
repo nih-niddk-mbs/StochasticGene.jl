@@ -1267,15 +1267,15 @@ end
 
 TBW
 """
-function write_trace_dataframe(root, file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_trace_dataframe(folder, file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
     parts = fields(file)
     G, R, S, insertstep = decompose_model(parts.model)
     transitions = get_transitions(G, parts.label)
-    r = readrates(joinpath(root, file), get_row(ratetype))
+    r = readrates(joinpath(folder, file), get_row(ratetype))
     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
-    write_trace_dataframe(joinpath(root, out), datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+    write_trace_dataframe(joinpath(folder, out), datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
 
@@ -1318,71 +1318,71 @@ function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R
 end
 
 ########### Parallelized functions ###########
-"""
-    write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), 
-                                   sources=1:3, targets=1:5, ratetype::String="median", 
-                                   start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, 
-                                   splicetype=""; hlabel="-h", state=true, pattern="gene")
+# """
+#     write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), 
+#                                    sources=1:3, targets=1:5, ratetype::String="median", 
+#                                    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, 
+#                                    splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-Parallelized version of write_traces_coupling using Julia's multi-threading.
-"""
-function write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
-    sources=1:3, targets=1:5, ratetype::String="median",
-    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
-    splicetype=""; hlabel="-h", state=true, pattern="gene")
+# Parallelized version of write_traces_coupling using Julia's multi-threading.
+# """
+# function write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+#     sources=1:3, targets=1:5, ratetype::String="median",
+#     start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+#     splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-    # Collect all tasks that need to be executed
-    tasks = []
+#     # Collect all tasks that need to be executed
+#     tasks = []
 
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f)
-                # Tasks for pattern$source$target files
-                for target in targets
-                    for source in sources
-                        if occursin("$pattern$source$target", f)
-                            coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-                            task_args = (
-                                joinpath(root, f), datapath, datacond, interval, ratetype,
-                                start, stop, probfn, noiseparams, splicetype,
-                                hlabel, state, coupling
-                            )
-                            push!(tasks, task_args)
-                        end
-                    end
+#     for (root, dirs, files) in walkdir(folder)
+#         for f in files
+#             if occursin("rates", f)
+#                 # Tasks for pattern$source$target files
+#                 for target in targets
+#                     for source in sources
+#                         if occursin("$pattern$source$target", f)
+#                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+#                             task_args = (
+#                                 joinpath(root, f), datapath, datacond, interval, ratetype,
+#                                 start, stop, probfn, noiseparams, splicetype,
+#                                 hlabel, state, coupling
+#                             )
+#                             push!(tasks, task_args)
+#                         end
+#                     end
 
-                    # Tasks for R$target files
-                    if occursin("R$target", f)
-                        coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
-                        task_args = (
-                            joinpath(root, f), datapath, datacond, interval, ratetype,
-                            start, stop, probfn, noiseparams, splicetype,
-                            hlabel, state, coupling
-                        )
-                        push!(tasks, task_args)
-                    end
-                end
-            end
-        end
-    end
+#                     # Tasks for R$target files
+#                     if occursin("R$target", f)
+#                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                         task_args = (
+#                             joinpath(root, f), datapath, datacond, interval, ratetype,
+#                             start, stop, probfn, noiseparams, splicetype,
+#                             hlabel, state, coupling
+#                         )
+#                         push!(tasks, task_args)
+#                     end
+#                 end
+#             end
+#         end
+#     end
 
-    # Process each task in parallel using threads
-    @info "Processing $(length(tasks)) files in parallel using $(Threads.nthreads()) threads"
+#     # Process each task in parallel using threads
+#     @info "Processing $(length(tasks)) files in parallel using $(Threads.nthreads()) threads"
 
-    Threads.@threads for task_args in tasks
-        file_path, datapath, datacond, interval, ratetype, start, stop, probfn,
-        noiseparams, splicetype, hlabel, state, coupling = task_args
+#     Threads.@threads for task_args in tasks
+#         file_path, datapath, datacond, interval, ratetype, start, stop, probfn,
+#         noiseparams, splicetype, hlabel, state, coupling = task_args
 
-        try
-            write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
-                start, stop, probfn, noiseparams, splicetype,
-                hlabel=hlabel, state=state, coupling=coupling)
-            @info "Successfully processed: $(basename(file_path))"
-        catch e
-            @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
-        end
-    end
-end
+#         try
+#             write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+#                 start, stop, probfn, noiseparams, splicetype,
+#                 hlabel=hlabel, state=state, coupling=coupling)
+#             @info "Successfully processed: $(basename(file_path))"
+#         catch e
+#             @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+#         end
+#     end
+# end
 
 # Alternative implementation using Threads.@spawn for more dynamic scheduling
 """
@@ -1415,7 +1415,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                             # Create a task for this file
                             t = @spawn begin
                                 try
-                                    write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+                                    write_trace_dataframe(root, file_path, datapath, datacond, interval, ratetype,
                                         start, stop, probfn, noiseparams, splicetype,
                                         hlabel=hlabel, state=state, coupling=coupling)
                                     @info "Successfully processed: $(basename(file_path))"
@@ -1436,7 +1436,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                         # Create a task for this file
                         t = @spawn begin
                             try
-                                write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+                                write_trace_dataframe(root, file_path, datapath, datacond, interval, ratetype,
                                     start, stop, probfn, noiseparams, splicetype,
                                     hlabel=hlabel, state=state, coupling=coupling)
                                 @info "Successfully processed: $(basename(file_path))"
