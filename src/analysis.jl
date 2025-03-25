@@ -1267,14 +1267,14 @@ end
 
 TBW
 """
-function write_trace_dataframe(folder, file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
     filename = basename(file)
     occursin(hlabel, filename) ? hierarchical = true : hierarchical = false
     parts = fields(filename)
     G, R, S, insertstep = decompose_model(parts.model)
     transitions = get_transitions(G, parts.label)
-    r = readrates(joinpath(folder, file), get_row(ratetype))
+    r = readrates(file, get_row(ratetype))
     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
