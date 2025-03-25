@@ -1269,13 +1269,14 @@ TBW
 """
 function write_trace_dataframe(folder, file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
-    occursin(hlabel, file) ? hierarchical = true : hierarchical = false
-    parts = fields(file)
+    filename = basename(file)
+    occursin(hlabel, filename) ? hierarchical = true : hierarchical = false
+    parts = fields(filename)
     G, R, S, insertstep = decompose_model(parts.model)
     transitions = get_transitions(G, parts.label)
     r = readrates(joinpath(folder, file), get_row(ratetype))
     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
-    write_trace_dataframe(joinpath(folder, out), datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
 
@@ -1288,7 +1289,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
             if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
-                write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                write_trace_dataframe(f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
             end
         end
     end
@@ -1305,12 +1306,12 @@ function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R
                 for source in sources
                     # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
                     if occursin("rates", f) && occursin("$pattern$source$target", f)
-                        write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+                        write_trace_dataframe(f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
                     end
                 end
                 if occursin("rates", f) && occursin("R$target", f)
                     coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
-                    write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                    write_trace_dataframe(f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
                 end
             end
         end
@@ -1415,7 +1416,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                             # Create a task for this file
                             t = @spawn begin
                                 try
-                                    write_trace_dataframe(root, file_path, datapath, datacond, interval, ratetype,
+                                    write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
                                         start, stop, probfn, noiseparams, splicetype,
                                         hlabel=hlabel, state=state, coupling=coupling)
                                     @info "Successfully processed: $(basename(file_path))"
@@ -1436,7 +1437,7 @@ function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3,
                         # Create a task for this file
                         t = @spawn begin
                             try
-                                write_trace_dataframe(root, file_path, datapath, datacond, interval, ratetype,
+                                write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
                                     start, stop, probfn, noiseparams, splicetype,
                                     hlabel=hlabel, state=state, coupling=coupling)
                                 @info "Successfully processed: $(basename(file_path))"
