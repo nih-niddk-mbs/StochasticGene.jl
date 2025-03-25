@@ -525,28 +525,28 @@ end
 function filter_gene(measurefile, measure, threshold)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println(length(measures[:, 1]))
+    println("length of measures: ",length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if d[col] > threshold || isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println(length(genes))
+    println("length of genes: ",length(genes))
     return genes
 end
 
 function filter_gene_nan(measurefile, measure)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println(length(measures[:, 1]))
+    println("length of measures: ",length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println(length(genes))
+    println("length of genes: ",length(genes))
     return genes
 end
 """
@@ -629,7 +629,7 @@ end
 """
 function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     h = predictedfn(model.rates[model.fittedparam], data, model)
-    println(h)
+    println("h: ",h)
     deviance(h, datapdf(data))
 end
 
@@ -709,7 +709,7 @@ function join_files(file1::String, file2::String, outfile::String, addlabel::Boo
     end
     header = reshape(permutedims(header), (1, length(head1) + length(head2) - 2))
     header = hcat(head1[1], header)
-    println(header)
+    println("header: ",header)
     writedlm(f, header, ',')
     for row in 1:size(contents1, 1)
         if contents1[row, 1] == contents2[row, 1]
@@ -742,7 +742,7 @@ function join_files(models::Array, files::Array, outfile::String, addlabel::Bool
     end
     header = reshape(permutedims(header), (1, len))
     header = hcat(headers[1][1], header)
-    println(header)
+    println("header: ",header)
     writedlm(f, header, ',')
     for row in 1:size(contents[1], 1)
         content = contents[1][row:row, 2:end]
@@ -885,9 +885,9 @@ function assemble_r(gene, G, folder1, folder2, cond1, cond2, outfolder)
     file1 = getratefile(gene, G, folder1, cond1)[1]
     file2 = getratefile(gene, G, folder2, cond2)[1]
     name = replace(file1, cond1 => cond1 * "-" * cond2)
-    println(name)
+    println("name: ",name)
     outfile = joinpath(outfolder, name)
-    println(outfile)
+    println("outfile: ",outfile)
     assemble_r(joinpath(folder1, file1), joinpath(folder2, file2), outfile)
 end
 
@@ -1068,27 +1068,27 @@ end
 function make_observation_dist(d, states, G, R, S, coupling=tuple)
     observations = Vector[]
     if isempty(coupling)
-        if typeof(d) <: Vector{<:Vector}
+        if eltype(d) <: Distribution
+            for s in states
+                push!(observations, [d[s] for s in s])
+            end
+            return states, observations
+        else
             units = Vector[]
             for s in eachindex(states)
                 push!(observations, [d[s][i] for i in states[s]])
             end
             return states, observations
-        else
-            for s in states
-                push!(observations, [d[s] for s in s])
-            end
-            return states, observations
         end
     else
-        if typeof(d) <: Vector{<:Vector{<:Vector}}
+        if eltype(eltype(d)) <: Distribution
             units = []
             for s in eachindex(states)
                 push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
-                push!(observations, [[d[i] for d in d[s]] for i in states[s]])
+                push!(observations, [[d[i] for d in d] for i in states[s]])
             end
             return units, observations
-        elseif typeof(d) <: Vector{<:Vector}
+        else
             units = []
             for s in eachindex(states)
                 push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
@@ -1267,15 +1267,15 @@ end
 
 TBW
 """
-function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+function write_trace_dataframe(root, file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
     occursin(hlabel, file) ? hierarchical = true : hierarchical = false
     parts = fields(file)
     G, R, S, insertstep = decompose_model(parts.model)
-    r = readrates(file, get_row(ratetype))
-    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
     transitions = get_transitions(G, parts.label)
-    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
+    r = readrates(joinpath(root, file), get_row(ratetype))
+    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
+    write_trace_dataframe(joinpath(root, out), datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
 
@@ -1288,7 +1288,7 @@ function write_traces(folder, datapath::String, datacond, interval, ratetype::St
         for f in files
             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
             if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
-                write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
             end
         end
     end
@@ -1305,12 +1305,12 @@ function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R
                 for source in sources
                     # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
                     if occursin("rates", f) && occursin("$pattern$source$target", f)
-                        write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
+                        write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
                     end
                 end
                 if occursin("rates", f) && occursin("R$target", f)
                     coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
-                    write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
+                    write_trace_dataframe(root, f, datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling)
                 end
             end
         end
@@ -1752,7 +1752,7 @@ end
 function plot_histogram(ratefile::String, datapath; root=".", row=2)
     fish = false
     r = readrow(ratefile, row)
-    println(r)
+    println("r: ",r)
     parts = fields(ratefile)
     label = parts.label
     cond = parts.cond
@@ -1771,8 +1771,8 @@ function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefi
     data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
-    println(typeof(model))
-    println(typeof(data))
+    println("typeof(model): ",typeof(model))
+    println("typeof(data): ",typeof(data))
     m = plot_histogram(data, model)
     return m, data, model
 end
@@ -1842,8 +1842,8 @@ function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false
             display(plt)
         end
     end
-    println(deviance(data, model))
-    println(loglikelihood(get_param(model), data, model)[1])
+    println("deviance: ", deviance(data, model))
+    println("loglikelihood: ",loglikelihood(get_param(model), data, model)[1])  
     return m
 end
 
