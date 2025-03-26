@@ -146,7 +146,6 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
     #     t = t0
     # end # if
 
-
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
         t, index, allele = findmin_tau(tau)   # reaction index and allele for least time transition
@@ -386,6 +385,9 @@ end
 TBW
 """
 function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
+    if r[end] < -1.0
+        throw(ArgumentError("coupling strength is not > -1.0"))
+    end
     if noiseparams isa Number
         noiseparams = fill(noiseparams, length(G))
     end
@@ -460,7 +462,7 @@ end
 """
     simulate_trace_vector(r, transitions, G, R, S, interval, totaltime, ntrials; insertstep=1, onstates=Int[], reporterfn=sum)
 
-- `hierarchical`: tuple of (mean, std, index) for hierarchical parameter
+- `hierarchical`: tuple of (background mean index, vector of background means)
 """
 function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
     trace = Array{Array{Float64}}(undef, ntrials)
@@ -485,15 +487,18 @@ end
 TBW
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
+    if verbose
+        totaltime = 0.0
+        totalsteps = 10
+    end
     for i in eachindex(trace)
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, warmupsteps=100)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=0, verbose=verbose)[1]
         tr = Vector[]
         for t in t
             tr = push!(tr, t[1:end-1, col])

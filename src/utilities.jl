@@ -992,35 +992,7 @@ function mediansmooth(xin, window)
 end
 
 """
-    residenceprob_G(file::String, G, header=false)
-
-Calculates the residence probability of G states from a file.
-
-# Arguments
-- `file`: The file containing the data.
-- `G`: The number of G states.
-- `header`: A boolean indicating whether the file contains a header (default is false).
-
-# Description
-This function calculates the residence probability of G states from the data in the specified file. It reads the rate matrix from the file and computes the residence probabilities for each row in the matrix.
-
-# Returns
-- `Array{Any,2}`: A 2D array where each row contains the residence probabilities for the corresponding row in the rate matrix.
-"""
-function residenceprob_G(file::String, G, header=false)
-    r = get_all_rates(file, header)
-    m = size(r)[1]
-    p = Array{Any,2}(undef, m, G + 1)
-    n = G - 1
-    for i in 1:m
-        p[i, 1] = r[i, 1]
-        p[i, 2:end] = residenceprob_G(r[i, 2:2*n+1], n)
-    end
-    return p
-end
-
-"""
-    residenceprob_G(r::Vector, n::Int)
+    residenceprob_G(r::Vector, G::Int)
 
 Calculates the residence probability of G states given the rates.
 
@@ -1045,20 +1017,79 @@ function residenceprob_G(r::Vector, G::Int)
 end
 
 """
-    splicesiteusage(model::GRSMmodel)
+    residenceprob_G_dataframe(r::Vector, G::Int)
+
+Creates a DataFrame with residence probabilities for G states for a single gene.
+
+# Arguments
+- `r`: Vector of rates
+- `G`: Number of G states
+
+# Returns
+- DataFrame with columns for each G state and their residence probabilities
+"""
+function residenceprob_G_dataframe(r::Vector, G::Int)
+    # Calculate residence probabilities
+    probs = vec(residenceprob_G(r, G))
+    
+    # Create DataFrame with state labels as columns
+    df = DataFrame()
+    for j in 1:G
+        df[!, "G$j"] = [probs[j]]
+    end
+    
+    return df
+end
+
+"""
+    residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
+
+Creates a DataFrame with residence probabilities for G states across multiple genes.
+
+# Arguments
+- `r`: Vector of rates
+- `G`: Tuple containing number of G states for each gene
+- `nrates`: Vector containing number of rates for each gene
+
+# Returns
+- DataFrame with columns for each G state and their residence probabilities
+"""
+function residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
+    # Initialize DataFrame
+    df = DataFrame()
+    k = 1
+    
+    # Calculate residence probabilities for each gene using the Int version
+    for (i, g) in enumerate(G)
+        # Get single gene probabilities using the Int version
+        single_df = residenceprob_G_dataframe(r[k:k+nrates[i]-1], g)
+        
+        # Rename columns to include gene number
+        for col in names(single_df)
+            df[!, "$(col)_$(i)"] = single_df[!, col]
+        end
+        
+        k += nrates[i]
+    end
+    
+    return df
+end
+
+"""
+    splicesiteusage(model::AbstractGRSMmodel)
     splicesiteusage(r::Vector, n::Int, nr::Int)
 
 Calculates the splice site usage for a GRSM model or given rates.
 
 # Arguments
-- `model`: An instance of `GRSMmodel`.
+- `model`: An instance of `AbstractGRSMmodel`.
 - `r`: Rates vector.
 - `G`: Number of states
 - `S`: Number of splice sites.
 
 # Methods
 
-## `splicesiteusage(model::GRSMmodel)`
+## `splicesiteusage(model::AbstractGRSMmodel)`
 
 Calculates the splice site usage for a GRSM model.
 
@@ -1069,7 +1100,7 @@ Calculates the splice site usage given rates, number of states, and number of sp
 # Returns
 - `Vector{Float64}`: Splice site usage probabilities.
 """
-splicesiteusage(model::GRSMmodel) = splicesiteusage(model.rates, model.G, model.R)
+splicesiteusage(model::AbstractGRSMmodel) = splicesiteusage(model.rates, model.G, model.R)
 
 function splicesiteusage(r::Vector, G::Int, S::Int)
     n = G - 1
@@ -1087,8 +1118,8 @@ end
 
 """
     onstate_prob(r::Vector, components::TComponents, reporter_per_state)
-    onstate_prob(param, model::AbstractGmodel)
-    onstate_prob(model::AbstractGmodel)
+    onstate_prob(param, model::AbstractGeneTransitionModel)
+    onstate_prob(model::AbstractGeneTransitionModel)
 
 Calculates the probability of being in the "on" state for a given model or rates.
 
@@ -1097,7 +1128,7 @@ Calculates the probability of being in the "on" state for a given model or rates
 - `components`: An instance of `TComponents`.
 - `reporter_per_state`: A vector indicating the reporter per state.
 - `param`: Parameters for the model.
-- `model`: An instance of `AbstractGmodel`.
+- `model`: An instance of `AbstractGeneTransitionModel`.
 
 # Methods
 
@@ -1105,11 +1136,11 @@ Calculates the probability of being in the "on" state for a given model or rates
 
 Calculates the probability of being in the "on" state given the rates, components, and reporter per state.
 
-## `onstate_prob(param, model::AbstractGmodel)`
+## `onstate_prob(param, model::AbstractGeneTransitionModel)`
 
 Calculates the probability of being in the "on" state given the parameters and model.
 
-## `onstate_prob(model::AbstractGmodel)`
+## `onstate_prob(model::AbstractGeneTransitionModel)`
 
 Calculates the probability of being in the "on" state for a given model.
 
@@ -1122,12 +1153,12 @@ function onstate_prob(r, components::TComponents, reporter_per_state)
     return sum(p0[reporter_per_state.>0]), p0
 end
 
-onstate_prob(param, model::AbstractGmodel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
+onstate_prob(param, model::AbstractGeneTransitionModel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
 
-onstate_prob(model::AbstractGmodel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
+onstate_prob(model::AbstractGeneTransitionModel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 
 """
-    burstoccupancy(model::GRSMmodel)
+    burstoccupancy(model::AbstractGRSMmodel)
     burstoccupancy(n::Int, nr::Int, r::Vector)
 
 Calculates the burst size distribution of a GRS model for total pre-mRNA occupancy and unspliced (visible) occupancy.
@@ -1136,14 +1167,14 @@ Calculates the burst size distribution of a GRS model for total pre-mRNA occupan
 This function calculates the burst size distribution for a given GRS model. It computes the total pre-mRNA occupancy and unspliced (visible) occupancy distributions by marginalizing over the conditional steady-state distribution.
 
 # Arguments
-- `model`: An instance of `GRSMmodel`.
+- `model`: An instance of `AbstractGRSMmodel`.
 - `n`: The number of states.
 - `nr`: The number of splice sites.
 - `r`: A vector representing the rates.
 
 # Methods
 
-## `burstoccupancy(model::GRSMmodel)`
+## `burstoccupancy(model::AbstractGRSMmodel)`
 
 Calculates the burst size distribution for a given GRSM model.
 
@@ -1154,7 +1185,7 @@ Calculates the burst size distribution given the number of states, number of spl
 # Returns
 - `Tuple{Vector{Float64}, Vector{Float64}}`: The total pre-mRNA occupancy and unspliced (visible) occupancy distributions.
 """
-burstoccupancy(model::GRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
+burstoccupancy(model::AbstractGRSMmodel) = burstoccupancy(model.G - 1, model.R, model.rates)
 
 function burstoccupancy(n::Int, nr::Int, r::Vector)
     T = mat_GSR_T(r, n, nr)
@@ -1350,13 +1381,13 @@ function test_steadystatemodel(model::AbstractGMmodel, nhist)
 end
 
 """
-    test_model(data::RNAOnOffData, model::GRSMmodel)
+    test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
 
 Simulates the RNA on-off model with splicing and compares it to the provided data.
 
 # Arguments
 - `data`: An instance of `RNAOnOffData` containing the observed data.
-- `model`: An instance of `GRSMmodel` representing the model to be tested.
+- `model`: An instance of `AbstractGRSMmodel` representing the model to be tested.
 
 # Description
 This function simulates the RNA on-off model with splicing using the provided model parameters and compares the simulated results to the observed data. It uses the `telegraphsplice0` function to perform the simulation.
@@ -1364,7 +1395,7 @@ This function simulates the RNA on-off model with splicing using the provided mo
 # Returns
 - `Nothing`: The function performs the simulation and comparison but does not return a value.
 """
-function test_model(data::RNAOnOffData, model::GRSMmodel)
+function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 
@@ -1680,7 +1711,7 @@ This function calculates the mean elongation time for a given model and rates. I
 # Returns
 - `Float64`: The mean elongation time.
 """
-function mean_elongationtime(r, transitions, R)
+function mean_elongationtime(r, transitions, R::Int)
     if R > 0
         n = length(transitions)
         return meantime(r[n+2:n+R+1])
@@ -1689,6 +1720,13 @@ function mean_elongationtime(r, transitions, R)
     end
 end
 
+function mean_elongationtime(r, transitions, R::Tuple)
+    m = Vector{Float64}(undef, length(R))
+    for i in eachindex(R)
+        m[i] = mean_elongationtime(r, transitions, R[i])
+    end
+    return m
+end
 """
     make_array(v)
 

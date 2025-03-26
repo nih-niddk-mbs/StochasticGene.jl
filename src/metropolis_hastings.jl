@@ -91,12 +91,12 @@ returns fits, stats, measures
 Run Metropolis-Hastings MCMC algorithm and compute statistics of results
 
 -`data`: AbstractExperimentalData structure
--`model`: AbstractGmodel structure with a logprior function
+-`model`: AbstractGeneTransitionModel structure with a logprior function
 -`options`: MHOptions structure
 
 model and data must have a likelihoodfn function
 """
-function run_mh(data::AbstractExperimentalData, model::AbstractGmodel, options::MHOptions)
+function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions)
     fits, waic = metropolis_hastings(data, model, options)
     if options.samplesteps > 0
         stats = compute_stats(fits.param, model)
@@ -112,7 +112,7 @@ end
 run_mh(data,model,options,nchains)
 
 """
-function run_mh(data::AbstractExperimentalData, model::AbstractGmodel, options::MHOptions, nchains)
+function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
     if nchains == 1
         return run_mh(data, model, options)
     else
@@ -405,8 +405,12 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
 end
 
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
+    # mhfactor not needed for symmetric proposal distribution
     # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
-    if rand() < exp((ll + prior - llt - priort) / temp)
+    # if rand() < exp((ll + prior - llt - priort) / temp)
+    # println(mhfactor(param,d,paramt,dt))
+    # println(ll + prior - llt - priort)
+    if log(rand()) < (ll + prior - llt - priort) / temp
         return 1, logpredictionst, paramt, llt, priort, dt
     else
         return 0, logpredictions, param, ll, prior, d
@@ -524,11 +528,11 @@ function proposal_dist(param::Vector, cov::Matrix, model)
 end
 
 """
-proposal_scale(cv::Float64,model::AbstractGmodel)
+proposal_scale(cv::Float64,model::AbstractGeneTransitionModel)
 
 return variance of normal distribution of log(parameter)
 """
-proposal_scale(cv::Float64, model::AbstractGmodel) = sqrt(log(1 + cv^2))
+proposal_scale(cv::Float64, model::AbstractGeneTransitionModel) = sqrt(log(1 + cv^2))
 
 
 """
@@ -661,9 +665,16 @@ function compute_stats(paramin::Array{Float64,2}, model)
     np = size(param, 1)
     madparam = Array{Float64,1}(undef, np)
     qparam = Matrix{Float64}(undef, 3, 0)
-    corparam = cor(param')
-    covparam = cov(param')
-    covlogparam = cov(paramin')
+    if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
+        nrates = num_all_parameters(model)
+        corparam = cor(param[1:nrates, :]')
+        covparam = cov(param[1:nrates, :]')
+        covlogparam = cov(paramin[1:nrates, :]')
+    else
+        corparam = cor(param')
+        covparam = cov(param')
+        covlogparam = cov(paramin')
+    end
     for i in 1:np
         madparam[i] = mad(param[i, :], normalize=false)
         qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
@@ -671,24 +682,24 @@ function compute_stats(paramin::Array{Float64,2}, model)
     Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
 end
 
-function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchicalmodel)
-    param = inverse_transform_rates(paramin, model)
-    meanparam = mean(param, dims=2)
-    stdparam = std(param, dims=2)
-    medparam = median(param, dims=2)
-    np = size(param, 1)
-    madparam = Array{Float64,1}(undef, np)
-    qparam = Matrix{Float64}(undef, 3, 0)
-    nrates = num_rates(model)
-    corparam = cor(param[1:nrates, :]')
-    covparam = cov(param[1:nrates, :]')
-    covlogparam = cov(paramin[1:nrates, :]')
-    for i in 1:np
-        madparam[i] = mad(param[i, :], normalize=false)
-        qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
-    end
-    Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
-end
+# function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchicalmodel)
+#     param = inverse_transform_rates(paramin, model)
+#     meanparam = mean(param, dims=2)
+#     stdparam = std(param, dims=2)
+#     medparam = median(param, dims=2)
+#     np = size(param, 1)
+#     madparam = Array{Float64,1}(undef, np)
+#     qparam = Matrix{Float64}(undef, 3, 0)
+#     nrates = num_all_parameters(model)
+#     corparam = cor(param[1:nrates, :]')
+#     covparam = cov(param[1:nrates, :]')
+#     covlogparam = cov(paramin[1:nrates, :]')
+#     for i in 1:np
+#         madparam[i] = mad(param[i, :], normalize=false)
+#         qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
+#     end
+#     Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
+# end
 """
 compute_rhat(chain::Array{Tuple,1})
 compute_rhat(fits::Array{Fit,1})

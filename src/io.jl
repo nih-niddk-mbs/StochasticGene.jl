@@ -486,14 +486,29 @@ rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fitte
 
 ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
+"""
+    rlabels(model::AbstractGMmodel)
+"""
+function rlabels(model::AbstractGMmodel)
+    labels = String[]
+    for t in model.Gtransitions
+        push!(labels, "Rate$(t[1])$(t[2])")
+    end
+    push!(labels, "Eject")
+    push!(labels, "Decay")
+    if typeof(model.reporter) == HMMReporter
+        for i in 1:model.reporter.n
+            push!(labels, "noiseparam$i")
+        end
+    end
+    reshape(labels, 1, :)
+end
 
 """
-    rlabels(model::AbstractGRSMmodel)
+    rlabels_GRSM(transitions, R, S, reporter, unit=:"")
 
 TBW
 """
-
-
 function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     labels = String[]
     for t in transitions
@@ -517,58 +532,46 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
 end
 
 function rlabels_GRSM(model::AbstractGRSMmodel)
-    rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
-end
-
-function rlabels_GRSM(model::Union{GRSMcoupledmodel,GRSMcoupledhierarchicalmodel})
-    labels = Array{String}(undef, 1, 0)
-    for i in eachindex(model.G)
-        labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
-    end
-    for i in 1:model.coupling[1]
-        labels = hcat(labels, ["Coupling_$i"])
-    end
-    reshape(labels, 1, :)
-end
-
-function rlabels(model::AbstractGRSMmodel)
-    rlabels_GRSM(model)
-end
-
-function rlabels(model::AbstractGRSMhierarchicalmodel)
-    labels = String[]
-    l = rlabels_GRSM(model)
-    for i in 1:model.hierarchy.nhypersets
-        append!(labels, "shared_" .* l)
-    end
-    for i in 1:model.hierarchy.nindividuals
-        append!(labels, l)
-    end
-    reshape(labels, 1, :)
-end
-"""
-    rlabels(model::AbstractGMmodel)
-
-
-"""
-function rlabels(model::AbstractGMmodel)
-    labels = String[]
-    for t in model.Gtransitions
-        push!(labels, "Rate$(t[1])$(t[2])")
-    end
-    push!(labels, "Eject")
-    push!(labels, "Decay")
-    if typeof(model.reporter) == HMMReporter
-        for i in 1:model.reporter.n
-            push!(labels, "noiseparam$i")
+    if hastrait(model, :coupling)
+        labels = Array{String}(undef, 1, 0)
+        for i in eachindex(model.G)
+            labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
         end
+        for i in 1:model.trait.coupling.ncoupling
+            labels = hcat(labels, ["Coupling_$i"])
+        end
+    else
+        labels = rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
     end
-    reshape(labels, 1, :)
+    labels
 end
 
-function rlabels(model::GRSMgridmodel)
-    hcat(rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter), "GridProb")
+function rlabels_GRSM_grid(labels)
+    hcat(labels, "GridProb")
 end
+
+function rlabels_GRSM_hierarchical(labelsin, model)
+    labels = "hyper_" .* labelsin
+    for i in 2:model.trait.hierarchical.nhypersets
+        labels = hcat(labels, "hyper_" .* labelsin)
+    end
+    for i in 1:model.trait.hierarchical.nindividuals
+        labels = hcat(labels, labelsin)
+    end
+    labels
+end
+
+function rlabels(model::GRSMmodel)
+    labels = rlabels_GRSM(model)
+    if hastrait(model, :grid)
+        labels = rlabels_GRSM_grid(labels)
+    end
+    if hastrait(model, :hierarchical)
+        labels = rlabels_GRSM_hierarchical(labels, model)
+    end
+    labels
+end
+
 
 """
     statlabels(model::String, conds, fittedparams)
@@ -603,17 +606,6 @@ optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fi
 
 optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds) "LL" "Convergence"]
 
-function get_all_rates(file::String, header::Bool)
-    r = readdlm(file, ',', header=header)
-    if header
-        r = r[1]
-    end
-    return r
-end
-
-
-
-
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$nalleles")
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
@@ -633,37 +625,30 @@ end
 """
     filename(data, model::AbstractGRSMmodel)
     filename(data, model::AbstractGMmodel)
-    filename(data, model::GRSMcoupledmodel)
+    filename(data, model::GRSMmodel)
 
 return output file names
 """
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
-filename(data, model::GRSMcoupledmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
-
-# function filename(data, model::GRSMcoupledmodel)
-#     m = ""
-#     for i in eachindex(model.G)
-#         m *= "$(model.G[i])$(model.R[i])$(model.S[i])$(model.insertstep[i])"
-#     end
-#     return filename(data.label, data.gene, m, model.nalleles)
-# end
+filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 """
-writeall(path::String,fit,stats,measures,data,temp,model::AbstractGmodel;optimized=0,burst=0)
+writeall(path::String,fit,stats,measures,data,temp,model::AbstractGeneTransitionModel;optimized=0,burst=0)
 """
-function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGmodel; optimized=0, burst=0, writesamples=false)
-    if ~isdir(path)
+function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
+    if !isdir(path)
         mkpath(path)
     end
     name = filename(data, model)
-    if typeof(model) <: AbstractGRSMhierarchicalmodel
-        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-    end
-    write_rates(joinpath(path, "rates" * name), fits, stats, model)
+    labels = rlabels(model)
+    write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-    write_param_stats(joinpath(path, "param-stats" * name), stats, model)
-    write_info(joinpath(path, "info" * name), model)
+    write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
+    write_info(joinpath(path, "info" * name), data, model, labels)
+    if hastrait(model, :hierarchical)
+        write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
+    end
     if optimized != 0
         write_optimized(joinpath(path, "optimized" * name), optimized)
     end
@@ -685,7 +670,6 @@ end
 #     name = filename(data, model)
 #     write_rates(joinpath(path, "rates" * name), fits, stats, model)
 #     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-#     write_param_stats(joinpath(path, "param-stats" * name), stats, model)
 #     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
 #     write_info(joinpath(path, "info" * name), model)
 #     if optimized != 0
@@ -709,24 +693,33 @@ mean
 median
 last accepted
 """
-function write_rates(file::String, fits::Fit, stats, model)
+function write_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model), ',')  # labels
+
+    writedlm(f, labels, ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
+
+    # if haskey(model.trait, :hierarchical)
+    #     writedlm(f, rlabels(model), ',')  # labels
+    #     writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
+    #     writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
+    #     writedlm(f, [get_rates_hierarchical(stats.medparam, model, false)], ',')  # median posterior
+    #     writedlm(f, [get_rates_hierarchical(fits.param[:, end], model)], ',')  # last sample
+    # else
+    #     writedlm(f, rlabels(model), ',')  # labels
+    #     writedlm(f, [get_rates(fits.parml, model)], ',')  # max posterior
+    #     writedlm(f, [get_rates(stats.meanparam, model, false)], ',')  # mean posterior
+    #     writedlm(f, [get_rates(stats.medparam, model, false)], ',')  # median posterior
+    #     writedlm(f, [get_rates(fits.param[:, end], model)], ',')  # last sample
+    # end
     close(f)
 end
 
-function write_rates(file::String, fits::Fit, stats, model::AbstractGRSMhierarchicalmodel)
-    f = open(file, "w")
-    writedlm(f, rlabels(model), ',')  # labels
-    writedlm(f, [get_rates_hierarchical(fits.parml, model)], ',')  # max posterior
-    writedlm(f, [get_rates_hierarchical(stats.meanparam, model, false)], ',')  # mean posterior
-    writedlm(f, [get_rates_hierarchical(stats.medparam, model, false)], ',')  # median posterior
-    writedlm(f, [get_rates_hierarchical(fits.param[:, end], model)], ',')  # last sample
-    close(f)
+function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_rates(file, fits, stats, model, rlabels(model))
 end
 
 function remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
@@ -739,16 +732,20 @@ end
 """
     write_hierarchy(file::String, fits::Fit, stats, model)
 
-write hierarchy parameters into a file for hierarchichal models
+write hierarchy parameters into a file for hierarchical models
 """
-function write_hierarchy(file::String, fits::Fit, stats, model)
+function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, 1:model.hierarchy.nrates], ',')  # labels
-    writedlm(f, [get_rates(fits.parml, model)[1:model.hierarchy.nrates]], ',')  # max posterior
-    writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.hierarchy.nrates]], ',')  # mean posterior
-    writedlm(f, [get_rates(stats.medparam, model, false)[1:model.hierarchy.nrates]], ',')  # median posterior
-    writedlm(f, [get_rates(fits.param[:, end], model)[1:model.hierarchy.nrates]], ',')  # last sample
+    writedlm(f, labels, ',')  # labels
+    writedlm(f, [get_rates(fits.parml, model)[1:model.trait.hierarchical.nrates]], ',')  # max posterior
+    writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # mean posterior
+    writedlm(f, [get_rates(stats.medparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # median posterior
+    writedlm(f, [get_rates(fits.param[:, end], model)[1:model.trait.hierarchical.nrates]], ',')  # last sample
     close(f)
+end
+
+function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
+    write_hierarchy(file, fits, stats, model, rlabels(model))
 end
 
 """
@@ -772,9 +769,9 @@ end
 
 write parameter statistics into a file
 """
-function write_param_stats(file, stats::Stats, model)
+function write_param_stats(file, stats::Stats, model, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
+    writedlm(f, labels[1:1, model.fittedparam], ',')
     writedlm(f, stats.meanparam', ',')
     writedlm(f, stats.stdparam', ',')
     writedlm(f, stats.medparam', ',')
@@ -784,6 +781,10 @@ function write_param_stats(file, stats::Stats, model)
     writedlm(f, stats.covparam, ',')
     writedlm(f, stats.covlogparam, ',')
     close(f)
+end
+
+function write_param_stats(file, stats::Stats, model)
+    write_param_stats(file, stats, model, rlabels(model))
 end
 
 """
@@ -815,15 +816,25 @@ end
 
 TBW
 """
-function write_info(file::String, model)
+function write_info(file::String, data, model, labels)
     f = open(file, "w")
-    writedlm(f, rlabels(model)[1:1, model.fittedparam], ',')
+    writedlm(f, labels, ',')
     writedlm(f, [exp.(mean.(model.rateprior))], ',')
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
     writedlm(f, [model.Gtransitions], ',')
+    writedlm(f, [data.label], ',')
+    writedlm(f, [data.gene], ',')
+    if typeof(data) <: AbstractTraceData
+        writedlm(f, [data.interval], ',')
+    end
     close(f)
 end
+
+function write_info(file::String, data, model)
+    write_info(file, data, model, rlabels(model))
+end
+
 
 """
 write_MHsamples(file::String,samples::Matrix)
@@ -868,7 +879,7 @@ read in rna histograms
 """
 function read_rna(gene, cond, datapath)
     h = readfile(gene, cond, datapath)[:, 1]
-    h = truncate_histogram(h,.99, 1000)
+    h = truncate_histogram(h, 0.99, 1000)
     return length(h), h
 end
 """
@@ -1174,6 +1185,14 @@ function fix_tracefiles(path::String)
     end
 end
 
+function read_allrates_csv(file::String, header::Bool)
+    r = readdlm(file, ',', header=header)
+    if header
+        r = r[1]
+    end
+    return r
+end
+
 """
     readrates(infolder::String, label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int, ratetype::String="median")
 
@@ -1369,17 +1388,6 @@ function read_optimized(file::String)
     ll = readrow(file, 2)
     conv = readrow(file, 3)
     [rates ll conv]
-end
-
-function write_residency_G(fileout::String, filein::String, G, header)
-    rates = get_all_rates(filein, header)
-    n = G - 1
-    f = open(fileout, "w")
-    writedlm(f, ["gene" collect(0:n)'], ',')
-    for r in eachrow(rates)
-        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n)], ',')
-    end
-    close(f)
 end
 
 """

@@ -194,7 +194,8 @@ end
 """
     add_residenceprob!(df::DataFrame)
 
-TBW
+add residence probability of G states to dataframe
+Convention changed from original code. G states are now labeled starting from 1 rather than zero
 """
 function add_residenceprob!(df::DataFrame)
     n = df.Model[1] - 1
@@ -207,7 +208,7 @@ function add_residenceprob!(df::DataFrame)
             Symbol("Rate$(j-1)$j")
             r[2*j-1] = df[i, Symbol("Rate$j$(j-1)")]
             r[2*j] = df[i, Symbol("Rate$(j-1)$j")]
-            g[i, :] = residenceprob_G(r, n)
+            g[i, :] = residenceprob_G(r, n + 1)
         end
     end
     for j in 1:n+1
@@ -524,28 +525,28 @@ end
 function filter_gene(measurefile, measure, threshold)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println(length(measures[:, 1]))
+    println("length of measures: ",length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if d[col] > threshold || isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println(length(genes))
+    println("length of genes: ",length(genes))
     return genes
 end
 
 function filter_gene_nan(measurefile, measure)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println(length(measures[:, 1]))
+    println("length of measures: ",length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println(length(genes))
+    println("length of genes: ",length(genes))
     return genes
 end
 """
@@ -601,22 +602,34 @@ function deviance(fits, data::AbstractTraceData, model)
     end
 end
 
-function deviance(fits, data::AbstractTraceData, model::GRSMcoupledmodel)
-    s = 0
-    for t in data.trace[1]
-        s += sum(sum.(t))
+function deviance(fits, data::AbstractTraceData, model::AbstractGRSMmodel{TraitType}) where {TraitType<:NamedTuple}
+    if hastrait(model, :coupling)
+        # Coupling-specific logic
+        s = 0
+        for t in data.trace[1]
+            s += sum(sum.(t))
+        end
+        return fits.llml / s
+    else
+        # Default logic
+        s = 0
+        for t in data.trace[1]
+            s += sum(sum.(t))
+        end
+        return fits.llml / s
     end
-    fits.llml / s
 end
 
-"""
-    deviance(data::AbstractHistogramData, model::AbstractGmodel)
 
 
 """
-function deviance(data::AbstractHistogramData, model::AbstractGmodel)
+    deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
+
+
+"""
+function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     h = predictedfn(model.rates[model.fittedparam], data, model)
-    println(h)
+    println("h: ",h)
     deviance(h, datapdf(data))
 end
 
@@ -696,7 +709,7 @@ function join_files(file1::String, file2::String, outfile::String, addlabel::Boo
     end
     header = reshape(permutedims(header), (1, length(head1) + length(head2) - 2))
     header = hcat(head1[1], header)
-    println(header)
+    println("header: ",header)
     writedlm(f, header, ',')
     for row in 1:size(contents1, 1)
         if contents1[row, 1] == contents2[row, 1]
@@ -729,7 +742,7 @@ function join_files(models::Array, files::Array, outfile::String, addlabel::Bool
     end
     header = reshape(permutedims(header), (1, len))
     header = hcat(headers[1][1], header)
-    println(header)
+    println("header: ",header)
     writedlm(f, header, ',')
     for row in 1:size(contents[1], 1)
         content = contents[1][row:row, 2:end]
@@ -872,9 +885,9 @@ function assemble_r(gene, G, folder1, folder2, cond1, cond2, outfolder)
     file1 = getratefile(gene, G, folder1, cond1)[1]
     file2 = getratefile(gene, G, folder2, cond2)[1]
     name = replace(file1, cond1 => cond1 * "-" * cond2)
-    println(name)
+    println("name: ",name)
     outfile = joinpath(outfolder, name)
-    println(outfile)
+    println("outfile: ",outfile)
     assemble_r(joinpath(folder1, file1), joinpath(folder2, file2), outfile)
 end
 
@@ -1047,15 +1060,122 @@ function make_vector(x, n)
     end
 end
 
+
+#########
+# New functions
+#########
+
+function make_observation_dist(d, states, G, R, S, coupling=tuple)
+    observations = Vector[]
+    if isempty(coupling)
+        if eltype(d) <: Distribution
+            for s in states
+                push!(observations, [d[s] for s in s])
+            end
+            return states, observations
+        else
+            units = Vector[]
+            for s in eachindex(states)
+                push!(observations, [d[s][i] for i in states[s]])
+            end
+            return states, observations
+        end
+    else
+        if eltype(eltype(d)) <: Distribution
+            units = []
+            for s in eachindex(states)
+                push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
+                push!(observations, [[d[i] for d in d] for i in states[s]])
+            end
+            return units, observations
+        else
+            units = []
+            for s in eachindex(states)
+                push!(units, [unit_state(i, G, R, S, coupling[1]) for i in states[s]])
+                push!(observations, [[d[i] for d in d[s]] for i in states[s]])
+            end
+            return units, observations
+        end
+    end
+
+end
+
+
+function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool, coupling)
+    l = maximum(length.(traces))
+    data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+    pred = ["model_mean$i" => [mean.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
+    predstd = ["model_std$i" => [std.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
+    cols = [data pred predstd]
+    if state
+        g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
+        gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+        cols = hcat(cols, [gs s zs])
+    end
+    # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
+    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
+    DataFrame(permutedims(cols, (2, 1))[:])
+end
+
+function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
+    l = maximum(size.(traces, 1))
+    cols = Matrix(undef, length(traces), 0)
+    for k in coupling[1]
+        data = ["data$i" * "_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
+        pred = ["model_mean$i" * "_$k" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+        predstd = ["std_mean$i" * "_$k" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+        cols = hcat(cols, [data pred predstd])
+        if state
+            index = [[s[k] for s in t] for t in ts]
+            g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
+            gs = ["Gstate$i" * "_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            s = ["Rstate$i" * "_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            zs = ["Reporters$i" * "_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+            cols = hcat(cols, [gs s zs])
+        end
+    end
+    DataFrame(permutedims(cols, (2, 1))[:])
+end
+
+function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing)
+    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    if hierarchical
+        h = (2, [8], ())
+        method = (Tsit5(), true)
+    else
+        h = ()
+        method = Tsit5()
+    end
+    if !isempty(coupling)
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, nothing)
+    else
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, (), nothing)
+    end
+    ts, d = predict_trace(get_param(model), data, model)
+    states, observations = make_observation_dist(d, ts, G, R, S, coupling)
+    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, coupling)
+end
+
+########
+
+
+
 """
     make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 
 TBW
 """
-function make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+function make_traces_dataframe_old(traces, interval, rin, transitions, G::Int, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+
     if hierarchical
         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        rshared = reshape(rin[1:nrates], nrates,1)
+        rshared = reshape(rin[1:nrates], nrates, 1)
         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
         rin = hcat(rin, rshared)
     end
@@ -1085,12 +1205,12 @@ end
 
 TBW
 """
-function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+function make_traces_dataframe_old(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
     noiseparams = make_vector(noiseparams, length(G))
     probfn = make_vector(probfn, length(G))
     if hierarchical
         nall = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
-        rates = reshape(rin, nall, length(traces)+2)
+        rates = reshape(rin, nall, length(traces) + 2)
         noiseindividual = Matrix{Float64}[]
         rshared = Matrix{Float64}[]
         j = 1
@@ -1103,7 +1223,7 @@ function make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, 
         noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
         rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
         couplingStrength = rin[nall:nall]
-        r = (rshared, noiseindividual, couplingStrength) 
+        r = (rshared, noiseindividual, couplingStrength)
     else
         r = copy(rin)
     end
@@ -1136,9 +1256,9 @@ end
 
 
 """
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
     traces = read_tracefiles(datapath, datacond, start, stop)
-    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state, hierarchical, coupling)
+    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling)
     CSV.write(outfile, df)
 end
 
@@ -1149,12 +1269,13 @@ TBW
 """
 function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
     println(file)
-    occursin(hlabel, file) ? hierarchical = true : hierarchical = false
-    parts = fields(file)
+    filename = basename(file)
+    occursin(hlabel, filename) ? hierarchical = true : hierarchical = false
+    parts = fields(filename)
     G, R, S, insertstep = decompose_model(parts.model)
+    transitions = get_transitions(G, parts.label)
     r = readrates(file, get_row(ratetype))
     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
-    transitions = get_transitions(G, parts.label)
     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling)
 end
 
@@ -1198,71 +1319,71 @@ function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R
 end
 
 ########### Parallelized functions ###########
-"""
-    write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), 
-                                   sources=1:3, targets=1:5, ratetype::String="median", 
-                                   start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, 
-                                   splicetype=""; hlabel="-h", state=true, pattern="gene")
+# """
+#     write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), 
+#                                    sources=1:3, targets=1:5, ratetype::String="median", 
+#                                    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, 
+#                                    splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-Parallelized version of write_traces_coupling using Julia's multi-threading.
-"""
-function write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
-    sources=1:3, targets=1:5, ratetype::String="median",
-    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
-    splicetype=""; hlabel="-h", state=true, pattern="gene")
+# Parallelized version of write_traces_coupling using Julia's multi-threading.
+# """
+# function write_traces_coupling_parallel(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+#     sources=1:3, targets=1:5, ratetype::String="median",
+#     start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+#     splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-    # Collect all tasks that need to be executed
-    tasks = []
+#     # Collect all tasks that need to be executed
+#     tasks = []
 
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f)
-                # Tasks for pattern$source$target files
-                for target in targets
-                    for source in sources
-                        if occursin("$pattern$source$target", f)
-                            coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-                            task_args = (
-                                joinpath(root, f), datapath, datacond, interval, ratetype,
-                                start, stop, probfn, noiseparams, splicetype,
-                                hlabel, state, coupling
-                            )
-                            push!(tasks, task_args)
-                        end
-                    end
+#     for (root, dirs, files) in walkdir(folder)
+#         for f in files
+#             if occursin("rates", f)
+#                 # Tasks for pattern$source$target files
+#                 for target in targets
+#                     for source in sources
+#                         if occursin("$pattern$source$target", f)
+#                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+#                             task_args = (
+#                                 joinpath(root, f), datapath, datacond, interval, ratetype,
+#                                 start, stop, probfn, noiseparams, splicetype,
+#                                 hlabel, state, coupling
+#                             )
+#                             push!(tasks, task_args)
+#                         end
+#                     end
 
-                    # Tasks for R$target files
-                    if occursin("R$target", f)
-                        coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
-                        task_args = (
-                            joinpath(root, f), datapath, datacond, interval, ratetype,
-                            start, stop, probfn, noiseparams, splicetype,
-                            hlabel, state, coupling
-                        )
-                        push!(tasks, task_args)
-                    end
-                end
-            end
-        end
-    end
+#                     # Tasks for R$target files
+#                     if occursin("R$target", f)
+#                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                         task_args = (
+#                             joinpath(root, f), datapath, datacond, interval, ratetype,
+#                             start, stop, probfn, noiseparams, splicetype,
+#                             hlabel, state, coupling
+#                         )
+#                         push!(tasks, task_args)
+#                     end
+#                 end
+#             end
+#         end
+#     end
 
-    # Process each task in parallel using threads
-    @info "Processing $(length(tasks)) files in parallel using $(Threads.nthreads()) threads"
+#     # Process each task in parallel using threads
+#     @info "Processing $(length(tasks)) files in parallel using $(Threads.nthreads()) threads"
 
-    Threads.@threads for task_args in tasks
-        file_path, datapath, datacond, interval, ratetype, start, stop, probfn,
-        noiseparams, splicetype, hlabel, state, coupling = task_args
+#     Threads.@threads for task_args in tasks
+#         file_path, datapath, datacond, interval, ratetype, start, stop, probfn,
+#         noiseparams, splicetype, hlabel, state, coupling = task_args
 
-        try
-            write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
-                start, stop, probfn, noiseparams, splicetype,
-                hlabel=hlabel, state=state, coupling=coupling)
-            @info "Successfully processed: $(basename(file_path))"
-        catch e
-            @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
-        end
-    end
-end
+#         try
+#             write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+#                 start, stop, probfn, noiseparams, splicetype,
+#                 hlabel=hlabel, state=state, coupling=coupling)
+#             @info "Successfully processed: $(basename(file_path))"
+#         catch e
+#             @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+#         end
+#     end
+# end
 
 # Alternative implementation using Threads.@spawn for more dynamic scheduling
 """
@@ -1396,6 +1517,47 @@ function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
     end
 end
 
+
+function write_residency_G_allgenes(fileout::String, filein::String, G, header)
+    rates = read_all_rates_csv(filein, header)
+    n = G - 1
+    f = open(fileout, "w")
+    writedlm(f, ["gene" collect(0:n)'], ',')
+    for r in eachrow(rates)
+        writedlm(f, [r[1] residenceprob_G(r[2:2*n+1], n + 1)], ',')
+    end
+    close(f)
+end
+
+function write_residency_G(file, ratetype="median", transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), nnoiseparams=4)
+    println(file)
+    r = readrates(file, get_row(ratetype))
+    parts = fields(file)
+    G, R, S, insertstep = decompose_model(parts.model)
+    out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
+    if G isa Int
+        CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G)))
+    else
+        if G[1] == 2 && G[2] == 2
+            transitions = (([1, 2], [2, 1]), ([1, 2], [2, 1]))
+        end
+        nrates = num_rates(transitions, R, S, insertstep) .+ nnoiseparams
+        CSV.write(out, DataFrame(residenceprob_G_dataframe(r, G, nrates)))
+    end
+end
+
+function write_residency_G_folder(folder)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f)
+                file = joinpath(root, f)
+                println(file)
+                write_residency_G(file)
+            end
+        end
+    end
+
+end
 
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
@@ -1591,7 +1753,7 @@ end
 function plot_histogram(ratefile::String, datapath; root=".", row=2)
     fish = false
     r = readrow(ratefile, row)
-    println(r)
+    println("r: ",r)
     parts = fields(ratefile)
     label = parts.label
     cond = parts.cond
@@ -1610,8 +1772,8 @@ function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefi
     data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
-    println(typeof(model))
-    println(typeof(data))
+    println("typeof(model): ",typeof(model))
+    println("typeof(data): ",typeof(data))
     m = plot_histogram(data, model)
     return m, data, model
 end
@@ -1642,7 +1804,7 @@ function plot_histogram(data::AbstractRNAData{Array{Float64,1}}, model)
     return h
 end
 
-function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
+function plot_histogram(data::RNAOnOffData, model::AbstractGeneTransitionModel, filename="")
     h = predictedarray(model.rates, data, model)
     plt1 = plot(data.bins, h[1])
     plot!(plt1, data.bins, normalize_histogram(data.OFF))
@@ -1658,7 +1820,7 @@ function plot_histogram(data::RNAOnOffData, model::AbstractGmodel, filename="")
     return h
 end
 
-function plot_histogram(data::TraceRNAData, model::AbstractGmodel, filename="")
+function plot_histogram(data::TraceRNAData, model::AbstractGeneTransitionModel, filename="")
     M = make_mat_M(model.components.mcomponents, model.rates)
     h = steady_state(M, model.components.mcomponents.nT, model.nalleles, data.nRNA)
     plt = plot(h)
@@ -1672,7 +1834,6 @@ end
 
 function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false) where {T1<:Array,T2<:Array}
     m = predictedarray(model.rates, data, model)
-    println("*")
     for i in eachindex(m)
         plt = plot(m[i])
         plot!(normalize_histogram(data.histRNA[i]), show=true)
@@ -1682,8 +1843,8 @@ function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false
             display(plt)
         end
     end
-    println(deviance(data, model))
-    println(loglikelihood(get_param(model), data, model)[1])
+    println("deviance: ", deviance(data, model))
+    println("loglikelihood: ",loglikelihood(get_param(model), data, model)[1])  
     return m
 end
 
@@ -1695,7 +1856,3 @@ function plot_histogram(data::RNAData, model::AbstractGMmodel)
     return h
 end
 
-
-# Usage example:
-# (norms, theory, sims, means, errors) = simulate_trials(...)
-# plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
