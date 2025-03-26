@@ -1006,6 +1006,7 @@ function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f)
+                println(f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f))
@@ -1532,7 +1533,7 @@ end
 function write_residency_G(file, ratetype="median", transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), nnoiseparams=4)
     println(file)
     r = readrates(file, get_row(ratetype))
-    parts = fields(file)
+    parts = fields(basename(file))
     G, R, S, insertstep = decompose_model(parts.model)
     out = replace(file, "rates" => "residencyG", ".txt" => ".csv")
     if G isa Int
@@ -1551,7 +1552,6 @@ function write_residency_G_folder(folder)
         for f in files
             if occursin("rates", f)
                 file = joinpath(root, f)
-                println(file)
                 write_residency_G(file)
             end
         end

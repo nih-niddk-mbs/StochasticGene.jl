@@ -1150,7 +1150,7 @@ function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder,
     if R == 0
         println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond)
     else
-        println("Gene: ", gene, "Label: ", datacond, " G R S insertstep: ", G, R, S, insertstep)
+        println("Gene: ", gene, ", datacond: ", datacond, ", G R S insertstep: ", G, R, S, insertstep)
     end
     println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)
@@ -1160,7 +1160,7 @@ end
 function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
     println("Gene: ", gene)
     for i in eachindex(G)
-        println("Label: ", datacond[i], " G R S insertstep: ", G[i], R[i], S[i], insertstep[i])
+        println("datacond: ", datacond[i], ", G R S insertstep: ", G[i], R[i], S[i], insertstep[i])
     end
     println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)
