@@ -81,7 +81,7 @@ export
     make_array,
     make_dataframes,
     make_mat,
-    make_ONOFFhistograms,
+    write_ONOFFhistograms,
     makeswarm,
     make_traces,
     make_traces_dataframe,

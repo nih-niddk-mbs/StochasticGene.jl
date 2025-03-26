@@ -978,11 +978,11 @@ end
 
 
 """
-    make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")
+    write_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="")
 
 simulations and master equation solutions of dwell time histograms
 """
-function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="", simulate=false)
+function write_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile::String="", simulate=false)
     onstates = on_states(G, R, S, insertstep)
     components = TAIComponents(transitions, G, R, S, insertstep, onstates, "")
     T = make_mat_T(components, r)
@@ -1001,18 +1001,18 @@ function make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins; outfile
     return df
 end
 
-function make_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
+function write_ONOFFhistograms(folder::String, bins=collect(1.0:200.0))
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f)
-                println(f)
+                println(joinpath(root, f))
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 r = readrates(joinpath(root, f))
                 out = joinpath(root, replace(f, "rates" => "ONOFF", ".txt" => ".csv"))
                 transitions = get_transitions(G, parts.label)
-                make_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
+                write_ONOFFhistograms(r, transitions, G, R, S, insertstep, bins, outfile=out)
             end
         end
     end

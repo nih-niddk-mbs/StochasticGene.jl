@@ -228,7 +228,7 @@ Model predicted traces using the Viterbi algorithm can be generated with
 
 ```
 julia> write_traces("results/trace-test/","data/testtraces","",1.)
-results/trace-test/rates_trace-TEST-nstate_test_test_3221_1.txt
+results/trace-test/rates_trace-TEST-nstate_testtrace_test_3221_1.txt
 
 ```
 This function will read in all the rate files in the `results/trace-test folder and the output will be in files that begins with predictedtraces, which you can read in with
@@ -242,8 +242,8 @@ This reads it into a dataframe and you can plot it by adding the Julia Plots pac
 ON and OFF dwelltime histograms can be generated with
 
 ```
-julia> make_ONOFFhistograms("results/trace-test/")
-rates_trace-TEST-nstate_testtrace_test_3221_1.txt
+julia> write_ONOFFhistograms("results/trace-test/")
+results/trace-test/rates_trace-TEST-nstate_testtrace_test_3221_1.txt
 
 ```
 where the results will be in files that begin with ONOFF, which you can read in with
@@ -257,7 +257,7 @@ julia> df=CSV.read("results/trace-test/ONOFF_trace-TEST-nstate_testtrace_test_32
 G state residence time probabilities can be generated with
 
 ```
- write_residency_G_folder("results/trace-test/")
+julia> write_residency_G_folder("results/trace-test/")
 results/trace-test/rates_trace-TEST-nstate_testtrace_test_3221_1.txt
 
 ```
