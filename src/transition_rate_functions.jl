@@ -214,7 +214,7 @@ This function modifies the `onstates` vector in place to generate a vector of on
 - `Nothing`: This function modifies the `onstates` vector in place.
 """
 function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
-    (R == 0) && throw("Cannot use empty ON state [] for R = 0")
+    (R == 0) && throw(ArgumentError("Cannot use empty ON state vector ([]) when R = 0. For R = 0 models, specify the ON states explicitly using G states."))
     for i in 1:G, z in 1:base^R
         if any(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
             push!(onstates, state_index(G, i, z))
@@ -551,7 +551,7 @@ This function returns an `Indices` structure based on the provided parameters. I
 """
 function set_indices(ntransitions, R, S, insertstep)
     if insertstep > R > 0
-        throw("insertstep>R")
+        throw(DomainError("insertstep>R"))
     end
     if S > 0
         # Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions + R + R - insertstep + 3)
@@ -567,7 +567,7 @@ set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1],
 
 function set_indices(ntransitions, R, S, insertstep, offset)
     if insertstep > R > 0
-        throw("insertstep>R")
+        throw(DomainError("insertstep>R"))
     end
     if S > 0
         Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), offset .+ collect(ntransitions+R+2:ntransitions+R+S-insertstep+2), offset + ntransitions + R + S - insertstep + 3)

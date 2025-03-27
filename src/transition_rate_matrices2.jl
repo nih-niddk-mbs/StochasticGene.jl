@@ -466,7 +466,7 @@ num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=ba
 """
 function set_indices(ntransitions, R, S, insertstep)
     if insertstep > R > 0
-        throw("insertstep>R")
+        throw(DomainError("insertstep>R"))
     end
     if S > 0
         Indices(collect(1:ntransitions), collect(ntransitions+1:ntransitions+R+1), collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), ntransitions + R + R - insertstep + 3)
@@ -485,7 +485,7 @@ set_indices(ntransitions) = Indices(collect(1:ntransitions), [ntransitions + 1],
 """
 function set_indices(ntransitions, R, S, insertstep, offset)
     if insertstep > R > 0
-        throw("insertstep>R")
+        throw(DomainError("insertstep>R"))
     end
     if S > 0
         Indices(offset .+ collect(1:ntransitions), offset .+ collect(ntransitions+1:ntransitions+R+1), offset .+ collect(ntransitions+R+2:ntransitions+R+R-insertstep+2), offset + ntransitions + R + R - insertstep + 3)

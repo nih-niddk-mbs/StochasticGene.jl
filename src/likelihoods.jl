@@ -1084,7 +1084,7 @@ compute number of transition rates (not counting noise parameters)
 function num_rates(transitions::Tuple, R, S, insertstep)
     if R > 0
         if insertstep > R
-            throw("insertstep>R")
+            throw(DomainError("insertstep>R"))
         end
         if S == 0
             insertstep = 1

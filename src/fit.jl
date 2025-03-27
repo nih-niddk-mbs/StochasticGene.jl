@@ -38,7 +38,7 @@ function get_transitions(G::Int, TransitionType)
             return ([1, 2], [2, 1], [2, 3], [3, 2], [3, 4], [4, 3])
         end
     else
-        throw("transition type unknown")
+        throw(ArgumentError("Transition type unknown for G = $G"))
     end
 end
 
@@ -407,7 +407,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
             load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, datacol, zeromedian)
         end
     else
-        throw("$datatype not included")
+        throw(ArgumentError("Data type '$datatype' not supported"))
     end
 end
 
@@ -830,7 +830,7 @@ TBW
 """
 function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10)
     if isempty(rm)
-        throw("No prior mean")
+        throw(ArgumentError("No prior mean"))
         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
     end
     if priorcv isa Number
@@ -849,7 +849,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
     if length(rcv) == length(rm)
         return distribution_array(transform_array(rm[fittedparam], couplingindices, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
     else
-        throw("priorcv not the same length as prior mean")
+        throw(ArgumentError("priorcv not the same length as prior mean"))
     end
 end
 
@@ -861,7 +861,7 @@ end
 """
 function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor)
     if isempty(rm)
-        throw("No prior mean")
+        throw(ArgumentError("No prior mean"))
         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
     end
     if priorcv isa Number
@@ -875,7 +875,7 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
     if length(rcv) == length(rm)
         return distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
     else
-        throw("priorcv not the same length as prior mean")
+        throw(ArgumentError("priorcv not the same length as prior mean"))
     end
 end
 
@@ -972,7 +972,7 @@ function default_fitted(datatype::String, transitions, R::Int, S::Int, insertste
     fittedparam = collect(1:n-1)
     if occursin("trace", datatype)
         if isnothing(grid)
-            isempty(noiseparams) && throw("noisepriors cannot be empty for trace data")
+            isempty(noiseparams) && throw(ArgumentError("noisepriors cannot be empty for trace data"))
             fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams))
         else
             fittedparam = vcat(fittedparam, collect(n+1:n+noiseparams+1))

@@ -311,7 +311,7 @@ end
 return vector of on state indices for GR and GRS models
 """
 function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
-    (R == 0) && throw("Cannot use empty ON state [] for R = 0")
+    (R == 0) && throw(ArgumentError("Cannot use empty ON state vector ([]) for R = 0"))
     for i in 1:G, z in 1:base^R
         if any(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
             push!(onstates, state_index(G, i, z))

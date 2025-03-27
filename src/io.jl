@@ -139,7 +139,7 @@ function fields(file::String)
             s = Summary_Fields(v[1], v[2], v[3], v[4])
         else
             println(file)
-            throw("Incorrect file name format")
+            throw(ArgumentError("Incorrect file name format"))
         end
     else
         if length(v) == 6
@@ -148,7 +148,7 @@ function fields(file::String)
             s = Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
         else
             println(file)
-            throw("Incorrect file name format")
+            throw(ArgumentError("Incorrect file name format"))
         end
     end
     return s

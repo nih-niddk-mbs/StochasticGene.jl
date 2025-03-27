@@ -1239,16 +1239,16 @@ function set_onoff(onstates, bins, nalleles, coupling)
             bins = [bins]
         end
         if length(bins) != length(onstates)
-            throw("number of time bin vectors do not match number of onstates")
+            throw(ArgumentError("Number of time bin vectors ($(length(bins))) does not match number of onstates ($(length(onstates)))"))
         end
         before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles)
         return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
     else
-        if ~(eltype(onstates) <: Vector && eltype(eltype(onstates)) <: Vector)
-            throw("onstates not a vector of vectors of vectors")
+        if !(eltype(onstates) <: Vector{Vector{T}} where {T})
+            throw(ArgumentError("onstates must be a Vector{Vector{Vector}}, got $(typeof(onstates))"))
         end
         if ~(eltype(bins) <: Vector && eltype(eltype(bins)) <: Vector)
-            throw("bins not a vector of vectors of vectors")
+            throw(ArgumentError("bins must be a Vector{Vector{Vector}}, got $(typeof(bins))"))
         end
 
         tIA = Vector[]
