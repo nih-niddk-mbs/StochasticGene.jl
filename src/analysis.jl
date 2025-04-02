@@ -1614,10 +1614,11 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, t
     lags = collect(-lag:stride:lag)
     cc_mean = zeros(length(lags))
     cc_var = zeros(length(lags))
-    ac1_mean = zeros(61)
-    ac1_var = zeros(61)
-    ac2_mean = zeros(61)
-    ac2_var = zeros(61)
+    lags_ac = collect(0:stride:lag)
+    ac1_mean = zeros(length(lags_ac))
+    ac1_var = zeros(length(lags_ac))
+    ac2_mean = zeros(length(lags_ac))
+    ac2_var = zeros(length(lags_ac))
     linf_norm = Float64[]
     l2_norm = Float64[]
     ac1tuple = (0, ac1_mean, ac1_var)
