@@ -19,6 +19,7 @@ This module provides a comprehensive set of tools for simulating stochastic mode
 - Post-fit analysis and plotting
 - Functions for use on the NIH cluster Biowulf
 - Hidden Markov models
+- GPU-accelerated computations using CUDA
 
 # Included Files
 - `transition_rate_make.jl`: Functions for transition rate calculations.
@@ -35,23 +36,23 @@ This module provides a comprehensive set of tools for simulating stochastic mode
 """
 module StochasticGene
 
-using Distributions
-using StatsBase
-using Statistics
-using DelimitedFiles
-using Dates
-using Distributed
-using LinearAlgebra
-# using Plots
-using SparseArrays
-using OrdinaryDiffEq
-using LSODA
-using DataFrames
-using FFTW
-using Downloads
 using CSV
+using CUDA
+using DataFrames
+using Dates
+using DelimitedFiles
+using Distributed
+using Distributions
+using Downloads
+using FFTW
+using LinearAlgebra
+using LSODA
 using MultivariateStats
 using Optim
+using OrdinaryDiffEq
+using SparseArrays
+using Statistics
+using StatsBase
 
 export
     assemble_all,
@@ -146,7 +147,9 @@ export
     write_traces,
     write_traces_coupling,
     write_traces_coupling_spawn,
-    write_winners
+    write_winners,
+    forward_gpu,
+    run_mcmc_parallel
     
 
 ### Source files

@@ -113,19 +113,94 @@ run_mh(data,model,options,nchains)
 
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
-    if nchains == 1
-        return run_mh(data, model, options)
+    if CUDA.functional()
+        return run_mh_gpu(data, model, options, nchains)
     else
-        sd = run_chains(data, model, options, nchains)
-        chain = extract_chain(sd)
-        waic = pooled_waic(chain)
-        fits = merge_fit(chain)
-        stats = compute_stats(fits.param, model)
-        rhat = compute_rhat(chain)
-        return fits, stats, Measures(waic, vec(rhat))
+        if nchains == 1
+            return run_mh(data, model, options)
+        else
+            sd = run_chains(data, model, options, nchains)
+            chain = extract_chain(sd)
+            waic = pooled_waic(chain)
+            fits = merge_fit(chain)
+            stats = compute_stats(fits.param, model)
+            rhat = compute_rhat(chain)
+            return fits, stats, Measures(waic, vec(rhat))
+        end
     end
 end
 
+"""
+run_mh_gpu(data, model, options, nchains=1)
+
+Run Metropolis-Hastings MCMC algorithm on GPU(s) and compute statistics of results.
+
+# Arguments
+- `data`: AbstractExperimentalData structure
+- `model`: AbstractGeneTransitionModel structure with a logprior function
+- `options`: MHOptions structure
+- `nchains`: Number of chains to run (default: 1)
+
+# Returns
+- fits, stats, measures as in run_mh
+"""
+function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains=1)
+    # Check if CUDA is available
+    if !CUDA.functional()
+        error("CUDA is not available. Please use run_mh instead.")
+    end
+
+    # Get number of available GPUs
+    n_gpus = length(CUDA.devices())
+    if n_gpus == 0
+        error("No CUDA devices available")
+    end
+
+    # If only one chain, run on a single GPU
+    if nchains == 1
+        # Set the active GPU
+        CUDA.device!(0)
+
+        # Run the MCMC chain
+        # The GPU-accelerated functions in hmm.jl will be used automatically
+        fits, waic = metropolis_hastings(data, model, options)
+
+        # Compute statistics if needed
+        if options.samplesteps > 0
+            stats = compute_stats(fits.param, model)
+            rhat = compute_rhat([fits])
+            measures = Measures(waic, vec(rhat))
+        else
+            stats = 0
+            measures = 0
+        end
+
+        return fits, stats, measures
+    else
+        # For multiple chains, run them sequentially on different GPUs
+        chain_results = Vector{Tuple}(undef, nchains)
+
+        # Run chains sequentially, each on a different GPU
+        for chain in 1:nchains
+            # Select GPU for this chain
+            gpu_id = (chain - 1) % n_gpus
+
+            # Set the active GPU for this chain
+            CUDA.device!(gpu_id)
+
+            # Run the MCMC chain
+            # The GPU-accelerated functions in hmm.jl will be used automatically
+            chain_results[chain] = metropolis_hastings(data, model, options)
+        end
+
+        # Process results
+        waic = pooled_waic(chain_results)
+        fits = merge_fit(chain_results)
+        stats = compute_stats(fits.param, model)
+        rhat = compute_rhat(chain_results)
+        return fits, stats, Measures(waic, vec(rhat))
+    end
+end
 
 """
 run_chains(data,model,options,nchains)
@@ -787,4 +862,5 @@ function hist_entropy(hist::Array{Array,1})
     end
     return l
 end
+
 

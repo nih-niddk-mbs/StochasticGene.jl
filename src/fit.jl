@@ -292,7 +292,8 @@ function set_trace_background(traceinfo, nframes)
             background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
         end
     else
-        background = Vector[]
+        throw(ArgumentError("Must include trace background"))
+        # background = Vector[]
     end
     return background
 end

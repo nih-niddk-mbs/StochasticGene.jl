@@ -581,21 +581,25 @@ end
 TBW
 """
 function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+    if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
+        return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+    else
+        α = zeros(Nstate, Ngrid, T)
+        C = Vector{Float64}(undef, T)
+        α[:, :, 1] = p0 .* b[:, :, 1]
+        C[1] = 1 / sum(α[:, :, 1])
+        α[:, :, 1] *= C[1]
+        for t in 2:T
+            for l in 1:Ngrid, k in 1:Nstate
+                for j in 1:Ngrid, i in 1:Nstate
+                    α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+                end
             end
+            C[t] = 1 / sum(α[:, :, t])
+            α[:, :, t] *= C[t]
         end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
+        return α, C
     end
-    return α, C
 end
 
 """
@@ -605,39 +609,37 @@ TBW
 """
 function forward_grid(a, a_grid, b, p0)
     Nstate, Ngrid, T = size(b)
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
-    end
-    return α, C
+    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
 end
 
+"""
+forward(a, b, p0, N, T)
+
+returns forward variable α, and scaling parameter array C using scaled forward algorithm
+α[i,t] = P(O1,...,OT,qT=Si,λ)
+Ct = Prod_t 1/∑_i α[i,t]
+
+# """
 function forward(a::Matrix, b, p0, N, T)
-    α = zeros(N, T)
-    C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / sum(α[:, 1])
-    α[:, 1] *= C[1]
-    for t in 2:T
-        for j in 1:N
-            for i in 1:N
-                forward_inner_operation!(α, a, b, i, j, t)
+    if CUDA.functional() && (N * N * T > 1000)
+        return forward_gpu(a, b, p0, N, T)
+    else
+        α = zeros(N, T)
+        C = Vector{Float64}(undef, T)
+        α[:, 1] = p0 .* b[:, 1]
+        C[1] = 1 / sum(α[:, 1])
+        α[:, 1] *= C[1]
+        for t in 2:T
+            for j in 1:N
+                for i in 1:N
+                    forward_inner_operation!(α, a, b, i, j, t)
+                end
             end
+            C[t] = 1 / sum(α[:, t])
+            α[:, t] *= C[t]
         end
-        C[t] = 1 / sum(α[:, t])
-        α[:, t] *= C[t]
+        return α, C
     end
-    return α, C
 end
 
 """
@@ -655,57 +657,119 @@ function forward(atuple::Tuple, b::Array, p0)
     forward_grid(a, a_grid, b, p0)
 end
 
+
+
 """
-forward(a, b, p0, N, T)
+    forward_gpu(a::Matrix, b, p0, N, T)
 
-returns forward variable α, and scaling parameter array C using scaled forward algorithm
-α[i,t] = P(O1,...,OT,qT=Si,λ)
-Ct = Prod_t 1/∑_i α[i,t]
+GPU-accelerated version of the forward algorithm that computes forward probabilities in parallel.
+Returns the forward variable α and scaling parameter array C.
 
-# """
-# function forward(a::Matrix, b, p0, N, T)
-#     α = zeros(N, T)
-#     C = Vector{Float64}(undef, T)
-#     α[:, 1] = p0 .* b[:, 1]
-#     C[1] = 1 / sum(α[:, 1])
-#     α[:, 1] *= C[1]
-#     for t in 2:T
-#         for j in 1:N
-#             for i in 1:N
-#                 forward_inner_operation!(α, a, b, i, j, t)
-#             end
-#         end
-#         C[t] = 1 / sum(α[:, t])
-#         α[:, t] *= C[t]
-#     end
-#     return α, C
-# end
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
 
-# using CUDA
+# Returns
+- Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
+"""
+function forward_gpu(a::Matrix, b, p0, N, T)
+    # Move data to GPU
+    a_gpu = CuArray(a)
+    b_gpu = CuArray(b)
+    p0_gpu = CuArray(p0)
 
-# function forward_gpu(A, B, O, α_init)
-#     T = length(O)        # Number of time steps
-#     N = size(A, 1)       # Number of states (60,000)
-    
-#     # Move data to GPU
-#     A_gpu = CuArray(A)
-#     B_gpu = CuArray(B)
-#     α_gpu = CuArray(α_init)
-#     O_gpu = CuArray(O)
+    # Allocate GPU arrays for results
+    α_gpu = CuArray{Float64}(undef, N, T)
+    C_gpu = CuArray{Float64}(undef, T)
 
-#     # Allocate space for alpha values
-#     α = CUDA.zeros(N, T) # (60,000 × T) matrix
+    # Initialize first time step
+    α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
+    C_gpu[1] = sum(α_gpu[:, 1])
+    α_gpu[:, 1] ./= C_gpu[1]
 
-#     # Initialize first time step
-#     α[:, 1] .= α_gpu .* B_gpu[:, O_gpu[1]]
+    # Compute forward probabilities using matrix multiplication on GPU
+    for t in 2:T
+        α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
+        C_gpu[t] = sum(α_gpu[:, t])
+        α_gpu[:, t] ./= C_gpu[t]
+    end
 
-#     # Compute forward probabilities
-#     for t in 2:T
-#         α[:, t] .= A_gpu' * α[:, t-1] .* B_gpu[:, O_gpu[t]]
-#     end
+    # Return results back to CPU
+    return Array(α_gpu), Array(C_gpu)
+end
 
-#     return Array(α)  # Move results back to CPU
-# end
+"""
+    forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+
+GPU-accelerated version of the forward_grid algorithm that computes forward probabilities in parallel.
+Returns the forward variable α and scaling parameter array C.
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `Nstate`: Number of states
+- `Ngrid`: Number of grid points
+- `T`: Number of time steps
+
+# Returns
+- Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
+"""
+function forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+    # Move data to GPU
+    a_gpu = CuArray(a)
+    a_grid_gpu = CuArray(a_grid)
+    b_gpu = CuArray(b)
+    p0_gpu = CuArray(p0)
+
+    # Allocate GPU arrays for results
+    α_gpu = CuArray{Float64}(undef, Nstate, Ngrid, T)
+    C_gpu = CuArray{Float64}(undef, T)
+
+    # Initialize first time step
+    α_gpu[:, :, 1] .= p0_gpu .* b_gpu[:, :, 1]
+    C_gpu[1] = sum(α_gpu[:, :, 1])
+    α_gpu[:, :, 1] ./= C_gpu[1]
+
+    # Compute forward probabilities using matrix multiplication on GPU
+    for t in 2:T
+        # Reshape for efficient matrix multiplication
+        α_prev = reshape(α_gpu[:, :, t-1], Nstate * Ngrid, 1)
+        a_combined = kron(a_grid_gpu, a_gpu)  # Kronecker product for combined transitions
+        α_temp = reshape(a_combined * α_prev, Nstate, Ngrid)
+        α_gpu[:, :, t] .= α_temp .* b_gpu[:, :, t]
+
+        C_gpu[t] = sum(α_gpu[:, :, t])
+        α_gpu[:, :, t] ./= C_gpu[t]
+    end
+
+    # Return results back to CPU
+    return Array(α_gpu), Array(C_gpu)
+end
+
+"""
+    forward_grid_gpu(a, a_grid, b, p0)
+
+GPU-accelerated version of forward_grid that automatically determines dimensions.
+Returns the forward variable α and scaling parameter array C.
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+
+# Returns
+- Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
+"""
+function forward_grid_gpu(a, a_grid, b, p0)
+    Nstate, Ngrid, T = size(b)
+    forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+end
 
 
 """
@@ -1101,30 +1165,30 @@ end
 
 # hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
-    rshared, rindividual, _, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
+    rshared, rindividual, _, noiseindividual, _, _, pgridshared, pgridindividual = r
     if method[2]
         a, p0 = make_ap(rshared[1], interval, components, method[1])
         a_grid = make_a_grid(pgridshared[1][1], Ngrid)
-        ll, logpredictions = ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        states, observation_dist = predict_trace(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
     else
-        ll, logpredictions = ll_hmm(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
+        states, observation_dist = predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
     end
     lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
+    ll + sum(lhp), vcat(observation_dist, lhp)
 end
 
 # coupled, hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
-    rshared, rindividual, _, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual, pgridshared, pgridindividual = r
+    rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
     if method[2]
         a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
         a_grid = make_a_grid(pgridshared[1], Ngrid)
-        ll, logpredictions = ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        states, observation_dist = predict_trace(noiseindividual, a, a_grid, p0, reporter, trace[1])
     else
-        ll, logpredictions = ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
+        states, observation_dist = predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1], method[1])
     end
     lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
+    ll + sum(lhp), vcat(observation_dist, lhp)
 end
 
 
@@ -1351,7 +1415,9 @@ function mean_hmm(p0, meanintensity)
     sum(p0 .* meanintensity)
 end
 
-
+########################
+# Old functions
+########################
 """
     predicted_statepath(r::Vector, N::Int, elementsT, noiseparams, reporters_per_state, probfn, T::Int, interval)
     predicted_statepath(r, tcomponents, reporter, T, interval)
@@ -1742,295 +1808,3 @@ function predict_trace(param, data, model::AbstractGRSMmodel)
         predict_trace(r, model.components, model.reporter, data.interval, data.trace, model.method)
     end
 end
-
-#########################################################
-#
-#   Predicted states for different model types
-#   Generated by Cursor
-#
-#########################################################
-
-# """
-#     predicted_states_basic(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-
-# Return predicted state paths using Viterbi algorithm for basic model type.
-# Returns both the state paths and observation distributions.
-
-# # Arguments
-# - `param`: Model parameters
-# - `data`: Trace data
-# - `model`: Basic model (no special traits)
-
-# # Returns
-# - Tuple of (state_paths, observation_distributions)
-# """
-# function predicted_states_basic(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     rates, noiseparams = r
-
-#     return predicted_states_basic(
-#         rates,
-#         noiseparams,
-#         data.interval,
-#         model.components.tcomponents.elementsT,
-#         model.components.tcomponents.nT,
-#         model.reporter.per_state,
-#         data.trace[1],
-#         model.method
-#     )
-# end
-
-# """
-#     predicted_states_grid(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-
-# Return predicted state paths for grid model type.
-# """
-# function predicted_states_grid(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     rates, noiseparams, pgrid = r
-
-#     return predicted_states_grid(
-#         rates,
-#         noiseparams,
-#         pgrid,
-#         model.grid,
-#         data.interval,
-#         model.components.tcomponents.elementsT,
-#         model.components.tcomponents.nT,
-#         model.reporter.per_state,
-#         data.trace[1],
-#         model.method
-#     )
-# end
-
-# """
-#     predicted_states_coupled(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-
-# Return predicted state paths for coupled model type.
-# """
-# function predicted_states_coupled(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     rates, noiseparams = r
-#     coupling_strength = prepare_coupling_strength(param, model)
-
-#     return predicted_states_coupled(
-#         rates,
-#         noiseparams,
-#         coupling_strength,
-#         model.components,
-#         model.reporter.per_state,
-#         data.trace[1],
-#         data.interval,
-#         model.method
-#     )
-# end
-
-# """
-#     predicted_states_hierarchical(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-
-# Return predicted state paths for hierarchical model type.
-# """
-# function predicted_states_hierarchical(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     rshared, rindividual, noiseshared, noiseindividual = r
-
-#     return predicted_states_hierarchical(
-#         rshared,
-#         rindividual,
-#         noiseshared,
-#         noiseindividual,
-#         data.interval,
-#         model.components.tcomponents.elementsT,
-#         model.components.tcomponents.nT,
-#         model.reporter.per_state,
-#         data.trace[1],
-#         model.method
-#     )
-# end
-
-# """
-#     predicted_states(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-
-# Main dispatch function for predicted states. Routes to appropriate method based on model traits.
-# """
-# function predicted_states(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     if !isnothing(model.trait)
-#         if haskey(model.trait, :grid)
-#             return predicted_states_grid(param, data, model)
-#         elseif haskey(model.trait, :coupling)
-#             if haskey(model.trait, :hierarchical)
-#                 # Handle combined coupling + hierarchical case
-#                 r = prepare_rates(param, model)
-#                 rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
-
-#                 return predicted_states_coupled_hierarchical(
-#                     rshared,
-#                     rindividual,
-#                     noiseshared,
-#                     noiseindividual,
-#                     couplingshared,
-#                     couplingindividual,
-#                     model.components,
-#                     model.reporter.per_state,
-#                     data.trace[1],
-#                     data.interval,
-#                     model.method
-#                 )
-#             else
-#                 return predicted_states_coupled(param, data, model)
-#             end
-#         elseif haskey(model.trait, :hierarchical)
-#             return predicted_states_hierarchical(param, data, model)
-#         end
-#     end
-#     return predicted_states_basic(param, data, model)
-# end
-
-# """
-#     predicted_states_basic(rates, noiseparams, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-
-# Direct version of predicted_states_basic that takes raw parameters instead of data/model objects.
-
-# # Arguments
-# - `rates`: Model transition rates
-# - `noiseparams`: Noise parameters
-# - `interval`: Time interval between observations
-# - `elementsT`: Transition matrix elements
-# - `nT`: Number of states
-# - `reporter_per_state`: Reporter states per model state
-# - `traces`: Vector of observation traces
-# - `method`: Integration method (default: Tsit5())
-
-# # Returns
-# - Tuple of (state_paths, observation_distributions)
-# """
-# function predicted_states_basic(rates, noiseparams, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-#     a, p0 = make_ap(rates, interval, elementsT, nT, method)
-#     d = set_d(noiseparams, reporter_per_state)
-
-#     states = Vector{Vector{Int}}()
-#     obs_dist = Vector{Vector{Float64}}()
-
-#     for obs in traces
-#         b = set_b(obs, d)
-#         path = viterbi(a, b, p0)
-#         push!(states, path)
-#         push!(obs_dist, b)
-#     end
-
-#     return states, obs_dist
-# end
-
-# """
-#     predicted_states_grid(rates, noiseparams, pgrid, ngrid, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-
-# Direct version of predicted_states_grid that takes raw parameters.
-# """
-# function predicted_states_grid(rates, noiseparams, pgrid, ngrid, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-#     a, p0 = make_ap(rates, interval, elementsT, nT, method)
-#     d = set_d(noiseparams, reporter_per_state)
-
-#     states = Vector{Vector{Int}}()
-#     obs_dist = Vector{Vector{Float64}}()
-
-#     for (i, obs) in enumerate(traces)
-#         grid_idx = div(i - 1, ngrid) + 1
-#         b = set_b(obs, d, pgrid[grid_idx])
-#         path = viterbi(a, b, p0)
-#         push!(states, path)
-#         push!(obs_dist, b)
-#     end
-
-#     return states, obs_dist
-# end
-
-# """
-#     predicted_states_coupled(rates, noiseparams, coupling_strength, components, reporter_per_state, traces, interval, method=Tsit5())
-
-# Direct version of predicted_states_coupled that takes raw parameters.
-# """
-# function predicted_states_coupled(rates, noiseparams, coupling_strength, components, reporter_per_state, traces, interval, method=Tsit5())
-#     states_all = Vector{Vector{Vector{Int}}}()
-#     obs_dist_all = Vector{Vector{Vector{Float64}}}()
-
-#     for α in eachindex(components.modelcomponents)
-#         states = Vector{Vector{Int}}()
-#         obs_dist = Vector{Vector{Float64}}()
-
-#         TC = make_mat_TC(components, rates, coupling_strength)
-#         p0 = normalized_nullspace(TC)
-#         d = set_d(noiseparams[α], reporter_per_state[α])
-
-#         for obs in traces[α]
-#             b = set_b(obs, d)
-#             path = viterbi(TC, b, p0)
-#             push!(states, path)
-#             push!(obs_dist, b)
-#         end
-
-#         push!(states_all, states)
-#         push!(obs_dist_all, obs_dist)
-#     end
-
-#     return states_all, obs_dist_all
-# end
-
-# """
-#     predicted_states_hierarchical(rshared, rindividual, noiseshared, noiseindividual, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-
-# Direct version of predicted_states_hierarchical that takes raw parameters.
-# """
-# function predicted_states_hierarchical(rshared, rindividual, noiseshared, noiseindividual, interval, elementsT, nT, reporter_per_state, traces, method=Tsit5())
-#     states = Vector{Vector{Vector{Int}}}()
-#     obs_dist = Vector{Vector{Vector{Float64}}}()
-
-#     for i in eachindex(rindividual)
-#         a, p0 = make_ap(rindividual[i], interval, elementsT, nT, method)
-#         d = set_d(noiseindividual[i], reporter_per_state)
-
-#         individual_states = Vector{Vector{Int}}()
-#         individual_obs = Vector{Vector{Float64}}()
-
-#         for obs in traces[i]
-#             b = set_b(obs, d)
-#             path = viterbi(a, b, p0)
-#             push!(individual_states, path)
-#             push!(individual_obs, b)
-#         end
-
-#         push!(states, individual_states)
-#         push!(obs_dist, individual_obs)
-#     end
-
-#     return states, obs_dist
-# end
-
-# """
-#     predicted_states_coupled_hierarchical(rshared, rindividual, noiseshared, noiseindividual, coupling_shared, coupling_individual, components, reporter_per_state, traces, interval, method=Tsit5())
-
-# Direct version of the coupled hierarchical case that takes raw parameters.
-# """
-# function predicted_states_coupled_hierarchical(rshared, rindividual, noiseshared, noiseindividual, coupling_shared, coupling_individual, components, reporter_per_state, traces, interval, method=Tsit5())
-#     states_all = Vector{Vector{Vector{Vector{Int}}}}()
-#     obs_dist_all = Vector{Vector{Vector{Vector{Float64}}}}()
-
-#     for i in eachindex(rindividual)
-#         TC = make_mat_TC(components, rindividual[i], coupling_individual[i])
-#         individual_states, individual_obs = predicted_states_coupled(
-#             rindividual[i],
-#             noiseindividual[i],
-#             coupling_individual[i],
-#             components,
-#             reporter_per_state,
-#             traces[i],
-#             interval,
-#             method
-#         )
-#         push!(states_all, individual_states)
-#         push!(obs_dist_all, individual_obs)
-#     end
-
-#     return states_all, obs_dist_all
-# end
-
-
