@@ -9,6 +9,9 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
+using CUDA
+using CUDA: @allowscalar
+
 """
     fkf!(du,u::Matrix, p, t)
 
@@ -679,18 +682,18 @@ function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}
     # Use proper GPU array operations instead of scalar indexing
     α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
     
-    # Use @allowscalar for operations that require scalar indexing
-    @allowscalar C_gpu[1] = sum(α_gpu[:, 1])
-    @allowscalar α_gpu[:, 1] ./= C_gpu[1]
+    # Use CUDA.@allowscalar for operations that require scalar indexing
+    CUDA.@allowscalar C_gpu[1] = sum(α_gpu[:, 1])
+    CUDA.@allowscalar α_gpu[:, 1] ./= C_gpu[1]
     
     # Compute forward probabilities using matrix multiplication on GPU
     for t in 2:T
         # Use proper GPU array operations
         α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
         
-        # Use @allowscalar for operations that require scalar indexing
-        @allowscalar C_gpu[t] = sum(α_gpu[:, t])
-        @allowscalar α_gpu[:, t] ./= C_gpu[t]
+        # Use CUDA.@allowscalar for operations that require scalar indexing
+        CUDA.@allowscalar C_gpu[t] = sum(α_gpu[:, t])
+        CUDA.@allowscalar α_gpu[:, t] ./= C_gpu[t]
     end
     
     # Return results back to CPU
