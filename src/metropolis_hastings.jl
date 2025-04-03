@@ -114,6 +114,7 @@ run_mh(data,model,options,nchains)
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
     if CUDA.functional()
+        println("CUDA is functional")
         return run_mh_gpu(data, model, options, nchains)
     else
         if nchains == 1
@@ -149,22 +150,30 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
     if !CUDA.functional()
         error("CUDA is not available. Please use run_mh instead.")
     end
-
+    
     # Get number of available GPUs
     n_gpus = length(CUDA.devices())
     if n_gpus == 0
         error("No CUDA devices available")
     end
-
+    
+    # Print GPU information
+    println("Running on $(n_gpus) GPU(s):")
+    for i in 1:n_gpus
+        device = CUDA.devices()[i]
+        println("  GPU $i: $(device.name) with $(device.total_memory / 1024^3) GB memory")
+    end
+    
     # If only one chain, run on a single GPU
     if nchains == 1
         # Set the active GPU
         CUDA.device!(0)
-
+        println("Running single chain on GPU 0")
+        
         # Run the MCMC chain
         # The GPU-accelerated functions in hmm.jl will be used automatically
         fits, waic = metropolis_hastings(data, model, options)
-
+        
         # Compute statistics if needed
         if options.samplesteps > 0
             stats = compute_stats(fits.param, model)
@@ -174,25 +183,26 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
             stats = 0
             measures = 0
         end
-
+        
         return fits, stats, measures
     else
         # For multiple chains, run them sequentially on different GPUs
         chain_results = Vector{Tuple}(undef, nchains)
-
+        
         # Run chains sequentially, each on a different GPU
         for chain in 1:nchains
             # Select GPU for this chain
             gpu_id = (chain - 1) % n_gpus
-
+            
             # Set the active GPU for this chain
             CUDA.device!(gpu_id)
-
+            println("Running chain $chain on GPU $gpu_id")
+            
             # Run the MCMC chain
             # The GPU-accelerated functions in hmm.jl will be used automatically
             chain_results[chain] = metropolis_hastings(data, model, options)
         end
-
+        
         # Process results
         waic = pooled_waic(chain_results)
         fits = merge_fit(chain_results)

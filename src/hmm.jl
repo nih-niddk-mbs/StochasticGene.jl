@@ -660,43 +660,35 @@ end
 
 
 """
-    forward_gpu(a::Matrix, b, p0, N, T)
+    forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}, N::Int64, T::Int64)
 
-GPU-accelerated version of the forward algorithm that computes forward probabilities in parallel.
+GPU-accelerated version of the forward algorithm.
 Returns the forward variable α and scaling parameter array C.
-
-# Arguments
-- `a`: Transition probability matrix
-- `b`: Emission probability matrix
-- `p0`: Initial state distribution
-- `N`: Number of states
-- `T`: Number of time steps
-
-# Returns
-- Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
 """
-function forward_gpu(a::Matrix, b, p0, N, T)
+function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}, N::Int64, T::Int64)
     # Move data to GPU
     a_gpu = CuArray(a)
     b_gpu = CuArray(b)
     p0_gpu = CuArray(p0)
-
-    # Allocate GPU arrays for results
-    α_gpu = CuArray{Float64}(undef, N, T)
-    C_gpu = CuArray{Float64}(undef, T)
-
+    
+    # Allocate GPU arrays for α and C
+    α_gpu = CUDA.zeros(Float64, N, T)
+    C_gpu = CUDA.zeros(Float64, T)
+    
     # Initialize first time step
+    # Use proper GPU array operations instead of scalar indexing
     α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
     C_gpu[1] = sum(α_gpu[:, 1])
     α_gpu[:, 1] ./= C_gpu[1]
-
+    
     # Compute forward probabilities using matrix multiplication on GPU
     for t in 2:T
+        # Use proper GPU array operations
         α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
         C_gpu[t] = sum(α_gpu[:, t])
         α_gpu[:, t] ./= C_gpu[t]
     end
-
+    
     # Return results back to CPU
     return Array(α_gpu), Array(C_gpu)
 end
