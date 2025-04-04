@@ -158,12 +158,12 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
         error("No CUDA devices available")
     end
     
-    # Print GPU information
-    println("Running on $(n_gpus) GPU(s):")
-    for i in 1:n_gpus
-        device = devices[i]
-        println("  GPU $i: $(device.name) with $(device.total_memory / 1024^3) GB memory")
-    end
+    # # Print GPU information
+    # println("Running on $(n_gpus) GPU(s):")
+    # for i in 1:n_gpus
+    #     device = devices[i]
+    #     println("  GPU $i: $(device) with $(device.total_memory / 1024^3) GB memory")
+    # end
     
     # If only one chain, run on a single GPU
     if nchains == 1
