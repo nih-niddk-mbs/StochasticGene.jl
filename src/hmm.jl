@@ -660,8 +660,6 @@ function forward(atuple::Tuple, b::Array, p0)
     forward_grid(a, a_grid, b, p0)
 end
 
-
-
 """
     forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}, N::Int64, T::Int64)
 
@@ -683,8 +681,8 @@ function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}
     α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
     
     # Use CUDA.@allowscalar for operations that require scalar indexing
-    CUDA.@allowscalar C_gpu[1] = sum(α_gpu[:, 1])
-    CUDA.@allowscalar α_gpu[:, 1] ./= C_gpu[1]
+    CUDA.@allowscalar C_gpu[1] = 1 / sum(α_gpu[:, 1])
+    CUDA.@allowscalar α_gpu[:, 1] *= C_gpu[1]
     
     # Compute forward probabilities using matrix multiplication on GPU
     for t in 2:T
@@ -692,8 +690,8 @@ function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}
         α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
         
         # Use CUDA.@allowscalar for operations that require scalar indexing
-        CUDA.@allowscalar C_gpu[t] = sum(α_gpu[:, t])
-        CUDA.@allowscalar α_gpu[:, t] ./= C_gpu[t]
+        CUDA.@allowscalar C_gpu[t] = 1 / sum(α_gpu[:, t])
+        CUDA.@allowscalar α_gpu[:, t] *= C_gpu[t]
     end
     
     # Return results back to CPU
