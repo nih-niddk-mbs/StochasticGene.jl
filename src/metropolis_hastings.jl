@@ -152,7 +152,8 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
     end
     
     # Get number of available GPUs
-    n_gpus = length(CUDA.devices())
+    devices = collect(CUDA.devices())
+    n_gpus = length(devices)
     if n_gpus == 0
         error("No CUDA devices available")
     end
@@ -160,7 +161,7 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
     # Print GPU information
     println("Running on $(n_gpus) GPU(s):")
     for i in 1:n_gpus
-        device = CUDA.devices()[i]
+        device = devices[i]
         println("  GPU $i: $(device.name) with $(device.total_memory / 1024^3) GB memory")
     end
     
