@@ -882,6 +882,13 @@ function read_rna(gene, cond, datapath)
     h = truncate_histogram(h, 0.99, 1000)
     return length(h), h
 end
+
+function read_rnacount(gene, cond, datapath)
+    c = readfile(gene, cond, datapath)
+    countsRNA = c[:, 1]
+    yieldfactor = c[:, 2]
+    return countsRNA, yieldfactor
+end
 """
     readfiles(gene::String, cond::String, datapath::Vector)
 

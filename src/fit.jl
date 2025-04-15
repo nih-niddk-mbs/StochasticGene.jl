@@ -175,7 +175,7 @@ then G = (2,3).
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
-- `onstates::Vector{Int}=Int[]`: vector of on or sojourn states, e.g. [[2,3],Int[]], use empty vector for R states, do not use Int[] for R=0 models
+- `onstates=Int[]`: vector of on or sojourn states, e.g. [2], if multiple onstates are desired, use vector of vectors, e.g. [[2,3],Int[]], use empty vector for R states or vector of empty vectors for R states in coupled models, do not use Int[] for R=0 models
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
@@ -190,7 +190,8 @@ then G = (2,3).
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `traceinfo=(1.0, 1., -1, 1.)`: 4-tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces); for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7]) 
+- `traceinfo=(1.0, 1., -1, 1., [100.,10.])`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background noise parameters, e.g. [mean, std]); for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [[1000., 100.], [1000., 100.]]) 
+    If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
@@ -353,9 +354,14 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
     println("datapath: ", datapath)
     println("datacond: ", datacond)
     println("traceinfo: ", traceinfo)
-    weight = set_trace_weight(traceinfo)
     nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
-    background = set_trace_background(traceinfo, nframes)
+    if length(traceinfo) > 3 && traceinfo[4] != 1.0
+        weight = set_trace_weight(traceinfo)
+        background = set_trace_background(traceinfo, nframes)
+    else
+        weight = 0.0
+        background = 0.0
+    end
     if datatype == "trace" || datatype == "tracejoint"
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale))
     elseif datatype == "tracerna"
@@ -385,6 +391,10 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
     if datatype == "rna"
         len, h = read_rna(gene, datacond, datapath)
         return RNAData(label, gene, len, h)
+    elseif datatype == "rnacount"
+        countsRNA, yieldfactor = read_rnacount(gene, datacond, datapath)
+        nRNA = quantile(countsRNA, 0.99)
+        return RNACountData(label, gene, nRNA, countsRNA, yieldfactor)
     elseif datatype == "rnaonoff"
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
@@ -574,43 +584,8 @@ function make_ratetransforms(data, transitions, R, S, insertstep, nrates, report
     for i in eachindex(nrates)
         push!(ratetransforms, log)
     end
-
-    # for i in 1:num_rates(transitions, R, S, insertstep)
-    #     push!(ratetransforms, log)
-    # end
-
-    # for i in eachindex(transitions)
-    #     push!(ratetransforms, make_ratetransforms(transitions[i], R[i], S[i], insertstep[i], reporter[i], coupling[i], grid[i]))
-    # end
     ratetransforms
 end
-
-# function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
-#     if typeof(reporter) <: HMMReporter
-#         n = reporter.n
-#     elseif typeof(reporter) <: Vector
-#         n = length(reporter)
-#     elseif typeof(reporter) <: Int
-#         n = reporter
-#     else
-#         n = 0
-#     end
-#     c = isempty(coupling) ? 0 : coupling[5]
-#     g = isnothing(grid) ? 0 : 1
-#     # n = typeof(reporter) <: HMMReporter ? reporter.n : 0
-#     # num_rates(transitions, R, S, insertstep) + n
-#     num_rates(transitions, R, S, insertstep) + n + c + g
-# end
-
-# function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, reporter, coupling=tuple(), grid=nothing)
-#     n = 0
-#     for i in eachindex(R)
-#         n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
-#     end
-#     c = isempty(coupling) ? 0 : coupling[5]
-#     g = isnothing(grid) ? 0 : 1
-#     n + c + g
-# end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
@@ -640,8 +615,6 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     CBool = isempty(coupling)
     GBool = isnothing(grid)
     HBool = isempty(hierarchical)
-
-   
 
     if CBool && GBool && HBool
         if R == 0
@@ -673,7 +646,6 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         return GRSMmodel{typeof(trait),typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(trait, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         # return GRSMcoupledgridhierarchicalmodel()
     end
-
 end
 
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)

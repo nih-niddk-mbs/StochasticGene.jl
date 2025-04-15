@@ -66,6 +66,14 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     histRNA::hType
 end
 
+struct RNACountData <: AbstractHistogramData
+    label::String
+    gene::String
+    nRNA::Int
+    countsRNA::Vector{Int}
+    yieldfactor::Vector{Float64}
+end
+
 struct DwellTimeData <: AbstractHistogramData
     label::String
     gene::String

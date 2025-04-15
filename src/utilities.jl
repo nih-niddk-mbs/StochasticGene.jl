@@ -1402,7 +1402,7 @@ end
 """
     make_histograms(folder::String, file::String, label::String)
 
-Creates histograms from data in a file and saves them to a specified folder.
+Creates histograms from cell counts data in a file and saves them to a specified folder.
 
 # Arguments
 - `folder`: The folder where the histograms will be saved.
@@ -1429,6 +1429,35 @@ function make_histograms(folder, file, label)
         close(f)
     end
 end
+
+function make_gene_counts(folder, file, label)
+    if ~ispath(folder)
+        mkpath(folder)
+    end
+    a, h = readdlm(file, header=true)
+    for r in eachrow(a)
+        f = open("$folder/$(r[1])_$label.txt", "w")
+        a = r[2:end]
+        a = a[(a.!="").&(a.!="NA")]
+        writedlm(f, h)
+        close(f)    
+    end
+end
+
+function read_cell_counts(file)
+    a, h = readdlm(file, header=true)
+    return a, h
+end
+
+function get_cell_counts(count_matrix)
+    if typeof(count_matrix[1, 1]) <: AbstractString
+        c = sum(count_matrix[:, 2:end], dims=1)
+    else
+        c = sum(count_matrix, dims=1)
+    end
+    S = sum(c)
+    return c, S
+end 
 
 """
     make_histogram(r)

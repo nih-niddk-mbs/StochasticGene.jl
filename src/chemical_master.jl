@@ -334,7 +334,7 @@ technical_loss(mhist,yieldfactor)
 
 Reduce counts due to technical loss
 """
-function technical_loss!(mhist::Vector, yieldfactor)
+function technical_loss!(mhist::Vector{<:Vector}, yieldfactor)
     for i in eachindex(mhist)
         mhist[i] = technical_loss(mhist[i], yieldfactor, length(mhist[i]))
     end
@@ -348,11 +348,21 @@ function technical_loss(mhist::Vector, yieldfactor, nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
         d = Binomial(m - 1, clamp(yieldfactor, 0.0, 1.0))
-        for c in 1:nhist
+        for c in 1:m+1
             p[c] += mhist[m] * pdf(d, c - 1)
         end
     end
     normalize_histogram(p)
+end
+
+function technical_loss_at_k(k::Int, mhist, yieldfactor, nhist)
+    pmf = normalize_histogram(mhist)
+    p = 0
+    for m in k:nhist
+        d = Binomial(m, clamp(yieldfactor, 0.0, 1.0))
+        p += pmf[m+1] * pdf(d, k)
+    end
+    return p
 end
 """
 technical_loss_poisson(mhist,yieldfactor,nhist)

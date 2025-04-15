@@ -936,7 +936,7 @@ function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, co
     components = components.modelcomponents
     dims = [components[i].nT for i in eachindex(components)]
     for i in eachindex(rates)
-        if trace[3][i] > 0.0
+        if typeof(trace[3]) <: AbstractVector && trace[3][i] > 0.0
             a, p0 = make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method)
             rps = reduce_reporters_per_state(reporter[i].per_state, dims, i)
             d = set_d(noiseparams[i], rps, reporter[i].probfn, dims[i])
