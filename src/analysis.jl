@@ -525,28 +525,28 @@ end
 function filter_gene(measurefile, measure, threshold)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println("length of measures: ",length(measures[:, 1]))
+    println("length of measures: ", length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if d[col] > threshold || isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println("length of genes: ",length(genes))
+    println("length of genes: ", length(genes))
     return genes
 end
 
 function filter_gene_nan(measurefile, measure)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
-    println("length of measures: ",length(measures[:, 1]))
+    println("length of measures: ", length(measures[:, 1]))
     col = findfirst(header[1, :] .== measure)
     for d in eachrow(measures)
         if isnan(d[col])
             push!(genes, d[1])
         end
     end
-    println("length of genes: ",length(genes))
+    println("length of genes: ", length(genes))
     return genes
 end
 """
@@ -629,7 +629,7 @@ end
 """
 function deviance(data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     h = predictedfn(model.rates[model.fittedparam], data, model)
-    println("h: ",h)
+    println("h: ", h)
     deviance(h, datapdf(data))
 end
 
@@ -709,7 +709,7 @@ function join_files(file1::String, file2::String, outfile::String, addlabel::Boo
     end
     header = reshape(permutedims(header), (1, length(head1) + length(head2) - 2))
     header = hcat(head1[1], header)
-    println("header: ",header)
+    println("header: ", header)
     writedlm(f, header, ',')
     for row in 1:size(contents1, 1)
         if contents1[row, 1] == contents2[row, 1]
@@ -742,7 +742,7 @@ function join_files(models::Array, files::Array, outfile::String, addlabel::Bool
     end
     header = reshape(permutedims(header), (1, len))
     header = hcat(headers[1][1], header)
-    println("header: ",header)
+    println("header: ", header)
     writedlm(f, header, ',')
     for row in 1:size(contents[1], 1)
         content = contents[1][row:row, 2:end]
@@ -885,9 +885,9 @@ function assemble_r(gene, G, folder1, folder2, cond1, cond2, outfolder)
     file1 = getratefile(gene, G, folder1, cond1)[1]
     file2 = getratefile(gene, G, folder2, cond2)[1]
     name = replace(file1, cond1 => cond1 * "-" * cond2)
-    println("name: ",name)
+    println("name: ", name)
     outfile = joinpath(outfolder, name)
-    println("outfile: ",outfile)
+    println("outfile: ", outfile)
     assemble_r(joinpath(folder1, file1), joinpath(folder2, file2), outfile)
 end
 
@@ -1504,20 +1504,18 @@ function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1
     covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
 end
 
-
 function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                m1, m2, cc12, cc21, ac1, ac2, cc, tau = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                 ac1, ac2, cc, ac1f, ac2f, ccf, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
-                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc))
+                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc, autocovariance1=ac1, autocovariance2=ac2, cc_normalized=ccf, ac1_normalized=ac1f, ac2_normalized=ac2f))
             end
         end
     end
 end
-
 
 function write_residency_G_allgenes(fileout::String, filein::String, G, header)
     rates = read_all_rates_csv(filein, header)
@@ -1754,7 +1752,7 @@ end
 function plot_histogram(ratefile::String, datapath; root=".", row=2)
     fish = false
     r = readrow(ratefile, row)
-    println("r: ",r)
+    println("r: ", r)
     parts = fields(ratefile)
     label = parts.label
     cond = parts.cond
@@ -1773,8 +1771,8 @@ function plot_histogram(gene::String, cell::String, G::Int, cond::String, ratefi
     data = data_rna(gene, cond, datapath, fish, "label", root)
     nalleles = alleles(gene, cell, root)
     model = model_rna(r, [], G, nalleles, 0.01, [], (), 0)
-    println("typeof(model): ",typeof(model))
-    println("typeof(data): ",typeof(data))
+    println("typeof(model): ", typeof(model))
+    println("typeof(data): ", typeof(data))
     m = plot_histogram(data, model)
     return m, data, model
 end
@@ -1845,7 +1843,7 @@ function plot_histogram(data::RNAData{T1,T2}, model::AbstractGMmodel, save=false
         end
     end
     println("deviance: ", deviance(data, model))
-    println("loglikelihood: ",loglikelihood(get_param(model), data, model)[1])  
+    println("loglikelihood: ", loglikelihood(get_param(model), data, model)[1])
     return m
 end
 

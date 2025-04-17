@@ -1378,11 +1378,18 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     a, p0 = make_ap(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
-    cc12 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
-    cc21 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .- m1 .* m2) * max_intensity[1] * max_intensity[2]
-    ac1 = (crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .- m1 .^ 2) * max_intensity[1]^2
-    ac2 = (crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .- m2 .^ 2) * max_intensity[2]^2
-    m1, m2, cc12, cc21, ac1, ac2, vcat(reverse(cc21), cc12[2:end]), vcat(-reverse(lags), lags[2:end])
+    v1 = variance_hmm(p0, mean_intensity[1])
+    v2 = variance_hmm(p0, mean_intensity[2])
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2)
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1)
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2)
+
+    ac1 = vcat(reverse(ac1), ac1[2:end])
+    ac2 = vcat(reverse(ac2), ac2[2:end])
+    cc = vcat(reverse(cc21), cc12[2:end])
+
+    ac1, ac2, cc, ac1/v1, ac2/v2, cc/sqrt(v1*v2), vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
@@ -1392,7 +1399,15 @@ function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags
     crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity) .^ 2
 end
 
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2) 
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
+end
+
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
+end
+
+function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
     m1 = meanintensity1 .* p0
     al = a^lags[1]
@@ -1406,6 +1421,11 @@ function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
         al *= as
     end
     cc
+end
+
+
+function variance_hmm(p0, meanintensity)
+    sum(p0 .* (meanintensity .^ 2)) - mean_hmm(p0, meanintensity) .^ 2
 end
 
 function mean_hmm(p0, meanintensity)

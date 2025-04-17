@@ -1420,28 +1420,31 @@ function make_histograms(folder, file, label)
         mkpath(folder)
     end
     a, h = readdlm(file, ',', header=true)
-    for r in eachrow(a)
-        f = open("$folder/$(r[1])_$label.txt", "w")
-        a = r[2:end]
-        a = a[(a.!="").&(a.!="NA")]
-        h = make_histogram(Int.(a) .+ 1)
-        writedlm(f, h)
-        close(f)
-    end
+    c, S = get_cell_counts(a)
+    make_gene_counts(a, c, S, label)
 end
 
-function make_gene_counts(folder, file, label)
+function make_gene_counts(folder, file, label, gene)
     if ~ispath(folder)
         mkpath(folder)
     end
-    a, h = readdlm(file, header=true)
-    for r in eachrow(a)
-        f = open("$folder/$(r[1])_$label.txt", "w")
+    a, h = read_cell_counts(file)
+    make_gene_counts(a, gene, label)
+end
+
+function make_gene_counts(count_matrix::Matrix, label::String, yieldfactor::Vector)
+    for r in eachrow(count_matrix)
+        gene = r[1]
         a = r[2:end]
         a = a[(a.!="").&(a.!="NA")]
-        writedlm(f, h)
-        close(f)    
+        make_gene_counts(gene, a, label, yieldfactor)
     end
+end
+
+function make_gene_counts(gene, counts::Vector, label, yieldfactor::Vector)
+    f = open("$folder/$gene_$label.txt", "w")
+    writedlm(f, [counts yieldfactor])
+    close(f)
 end
 
 function read_cell_counts(file)
