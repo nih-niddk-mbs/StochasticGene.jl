@@ -287,10 +287,10 @@ function set_trace_background(traceinfo, nframes)
         if eltype(traceinfo[5]) <: AbstractVector
             background = Vector[]
             for t in traceinfo[5]
-                push!(background, t[1] .+ randn(nframes) .* t[2])
+                push!(background, t[1] .+ fill(0., nframes) .* t[2])
             end
         else
-            background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
+            background = traceinfo[5][1] .+ fill(0., nframes) .* traceinfo[5][2]
         end
     else
         throw(ArgumentError("Must include trace background"))

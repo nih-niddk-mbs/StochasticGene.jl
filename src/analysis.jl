@@ -589,6 +589,9 @@ function deviance(fits, data::AbstractHistogramData, model)
     deviance(log.(max.(predictions, eps())), datapdf(data))
 end
 
+deviance(fits, data::RNACountData, model) = -1
+
+
 """
     deviance(fits, data::AbstractTraceData, model)
 

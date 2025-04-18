@@ -889,37 +889,6 @@ end
 
 TBW
 """
-# function ll_off(obs::Float64, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
-#     b = set_b_background(obs, d)
-#     _, C = forward(a, b, p0)
-#     weight * sum(log.(C))
-# end
-
-# function ll_off(obs::Vector, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0, weight)
-#     b = set_b(obs, d)
-#     _, C = forward(a, b, p0)
-#     weight * sum(log.(C))
-# end
-
-
-
-# function ll_off(obs::Vector, d::Vector{T}, a::Matrix, p0, weight) where {T<:Vector}
-#     l = 0
-#     for i in eachindex(obs)
-#         b = set_b(obs[i], d)
-#         _, C = forward(a, b, p0)
-#         l += weight[i] * sum(log.(C))
-#     end
-#     l
-# end
-
-# function ll_off(trace, rates, noiseparams, reporter, interval, components, method)
-#     a, p0 = make_ap(rates, interval, components.elementsT, components.nT, method)
-#     d = set_d(noiseparams, reporter, components.nT)
-#     b = set_b(trace[2], d)
-#     _, C = forward(a, b, p0)
-#     sum(log.(C)) * trace[3] * length(trace[1])
-# end
 
 function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
     if trace[3] > 0.0

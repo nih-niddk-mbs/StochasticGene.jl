@@ -1031,13 +1031,13 @@ Creates a DataFrame with residence probabilities for G states for a single gene.
 function residenceprob_G_dataframe(r::Vector, G::Int)
     # Calculate residence probabilities
     probs = vec(residenceprob_G(r, G))
-    
+
     # Create DataFrame with state labels as columns
     df = DataFrame()
     for j in 1:G
         df[!, "G$j"] = [probs[j]]
     end
-    
+
     return df
 end
 
@@ -1058,20 +1058,20 @@ function residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
     # Initialize DataFrame
     df = DataFrame()
     k = 1
-    
+
     # Calculate residence probabilities for each gene using the Int version
     for (i, g) in enumerate(G)
         # Get single gene probabilities using the Int version
         single_df = residenceprob_G_dataframe(r[k:k+nrates[i]-1], g)
-        
+
         # Rename columns to include gene number
         for col in names(single_df)
             df[!, "$(col)_$(i)"] = single_df[!, col]
         end
-        
+
         k += nrates[i]
     end
-    
+
     return df
 end
 
@@ -1441,8 +1441,8 @@ function make_gene_counts(count_matrix::Matrix, label::String, yieldfactor::Vect
     end
 end
 
-function make_gene_counts(gene, counts::Vector, label, yieldfactor::Vector)
-    f = open("$folder/$gene_$label.txt", "w")
+function make_gene_counts(folder, gene, counts::Vector, label, yieldfactor::Vector)
+    f = open("$folder/$(gene)_$label.txt", "w")
     writedlm(f, [counts yieldfactor])
     close(f)
 end
@@ -1459,8 +1459,8 @@ function get_cell_counts(count_matrix)
         c = sum(count_matrix, dims=1)
     end
     S = sum(c)
-    return c, S
-end 
+    return vec(c)/maximum(c), S
+end
 
 """
     make_histogram(r)

@@ -535,6 +535,11 @@ function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramDa
     return -2 * hist' * (lppd - pwaic), 2 * se
 end
 
+function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::RNACountData) where {T}
+    se =  var(lppd - pwaic)
+    return -2 * mean(lppd - pwaic), 2 * se
+end
+
 """
     compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceHistogramData) where {T}
 

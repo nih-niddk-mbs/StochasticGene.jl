@@ -552,7 +552,7 @@ Calculates the likelihood for a single RNA histogram.
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function predictedfn(param, data::RNAData, model::AbstractGeneTransitionModel)
+function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
     steady_state(M, model.components.nT, model.nalleles, data.nRNA)

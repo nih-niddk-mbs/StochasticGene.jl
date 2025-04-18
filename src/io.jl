@@ -646,7 +646,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
     write_info(joinpath(path, "info" * name), data, model, labels)
-    if hastrait(model, :hierarchical)
+    if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
     end
     if optimized != 0
@@ -693,7 +693,7 @@ mean
 median
 last accepted
 """
-function write_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
+function write_rates(file::String, fits::Fit, stats, model, labels)
     f = open(file, "w")
 
     writedlm(f, labels, ',')  # labels
@@ -718,7 +718,7 @@ function write_rates(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     close(f)
 end
 
-function write_rates(file::String, fits::Fit, stats, model::GRSMmodel)
+function write_rates(file::String, fits::Fit, stats, model)
     write_rates(file, fits, stats, model, rlabels(model))
 end
 
@@ -927,18 +927,22 @@ end
 read file accounting for delimiter and headers
 """
 function readfile(file::String)
-    if occursin("csv", file)
-        c = readfile_csv(file)
-    else
-        c = readdlm(file)
-        if typeof(c[1]) <: AbstractString && occursin(",", c[1])
-            c = readdlm(file, ',')
+    if isfile(file)
+        if occursin("csv", file)
+            c = readfile_csv(file)
+        else
+            c = readdlm(file)
+            if typeof(c[1]) <: AbstractString && occursin(",", c[1])
+                c = readdlm(file, ',')
+            end
         end
+        if typeof(c[1, 1]) <: AbstractString
+            c = float.(c[2:end, :])
+        end
+        return c
+    else
+        throw(ArgumentError("File $file does not exist"))
     end
-    if typeof(c[1, 1]) <: AbstractString
-        c = float.(c[2:end, :])
-    end
-    return c
 end
 
 function readfile_csv(file::String)

@@ -66,7 +66,7 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     histRNA::hType
 end
 
-struct RNACountData <: AbstractHistogramData
+struct RNACountData <: AbstractRNAData{Vector{Int}}
     label::String
     gene::String
     nRNA::Int

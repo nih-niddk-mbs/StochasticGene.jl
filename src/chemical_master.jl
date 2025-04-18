@@ -358,11 +358,11 @@ end
 function technical_loss_at_k(k::Int, mhist, yieldfactor, nhist)
     pmf = normalize_histogram(mhist)
     p = 0
-    for m in k:nhist
+    for m in k:nhist-1
         d = Binomial(m, clamp(yieldfactor, 0.0, 1.0))
         p += pmf[m+1] * pdf(d, k)
     end
-    return p
+    return max(p, 0.0)
 end
 """
 technical_loss_poisson(mhist,yieldfactor,nhist)
