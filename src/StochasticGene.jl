@@ -19,7 +19,7 @@ This module provides a comprehensive set of tools for simulating stochastic mode
 - Post-fit analysis and plotting
 - Functions for use on the NIH cluster Biowulf
 - Hidden Markov models
-- GPU-accelerated computations using CUDA
+# - GPU-accelerated computations using CUDA (optional)
 
 # Included Files
 - `transition_rate_make.jl`: Functions for transition rate calculations.
@@ -52,7 +52,7 @@ using OrdinaryDiffEq
 using SparseArrays
 using Statistics
 using StatsBase
-using CUDA
+# using CUDA
 
 export
     assemble_all,

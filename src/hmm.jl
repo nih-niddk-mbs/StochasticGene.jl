@@ -9,8 +9,8 @@
 ### For continuous processes, numerically solve forward Kolmogorov equation to obtain transition probability matrix
 ###
 
-using CUDA
-using CUDA: @allowscalar
+# using CUDA
+# using CUDA: @allowscalar
 
 """
     fkf!(du,u::Matrix, p, t)
@@ -584,9 +584,9 @@ end
 TBW
 """
 function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
-        return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
-    else
+    # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
+    #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+    # else
         α = zeros(Nstate, Ngrid, T)
         C = Vector{Float64}(undef, T)
         α[:, :, 1] = p0 .* b[:, :, 1]
@@ -602,7 +602,7 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
             α[:, :, t] *= C[t]
         end
         return α, C
-    end
+    # end
 end
 
 """
@@ -624,9 +624,9 @@ Ct = Prod_t 1/∑_i α[i,t]
 
 # """
 function forward(a::Matrix, b, p0, N, T)
-    if CUDA.functional() && (N * N * T > 1000)
-        return forward_gpu(a, b, p0, N, T)
-    else
+    # if CUDA.functional() && (N * N * T > 1000)
+    #     return forward_gpu(a, b, p0, N, T)
+    # else
         α = zeros(N, T)
         C = Vector{Float64}(undef, T)
         α[:, 1] = p0 .* b[:, 1]
@@ -642,7 +642,7 @@ function forward(a::Matrix, b, p0, N, T)
             α[:, t] *= C[t]
         end
         return α, C
-    end
+    # end
 end
 
 """
@@ -666,37 +666,37 @@ end
 GPU-accelerated version of the forward algorithm.
 Returns the forward variable α and scaling parameter array C.
 """
-function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}, N::Int64, T::Int64)
-    # Move data to GPU
-    a_gpu = CuArray(a)
-    b_gpu = CuArray(b)
-    p0_gpu = CuArray(p0)
+# function forward_gpu(a::Matrix{Float64}, b::Matrix{Float64}, p0::Vector{Float64}, N::Int64, T::Int64)
+#     # Move data to GPU
+#     a_gpu = CuArray(a)
+#     b_gpu = CuArray(b)
+#     p0_gpu = CuArray(p0)
     
-    # Allocate GPU arrays for α and C
-    α_gpu = CUDA.zeros(Float64, N, T)
-    C_gpu = CUDA.zeros(Float64, T)
+#     # Allocate GPU arrays for α and C
+#     α_gpu = CUDA.zeros(Float64, N, T)
+#     C_gpu = CUDA.zeros(Float64, T)
     
-    # Initialize first time step
-    # Use proper GPU array operations instead of scalar indexing
-    α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
+#     # Initialize first time step
+#     # Use proper GPU array operations instead of scalar indexing
+#     α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
     
-    # Use CUDA.@allowscalar for operations that require scalar indexing
-    CUDA.@allowscalar C_gpu[1] = 1 / sum(α_gpu[:, 1])
-    CUDA.@allowscalar α_gpu[:, 1] *= C_gpu[1]
+#     # Use CUDA.@allowscalar for operations that require scalar indexing
+#     CUDA.@allowscalar C_gpu[1] = 1 / sum(α_gpu[:, 1])
+#     CUDA.@allowscalar α_gpu[:, 1] *= C_gpu[1]
     
-    # Compute forward probabilities using matrix multiplication on GPU
-    for t in 2:T
-        # Use proper GPU array operations
-        α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
+#     # Compute forward probabilities using matrix multiplication on GPU
+#     for t in 2:T
+#         # Use proper GPU array operations
+#         α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
         
-        # Use CUDA.@allowscalar for operations that require scalar indexing
-        CUDA.@allowscalar C_gpu[t] = 1 / sum(α_gpu[:, t])
-        CUDA.@allowscalar α_gpu[:, t] *= C_gpu[t]
-    end
+#         # Use CUDA.@allowscalar for operations that require scalar indexing
+#         CUDA.@allowscalar C_gpu[t] = 1 / sum(α_gpu[:, t])
+#         CUDA.@allowscalar α_gpu[:, t] *= C_gpu[t]
+#     end
     
-    # Return results back to CPU
-    return Array(α_gpu), Array(C_gpu)
-end
+#     # Return results back to CPU
+#     return Array(α_gpu), Array(C_gpu)
+# end
 
 """
     forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
@@ -716,37 +716,37 @@ Returns the forward variable α and scaling parameter array C.
 # Returns
 - Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
 """
-function forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
-    # Move data to GPU
-    a_gpu = CuArray(a)
-    a_grid_gpu = CuArray(a_grid)
-    b_gpu = CuArray(b)
-    p0_gpu = CuArray(p0)
+# function forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+#     # Move data to GPU
+#     a_gpu = CuArray(a)
+#     a_grid_gpu = CuArray(a_grid)
+#     b_gpu = CuArray(b)
+#     p0_gpu = CuArray(p0)
 
-    # Allocate GPU arrays for results
-    α_gpu = CuArray{Float64}(undef, Nstate, Ngrid, T)
-    C_gpu = CuArray{Float64}(undef, T)
+#     # Allocate GPU arrays for results
+#     α_gpu = CuArray{Float64}(undef, Nstate, Ngrid, T)
+#     C_gpu = CuArray{Float64}(undef, T)
 
-    # Initialize first time step
-    α_gpu[:, :, 1] .= p0_gpu .* b_gpu[:, :, 1]
-    C_gpu[1] = sum(α_gpu[:, :, 1])
-    α_gpu[:, :, 1] ./= C_gpu[1]
+#     # Initialize first time step
+#     α_gpu[:, :, 1] .= p0_gpu .* b_gpu[:, :, 1]
+#     C_gpu[1] = sum(α_gpu[:, :, 1])
+#     α_gpu[:, :, 1] ./= C_gpu[1]
 
-    # Compute forward probabilities using matrix multiplication on GPU
-    for t in 2:T
-        # Reshape for efficient matrix multiplication
-        α_prev = reshape(α_gpu[:, :, t-1], Nstate * Ngrid, 1)
-        a_combined = kron(a_grid_gpu, a_gpu)  # Kronecker product for combined transitions
-        α_temp = reshape(a_combined * α_prev, Nstate, Ngrid)
-        α_gpu[:, :, t] .= α_temp .* b_gpu[:, :, t]
+#     # Compute forward probabilities using matrix multiplication on GPU
+#     for t in 2:T
+#         # Reshape for efficient matrix multiplication
+#         α_prev = reshape(α_gpu[:, :, t-1], Nstate * Ngrid, 1)
+#         a_combined = kron(a_grid_gpu, a_gpu)  # Kronecker product for combined transitions
+#         α_temp = reshape(a_combined * α_prev, Nstate, Ngrid)
+#         α_gpu[:, :, t] .= α_temp .* b_gpu[:, :, t]
 
-        C_gpu[t] = sum(α_gpu[:, :, t])
-        α_gpu[:, :, t] ./= C_gpu[t]
-    end
+#         C_gpu[t] = sum(α_gpu[:, :, t])
+#         α_gpu[:, :, t] ./= C_gpu[t]
+#     end
 
-    # Return results back to CPU
-    return Array(α_gpu), Array(C_gpu)
-end
+#     # Return results back to CPU
+#     return Array(α_gpu), Array(C_gpu)
+# end
 
 """
     forward_grid_gpu(a, a_grid, b, p0)

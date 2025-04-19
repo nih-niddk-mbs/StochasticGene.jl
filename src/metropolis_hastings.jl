@@ -879,4 +879,29 @@ function hist_entropy(hist::Array{Array,1})
     return l
 end
 
+# function run_mcmc_parallel(model::HMM, observations::AbstractArray, n_chains::Int, n_steps::Int; gpu_ids::Vector{Int}=Int[])
+    # if !CUDA.functional()
+    #     error("CUDA is not available. Please install CUDA.jl and ensure you have a compatible GPU.")
+    # end
+    
+    # # Get available GPUs
+    # available_gpus = CUDA.devices()
+    # if isempty(gpu_ids)
+    #     gpu_ids = collect(1:length(available_gpus))
+    # end
+    
+    # # Distribute chains across GPUs
+    # chains_per_gpu = ceil(Int, n_chains / length(gpu_ids))
+    
+    # Run chains in parallel
+    # results = Vector{Any}(undef, n_chains)
+    # Threads.@threads for i in 1:n_chains
+    #     # gpu_id = gpu_ids[mod1(i, length(gpu_ids))]
+    #     # device!(available_gpus[gpu_id])
+    #     results[i] = run_mcmc_chain(model, observations, n_steps)
+    # end
+    
+    # return results
+# end
+
 
