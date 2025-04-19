@@ -1355,8 +1355,20 @@ function multi_tau_covariance(data1::Vector{Float64}, data2::Vector{Float64}=Flo
     return lags[valid_idx], corr[valid_idx]
 end
 
+"""
+    make_histogram(r)
 
+Creates a histogram from a vector of data.
 
+# Arguments
+- `r`: A vector of data values.
+
+# Description
+This function creates a histogram from the provided vector of data values `r`. It counts the occurrences of each unique value in the vector and returns a vector representing the histogram.
+
+# Returns
+- `Vector{Int}`: A vector representing the histogram, where each element corresponds to the count of a unique value in the input vector.
+"""
 function make_histogram(r)
     nhist = maximum(r)
     h = zeros(Int, nhist + 1)
@@ -1441,28 +1453,7 @@ end
 
 
 
-"""
-    make_histogram(r)
 
-Creates a histogram from a vector of data.
-
-# Arguments
-- `r`: A vector of data values.
-
-# Description
-This function creates a histogram from the provided vector of data values `r`. It counts the occurrences of each unique value in the vector and returns a vector representing the histogram.
-
-# Returns
-- `Vector{Int}`: A vector representing the histogram, where each element corresponds to the count of a unique value in the input vector.
-"""
-function make_histogram(r)
-    nhist = maximum(r)
-    h = zeros(Int, nhist + 1)
-    for c in r
-        h[c] += 1
-    end
-    h
-end
 
 """
     expv(v::Array)
