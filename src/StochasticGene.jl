@@ -37,7 +37,6 @@ This module provides a comprehensive set of tools for simulating stochastic mode
 module StochasticGene
 
 using CSV
-using CUDA
 using DataFrames
 using Dates
 using DelimitedFiles
@@ -53,6 +52,7 @@ using OrdinaryDiffEq
 using SparseArrays
 using Statistics
 using StatsBase
+using CUDA
 
 export
     assemble_all,
