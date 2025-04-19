@@ -362,7 +362,7 @@ function technical_loss_at_k(k::Int, mhist, yieldfactor, nhist)
         d = Binomial(m, clamp(yieldfactor, 0.0, 1.0))
         p += pmf[m+1] * pdf(d, k)
     end
-    return max(p, 0.0)
+    return p
 end
 """
 technical_loss_poisson(mhist,yieldfactor,nhist)

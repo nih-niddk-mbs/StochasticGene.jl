@@ -959,6 +959,15 @@ read file and return given column
 """
 readfile(file::String, col::Int) = readfile(file)[:, col]
 
+"""
+    read_cell_counts(file)
+
+read cell counts from a file
+"""
+function read_cell_counts(file)
+    a, h = readdlm(file, header=true)
+    return a, h
+end
 
 """
     read_dwelltimes(datapath)

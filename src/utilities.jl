@@ -1357,46 +1357,13 @@ end
 
 
 
-"""
-    test_steadystatemodel(model::AbstractGMmodel, nhist)
-
-Compares the chemical master solution to a Gillespie simulation for the steady-state mRNA distribution.
-
-# Arguments
-- `model`: An instance of `AbstractGMmodel`.
-- `nhist`: The number of histogram bins for the simulation.
-
-# Description
-This function compares the steady-state mRNA distribution obtained from the chemical master equation solution to that obtained from a Gillespie simulation. It uses the rates and number of states from the provided model.
-
-# Returns
-- `Tuple{Vector{Float64}, Vector{Float64}}`: The steady-state mRNA distributions from the chemical master solution and the Gillespie simulation.
-"""
-function test_steadystatemodel(model::AbstractGMmodel, nhist)
-    G = model.G
-    r = model.rates
-    g1 = steady_state(r[1:2*G], G - 1, nhist, model.nalleles)
-    g2 = simulatorGM(r[1:2*G], G - 1, nhist, model.nalleles)
-    return g1, g2
-end
-
-"""
-    test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
-
-Simulates the RNA on-off model with splicing and compares it to the provided data.
-
-# Arguments
-- `data`: An instance of `RNAOnOffData` containing the observed data.
-- `model`: An instance of `AbstractGRSMmodel` representing the model to be tested.
-
-# Description
-This function simulates the RNA on-off model with splicing using the provided model parameters and compares the simulated results to the observed data. It uses the `telegraphsplice0` function to perform the simulation.
-
-# Returns
-- `Nothing`: The function performs the simulation and comparison but does not return a value.
-"""
-function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
-    telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
+function make_histogram(r)
+    nhist = maximum(r)
+    h = zeros(Int, nhist + 1)
+    for c in r
+        h[c] += 1
+    end
+    h
 end
 
 """
@@ -1415,52 +1382,64 @@ This function reads data from the specified file, creates histograms for each ro
 # Returns
 - `Nothing`: The function performs the histogram creation and saving but does not return a value.
 """
-function make_histograms(folder, file, label)
+
+
+function make_rna_histograms(folder, count_matrix::Matrix, label)
     if ~ispath(folder)
         mkpath(folder)
     end
-    a, h = readdlm(file, ',', header=true)
-    c, S = get_cell_counts(a)
-    make_gene_counts(a, c, S, label)
-end
-
-function make_gene_counts(folder, file, label, gene)
-    if ~ispath(folder)
-        mkpath(folder)
-    end
-    a, h = read_cell_counts(file)
-    make_gene_counts(a, gene, label)
-end
-
-function make_gene_counts(count_matrix::Matrix, label::String, yieldfactor::Vector)
     for r in eachrow(count_matrix)
-        gene = r[1]
+        f = open("$folder/$(r[1])_$label.txt", "w")
         a = r[2:end]
         a = a[(a.!="").&(a.!="NA")]
-        make_gene_counts(gene, a, label, yieldfactor)
+        h = make_histogram(Int.(a) .+ 1)
+        writedlm(f, h)
+        close(f)
     end
 end
 
-function make_gene_counts(folder, gene, counts::Vector, label, yieldfactor::Vector)
-    f = open("$folder/$(gene)_$label.txt", "w")
-    writedlm(f, [counts yieldfactor])
-    close(f)
+function make_rna_histograms(folder, file::String, label::String)
+    count_matrix, _ = read_cell_counts(file)   
+    make_rna_histograms(folder, count_matrix, label)
 end
 
-function read_cell_counts(file)
-    a, h = readdlm(file, header=true)
-    return a, h
-end
 
-function get_cell_counts(count_matrix)
+
+function get_cell_counts(count_matrix::Matrix)
     if typeof(count_matrix[1, 1]) <: AbstractString
         c = sum(count_matrix[:, 2:end], dims=1)
     else
         c = sum(count_matrix, dims=1)
     end
     S = sum(c)
-    return vec(c)/maximum(c), S
+    return vec(c) / maximum(c), S
 end
+
+function make_gene_counts(folder, gene::String, counts::Vector, yieldfactor::Vector, label::String)
+    f = open("$folder/$(gene)_$label.txt", "w")
+    writedlm(f, [counts yieldfactor])
+    close(f)
+end
+
+function make_gene_counts(folder, count_matrix::Matrix, yieldfactor::Vector, label::String)
+    if ~ispath(folder)
+        mkpath(folder)
+    end
+    for r in eachrow(count_matrix)
+        gene = string(r[1])
+        counts = r[2:end]
+        counts = counts[(counts.!="").&(counts.!="NA")]
+        make_gene_counts(folder, gene, counts, yieldfactor, label)
+    end
+end
+
+function make_gene_counts(folder, file, label)
+    count_matrix, _ = readdlm(file, ',', header=true)
+    yieldfactor, _ = get_cell_counts(count_matrix)
+    make_gene_counts(folder, count_matrix, yieldfactor, label)
+end
+
+
 
 """
     make_histogram(r)

@@ -456,8 +456,8 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     predictions = predictedfn(param, data, model)
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
-        p = technical_loss_at_k(data.countsRNA[k], predictions, data.yieldfactor[k], data.nRNA)
-        logpredictions[k] = -log(p)
+        p = technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA)
+        logpredictions[k] = -log(max(p, eps()))
     end
     return sum(logpredictions), logpredictions
 end

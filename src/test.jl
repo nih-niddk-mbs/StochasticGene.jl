@@ -3,6 +3,48 @@
 # test.jl
 
 
+"""
+    test_steadystatemodel(model::AbstractGMmodel, nhist)
+
+Compares the chemical master solution to a Gillespie simulation for the steady-state mRNA distribution.
+
+# Arguments
+- `model`: An instance of `AbstractGMmodel`.
+- `nhist`: The number of histogram bins for the simulation.
+
+# Description
+This function compares the steady-state mRNA distribution obtained from the chemical master equation solution to that obtained from a Gillespie simulation. It uses the rates and number of states from the provided model.
+
+# Returns
+- `Tuple{Vector{Float64}, Vector{Float64}}`: The steady-state mRNA distributions from the chemical master solution and the Gillespie simulation.
+"""
+function test_steadystatemodel(model::AbstractGMmodel, nhist)
+    G = model.G
+    r = model.rates
+    g1 = steady_state(r[1:2*G], G - 1, nhist, model.nalleles)
+    g2 = simulatorGM(r[1:2*G], G - 1, nhist, model.nalleles)
+    return g1, g2
+end
+
+"""
+    test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
+
+Simulates the RNA on-off model with splicing and compares it to the provided data.
+
+# Arguments
+- `data`: An instance of `RNAOnOffData` containing the observed data.
+- `model`: An instance of `AbstractGRSMmodel` representing the model to be tested.
+
+# Description
+This function simulates the RNA on-off model with splicing using the provided model parameters and compares the simulated results to the observed data. It uses the `telegraphsplice0` function to perform the simulation.
+
+# Returns
+- `Nothing`: The function performs the simulation and comparison but does not return a value.
+"""
+function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
+    telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
+end
+
 simDT_convert(v) = [[s[1], s[3]] for s in v]
 
 function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
@@ -193,9 +235,12 @@ test_fit_coupled(; nchains=1, maxtime=60.0, propcv=0.01) = fit(nchains, "tracejo
 
 test_fit_coupled_h(; nchains=1, maxtime=60.0, propcv=0.01) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [[25000, 10000], [25000, 10000]]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 28], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (3, 3), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([25000.0, 15000.0, 80000.0, 10000.0], [25000.0, 15000.0, 80000.0, 10000.0]), (2, [11, 10], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5(), true))
 
-test_fit_coupled_h2(; nchains=1, maxtime=60.0, propcv=0.01) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [[25000, 10000], [25000, 10000]]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([25000.0, 15000.0, 80000.0, 10000.0], [25000.0, 15000.0, 80000.0, 10000.0]), (2, [], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5(), true))
+test_fit_coupled_h2(; nchains=1, maxtime=60.0, propcv=0.01) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [[25000, 0], [25000, 0]]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([25000.0, 15000.0, 80000.0, 10000.0], [25000.0, 15000.0, 80000.0, 10000.0]), (2, [], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (Tsit5(), true))
 
-test_rnacount(;nchains=1, gene="AURKAIP1", datapath="data/U3AS4/", maxtime=60.0) = fit(nchains=nchains, datatype="rnacount", transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, datapath=datapath, cell="U3", gene=gene, datacond="WT", infolder="test", resultfolder="test", fittedparam=[1, 2, 3], maxtime=maxtime, decayrate=1.0);
+test_rnacount(;nchains=1, gene="RPLP1", datapath="data/U3AS4/counts", maxtime=60.0) = fit(nchains=nchains, datatype="rnacount", transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, datapath=datapath, cell="U3A", gene=gene, datacond="WT-UTR", infolder="test", resultfolder="test", fittedparam=[1, 2, 3], maxtime=maxtime, ratetype="ml");
+
+test_rna(; nchains=1, gene="RPLP1", datapath="data/U3AS4/histograms", maxtime=60.0) = fit(nchains=nchains, datatype="rna", transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, datapath=datapath, cell="U3A", gene=gene, datacond="WT-UTR", infolder="test", resultfolder="test", fittedparam=[1, 2, 3], maxtime=maxtime, ratetype="ml");
+
 
 
 # @time fit(16, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, [290.0, 140.0]), "control-2025-03-15", "control-2025-03-15", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene",[1, 2,3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", 43000.0, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 290.0, 140.0, 1200.0, 175.0], [2.0, 2.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [290.0, 140.0, 1200.0, 175.0], (), "ml", 0.02, 2000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, Tsit5())
