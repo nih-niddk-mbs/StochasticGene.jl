@@ -42,6 +42,42 @@ function get_transitions(G::Int, TransitionType)
     end
 end
 
+
+const SUPPORTED_DATATYPES = Set([
+    :rna, :rnacount, :rnaonoff, :rnadwelltime,
+    :dwelltime, :trace, :tracerna, :tracejoint, :tracegrid
+])
+
+"""
+    normalize_datatype(datatype::AbstractString) -> Symbol
+    normalize_datatype(datatype::Symbol) -> Symbol
+
+Normalize a user-supplied or internal data type into a lowercase `Symbol`
+and validate against supported types.
+
+Accepts either a `String` or `Symbol`. Strings are lowercased and converted.
+
+# Arguments
+- `datatype`: A string (e.g. "RNA") or symbol (e.g. :rna)
+
+# Returns
+- A validated lowercase `Symbol` (e.g. `:rna`, `:tracegrid`)
+
+# Throws
+- `ArgumentError` if the type is unsupported
+"""
+
+function normalize_datatype(datatype::Symbol)
+    datatype ∈ SUPPORTED_DATATYPES || error(
+        "Unsupported datatype '$datatype'. Supported types: $(join(SUPPORTED_DATATYPES, ", "))"
+    )
+    return datatype
+end
+
+function normalize_datatype(datatype::AbstractString)
+    return normalize_datatype(Symbol(lowercase(datatype)))
+end
+
 """
     get_transitions(G::Tuple, TransitionType)
 
@@ -383,43 +419,73 @@ function load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
     return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1))
 end
 
-"""
-    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna)
+const TRACE_DATATYPES = Set([
+    :trace, :tracegrid, :tracejoint, :tracerna
+])
 
-return data structure
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
-    if datatype == "rna"
+    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna; datacol=3, zeromedian=false)
+
+Load RNA or trace data based on the provided `datatype` string or symbol.
+
+Supports multiple data formats, including steady-state RNA histograms,
+dwell time distributions, ON/OFF state durations, and fluorescence traces.
+
+# Arguments
+- `datatype`: String or Symbol describing the data type (e.g. "rna", "tracegrid")
+- `dttype`: Dwell time type (used only for rnadwelltime and dwelltime)
+- `datapath`: Path(s) to the data file(s)
+- `label`: Label for the dataset
+- `gene`: Gene name
+- `datacond`: Experimental condition
+- `traceinfo`: Tuple of trace metadata
+- `temprna`: Integer divisor for histogram normalization
+- `datacol`: Column of trace data to extract (default = 3)
+- `zeromedian`: If true, zero-center each trace before fitting (default = false)
+
+# Returns
+- A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`)
+
+# Throws
+- `ArgumentError` if `datatype` is unsupported
+"""
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna; datacol=3, zeromedian=false)
+    dt = normalize_datatype(datatype)
+
+    if dt == :rna
         len, h = read_rna(gene, datacond, datapath)
         return RNAData(label, gene, len, h)
-    elseif datatype == "rnacount"
+
+    elseif dt == :rnacount
         countsRNA, yieldfactor = read_rnacount(gene, datacond, datapath)
         nRNA = quantile(countsRNA, 0.99)
         return RNACountData(label, gene, nRNA, countsRNA, yieldfactor)
-    elseif datatype == "rnaonoff"
+
+    elseif dt == :rnaonoff
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         LC = readfile(gene, datacond, datapath[2])
         return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3])
-    elseif datatype == "rnadwelltime"
+
+    elseif dt == :rnadwelltime
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype)
-    elseif datatype == "dwelltime"
+
+    elseif dt == :dwelltime
         bins, DT = read_dwelltimes(datapath)
         return DwellTimeData(label, gene, bins, DT, dttype)
-    elseif occursin("trace", datatype)
-        # if datatype == "tracejoint"
-        #     load_data_tracejoint(datapath, label, gene, datacond, traceinfo)
-        # elseif 
-        if datatype == "tracegrid"
-            load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
+
+    elseif dt ∈ TRACE_DATATYPES
+        if dt == :tracegrid
+            return load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
         else
-            load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, datacol, zeromedian)
+            return load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian)
         end
+
     else
-        throw(ArgumentError("Data type '$datatype' not supported"))
+        throw(ArgumentError("Unsupported datatype '$datatype'"))
     end
 end
 
@@ -1154,7 +1220,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("Median fitted rates: ", stats.medparam[:, 1])
     println("ML rates: ", inverse_transform_rates(fits.parml, model))
     println("Acceptance: ", fits.accept, "/", fits.total)
-    if typeof(data) <: AbstractHistogramData && !(typeof(data) <: RNACountData)
+    if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))
     end
     println("rhat: ", maximum(measures.rhat))

@@ -408,6 +408,29 @@ abstract type Results end
 
 
 
+# === Behavioral trait functions ===
+#
+# These functions provide soft behavioral tags for data types
+# without relying on type inheritance. They help determine which
+# methods are valid for a given data type without enforcing hard
+# subtyping relationships.
+#
+# Usage example:
+#     if is_deviance_supported(data)
+#         println("Deviance: ", deviance(fits, data, model))
+#     end
+
+"""
+    is_histogram_compatible(data) -> Bool
+
+Return `true` if the data can be treated as a histogram (e.g. for
+plotting, normalization, or PDF comparisons). 
+
+Used to prevent histogram methods from being accidentally applied to
+non-histogram types like `RNACountData`.
+"""
+is_histogram_compatible(::AbstractHistogramData) = true
+is_histogram_compatible(::RNACountData) = false
 
 
 
