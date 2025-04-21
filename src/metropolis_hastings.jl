@@ -113,7 +113,7 @@ run_mh(data,model,options,nchains)
 
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
-    if CUDA.functional()
+    if false && CUDA.functional()
         println("CUDA is functional")
         return run_mh_gpu(data, model, options, nchains)
     else

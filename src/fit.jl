@@ -379,7 +379,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
     return trace, maxmedians
 end
 
-function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, col=3, zeromedian=false)
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false)
     if typeof(datapath) <: String
         tracer = read_tracefiles(datapath, datacond, traceinfo, col)
     else
@@ -399,11 +399,13 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, c
         weight = 0.0
         background = 0.0
     end
-    if datatype == "trace" || datatype == "tracejoint"
+    if datatype == :trace || datatype == :tracejoint
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale))
-    elseif datatype == "tracerna"
+    elseif datatype == :tracerna
         len, h = read_rna(gene, datacond, datapath[2])
         return TraceRNAData(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h)
+    else
+        throw(ArgumentError("Unsupported datatype '$datatype'"))
     end
 end
 
@@ -424,7 +426,7 @@ const TRACE_DATATYPES = Set([
 ])
 
 """
-    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna; datacol=3, zeromedian=false)
+    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
 
 Load RNA or trace data based on the provided `datatype` string or symbol.
 
@@ -449,7 +451,7 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 # Throws
 - `ArgumentError` if `datatype` is unsupported
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna; datacol=3, zeromedian=false)
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
     dt = normalize_datatype(datatype)
 
     if dt == :rna

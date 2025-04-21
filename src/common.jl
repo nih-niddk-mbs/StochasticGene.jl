@@ -429,6 +429,7 @@ plotting, normalization, or PDF comparisons).
 Used to prevent histogram methods from being accidentally applied to
 non-histogram types like `RNACountData`.
 """
+is_histogram_compatible(::AbstractExperimentalData) = false
 is_histogram_compatible(::AbstractHistogramData) = true
 is_histogram_compatible(::RNACountData) = false
 
