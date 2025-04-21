@@ -1115,8 +1115,7 @@ function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporte
     a, p0 = make_ap(r, interval, components, method)
     a_grid = make_a_grid(pgrid[1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
-    ll, logpredictions = _ll_hmm(a, a_grid, p0, d, trace[1])
-    ll, logpredictions
+    _ll_hmm(a, a_grid, p0, d, trace[1])
 end
 
 # coupled, grid
@@ -1125,28 +1124,35 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponent
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
     a_grid = make_a_grid(pgrid[1][1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
-    ll, logpredictions = _ll_hmm(a, a_grid, p0, d, trace[1])
-    ll, logpredictions
+    _ll_hmm(a, a_grid, p0, d, trace[1])
 end
 
 # hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
+    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+    d = set_d(noiseshared[1], reporter)
     if method[2]
-        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
+        ll, logpredictions = _ll_hmm(noiseindividual, a, a_grid, p0, d, trace[1])
     else
-        predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
+        ll, logpredictions = _ll_hmm(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
     end
+    ll, logpredictions
 end
 
 # coupled, hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+    d = set_d(noiseshared[1], reporter)
     if method[2]
-        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
+        ll, logpredictions = _ll_hmm(noiseindividual, a, a_grid, p0, d, trace[1])
     else
-        predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
+        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
     end
+    ll, logpredictions
 end
 
 
@@ -1339,13 +1345,13 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     a, p0 = make_ap(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
-    v1 = variance_hmm(p0, mean_intensity[1])
-    v2 = variance_hmm(p0, mean_intensity[2])
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2)
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1)
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2)
 
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2)*max_intensity[1]*max_intensity[2]
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)*max_intensity[1]*max_intensity[2]
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1)*max_intensity[1]^2
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2)*max_intensity[2]^2
+    v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
+    v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
     ac1 = vcat(reverse(ac1), ac1[2:end])
     ac2 = vcat(reverse(ac2), ac2[2:end])
     cc = vcat(reverse(cc21), cc12[2:end])
@@ -1392,6 +1398,250 @@ end
 function mean_hmm(p0, meanintensity)
     sum(p0 .* meanintensity)
 end
+
+
+
+########################
+# Predict trace functions
+########################
+#### Return states and d (not observation_dist)
+
+"""
+    _predict_trace(a::Matrix, p0::Vector, d, traces)
+
+"""
+function _predict_trace(a::Matrix, p0::Vector, d, traces)
+    states = Vector{Int}[]
+    for i in eachindex(traces)
+        b = set_b(traces[i], d)
+        push!(states, viterbi(a, b, p0))
+    end
+    states, d
+end
+
+"""
+    _predict_trace(noiseparams, a::Matrix, p0::Vector, reporter, traces)
+
+"""
+function _predict_trace(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
+        push!(states, viterbi(a, b, p0))
+        push!(d, di)
+    end
+    states, d
+end
+
+"""
+    _predict_trace(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function _predict_trace(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], interval, components, method)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
+        push!(states, viterbi(a, b, p0))
+        push!(d, di)
+    end
+    states, d
+end
+
+"""
+    _predict_trace(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function _predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
+        di = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], di)
+        push!(states, viterbi(a, b, p0))
+        push!(d, di)
+    end
+    states, d
+end
+
+### grid trait likelihoods
+
+"""
+    _predict_trace(a, a_grid, p0::Vector, d, traces)
+
+"""
+function _predict_trace(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
+    states = Vector{Int}[]
+    for i in eachindex(traces)
+        b = set_b(traces[i], d)
+        push!(states, viterbi_grid(a, a_grid, b, p0))
+    end
+    states, d
+end
+
+"""
+    _predict_trace(noiseparams, a, a_grid, p0::Vector, reporter, traces)
+
+"""
+function _predict_trace(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
+        push!(states, viterbi_grid(a, a_grid, b, p0))
+        push!(d, d)
+    end
+    states, d
+end
+
+"""
+    _predict_trace(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function _predict_trace(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], interval, components, method)
+        a_grid = make_a_grid(pgrid, Ngrid)
+        di = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], di)
+        push!(states, viterbi_grid(a, a_grid, b, p0))
+        push!(d, di)
+    end
+    states, d
+end
+
+"""
+    _predict_trace(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+
+"""
+function _predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
+        a_grid = make_a_grid(pgrid, Ngrid)
+        d = set_d(noiseparams[i], reporter, Ngrid)
+        b = set_b(traces[i], d)
+        push!(states, viterbi_grid(a, a_grid, b, p0))
+    end
+    states, d
+end
+
+
+
+"""
+    predict_trace(r, components, reporter, interval, trace, method)
+
+"""
+# no traits
+function predict_trace(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
+    r, noiseparams = r
+    a, p0 = make_ap(r, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    _predict_trace(a, p0, d, trace[1])
+end
+
+# coupled
+function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    _predict_trace(a, p0, d, trace[1])
+end
+
+# hierarchical
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
+    rshared, rindividual, noiseshared, noiseindividual, _, _ = r
+    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        states, observation_dist = _predict_trace(noiseindividual, a, p0, reporter, trace[1])
+    else
+        states, observation_dist = _predict_trace(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1])
+    end
+    states, observation_dist
+end
+
+# coupled, hierarchical
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        states, observation_dist = _predict_trace(noiseindividual, a, p0, reporter, trace[1])
+    else
+        states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+    end
+    states, observation_dist
+end
+
+### grid trait likelihoods
+"""
+    predict_trace(r, pgrid, Ngrid, components, reporter, interval, trace, method)
+    
+"""
+# grid
+function predict_trace(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    r, noiseparams, pgrid = r
+    a, p0 = make_ap(r, interval, components, method)
+    a_grid = make_a_grid(pgrid[1], Ngrid)
+    d = set_d(noiseparams, reporter, Ngrid)
+    _predict_trace(a, a_grid, p0, d, trace[1])
+end
+
+# coupled, grid
+function predict_trace(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
+    r, noiseparams, couplingStrength, pgrid = r
+    a, p0 = make_ap(r, couplingStrength, interval, components, method)
+    a_grid = make_a_grid(pgrid[1][1], Ngrid)
+    d = set_d(noiseparams, reporter, Ngrid)
+    _predict_trace(a, a_grid, p0, d, trace[1])
+end
+
+# hierarchical, grid
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
+    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        _predict_trace(noiseindividual, a, a_grid, p0, d, trace[1])
+    else
+        _predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
+    end
+end
+
+# coupled, hierarchical, grid
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+    rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    a_grid = make_a_grid(pgridshared[1][1], Ngrid)
+    d = set_d(noiseshared[1], reporter)
+    if method[2]
+        _predict_trace(noiseindividual, a, a_grid, p0, d, trace[1])
+    else
+        _predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
+    end
+end
+
+
+function predict_trace(param, data, model::AbstractGRSMmodel)
+    r = prepare_rates(param, model)
+    if hastrait(model, :grid)
+        predict_trace(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
+    else
+        predict_trace(r, model.components, model.reporter, data.interval, data.trace, model.method)
+    end
+end
+
 
 ########################
 # Old functions
@@ -1538,245 +1788,4 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
         push!(observation_dist, [d[s] for s in spath])
     end
     states, observation_dist
-end
-
-########################
-# New functions
-########################
-#### Return states and d (not observation_dist)
-
-"""
-    predict_trace(a::Matrix, p0::Vector, d, traces)
-
-"""
-function predict_trace(a::Matrix, p0::Vector, d, traces)
-    states = Vector{Int}[]
-    # observation_dist = Vector[]
-    for i in eachindex(traces)
-        b = set_b(traces[i], d)
-        push!(states, viterbi(a, b, p0))
-        # spath = viterbi(a, b, p0)
-        # push!(states, [unit_state(i, 3, 3, S, coupling[1]) for i in spath])
-        # push!(observation_dist, [[d[i] for d in d] for i in spath])
-        # push!(observation_dist, [d[s] for s in spath])
-    end
-    # states, observation_dist
-    states, d
-end
-
-"""
-    predict_trace(noiseparams, a::Matrix, p0::Vector, reporter, traces)
-
-"""
-function predict_trace(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        di = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], di)
-        push!(states, viterbi(a, b, p0))
-        push!(d, di)
-    end
-    states, d
-end
-
-"""
-    predict_trace(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-
-"""
-function predict_trace(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], interval, components, method)
-        di = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], di)
-        push!(states, viterbi(a, b, p0))
-        push!(d, di)
-    end
-    states, d
-end
-
-"""
-    predict_trace(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-
-"""
-function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
-        di = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], di)
-        push!(states, viterbi(a, b, p0))
-        push!(d, di)
-    end
-    states, d
-end
-
-### grid trait likelihoods
-
-"""
-    predict_trace(a, a_grid, p0::Vector, d, traces)
-
-"""
-function predict_trace(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
-    states = Vector{Int}[]
-    for i in eachindex(traces)
-        b = set_b(traces[i], d)
-        push!(states, viterbi_grid(a, a_grid, b, p0))
-    end
-    states, d
-end
-
-"""
-    predict_trace(noiseparams, a, a_grid, p0::Vector, reporter, traces)
-
-"""
-function predict_trace(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        d = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], d)
-        push!(states, viterbi_grid(a, a_grid, b, p0))
-        push!(d, d)
-    end
-    states, d
-end
-
-"""
-    predict_trace(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-
-"""
-function predict_trace(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], interval, components, method)
-        a_grid = make_a_grid(pgrid, Ngrid)
-        di = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], di)
-        push!(states, viterbi_grid(a, a_grid, b, p0))
-        push!(d, di)
-    end
-    states, d
-end
-
-"""
-    predict_trace(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-
-"""
-function predict_trace(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-    states = Vector{Int}[]
-    d = Vector[]
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
-        a_grid = make_a_grid(pgrid, Ngrid)
-        d = set_d(noiseparams[i], reporter, Ngrid)
-        b = set_b(traces[i], d)
-        push!(states, viterbi_grid(a, a_grid, b, p0))
-    end
-    states, d
-end
-
-
-
-"""
-    predict_trace(r, components, reporter, interval, trace, method)
-
-"""
-# no traits
-function predict_trace(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
-    r, noiseparams = r
-    a, p0 = make_ap(r, interval, components, method)
-    d = set_d(noiseparams, reporter)
-    predict_trace(a, p0, d, trace[1])
-end
-
-# coupled
-function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
-    rates, noiseparams, couplingStrength = r
-    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
-    d = set_d(noiseparams, reporter)
-    predict_trace(a, p0, d, trace[1])
-end
-
-# hierarchical
-function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
-    rshared, rindividual, noiseshared, noiseindividual, _, _ = r
-    a, p0 = make_ap(rshared[1], interval, components, method[1])
-    d = set_d(noiseshared[1], reporter)
-    if method[2]
-        states, observation_dist = predict_trace(noiseindividual, a, p0, reporter, trace[1])
-    else
-        states, observation_dist = predict_trace(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1])
-    end
-    states, observation_dist
-end
-
-# coupled, hierarchical
-function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
-    rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
-    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-    d = set_d(noiseshared[1], reporter)
-    if method[2]
-        states, observation_dist = predict_trace(noiseindividual, a, p0, reporter, trace[1])
-    else
-        states, observation_dist = predict_trace(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
-    end
-    states, observation_dist
-end
-
-### grid trait likelihoods
-"""
-    predict_trace(r, pgrid, Ngrid, components, reporter, interval, trace, method)
-    
-"""
-# grid
-function predict_trace(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
-    r, noiseparams, pgrid = r
-    a, p0 = make_ap(r, interval, components, method)
-    a_grid = make_a_grid(pgrid[1], Ngrid)
-    d = set_d(noiseparams, reporter, Ngrid)
-    predict_trace(a, a_grid, p0, d, trace[1])
-end
-
-# coupled, grid
-function predict_trace(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
-    r, noiseparams, couplingStrength, pgrid = r
-    a, p0 = make_ap(r, couplingStrength, interval, components, method)
-    a_grid = make_a_grid(pgrid[1][1], Ngrid)
-    d = set_d(noiseparams, reporter, Ngrid)
-    predict_trace(a, a_grid, p0, d, trace[1])
-end
-
-# hierarchical, grid
-function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
-    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
-    if method[2]
-        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
-    else
-        predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
-    end
-end
-
-# coupled, hierarchical, grid
-function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
-    rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
-    if method[2]
-        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
-    else
-        predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
-    end
-end
-
-
-function predict_trace(param, data, model::AbstractGRSMmodel)
-    r = prepare_rates(param, model)
-    if hastrait(model, :grid)
-        predict_trace(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
-    else
-        predict_trace(r, model.components, model.reporter, data.interval, data.trace, model.method)
-    end
 end
