@@ -1131,30 +1131,22 @@ end
 
 # hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
-    rshared, rindividual, _, noiseindividual, _, _, pgridshared, pgridindividual = r
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
     if method[2]
-        a, p0 = make_ap(rshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
-        ll, logpredictions = _ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, noiseindividual, pgridindividual[1], Ngrid, interval, components, reporter, trace[1], method[1])
+        predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
     end
-    lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
 end
 
 # coupled, hierarchical, grid
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
     if method[2]
-        a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1], Ngrid)
-        ll, logpredictions = _ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual[1], Ngrid, interval, components, reporter, trace[1], method[1])
+        predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
     end
-    lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
 end
 
 
@@ -1760,31 +1752,23 @@ function predict_trace(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledCo
 end
 
 # hierarchical, grid
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
     if method[2]
-        a, p0 = make_ap(rshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1][1], Ngrid)
-        ll, logpredictions = _ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, noiseindividual, pgridindividual[1], Ngrid, interval, components, reporter, trace[1], method[1])
+        predict_trace(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
     end
-    lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
 end
 
 # coupled, hierarchical, grid
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
     if method[2]
-        a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-        a_grid = make_a_grid(pgridshared[1], Ngrid)
-        ll, logpredictions = _ll_hmm(noiseindividual, Ngrid, a, a_grid, p0, reporter, trace[1])
+        predict_trace(noiseindividual, Ngrid, components, reporter, interval, trace, method[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual[1], Ngrid, interval, components, reporter, trace[1], method[1])
+        predict_trace(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace, method[1])
     end
-    lhp = ll_hierarchy(pindividual, rhyper)
-    ll + sum(lhp), vcat(logpredictions, lhp)
 end
 
 
