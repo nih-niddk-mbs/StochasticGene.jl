@@ -124,7 +124,8 @@ end
 function makeswarm_genes(; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv::Float64=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
-
+    genes = checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh)
+    println(typeof(genes))
     makeswarm(checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datapath=datapath, cell=cell, datacond=datacond, traceinfo=traceinfo, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
         fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, coupling=coupling, TransitionType=TransitionType, grid=grid, root=root, elongationtime=elongationtime, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noisepriors=noisepriors, hierarchical=hierarchical, ratetype=ratetype,
         propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, method=method, src=src, zeromedian=zeromedian, datacol=datacol, ejectnumber=ejectnumber)
@@ -140,7 +141,7 @@ creates a run for each model
 
 and all keyword arguments in makeswarm(;<keyword arguments>)
 """
-function makeswarm(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test",
+function makeswarm_models(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test",
     fittedparam::Vector=Int[], grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     juliafile = juliafile * "_" * gene * "_" * datacond * ".jl"
@@ -536,36 +537,20 @@ Checks and returns the genes that meet the specified thresholds across multiple 
 - `Vector{String}`: A vector of genes that meet the specified thresholds across the given conditions and data paths.
 
 """
-function checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
+function checkgenes(root, conds::Vector, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
     genes = Vector{Vector{String}}(undef, 0)
     typeof(conds) <: AbstractString && (conds = [conds])
     typeof(datapath) <: AbstractString && (datapath = [datapath])
-
     for d in datapath, c in conds
         push!(genes, checkgenes(root, c, d, celltype, thresholdlow, thresholdhigh))
     end
     geneset = genes[1]
     for g in genes
-        genesest = intersect(geneset, g)
+        genesest = convert(Vector{String}, intersect(geneset, g))
     end
-    return geneset
+    return genesest
 end
-"""
-    checkgenes(root, conds, datapath, celltype::String, thresholdlow::Float64, thresholdhigh::Float64)
 
-Checks and returns the genes that meet the specified thresholds across multiple conditions and data paths.
-
-### Arguments
-- `root`: The root directory.
-- `cond`: The condition to check.
-- `datapath`: The data path to check.
-- `cell`: The type of cell.
-- `thresholdlow`: The lower threshold for filtering genes.
-- `thresholdhigh`: The upper threshold for filtering genes.
-
-### Returns
-- `Vector{String}`: A vector of genes that meet the specified thresholds for the given condition and data path.
-"""
 function checkgenes(root, cond::String, datapath::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
     if cell == "HBEC"
         return genes_hbec()
@@ -574,9 +559,9 @@ function checkgenes(root, cond::String, datapath::String, cell::String, threshol
         genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datapath))
         alleles = get_alleles(root, cell)
         if ~isnothing(alleles)
-            return intersect(genes, alleles)
+            return convert(Vector{String}, intersect(genes, alleles))
         else
-            return genes
+            return convert(Vector{String}, genes)
         end
     end
 end

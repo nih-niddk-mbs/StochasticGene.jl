@@ -511,19 +511,19 @@ function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, 
     return (sojourn, nonzeros), components
 end
 
-function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, probfn, noisepriors, coupling=tuple())
+function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep), probfn, weightind, off_states(G, R, S, insertstep), collect(n+1:n+nnoise))
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
     components = TComponents(transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
 
-function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, probfn, noisepriors, coupling)
+function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
     reporter = HMMReporter[]
     !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
     for i in eachindex(G)
         nnoise = length(noisepriors[i])
         n = num_rates(transitions[i], R[i], S[i], insertstep[i])
@@ -571,7 +571,7 @@ function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, 
 end
 
 function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-    make_reporter_components(transitions, G, R, S, insertstep, splicetype, probfn, noisepriors, coupling)
+    make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
 end
 
 function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
@@ -687,7 +687,13 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 
     if CBool && GBool && HBool
         if R == 0
-            return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            if typeof(data) <: AbstractTraceData
+                # For trace data with R=0, still use GRSMmodel but with simplified components
+                return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            else
+                # For non-trace data with R=0, use GMmodel
+                return GMmodel{typeof(r),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(r, transitions, G, nalleles, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
+            end
         else
             return GRSMmodel{Nothing,typeof(r),typeof(nrates),typeof(G),typeof(priord),typeof(propcv),typeof(fittedparam),typeof(method),typeof(components),typeof(reporter)}(nothing, r, ratetransforms, nrates, transitions, G, R, S, insertstep, nalleles, splicetype, priord, propcv, fittedparam, fixedeffects, method, components, reporter)
         end

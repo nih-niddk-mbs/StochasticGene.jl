@@ -186,9 +186,9 @@ function on_states(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model)
         o = on_states(G[m], R[m], S[m], insertstep[m])
         nbefore = prod(nT[1:m-1])
         nafter = prod(nT[m+1:end])
-        enlarged_indices = [(j - 1) * nbefore + 1:j * nbefore for j in o]
+        enlarged_indices = [(j-1)*nbefore+1:j*nbefore for j in o]
         enlarged_indices = vcat(enlarged_indices...)  # Flatten again into a single vector
-        enlarged_indices = [i + (j-1)*nafter for i in enlarged_indices, j in 1:nafter]
+        enlarged_indices = [i + (j - 1) * nafter for i in enlarged_indices, j in 1:nafter]
         enlarged_indices = vcat(enlarged_indices...)  # Flatten into a single vector
         push!(onstates, enlarged_indices)
     end
@@ -249,10 +249,14 @@ This function returns the barrier (off) states, which are the complement of the 
 # Returns
 - `Vector{Int}`: Vector of off states.
 """
-function off_states(G::Int, R, S, insertstep)
-    base = S > 0 ? 3 : 2
-    nT = G * base^R
-    off_states(nT, on_states(G, R, S, insertstep))
+function off_states(G::Int, R, S, insertstep, onstates=Int[])
+    if !isempty(onstates)
+        return off_states(G, onstates)
+    else
+        base = S > 0 ? 3 : 2
+        nT = G * base^R
+        off_states(nT, on_states(G, R, S, insertstep))
+    end
 end
 
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
@@ -449,16 +453,7 @@ This function returns the number of reporters for each state index. It can handl
 # Returns
 - `Vector{Int}`: Vector of the number of reporters for each state index.
 """
-function num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)
-    base = S > 0 ? 3 : 2
-    reporters = Vector{Int}(undef, G * base^R)
-    for i in 1:G, z in 1:base^R
-        # reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
-        reporters[state_index(G, i, z)] = num_reporters_per_index(z, R, insertstep, base, f)
-        # push!(reporters, f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1))
-    end
-    reporters
-end
+
 function num_reporters_per_state(G::Int, onstates::Vector)
     reporters = Int[]
     for i in 1:G
@@ -467,18 +462,50 @@ function num_reporters_per_state(G::Int, onstates::Vector)
     reporters
 end
 
-function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, f=sum)
-    nT = T_dimension.(G, R, S)
+function num_reporters_per_state(G::Tuple, onstates::Vector{Vector{Int}})
     reporters = Vector{Int}[]
-    for m in unit_model
-        rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], f)
-        for j in 1:m-1
-            rep = repeat(rep, outer=(nT[unit_model[j]],))
+    for i in eachindex(G)
+        push!(reporters, num_reporters_per_state(G[i], onstates[i]))
+    end
+    reporters
+end
+
+function num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, onstates=Int[], f=sum)
+    if !isempty(onstates)
+        reporters = num_reporters_per_state(G, onstates)
+    else
+        base = S > 0 ? 3 : 2
+        reporters = Vector{Int}(undef, G * base^R)
+        for i in 1:G, z in 1:base^R
+            # reporters[state_index(G, i, z)] = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+            reporters[state_index(G, i, z)] = num_reporters_per_index(z, R, insertstep, base, f)
+            # push!(reporters, f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1))
         end
-        for j in m+1:length(unit_model)
-            rep = repeat(rep, inner=(nT[unit_model[j]],))
+    end
+    reporters
+end
+
+
+function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, unit_model, onstates=Int[], f=sum)
+    if !isempty(onstates)
+        reporters = num_reporters_per_state(G, onstates)
+    else
+        nT = T_dimension.(G, R, S)
+        reporters = Vector{Int}[]
+        for m in unit_model
+            if typeof(onstates) <: Vector{Vector{Int}}
+                rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], onstates[m], f)
+            else
+                rep = num_reporters_per_state(G[m], R[m], S[m], insertstep[m], [], f)
+            end
+            for j in 1:m-1
+                rep = repeat(rep, outer=(nT[unit_model[j]],))
+            end
+            for j in m+1:length(unit_model)
+                rep = repeat(rep, inner=(nT[unit_model[j]],))
+            end
+            push!(reporters, rep)
         end
-        push!(reporters, rep)
     end
     reporters
 end
@@ -658,7 +685,7 @@ function kron_left(T, M::Vector, unit_model, first, last)
     T
 end
 
-function indices_kron_left(index::Vector, dimension::Int , right_dimension::Int)
+function indices_kron_left(index::Vector, dimension::Int, right_dimension::Int)
     indices = Int[]
     total = dimension * right_dimension
     for i in 0:dimension:total-1
@@ -670,7 +697,7 @@ end
 function indices_kron_right(index::Vector, dimension::Int)
     indices = Int[]
     for i in 1:dimension
-        append!(indices, i .+ dimension .*(index .- 1))
+        append!(indices, i .+ dimension .* (index .- 1))
     end
     indices
 end
