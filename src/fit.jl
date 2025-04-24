@@ -459,8 +459,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         return RNAData(label, gene, len, h)
 
     elseif dt == :rnacount
-        countsRNA, yieldfactor = read_rnacount(gene, datacond, datapath)
-        nRNA = quantile(countsRNA, 0.99)
+        countsRNA, yieldfactor, nRNA = read_rnacount(gene, datacond, datapath)
         return RNACountData(label, gene, nRNA, countsRNA, yieldfactor)
 
     elseif dt == :rnaonoff
