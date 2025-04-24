@@ -883,8 +883,11 @@ function read_rna(gene, cond, datapath)
     if length(h) > 200
         h = truncate_histogram(h, 0.99, 1000)
     end
-    # Ensure nhist is at least 20 (default value used in simulator)
-    nhist = max(length(h), 10)
+    # Ensure h has at least 10 elements by padding with zeros if needed
+    if length(h) < 4
+        h = vcat(h, zeros(4 - length(h)))
+    end
+    nhist = length(h)
     return nhist, h
 end
 
@@ -892,8 +895,7 @@ function read_rnacount(gene, cond, datapath)
     c = readfile(gene, cond, datapath)
     countsRNA = c[:, 1]
     yieldfactor = c[:, 2]
-    # Only use 99th percentile if we have enough data points
-    nhist = length(countsRNA) > 200 ? max(quantile(countsRNA, 0.99), 1000) : max(length(countsRNA), 10)
+    nhist = max(quantile(countsRNA, 0.99), 1) + 1
     return countsRNA, yieldfactor, nhist
 end
 """
