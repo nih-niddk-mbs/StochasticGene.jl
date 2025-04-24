@@ -301,7 +301,7 @@ To fit all the genes in the data folder use:
 ```
 julia> using StochasticGene
 
-julia> makeswarm(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "rna",G=2,transitions = ([1,2],[2,1]), datacond = "MOCK",resultfolder ="HCT_scRNA",datapath = "HCT116_testdata/",nsets=1,root = ".")
+julia> makeswarm_genes(cell="HCT116",maxtime = 600.,nchains = 8,datatype = "rna",G=2,transitions = ([1,2],[2,1]), datacond = "MOCK",resultfolder ="HCT_scRNA",datapath = "HCT116_testdata/",nsets=1,root = ".")
 ```
 
 (for G = 3, use transitions = ([1,2],[2,1],[2,3],[3,2]), for 3 state Kinetic Proofreading model use transitions = ([1,2],[2,1],[2,3],[3,1]))
@@ -315,9 +315,9 @@ julia> exit()
 To run the swarm file, type at the command line:
 
 ```
-[username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_2.swarm --time 12:00:00 -t 8  -g 24 --merge-output --module julialang
+[username@biowulf ~]$ swarm -f fit_HCT116-scRNA-ss_MOCK_2.swarm --time 1:00:00 -t 8  -g 16 --merge-output --module julialang
 ```
-`-t` flag is for time
+`-t` flag is for number of processors
 `-g` flag is for memory
 
 (choose a time longer than maxtime (remember to convert seconds to hours), and make sure to allocate enough memory)
