@@ -736,7 +736,7 @@ write hierarchy parameters into a file for hierarchical models
 """
 function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
-    writedlm(f, labels[1:model.trait.hierarchical.nrates], ',')  # labels
+    writedlm(f, labels[1:1,1:model.trait.hierarchical.nrates], ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)[1:model.trait.hierarchical.nrates]], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # median posterior
