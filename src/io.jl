@@ -893,9 +893,9 @@ end
 
 function read_rnacount(gene, cond, datapath)
     c = readfile(gene, cond, datapath)
-    countsRNA = c[:, 1]
+    countsRNA = round.(Int, c[:, 1])
     yieldfactor = c[:, 2]
-    nhist = max(quantile(countsRNA, 0.99), 1) + 1
+    nhist = round(Int, max(quantile(countsRNA, 0.99), 1) + 1)
     return countsRNA, yieldfactor, nhist
 end
 """
