@@ -674,9 +674,19 @@ function make_ratetransforms(data, transitions, R, S, insertstep, reporter, coup
     end 
     if !isnothing(gridtrait)
         for i in eachindex(gridtrait.gridindices)
-            push!(ftransforms, logit)
-            push!(invtransforms, invlogit)
+            push!(ftransforms, log)
+            push!(invtransforms, exp)
         end
+    end
+    if !isnothing(hierarchicaltrait)
+        fset = ftransforms
+        iset = invtransforms
+        for i in 1:hierarchicaltrait.nhypersets
+            ftransforms = vcat(ftransforms, repeat([log], hierarchicaltrait.nparams))
+            invtransforms = vcat(invtransforms, repeat([exp], hierarchicaltrait.nparams))
+        end
+        ftransforms = vcat(ftransforms, repeat(fset, hierarchicaltrait.nindividuals))
+        invtransforms = vcat(invtransforms, repeat(iset, hierarchicaltrait.nindividuals))
     end
     Transformation(ftransforms, invtransforms)
 end
