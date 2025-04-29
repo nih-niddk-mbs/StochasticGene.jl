@@ -6,9 +6,9 @@
     make_dataframes(resultfolder::String,datapath::String)
 
 """
-function make_dataframes(resultfolder::String, datapath::String, assemble=true, fittedparams=Int[])
+function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false)
     if assemble
-        assemble_all(resultfolder, fittedparams=fittedparams)
+        assemble_all(resultfolder, multicond)
     end
     files = get_ratesummaryfiles(resultfolder)
     parts = fields.(files)
@@ -25,7 +25,7 @@ function make_dataframes(resultfolder::String, datapath::String, assemble=true, 
                 mfiles = lfiles[model.==get_model.(lfiles)]
                 dfm = Vector{DataFrame}(undef, 0)
                 for i in eachindex(mfiles)
-                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath))
+                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, multicond))
                 end
                 push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
             end
@@ -47,7 +47,7 @@ statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
 TBW
 """
-function make_dataframe(ratefile::String, datapath::String)
+function make_dataframe(ratefile::String, datapath::String, multicond::Bool)
     df = read_dataframe(ratefile)
     df2 = read_dataframe(statfile_from_ratefile(ratefile))
     df = leftjoin(df, df2, on=:Gene, makeunique=true)
@@ -59,7 +59,7 @@ function make_dataframe(ratefile::String, datapath::String)
     else
         G = parse(Int, parts.model)
         insertcols!(df, :Model => fill(G, size(df, 1)))
-        df = stack_dataframe(df, G, parts.cond)
+        df = stack_dataframe(df, G, parts.cond, multicond)
         add_moments!(df, datapath)
     end
 end
@@ -270,7 +270,7 @@ add_time!(df::DataFrame, timestamp) = insertcols!(df, :Time => timestamp)
     stack_dataframe(df2::Vector{DataFrame})
 
 """
-stack_dataframe(df, G, cond) = stack_dataframe(separate_dataframe(df, G, cond))
+stack_dataframe(df, G, cond, multicond) = stack_dataframe(separate_dataframe(df, G, cond, multicond))
 
 function stack_dataframe(df2::Vector{DataFrame})
     df = df2[1]
@@ -285,18 +285,29 @@ end
 
 TBW
 """
-function separate_dataframe(df, G, cond)
-    conds = split(cond, "-")
+function separate_dataframe(df, G, cond, multicond)
+    println("cond: ", cond)
+    conds = split_conditions(cond, multicond)
     nsets = length(conds)
     df2 = Vector{DataFrame}(undef, nsets)
     for i in 1:nsets
         df2[i] = df[:, [1; 2*G*(i-1)+2:2*G*i+1; 2*G*nsets+2:end]]
-        rename!(x -> split(x, "_")[1], df2[i])
+        if multicond
+            rename!(x -> split(x, "_")[1], df2[i])
+        end
         insertcols!(df2[i], :Condition => fill(string(conds[i]), size(df, 1)))
     end
     return df2
 end
 
+function separate_dataframe(df, G)
+
+    df2 = Vector{DataFrame}(undef, nsets)
+    for i in 1:nsets
+        df2[i] = df[:, [1; 2*G*(i-1)+2:2*G*i+1; 2*G*nsets+2:end]]
+    end
+    return df2
+end
 
 # function residuals(df)
 #     R01 = lm(@formula(log(Rate01) ~  Time*log(Decay)+PC1+PC2+PC3+PC4+PC5),df[(df.Winner .> 1) .& (df.Expression .> 0.),:])
@@ -1035,7 +1046,8 @@ function write_RNAhistogram(folder, nRNA; ejectnumber=1)
     files = get_resultfiles(folder)
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f)
+            if occursin("rates", f) && !occursin("joint", f)
+                println(f)
                 parts = fields(f)
                 G, R, S, insertstep = decompose_model(parts.model)
                 nalleles = parse(Int, parts.nalleles)
@@ -1170,90 +1182,90 @@ end
 
 
 
-"""
-    make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+# """
+#     make_traces_dataframe(traces, interval, rin, transitions, G::Int, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 
-TBW
-"""
-function make_traces_dataframe_old(traces, interval, rin, transitions, G::Int, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
+# TBW
+# """
+# function make_traces_dataframe_old(traces, interval, rin, transitions, G::Int, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple())
 
-    if hierarchical
-        nrates = num_rates(transitions, R, S, insertstep) + noiseparams
-        rshared = reshape(rin[1:nrates], nrates, 1)
-        rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
-        rin = hcat(rin, rshared)
-    end
-    components = TComponents(transitions, G, R, S, insertstep, splicetype)
-    ts, td = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
-    l = maximum(length.(traces))
-    data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
-    pred = ["model_mean$i" => [mean.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
-    predstd = ["model_std$i" => [std.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
-    cols = [data pred predstd]
-    if state
-        g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
-        gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        cols = hcat(cols, [gs s zs])
-    end
-    # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
-    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
-    DataFrame(permutedims(cols, (2, 1))[:])
-end
+#     if hierarchical
+#         nrates = num_rates(transitions, R, S, insertstep) + noiseparams
+#         rshared = reshape(rin[1:nrates], nrates, 1)
+#         rin = reshape(rin[2*nrates+1:end], nrates, length(traces))
+#         rin = hcat(rin, rshared)
+#     end
+#     components = TComponents(transitions, G, R, S, insertstep, splicetype)
+#     ts, td = predicted_states(rin, components.nT, components, noiseparams, num_reporters_per_state(G, R, S, insertstep), probfn, interval, traces)
+#     l = maximum(length.(traces))
+#     data = ["data$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+#     pred = ["model_mean$i" => [mean.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
+#     predstd = ["model_std$i" => [std.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
+#     cols = [data pred predstd]
+#     if state
+#         g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
+#         gs = ["Gstate$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#         # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#         s = ["Rstate$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#         # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#         zs = ["Reporters$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#         cols = hcat(cols, [gs s zs])
+#     end
+#     # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
+#     # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
+#     DataFrame(permutedims(cols, (2, 1))[:])
+# end
 
-"""
-    make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+# """
+#     make_traces_dataframe(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, start=1, stop=-1, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
 
-TBW
-"""
-function make_traces_dataframe_old(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
-    noiseparams = make_vector(noiseparams, length(G))
-    probfn = make_vector(probfn, length(G))
-    if hierarchical
-        nall = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
-        rates = reshape(rin, nall, length(traces) + 2)
-        noiseindividual = Matrix{Float64}[]
-        rshared = Matrix{Float64}[]
-        j = 1
-        for i in eachindex(R)
-            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
-            push!(noiseindividual, rates[j+n:j+n+noiseparams[i]-1, :])
-            push!(rshared, rates[j:j+n-1, 1:1])
-            j += n + noiseparams[i]
-        end
-        noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
-        rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
-        couplingStrength = rin[nall:nall]
-        r = (rshared, noiseindividual, couplingStrength)
-    else
-        r = copy(rin)
-    end
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-    # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
-    ts, tp = predicted_states(r, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
-    l = maximum(length.(traces))
-    cols = Matrix(undef, length(traces), 0)
-    for k in coupling[1]
-        data = ["data$i" * "_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
-        pred = ["model_mean$i" * "_$k" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
-        predstd = ["std_mean$i" * "_$k" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
-        cols = hcat(cols, [data pred predstd])
-        if state
-            index = [[s[k] for s in t] for t in ts]
-            g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
-            gs = ["Gstate$i" * "_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            s = ["Rstate$i" * "_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            zs = ["Reporters$i" * "_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            cols = hcat(cols, [gs s zs])
-        end
-    end
-    DataFrame(permutedims(cols, (2, 1))[:])
-end
+# TBW
+# """
+# function make_traces_dataframe_old(traces, interval, rin, transitions, G::Tuple, R, S, insertstep, probfn=fill(prob_Gaussian, length(G)), noiseparams=fill(4, length(G)), splicetype="", state=true, hierarchical=false, coupling=((1, 2), (Int64[], [1]), [2, 0], [0, 1], 1))
+#     noiseparams = make_vector(noiseparams, length(G))
+#     probfn = make_vector(probfn, length(G))
+#     if hierarchical
+#         nall = num_all_parameters(transitions, R, S, insertstep, noiseparams, coupling)
+#         rates = reshape(rin, nall, length(traces) + 2)
+#         noiseindividual = Matrix{Float64}[]
+#         rshared = Matrix{Float64}[]
+#         j = 1
+#         for i in eachindex(R)
+#             n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+#             push!(noiseindividual, rates[j+n:j+n+noiseparams[i]-1, :])
+#             push!(rshared, rates[j:j+n-1, 1:1])
+#             j += n + noiseparams[i]
+#         end
+#         noiseindividual = [[p[:, j] for p in noiseindividual] for j in 1:size(noiseindividual[1], 2)]
+#         rshared = [[p[:, j] for p in rshared] for j in 1:size(rshared[1], 2)]
+#         couplingStrength = rin[nall:nall]
+#         r = (rshared, noiseindividual, couplingStrength)
+#     else
+#         r = copy(rin)
+#     end
+#     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+#     # components = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
+#     ts, tp = predicted_states(r, coupling, transitions, G, R, S, insertstep, components, noiseparams, num_reporters_per_state(G, R, S, insertstep, coupling[1]), probfn, interval, traces)
+#     l = maximum(length.(traces))
+#     cols = Matrix(undef, length(traces), 0)
+#     for k in coupling[1]
+#         data = ["data$i" * "_$k" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
+#         pred = ["model_mean$i" * "_$k" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+#         predstd = ["std_mean$i" * "_$k" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+#         cols = hcat(cols, [data pred predstd])
+#         if state
+#             index = [[s[k] for s in t] for t in ts]
+#             g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
+#             gs = ["Gstate$i" * "_$k" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#             # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#             s = ["Rstate$i" * "_$k" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#             # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#             zs = ["Reporters$i" * "_$k" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+#             cols = hcat(cols, [gs s zs])
+#         end
+#     end
+#     DataFrame(permutedims(cols, (2, 1))[:])
+# end
 
 """
     write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
@@ -1857,4 +1869,7 @@ function plot_histogram(data::RNAData, model::AbstractGMmodel)
     display(plt)
     return h
 end
+
+# Utility function for splitting conditions
+split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond, "-") : [cond]
 

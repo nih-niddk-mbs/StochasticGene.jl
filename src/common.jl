@@ -187,7 +187,10 @@ struct HMMReporter
     noiseparams::Vector{Int}
 end
 
-
+struct Transformation
+    f::Vector{Function}
+    f_inv::Vector{Function}
+end
 
 """
     Abstract model types
@@ -239,6 +242,7 @@ Structure for GM models.
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
+    transforms::Transformation
     Gtransitions::Tuple
     G::Int
     nalleles::Int
@@ -364,7 +368,7 @@ Structure for GRSM models.
 struct GRSMmodel{TraitType,RateType,nratesType,GType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGRSMmodel{TraitType}
     trait::TraitType
     rates::RateType
-    ratetransforms::Vector{Function}
+    transforms::Transformation
     nrates::nratesType
     Gtransitions::Tuple
     G::GType

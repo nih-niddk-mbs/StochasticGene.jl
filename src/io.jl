@@ -68,13 +68,13 @@ Arguments
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 """
-function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
-    write_dataframes_only(resultfolder, datapath, assemble=assemble, fittedparams=fittedparams)
+function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, fittedparams=Int[])
+    write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, fittedparams=fittedparams)
     write_winners(resultfolder, measure)
 end
 
-function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, fittedparams=Int[])
-    dfs = make_dataframes(resultfolder, datapath, assemble, fittedparams)
+function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, fittedparams=Int[])
+    dfs = make_dataframes(resultfolder, datapath, assemble, multicond)
     for df in dfs
         for dff in dfs
             for dfff in dff
@@ -285,28 +285,28 @@ end
     assemble_all(folder;fittedparams)
 
 """
-function assemble_all(folder::String; fittedparams=Int[])
+function assemble_all(folder::String, multicond::Bool=false)
     files = get_resultfiles(folder)
     parts = fields.(files)
     labels = get_labels(parts)
     conds = get_conds(parts)
     models = get_models(parts)
     names = get_names(parts)
-    if isempty(fittedparams)
-        fittedparams = collect(1:num_rates(models[1])-1)
-    end
-    assemble_all(folder, files, labels, conds, models, names)
+    # if isempty(fittedparams)
+    #     fittedparams = collect(1:num_rates(models[1])-1)
+    # end
+    assemble_all(folder, files, labels, conds, models, names, multicond)
 end
 
-function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names)
+function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names, multicond::Bool=false)
     parts = fields.(files)
     for l in labels, c in conds, g in models
-        any(file_indices(parts, "rates", l, c, g) .== 1) && assemble_all(folder, files, l, c, g, names)
+        any(file_indices(parts, "rates", l, c, g) .== 1) && assemble_all(folder, files, l, c, g, names, multicond)
     end
 end
 
-function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, names)
-    labels = assemble_rates(folder, files, label, cond, model)
+function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, names, multicond::Bool=false)
+    labels = assemble_rates(folder, files, label, cond, model, multicond)
     assemble_measures(folder, files, label, cond, model)
     assemble_stats(folder, files, label, cond, model)
     if model != "1" && "burst" ∈ names
@@ -335,12 +335,13 @@ end
 
 TBW
 """
-function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
+function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
     ratefiles = get_files(files, "rates", label, cond, model)
     labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
     # header = ratelabels(model, split(cond, "-"))
-    assemble_files(folder, ratefiles, outfile, ratelabels(labels, split(cond, "-")), readmedian)
+    header = ratelabels(labels, split_conditions(cond, multicond))
+    assemble_files(folder, ratefiles, outfile, header, readmedian)
     return labels
 end
 
@@ -485,6 +486,8 @@ rlabels(model::String, conds, fittedparams) = rlabels(model, conds)[1:1, fittedp
 rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fittedparams]
 
 ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
+
+ratelabels(labels::Matrix) = ["Gene" labels]
 
 """
     rlabels(model::AbstractGMmodel)

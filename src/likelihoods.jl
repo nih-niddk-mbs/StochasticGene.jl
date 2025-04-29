@@ -462,18 +462,42 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     return sum(logpredictions), logpredictions
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGeneTransitionModel)
-    ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-end
+# function loglikelihood(param, data::AbstractTraceData, model::AbstractGeneTransitionModel)
+#     _ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
+# end
+
+# Helper to get the right component
+get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
+get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
+# (Add more as needed)
 
 function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
     r = prepare_rates(param, model)
+    components = get_components(model, data)
     if !isnothing(model.trait) && haskey(model.trait, :grid)
-        ll_hmm(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
+        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method)
     else
-        ll_hmm(r, model.components, model.reporter, data.interval, data.trace, model.method)
+        ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method)
     end
 end
+
+# function ll_hmm_trace(param, data::AbstractTraceData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     if !isnothing(model.trait) && haskey(model.trait, :grid)
+#         ll_hmm(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
+#     else
+#         ll_hmm(r, model.components, model.reporter, data.interval, data.trace, model.method)
+#     end
+# end
+
+# function ll_hmm_trace(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
+#     r = prepare_rates(param, model)
+#     if !isnothing(model.trait) && haskey(model.trait, :grid)
+#         ll_hmm(r, model.trait.grid.ngrid, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+#     else
+#         ll_hmm(r, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
+#     end
+# end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
     ll_hmm_trace(param, data, model)
@@ -898,6 +922,14 @@ function transform_rates(r, model::AbstractGRSMmodel)
     end
 end
 
+function transform_rates(r, model)
+    rtransformed = map((f,x) -> f(x), model.transform.f, r)
+    rtransformed[model.fittedparam]
+end
+
+function inverse_transform_rates(p, model)
+    map((f,x) -> f(x), model.transform.f_inv[model.fittedparam], p)
+end
 
 # transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 

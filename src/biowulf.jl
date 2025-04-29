@@ -57,7 +57,7 @@ the function, it will parse the numerical method rather than just writing it.
 
 """
 function makeswarm(; gene::String="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling = tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
     propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
@@ -368,7 +368,7 @@ function create_label(label, inlabel, datatype, datacond::String, cell, Transiti
 end
 
 function create_label(label, inlabel, datatype, datacond::Vector, cell, TransitionType)
-    create_label(label, inlabel, datatype, join(datacond,"-"), cell, TransitionType)
+    create_label(label, inlabel, datatype, join(datacond, "-"), cell, TransitionType)
 end
 
 """
@@ -397,11 +397,11 @@ function create_modelstring(G::Int, R, S, insertstep)
 end
 
 function create_modelstring(G::Tuple, R, S, insertstep)
-        m = ""
-        for i in eachindex(G)
-            m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
-        end
-        return m
+    m = ""
+    for i in eachindex(G)
+        m *= "$(G[i])$(R[i])$(S[i])$(insertstep[i])"
+    end
+    return m
 end
 
 """
@@ -653,7 +653,11 @@ Retrieves the genes with halflives within the specified thresholds from a given 
 """
 function get_halflives(hlpath, thresholdlow::Float64, thresholdhigh::Float64)
     genes = Vector{String}(undef, 0)
-    halflives = readdlm(hlpath, ',')
+    if ispath(hlpath)
+        halflives = readdlm(hlpath, ',')
+    else
+        return nothing
+    end
     for row in eachrow(halflives)
         if typeof(row[2]) <: Number
             if thresholdlow <= row[2] < thresholdhigh

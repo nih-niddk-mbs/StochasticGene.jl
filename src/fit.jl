@@ -574,7 +574,7 @@ function make_reporter_components(data::AbstractTraceData, transitions, G, R, S,
 end
 
 function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, probfn, noisepriors, coupling)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
     mcomponents = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber)
     return reporter, MTComponents{typeof(mcomponents),typeof(tcomponents)}(mcomponents, tcomponents)
 end
@@ -647,13 +647,40 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, transitions, R, S, insertstep, nrates, reporter, couplingtrait, hierarchicaltrait, gridtrait)
-    ratetransforms = Vector{Function}[]
-    for i in eachindex(nrates)
-        push!(ratetransforms, log)
+function make_ratetransforms(data, transitions, R, S, insertstep, reporter, couplingtrait, gridtrait)
+    ftransforms = Vector{Function}[]
+    invtransforms = Vector{Function}[]
+    nrates = num_rates(transitions, R, S, insertstep)
+    if typeof(reporter) <: HMMReporter
+        for i in eachindex(nrates)
+            push!(ftransforms, log)
+            push!(invtransforms, exp)
+        end
+        for i in eachindex(reporter.noiseparams)
+            push!(ftransforms, x -> x / data.trace[i][end])
+            push!(invtransforms, x -> x * data.trace[i][end])
+        end
+    else
+        for i in eachindex(nrates)
+            push!(ftransforms, log)
+            push!(invtransforms, exp)
+        end
     end
-    ratetransforms
+    if !isempty(couplingtrait)
+        for i in eachindex(couplingtrait.couplingindices)
+            push!(ftransforms, log_shift)
+            push!(invtransforms, log_shift_inv)
+        end
+    end 
+    if !isnothing(gridtrait)
+        for i in eachindex(gridtrait.gridindices)
+            push!(ftransforms, logit)
+            push!(invtransforms, invlogit)
+        end
+    end
+    Transformation(ftransforms, invtransforms)
 end
+
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
@@ -678,7 +705,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 
     nrates = num_rates(transitions, R, S, insertstep)
     # ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
-    ratetransforms = Vector{Function}[]
+    ratetransforms = Transformation(Vector{Function}[], Vector{Function}[]) 
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
