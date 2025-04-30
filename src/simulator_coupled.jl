@@ -519,11 +519,7 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
     trace = Matrix{Float64}(undef, 0, 4)
     state = tracelog[1][2]
     frame = interval
-    if isempty(onstates)
-        reporters = num_reporters_per_state(G, R, S, insertstep, reporterfn)
-    else
-        reporters = num_reporters_per_state(G, onstates)
-    end
+    reporters = num_reporters_per_state(G, R, S, insertstep, onstates, reporterfn)
     i = 2
     base = S > 0 ? 3 : 2
     d = probfn(par, reporters, G * base^R)

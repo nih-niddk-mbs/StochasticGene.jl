@@ -242,7 +242,6 @@ Structure for GM models.
 """
 struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentType,ReporterType} <: AbstractGMmodel
     rates::RateType
-    transforms::Transformation
     Gtransitions::Tuple
     G::Int
     nalleles::Int
