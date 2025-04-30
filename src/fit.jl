@@ -647,18 +647,18 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, transitions, R, S, insertstep, reporter, couplingtrait, gridtrait)
-    ftransforms = Vector{Function}[]
-    invtransforms = Vector{Function}[]
-    nrates = num_rates(transitions, R, S, insertstep)
+function make_ratetransforms(data, nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait)
+    ftransforms = Function[]
+    invtransforms = Function[]
+    # nrates = num_rates(transitions, R, S, insertstep)
     if typeof(reporter) <: HMMReporter
-        for i in eachindex(nrates)
+        for i in 1:nrates
             push!(ftransforms, log)
             push!(invtransforms, exp)
         end
         for i in eachindex(reporter.noiseparams)
-            push!(ftransforms, x -> x / data.trace[i][end])
-            push!(invtransforms, x -> x * data.trace[i][end])
+            push!(ftransforms, x -> x - data.trace[end])
+            push!(invtransforms, x -> x + data.trace[end])
         end
     else
         for i in eachindex(nrates)
