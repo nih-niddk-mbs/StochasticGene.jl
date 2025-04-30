@@ -913,6 +913,11 @@ Transform rates to log space.
 """
 transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
+function transform_rates(r, model)
+    rtransformed = map((f, x) -> f(x), model.transform.f, r)
+    rtransformed[model.fittedparam]
+end
+
 function transform_rates(r, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
@@ -922,14 +927,9 @@ function transform_rates(r, model::AbstractGRSMmodel)
     end
 end
 
-function transform_rates(r, model)
-    rtransformed = map((f,x) -> f(x), model.transform.f, r)
-    rtransformed[model.fittedparam]
-end
 
-function inverse_transform_rates(p, model)
-    map((f,x) -> f(x), model.transform.f_inv[model.fittedparam], p)
-end
+
+
 
 # transform_rates(r, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(r, model.reporter.weightind, model.fittedparam, logv, logit)
 
@@ -952,6 +952,10 @@ Transform rates from log space back to original space.
 - Transformed rates.
 """
 inverse_transform_rates(p, model::AbstractGeneTransitionModel) = exp.(p)
+
+function inverse_transform_rates(p, model)
+    map((f, x) -> f(x), model.transform.f_inv[model.fittedparam], p)
+end
 
 function inverse_transform_rates(p, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)

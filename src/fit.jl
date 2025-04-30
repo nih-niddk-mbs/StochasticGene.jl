@@ -348,10 +348,11 @@ function set_trace_weight(traceinfo)
     return weight
 end
 
-function zero_median(tracer::Vector{T}, zeromedian) where T <: AbstractVector
+function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
     if zeromedian
         trace = similar(tracer)
         medians = [median(t) for t in tracer]
+        mads = [mad(t) for t in tracer]
         maxmedians = maximum(medians)
         for i in eachindex(tracer)
             trace[i] = tracer[i] .- medians[i] .+ maximum(medians)
@@ -363,12 +364,11 @@ function zero_median(tracer::Vector{T}, zeromedian) where T <: AbstractVector
     return trace, maxmedians
 end
 
-function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
+function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractMatrix}
     if zeromedian
         trace = similar(tracer)
         medians = [median(t, dims=1) for t in tracer]
         maxmedians = maximum(vcat(medians...), dims=1)
-        println("medians: ", medians)
         for i in eachindex(tracer)
             trace[i] = tracer[i] .- medians[i] .+ maxmedians
         end
@@ -378,6 +378,20 @@ function zero_median(tracer::Vector{T}, zeromedian) where T<:AbstractMatrix
     end
     return trace, maxmedians
 end
+
+# function robust_zscore(tracer::Vector, zeromedian=false)
+#     if zeromedian
+#         trace = similar(tracer)
+#         medians = [median(t) for t in tracer]
+#         mads = [mad(t) for t in tracer]
+#         for i in eachindex(tracer)
+#             trace[i] = (tracer[i] .- medians[i]) ./ mad(mads)
+#         end
+#     else
+#         trace = tracer
+#     end
+#     return trace
+# end
 
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false)
     if typeof(datapath) <: String
@@ -647,23 +661,23 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait)
+function make_ratetransforms(data, nrates::Int, reporter, couplingtrait, gridtrait, hierarchicaltrait)
     ftransforms = Function[]
     invtransforms = Function[]
     # nrates = num_rates(transitions, R, S, insertstep)
+    for i in 1:nrates
+        push!(ftransforms, log)
+        push!(invtransforms, exp)
+    end
     if typeof(reporter) <: HMMReporter
-        for i in 1:nrates
-            push!(ftransforms, log)
-            push!(invtransforms, exp)
-        end
         for i in eachindex(reporter.noiseparams)
-            push!(ftransforms, x -> x - data.trace[end])
-            push!(invtransforms, x -> x + data.trace[end])
-        end
-    else
-        for i in eachindex(nrates)
-            push!(ftransforms, log)
-            push!(invtransforms, exp)
+            if isodd(i)
+                push!(ftransforms, identity)
+                push!(invtransforms, identity)
+            else
+                push!(ftransforms, log)
+                push!(invtransforms, exp)
+            end
         end
     end
     if !isempty(couplingtrait)
@@ -671,7 +685,7 @@ function make_ratetransforms(data, nrates, reporter, couplingtrait, gridtrait, h
             push!(ftransforms, log_shift)
             push!(invtransforms, log_shift_inv)
         end
-    end 
+    end
     if !isnothing(gridtrait)
         for i in eachindex(gridtrait.gridindices)
             push!(ftransforms, log)
@@ -691,6 +705,47 @@ function make_ratetransforms(data, nrates, reporter, couplingtrait, gridtrait, h
     Transformation(ftransforms, invtransforms)
 end
 
+function make_ratetransforms(data, nrates::Tuple, reporter, couplingtrait, gridtrait, hierarchicaltrait)
+    ftransforms = Function[]
+    invtransforms = Function[]
+    for n in eachindex(nrates)
+        for i in 1:nrates[n]
+            push!(ftransforms, log)
+            push!(invtransforms, exp)
+        end
+        if typeof(reporter) <: HMMReporter
+            for i in eachindex(reporter.noiseparams)
+                if isodd(i)
+                    push!(ftransforms, identity)
+                    push!(invtransforms, identity)
+                end
+            end
+        end
+    end
+    if !isempty(couplingtrait)
+        for i in eachindex(couplingtrait.couplingindices)
+            push!(ftransforms, log_shift)
+            push!(invtransforms, log_shift_inv)
+        end
+    end
+    if !isnothing(gridtrait)
+        for i in eachindex(gridtrait.gridindices)
+            push!(ftransforms, log)
+            push!(invtransforms, exp)
+        end
+    end
+    if !isnothing(hierarchicaltrait)
+        fset = ftransforms
+        iset = invtransforms
+        for i in 1:hierarchicaltrait.nhypersets
+            push!(ftransforms, repeat([log], hierarchicaltrait.nparams))
+            push!(invtransforms, repeat([exp], hierarchicaltrait.nparams))
+        end
+        push!(ftransforms, repeat(fset, hierarchicaltrait.nindividuals))
+        push!(invtransforms, repeat(iset, hierarchicaltrait.nindividuals))
+    end
+    Transformation(ftransforms, invtransforms)
+end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
@@ -715,7 +770,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 
     nrates = num_rates(transitions, R, S, insertstep)
     # ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
-    ratetransforms = Transformation(Vector{Function}[], Vector{Function}[]) 
+    ratetransforms = Transformation(Vector{Function}[], Vector{Function}[])
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
