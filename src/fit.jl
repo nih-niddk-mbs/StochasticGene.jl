@@ -661,17 +661,14 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function make_ratetransforms(data, nrates::Int, reporter, couplingtrait, gridtrait, hierarchicaltrait)
-    ftransforms = Function[]
-    invtransforms = Function[]
-    # nrates = num_rates(transitions, R, S, insertstep)
+function rate_transforms!(ftransforms, invtransforms, nrates::Int, reporter, zeromedian=false)
     for i in 1:nrates
         push!(ftransforms, log)
         push!(invtransforms, exp)
     end
     if typeof(reporter) <: HMMReporter
         for i in eachindex(reporter.noiseparams)
-            if isodd(i)
+            if isodd(i) && zeromedian
                 push!(ftransforms, identity)
                 push!(invtransforms, identity)
             else
@@ -680,6 +677,20 @@ function make_ratetransforms(data, nrates::Int, reporter, couplingtrait, gridtra
             end
         end
     end
+end
+
+function rate_transforms!(ftransforms, invtransforms, nrates::Tuple, reporter)
+    for n in eachindex(nrates)
+        rate_transforms!(ftransforms, invtransforms, nrates[n], reporter[n])
+    end
+end
+
+function make_ratetransforms(nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait)
+    ftransforms = Function[]
+    invtransforms = Function[]
+
+    rate_transforms!(ftransforms, invtransforms, nrates, reporter)
+
     if !isempty(couplingtrait)
         for i in eachindex(couplingtrait.couplingindices)
             push!(ftransforms, log_shift)
@@ -692,7 +703,7 @@ function make_ratetransforms(data, nrates::Int, reporter, couplingtrait, gridtra
             push!(invtransforms, exp)
         end
     end
-    if !isnothing(hierarchicaltrait)
+    if !isempty(hierarchicaltrait)
         fset = ftransforms
         iset = invtransforms
         for i in 1:hierarchicaltrait.nhypersets
@@ -705,49 +716,7 @@ function make_ratetransforms(data, nrates::Int, reporter, couplingtrait, gridtra
     Transformation(ftransforms, invtransforms)
 end
 
-function make_ratetransforms(data, nrates::Tuple, reporter, couplingtrait, gridtrait, hierarchicaltrait)
-    ftransforms = Function[]
-    invtransforms = Function[]
-    for n in eachindex(nrates)
-        for i in 1:nrates[n]
-            push!(ftransforms, log)
-            push!(invtransforms, exp)
-        end
-        if typeof(reporter) <: HMMReporter
-            for i in eachindex(reporter.noiseparams)
-                if isodd(i)
-                    push!(ftransforms, identity)
-                    push!(invtransforms, identity)
-                end
-            end
-        end
-    end
-    if !isempty(couplingtrait)
-        for i in eachindex(couplingtrait.couplingindices)
-            push!(ftransforms, log_shift)
-            push!(invtransforms, log_shift_inv)
-        end
-    end
-    if !isnothing(gridtrait)
-        for i in eachindex(gridtrait.gridindices)
-            push!(ftransforms, log)
-            push!(invtransforms, exp)
-        end
-    end
-    if !isnothing(hierarchicaltrait)
-        fset = ftransforms
-        iset = invtransforms
-        for i in 1:hierarchicaltrait.nhypersets
-            push!(ftransforms, repeat([log], hierarchicaltrait.nparams))
-            push!(invtransforms, repeat([exp], hierarchicaltrait.nparams))
-        end
-        push!(ftransforms, repeat(fset, hierarchicaltrait.nindividuals))
-        push!(invtransforms, repeat(iset, hierarchicaltrait.nindividuals))
-    end
-    Transformation(ftransforms, invtransforms)
-end
-
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber=1, factor=10)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
@@ -769,8 +738,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 
     nrates = num_rates(transitions, R, S, insertstep)
-    # ratetransforms = make_ratetransforms(data, transitions, R, S, insertstep, nrates,reporter, couplingtrait, hierarchicaltrait, gridtrait)
-    ratetransforms = Transformation(Vector{Function}[], Vector{Function}[])
+    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical)
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
@@ -825,7 +793,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, ejectnumber)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber)
     options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
     return data, model, options
 end
@@ -1211,11 +1179,12 @@ function burstsize(fits::Fit, model::AbstractGRSMmodel)
     end
 end
 
-burstsize(r, model::AbstractGRSMmodel) = burstsize(r, model.R, length(model.Gtransitions))
+burstsize(r, model::AbstractGRSMmodel) = burstsize(r, 
 
 function burstsize(r, R, ntransitions, splicetype="", ejectnumber=1)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    M = make_mat_M(MComponents([(2, 1)], 2, R, total, r[end], splicetype, ejectnumber), r)
+    components = MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber)
+    M = make_mat_M(components, r)
     # M = make_components_M(transitions, G, R, nhist, decay, splicetype)
     nT = 2 * 2^R
     L = nT * total
