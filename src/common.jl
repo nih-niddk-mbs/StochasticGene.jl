@@ -187,10 +187,7 @@ struct HMMReporter
     noiseparams::Vector{Int}
 end
 
-struct Transformation
-    f::Vector{Function}
-    f_inv::Vector{Function}
-end
+
 
 """
     Abstract model types
@@ -254,7 +251,19 @@ struct GMmodel{RateType,PriorType,ProposalType,ParamType,MethodType,ComponentTyp
     reporter::ReporterType
 end
 
+"""
+    Transformation
 
+Structure for transformation of rates.
+
+# Fields
+- `f::Vector{Function}`: Vector of functions.
+- `f_inv::Vector{Function}`: Vector of inverse functions.
+"""
+struct Transformation
+    f::Vector{Function}
+    f_inv::Vector{Function}
+end
 
 """
 Trait system
@@ -347,6 +356,7 @@ Structure for GRSM models.
 # Fields
 - `trait::TraitType`: Trait type.
 - `rates::RateType`: Transition rates.
+- `transforms::Transformation`: Transformation of rates.
 - `nrates::nratesType`: Number of transition rates.
 - `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
 - `G::Int`: Number of G steps.

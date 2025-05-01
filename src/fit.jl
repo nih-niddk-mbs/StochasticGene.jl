@@ -661,7 +661,7 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function rate_transforms!(ftransforms, invtransforms, nrates::Int, reporter, zeromedian=false)
+function rate_transforms!(ftransforms, invtransforms, nrates::Int, reporter, zeromedian)
     for i in 1:nrates
         push!(ftransforms, log)
         push!(invtransforms, exp)
@@ -679,17 +679,17 @@ function rate_transforms!(ftransforms, invtransforms, nrates::Int, reporter, zer
     end
 end
 
-function rate_transforms!(ftransforms, invtransforms, nrates::Tuple, reporter)
+function rate_transforms!(ftransforms, invtransforms, nrates::Tuple, reporter, zeromedian)
     for n in eachindex(nrates)
-        rate_transforms!(ftransforms, invtransforms, nrates[n], reporter[n])
+        rate_transforms!(ftransforms, invtransforms, nrates[n], reporter[n], zeromedian)
     end
 end
 
-function make_ratetransforms(nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait)
+function make_ratetransforms(nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait, zeromedian)
     ftransforms = Function[]
     invtransforms = Function[]
 
-    rate_transforms!(ftransforms, invtransforms, nrates, reporter)
+    rate_transforms!(ftransforms, invtransforms, nrates, reporter, zeromedian)
 
     if !isempty(couplingtrait)
         for i in eachindex(couplingtrait.couplingindices)
@@ -737,8 +737,8 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
     end
 
-    nrates = num_rates(transitions, R, S, insertstep)
-    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical)
+    nrates = num_rates(transitions, R, S, insertstep)       
+    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical, zeromedian)
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
