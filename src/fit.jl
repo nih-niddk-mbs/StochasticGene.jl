@@ -1179,20 +1179,22 @@ function burstsize(fits::Fit, model::AbstractGRSMmodel)
     end
 end
 
-burstsize(r, model::AbstractGRSMmodel) = burstsize(r, 
+burstsize(r, model::AbstractGRSMmodel, ejectnumber=20) = burstsize(r, model.Gtransitions, model.G, model.R, model.S, model.insertstep, model.splicetype, ejectnumber)
 
-function burstsize(r, R, ntransitions, splicetype="", ejectnumber=1)
+function burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumber=1)
+    ntransitions = num_rates(transitions, R, S, insertstep)
     total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    components = MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber)
+    components = MComponents(transitions, G, R, total, r[num_rates(transitions, R, S, insertstep)], splicetype, ejectnumber)
     M = make_mat_M(components, r)
-    # M = make_components_M(transitions, G, R, nhist, decay, splicetype)
-    nT = 2 * 2^R
+    nT = G * 2^R
     L = nT * total
     S0 = zeros(L)
     S0[2] = 1.0
     s = time_evolve_diff([1, 10 / minimum(r[ntransitions:ntransitions+R+1])], M, S0)
     mean_histogram(s[2, collect(1:nT:L)])
 end
+
+
 
 """
 check_genename(gene,p1)
