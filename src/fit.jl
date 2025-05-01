@@ -798,9 +798,6 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     return data, model, options
 end
 
-
-
-
 """
     checklength(r, transitions, R, S, insertstep, reporter)
 
