@@ -508,6 +508,10 @@ function distribution_array(param::Vector, cv, dist=Normal)
     return d
 end
 
+function sigmanormal(mean, cv)
+    return max(mean * cv, 1.0)
+end
+
 """
     sigmalognormal(cv)
 

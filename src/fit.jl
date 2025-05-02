@@ -355,7 +355,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
         mads = [mad(t) for t in tracer]
         maxmedians = maximum(medians)
         for i in eachindex(tracer)
-            trace[i] = tracer[i] .- medians[i] .+ 0.0* maxmedians
+            trace[i] = (tracer[i] .- medians[i]) ./ maxmedians
         end
     else
         trace = tracer
@@ -370,7 +370,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractMatrix}
         medians = [median(t, dims=1) for t in tracer]
         maxmedians = maximum(vcat(medians...), dims=1)
         for i in eachindex(tracer)
-            trace[i] = tracer[i] .- medians[i] .+ 0.0* maxmedians
+            trace[i] = (tracer[i] .- medians[i]) ./ maxmedians
         end
     else
         trace = tracer
@@ -661,46 +661,52 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord
 end
 
-function rate_transforms!(ftransforms, invtransforms, nrates::Int, reporter, zeromedian)
+function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
     for i in 1:nrates
         push!(ftransforms, log)
         push!(invtransforms, exp)
+        push!(sigmatransforms, sigmalognormal)
     end
     if typeof(reporter) <: HMMReporter
         for i in eachindex(reporter.noiseparams)
             if isodd(i) && zeromedian
                 push!(ftransforms, identity)
                 push!(invtransforms, identity)
+                push!(sigmatransforms, sigmanormal)
             else
                 push!(ftransforms, log)
                 push!(invtransforms, exp)
+                push!(sigmatransforms, sigmalognormal)
             end
         end
     end
 end
 
-function rate_transforms!(ftransforms, invtransforms, nrates::Tuple, reporter, zeromedian)
+function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Tuple, reporter, zeromedian)
     for n in eachindex(nrates)
-        rate_transforms!(ftransforms, invtransforms, nrates[n], reporter[n], zeromedian)
+        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates[n], reporter[n], zeromedian)
     end
 end
 
-function make_ratetransforms(nrates, reporter, couplingtrait, gridtrait, hierarchicaltrait, zeromedian)
+function make_ratetransforms(nrates, fittedparam, reporter, couplingtrait, gridtrait, hierarchicaltrait, zeromedian)
     ftransforms = Function[]
     invtransforms = Function[]
+    sigmatransforms = Function[]
 
-    rate_transforms!(ftransforms, invtransforms, nrates, reporter, zeromedian)
+    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
 
     if !isempty(couplingtrait)
         for i in eachindex(couplingtrait.couplingindices)
             push!(ftransforms, log_shift)
             push!(invtransforms, log_shift_inv)
+            push!(sigmatransforms, sigmalognormal)  
         end
     end
     if !isnothing(gridtrait)
         for i in eachindex(gridtrait.gridindices)
             push!(ftransforms, log)
             push!(invtransforms, exp)
+            push!(sigmatransforms, sigmalognormal)
         end
     end
     if !isempty(hierarchicaltrait)
@@ -709,18 +715,20 @@ function make_ratetransforms(nrates, reporter, couplingtrait, gridtrait, hierarc
         for i in 1:hierarchicaltrait.nhypersets
             ftransforms = vcat(ftransforms, repeat([log], hierarchicaltrait.nparams))
             invtransforms = vcat(invtransforms, repeat([exp], hierarchicaltrait.nparams))
+            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal], hierarchicaltrait.nparams))
         end
         ftransforms = vcat(ftransforms, repeat(fset, hierarchicaltrait.nindividuals))
         invtransforms = vcat(invtransforms, repeat(iset, hierarchicaltrait.nindividuals))
+        sigmatransforms = vcat(sigmatransforms, repeat(sigmatransforms, hierarchicaltrait.nindividuals))
     end
-    Transformation(ftransforms, invtransforms)
+    Transformation(ftransforms[fittedparam], invtransforms[fittedparam], sigmatransforms[fittedparam])
 end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
     nrates = num_rates(transitions, R, S, insertstep)       
-    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical, zeromedian)
+    ratetransforms = make_ratetransforms(nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
@@ -954,7 +962,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(prior_mean(rm, fittedparam, ratetransforms), prior_sigma(rcv, fittedparam, ratetransforms), Normal)
+        return distribution_array(transform_rates(rm[fittedparam], ratetransforms.f), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -980,7 +988,7 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(prior_mean(rm, fittedparam, ratetransforms), prior_sigma(rcv, fittedparam, ratetransforms), Normal)
+        return distribution_array(transform_rates(rm[fittedparam], ratetransforms.f), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -996,6 +1004,21 @@ function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vect
     end
 end
 
+function prior_sigma(r, cv, sigmatransforms)
+    sigma = Vector{Float64}(undef, length(sigmatransforms))
+    for i in eachindex(sigmatransforms)
+        f = sigmatransforms[i]
+        if f === sigmalognormal
+            sigma[i] = f(cv[i])
+        elseif f === sigmanormal
+            sigma[i] = f(r[i], cv[i])
+        else
+            # Default: try with cv[i], or throw an error if you want strictness
+            sigma[i] = f(cv[i])
+        end
+    end
+    return sigma
+end
 
 # function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
 """

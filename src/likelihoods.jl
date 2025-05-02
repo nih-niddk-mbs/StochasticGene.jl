@@ -913,13 +913,23 @@ Transform rates to log space.
 """
 transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
-function transform_rates(r::AbstractVector, model::AbstractGRSMmodel)
-    rtransformed = map((f, x) -> f(x), model.transforms.f[model.fittedparam], r)
+function transform_rates(r, model::AbstractGRSMmodel)
+    transform_rates(r, model.transforms.f)
+    # rtransformed = map((f, x) -> f(x), model.transforms.f[model.fittedparam], r)
     # rtransformed[model.fittedparam]
 end
 
-function transform_rates(r::AbstractMatrix, model::AbstractGRSMmodel)
-    hcat([map((f, x) -> f(x), model.transforms.f[model.fittedparam], r[:, i]) for i in 1:size(r, 2)]...)
+# function transform_rates(r::AbstractMatrix, model::AbstractGRSMmodel)
+#     transform_rates(r, model.transforms.f, model.fittedparam)
+#     # hcat([map((f, x) -> f(x), model.transforms.f[model.fittedparam], r[:, i]) for i in 1:size(r, 2)]...)
+# end
+
+function transform_rates(r::AbstractVector, f::Vector{Function})
+    map((f, x) -> f(x), f, r)
+end
+
+function transform_rates(r::AbstractMatrix, f::Vector{Function})
+    hcat([map((f, x) -> f(x), f, r[:, i]) for i in 1:size(r, 2)]...)
 end
 
 function transform_rates2(r, model::AbstractGRSMmodel)
@@ -951,13 +961,29 @@ Transform rates from log space back to original space.
 """
 inverse_transform_params(p, model::AbstractGeneTransitionModel) = exp.(p)
 
-function inverse_transform_params(p::AbstractVector, model::AbstractGRSMmodel)
-    map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p)
+function inverse_transform_params(p, model::AbstractGRSMmodel)
+    inverse_transform_params(p, model.transforms.f_inv)
 end
 
-function inverse_transform_params(p::AbstractMatrix, model::AbstractGRSMmodel)
-    # Apply inverse transforms to each column of p
-    hcat([map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p[:, i]) for i in 1:size(p, 2)]...)
+# function inverse_transform_params(p::AbstractMatrix, model::AbstractGRSMmodel)
+#     # Apply inverse transforms to each column of p
+#     hcat([map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p[:, i]) for i in 1:size(p, 2)]...)
+# end
+
+function inverse_transform_params(p::AbstractVector, f_inv::Vector{Function})
+    map((f, x) -> f(x), f_inv, p)
+end
+
+function inverse_transform_params(p::AbstractMatrix, f_inv::Vector{Function})
+    hcat([map((f, x) -> f(x), f_inv, p[:, i]) for i in 1:size(p, 2)]...)
+end
+
+function apply_transform(p::AbstractVector, f)
+    map((f, x) -> f(x), f, p)
+end
+
+function apply_transform(p::AbstractMatrix, f)
+    hcat([map((f, x) -> f(x), f, p[:, i]) for i in 1:size(p, 2)]...)
 end
 
 function inverse_transform_params2(p, model::AbstractGRSMmodel)
