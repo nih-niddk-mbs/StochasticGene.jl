@@ -642,7 +642,7 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10)
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing)
     fittedindividual = hierarchical[2]
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
@@ -656,7 +656,7 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     hierarchy = HierarchicalTrait(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
     rprior = rmean[1:nhypersets*n_all_params]
-    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor)
+    priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor, ratetransforms)
 
     return hierarchy, fittedparam, fixedeffects, priord
 end
@@ -718,6 +718,10 @@ end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+
+    nrates = num_rates(transitions, R, S, insertstep)       
+    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical, zeromedian)
+
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         ncoupling = coupling[5]
@@ -732,13 +736,12 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         gridindices = nothing
     end
     if !isempty(hierarchical)
-        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor)
+        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, facor, ratetransforms)
     else
-        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
+        priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     end
 
-    nrates = num_rates(transitions, R, S, insertstep)       
-    ratetransforms = make_ratetransforms(nrates, reporter, coupling, grid, hierarchical, zeromedian)
+
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
@@ -932,7 +935,7 @@ end
 
 TBW
 """
-function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10)
+function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     if isempty(rm)
         throw(ArgumentError("No prior mean"))
         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
@@ -951,7 +954,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_array(rm[fittedparam], couplingindices, fittedparam, logv, log_shift1), sigmalognormal(rcv[fittedparam]), Normal)
+        return distribution_array(prior_mean(rm, fittedparam, ratetransforms), prior_sigma(rcv, fittedparam, ratetransforms), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -963,7 +966,7 @@ end
 
 
 """
-function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor)
+function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedparam::Vector, priorcv, noisepriors, factor, ratetransforms)
     if isempty(rm)
         throw(ArgumentError("No prior mean"))
         # rm = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors)
@@ -977,7 +980,7 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(log.(rm[fittedparam]), sigmalognormal(rcv[fittedparam]), Normal)
+        return distribution_array(prior_mean(rm, fittedparam, ratetransforms), prior_sigma(rcv, fittedparam, ratetransforms), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -985,11 +988,11 @@ end
 
 # prior_distribution(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10) = prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
 
-function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor)
+function prior_distribution(rm, transitions, R, S, insertstep, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     if isnothing(couplingindices)
-        prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, factor)
+        prior_distribution(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, factor, ratetransforms)
     else
-        prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor)
+        prior_distribution_coupling(rm, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     end
 end
 

@@ -263,6 +263,7 @@ Structure for transformation of rates.
 struct Transformation
     f::Vector{Function}
     f_inv::Vector{Function}
+    f_cv::Vector{Function}
 end
 
 """
