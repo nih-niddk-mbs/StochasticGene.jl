@@ -355,7 +355,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
         mads = [mad(t) for t in tracer]
         maxmedians = maximum(medians)
         for i in eachindex(tracer)
-            trace[i] = tracer[i] .- medians[i] .+ maximum(medians)
+            trace[i] = tracer[i] .- medians[i] .+ 0.0* maxmedians
         end
     else
         trace = tracer
@@ -370,7 +370,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractMatrix}
         medians = [median(t, dims=1) for t in tracer]
         maxmedians = maximum(vcat(medians...), dims=1)
         for i in eachindex(tracer)
-            trace[i] = tracer[i] .- medians[i] .+ maxmedians
+            trace[i] = tracer[i] .- medians[i] .+ 0.0* maxmedians
         end
     else
         trace = tracer
@@ -1285,7 +1285,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("final max ll: ", fits.llml)
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
-    println("ML rates: ", inverse_transform_rates(fits.parml, model))
+    println("ML rates: ", inverse_transform_params(fits.parml, model))
     println("Acceptance: ", fits.accept, "/", fits.total)
     if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))

@@ -660,7 +660,7 @@ function writeall(path::String, fits, stats, measures, data, temp, model::Abstra
     end
     if writesamples
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
-        write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_rates(fits.param, model)))
+        write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
 end
 
@@ -683,7 +683,7 @@ end
 #     end
 #     if writesamples
 #         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
-#         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_rates(fits.param, model)))
+#         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
 #     end
 # end
 

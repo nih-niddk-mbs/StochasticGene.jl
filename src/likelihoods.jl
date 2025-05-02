@@ -913,12 +913,16 @@ Transform rates to log space.
 """
 transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
-function transform_rates(r, model)
-    rtransformed = map((f, x) -> f(x), model.transform.f, r)
-    rtransformed[model.fittedparam]
+function transform_rates(r::AbstractVector, model::AbstractGRSMmodel)
+    rtransformed = map((f, x) -> f(x), model.transforms.f[model.fittedparam], r)
+    # rtransformed[model.fittedparam]
 end
 
-function transform_rates1(r, model::AbstractGRSMmodel)
+function transform_rates(r::AbstractMatrix, model::AbstractGRSMmodel)
+    hcat([map((f, x) -> f(x), model.transforms.f[model.fittedparam], r[:, i]) for i in 1:size(r, 2)]...)
+end
+
+function transform_rates2(r, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         return transform_array(r, model.trait.coupling.couplingindices, model.fittedparam, logv, log_shift1)
     else
@@ -934,7 +938,7 @@ end
 # transform_rates(r, model::GRSMcoupledhierarchicalmodel) = transform_array(r, model.coupling[2], model.fittedparam, logv, log_shift1)
 
 """
-    inverse_transform_rates(x, model::AbstractGeneTransitionModel)
+    inverse_transform_params(x, model::AbstractGeneTransitionModel)
 
 Transform rates from log space back to original space.
 
@@ -945,13 +949,18 @@ Transform rates from log space back to original space.
 # Returns
 - Transformed rates.
 """
-inverse_transform_rates(p, model::AbstractGeneTransitionModel) = exp.(p)
+inverse_transform_params(p, model::AbstractGeneTransitionModel) = exp.(p)
 
-function inverse_transform_rates1(p, model)
+function inverse_transform_params(p::AbstractVector, model::AbstractGRSMmodel)
     map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p)
 end
 
-function inverse_transform_rates(p, model::AbstractGRSMmodel)
+function inverse_transform_params(p::AbstractMatrix, model::AbstractGRSMmodel)
+    # Apply inverse transforms to each column of p
+    hcat([map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p[:, i]) for i in 1:size(p, 2)]...)
+end
+
+function inverse_transform_params2(p, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         return transform_array(p, model.trait.coupling.couplingindices, model.fittedparam, expv, invlog_shift1)
     else
@@ -959,11 +968,11 @@ function inverse_transform_rates(p, model::AbstractGRSMmodel)
     end
 end
 
-# inverse_transform_rates(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
+# inverse_transform_params(p, model::AbstractGRSMmodel{Vector{Float64},HMMReporter}) = transform_array(p, model.reporter.weightind, model.fittedparam, expv, invlogit)
 
-# inverse_transform_rates(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
+# inverse_transform_params(p, model::GRSMcoupledmodel) = transform_array(p, length(model.rates), model.fittedparam, expv, invlog_shift1)
 
-# inverse_transform_rates(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, model.coupling[2], model.fittedparam, expv, invlog_shift1)
+# inverse_transform_params(p, model::GRSMcoupledhierarchicalmodel) = transform_array(p, model.coupling[2], model.fittedparam, expv, invlog_shift1)
 
 
 """
@@ -996,7 +1005,7 @@ Get rates from parameters.
 
 function get_rates!(r, param, model, inverse)
     if inverse
-        r[model.fittedparam] = inverse_transform_rates(param, model)
+        r[model.fittedparam] = inverse_transform_params(param, model)
     else
         r[model.fittedparam] = param
     end

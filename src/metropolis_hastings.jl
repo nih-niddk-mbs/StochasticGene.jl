@@ -749,7 +749,7 @@ returns Stats structure
 Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
 """
 function compute_stats(paramin::Array{Float64,2}, model)
-    param = inverse_transform_rates(paramin, model)
+    param = inverse_transform_params(paramin, model)
     meanparam = mean(param, dims=2)
     stdparam = std(param, dims=2)
     medparam = median(param, dims=2)
@@ -774,7 +774,7 @@ function compute_stats(paramin::Array{Float64,2}, model)
 end
 
 # function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchicalmodel)
-#     param = inverse_transform_rates(paramin, model)
+#     param = inverse_transform_params(paramin, model)
 #     meanparam = mean(param, dims=2)
 #     stdparam = std(param, dims=2)
 #     medparam = median(param, dims=2)
