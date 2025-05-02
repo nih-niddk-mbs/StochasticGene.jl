@@ -688,38 +688,42 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::T
     end
 end
 
-function make_ratetransforms(nrates, fittedparam, reporter, couplingtrait, gridtrait, hierarchicaltrait, zeromedian)
+function make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
     ftransforms = Function[]
     invtransforms = Function[]
     sigmatransforms = Function[]
 
     rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
 
-    if !isempty(couplingtrait)
-        for i in eachindex(couplingtrait.couplingindices)
+    if !isempty(coupling)
+        couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        for i in eachindex(couplingindices)
             push!(ftransforms, log_shift)
             push!(invtransforms, log_shift_inv)
             push!(sigmatransforms, sigmalognormal)  
         end
     end
-    if !isnothing(gridtrait)
-        for i in eachindex(gridtrait.gridindices)
+    if !isnothing(grid)
+        gridindices = grid_indices(transitions, R, S, insertstep, noisepriors, coupling, grid)
+        for i in eachindex(gridindices)
             push!(ftransforms, log)
             push!(invtransforms, exp)
             push!(sigmatransforms, sigmalognormal)
         end
     end
-    if !isempty(hierarchicaltrait)
+    if !isempty(hierarchical)
         fset = ftransforms
         iset = invtransforms
-        for i in 1:hierarchicaltrait.nhypersets
-            ftransforms = vcat(ftransforms, repeat([log], hierarchicaltrait.nparams))
-            invtransforms = vcat(invtransforms, repeat([exp], hierarchicaltrait.nparams))
-            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal], hierarchicaltrait.nparams))
+        nparams = length(hierarchical[2])
+        nindividuals = length(data.trace[1])
+        for i in 1:hierarchical[1]
+            ftransforms = vcat(ftransforms, repeat([log], nparams))
+            invtransforms = vcat(invtransforms, repeat([exp], nparams))
+            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal],nparams))
         end
-        ftransforms = vcat(ftransforms, repeat(fset, hierarchicaltrait.nindividuals))
-        invtransforms = vcat(invtransforms, repeat(iset, hierarchicaltrait.nindividuals))
-        sigmatransforms = vcat(sigmatransforms, repeat(sigmatransforms, hierarchicaltrait.nindividuals))
+        ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
+        invtransforms = vcat(invtransforms, repeat(iset, nindividuals))
+        sigmatransforms = vcat(sigmatransforms, repeat(sigmatransforms, nindividuals))
     end
     Transformation(ftransforms[fittedparam], invtransforms[fittedparam], sigmatransforms[fittedparam])
 end
@@ -728,7 +732,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
     nrates = num_rates(transitions, R, S, insertstep)       
-    ratetransforms = make_ratetransforms(nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
+    ratetransforms = make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
@@ -744,12 +748,10 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         gridindices = nothing
     end
     if !isempty(hierarchical)
-        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, facor, ratetransforms)
+        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms)
     else
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     end
-
-
 
     CBool = isempty(coupling)
     GBool = isnothing(grid)
