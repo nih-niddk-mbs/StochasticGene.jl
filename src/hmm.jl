@@ -894,9 +894,9 @@ function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a:
     if trace[3] > 0.0
         b = set_b(trace[2], d)
         _, C = forward(a, b, p0)
-        sum(log.(C)) * trace[3] * length(trace[1])
+        return sum(log.(C)) * trace[3] * length(trace[1])
     else
-        0.0
+        return 0.0
     end
 end
 
@@ -1044,6 +1044,26 @@ function _ll_hmm(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid
     sum(logpredictions), logpredictions
 end
 
+"""
+    ll_hierarchy(pindividual, rhyper)
+
+Loglikelihood for coupled hierarchical model individual parameters.
+    lognormal distribution constructed from hyper untransformed noise parameters
+"""
+function ll_hierarchy(pindividual, rhyper)
+    # d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
+    d = distribution_array(rhyper[1], sigmanormal.(rhyper[1], rhyper[2]))
+    lhp = Float64[]
+    for pc in pindividual
+        lhpc = 0
+        for i in eachindex(pc)
+            lhpc -= logpdf(d[i], pc[i])
+        end
+        push!(lhp, lhpc)
+    end
+    lhp
+end
+
 
 ###  likelihoods
 """
@@ -1091,6 +1111,13 @@ end
 # coupled, hierarchical
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
+    # println("rshared: ", rshared[1])
+    # println("couplingshared: ", couplingshared[1])
+    # println("noiseshared: ", noiseshared[1])
+    # println("rindividual: ", rindividual[1])
+    # println("pindividual: ", pindividual)
+    # println("noiseindividual: ", noiseindividual)
+    # println("rhyper: ", rhyper)
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
@@ -1100,7 +1127,10 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
     else
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
+    println("ll: ", ll)
     lhp = ll_hierarchy(pindividual, rhyper)
+    println("lhp: ", lhp)
+    println("lb: ", lb)
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
 

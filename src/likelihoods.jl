@@ -402,26 +402,6 @@ end
 # Model loglikelihoods
 
 """
-    ll_hierarchy(pindividual, rhyper)
-
-Loglikelihood for coupled hierarchical model individual parameters.
-    lognormal distribution constructed from hyper untransformed noise parameters
-"""
-function ll_hierarchy(pindividual, rhyper)
-    d = distribution_array(mulognormal(rhyper[1], rhyper[2]), sigmalognormal(rhyper[2]))
-    lhp = Float64[]
-    for pc in pindividual
-        lhpc = 0
-        for i in eachindex(pc)
-            lhpc -= logpdf(d[i], pc[i])
-        end
-        push!(lhp, lhpc)
-    end
-    lhp
-end
-
-
-"""
     loglikelihood(param, data, model)
 
 Calculates the negative loglikelihood for various types of data and models.
@@ -462,10 +442,6 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     return sum(logpredictions), logpredictions
 end
 
-# function loglikelihood(param, data::AbstractTraceData, model::AbstractGeneTransitionModel)
-#     _ll_hmm(get_rates(param, model), model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-# end
-
 # Helper to get the right component
 get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
 get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
@@ -481,24 +457,6 @@ function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
     end
 end
 
-# function ll_hmm_trace(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     if !isnothing(model.trait) && haskey(model.trait, :grid)
-#         ll_hmm(r, model.trait.grid.ngrid, model.components, model.reporter, data.interval, data.trace, model.method)
-#     else
-#         ll_hmm(r, model.components, model.reporter, data.interval, data.trace, model.method)
-#     end
-# end
-
-# function ll_hmm_trace(param, data::AbstractTraceHistogramData, model::AbstractGRSMmodel)
-#     r = prepare_rates(param, model)
-#     if !isnothing(model.trait) && haskey(model.trait, :grid)
-#         ll_hmm(r, model.trait.grid.ngrid, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
-#     else
-#         ll_hmm(r, model.components.tcomponents, model.reporter, data.interval, data.trace, model.method)
-#     end
-# end
-
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
     ll_hmm_trace(param, data, model)
 end
@@ -510,49 +468,6 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     logpredictions = log.(max.(predictions, eps()))
     return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
 end
-
-# function loglikelihood(param, data::TraceData, model::GRSMcoupledmodel)
-#     r, couplingStrength, noiseparams = prepare_rates(param, model)
-#     ll_hmm_coupled(r, couplingStrength, noiseparams, model.components, model.reporter, data.interval, data.trace)
-# end
-
-# function loglikelihood(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-#     rshared, rindividual, pindividual, rhyper = prepare_rates(param, model)
-#     if model.method[2]
-#         llg, llgp = ll_hmm_hierarchical_rateshared(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     else
-#         llg, llgp = ll_hmm_hierarchical(rshared, rindividual, model.components.nT, model.components, model.reporter.n, model.reporter.per_state, model.reporter.probfn, data.interval, data.trace)
-#     end
-#     lhp = ll_hierarchy(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihoodnew(param, data::AbstractTraceData, model::GRSMhierarchicalmodel)
-#     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = prepare_rates(param, model)
-#     ll_hmm_hierarchical((rshared, rindividual, noiseshared, noiseindividual), model.components, model.reporter, data.interval, data.trace, model.method)
-#     lhp = ll_hierarchy(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMcoupledhierarchicalmodel)
-#     rshared, rindividual, noiseshared, noiseindividual, couplingStrength, pindividual, rhyper = prepare_rates(param, model)
-#     llg, llgp = ll_hmm_coupled_hierarchical((rshared, rindividual, noiseshared, noiseindividual, couplingStrength), model.components, model.reporter, data.interval, data.trace, model.method)
-#     lhp = ll_hierarchy_c(pindividual, rhyper)
-#     return llg + sum(lhp), vcat(llgp, lhp)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid(r, noiseparams, pgrid[1], model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
-# end
-
-# function loglikelihood(param, data::TraceData, model::GRSMgridhierarchicalmodel)
-#     r, noiseparams, pgrid = prepare_rates(param, model)
-#     ll_hmm_grid_hierarchical((r, noiseparams, pgrid[1]), model.components.nT, model.Ngrid, model.components, model.reporter, data.interval, data.trace)
-# end
-
-
-
 
 
 # Predicted histogram functions
@@ -899,6 +814,15 @@ end
 #     end
 # end
 
+
+function apply_transform(p::AbstractVector, f)
+    map((f, x) -> f(x), f, p)
+end
+
+function apply_transform(p::AbstractMatrix, f)
+    hcat([map((f, x) -> f(x), f, p[:, i]) for i in 1:size(p, 2)]...)
+end
+
 """
     transform_rates(r, model::AbstractGeneTransitionModel)
 
@@ -914,23 +838,18 @@ Transform rates to log space.
 transform_rates(r, model::AbstractGeneTransitionModel) = log.(r)
 
 function transform_rates(r, model::AbstractGRSMmodel)
-    transform_rates(r, model.transforms.f)
+    apply_transform(r, model.transforms.f[model.fittedparam])
     # rtransformed = map((f, x) -> f(x), model.transforms.f[model.fittedparam], r)
     # rtransformed[model.fittedparam]
 end
 
-# function transform_rates(r::AbstractMatrix, model::AbstractGRSMmodel)
-#     transform_rates(r, model.transforms.f, model.fittedparam)
-#     # hcat([map((f, x) -> f(x), model.transforms.f[model.fittedparam], r[:, i]) for i in 1:size(r, 2)]...)
+# function transform_rates(r::AbstractVector, f::Vector{Function})
+#     map((f, x) -> f(x), f, r)
 # end
 
-function transform_rates(r::AbstractVector, f::Vector{Function})
-    map((f, x) -> f(x), f, r)
-end
-
-function transform_rates(r::AbstractMatrix, f::Vector{Function})
-    hcat([map((f, x) -> f(x), f, r[:, i]) for i in 1:size(r, 2)]...)
-end
+# function transform_rates(r::AbstractMatrix, f::Vector{Function})
+#     hcat([map((f, x) -> f(x), f, r[:, i]) for i in 1:size(r, 2)]...)
+# end
 
 function transform_rates2(r, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
@@ -962,7 +881,7 @@ Transform rates from log space back to original space.
 inverse_transform_params(p, model::AbstractGeneTransitionModel) = exp.(p)
 
 function inverse_transform_params(p, model::AbstractGRSMmodel)
-    inverse_transform_params(p, model.transforms.f_inv)
+    apply_transform(p, model.transforms.f_inv[model.fittedparam])
 end
 
 # function inverse_transform_params(p::AbstractMatrix, model::AbstractGRSMmodel)
@@ -970,21 +889,15 @@ end
 #     hcat([map((f, x) -> f(x), model.transforms.f_inv[model.fittedparam], p[:, i]) for i in 1:size(p, 2)]...)
 # end
 
-function inverse_transform_params(p::AbstractVector, f_inv::Vector{Function})
-    map((f, x) -> f(x), f_inv, p)
-end
+# function inverse_transform_params(p::AbstractVector, f_inv::Vector{Function})
+#     map((f, x) -> f(x), f_inv, p)
+# end
 
-function inverse_transform_params(p::AbstractMatrix, f_inv::Vector{Function})
-    hcat([map((f, x) -> f(x), f_inv, p[:, i]) for i in 1:size(p, 2)]...)
-end
+# function inverse_transform_params(p::AbstractMatrix, f_inv::Vector{Function})
+#     hcat([map((f, x) -> f(x), f_inv, p[:, i]) for i in 1:size(p, 2)]...)
+# end
 
-function apply_transform(p::AbstractVector, f)
-    map((f, x) -> f(x), f, p)
-end
 
-function apply_transform(p::AbstractMatrix, f)
-    hcat([map((f, x) -> f(x), f, p[:, i]) for i in 1:size(p, 2)]...)
-end
 
 function inverse_transform_params2(p, model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
@@ -1014,7 +927,9 @@ Get fitted parameters from model.
 """
 get_param(model::AbstractGeneTransitionModel) = log.(model.rates[model.fittedparam])
 
-get_param(model::AbstractGRSMmodel) = transform_rates(model.rates[model.fittedparam], model)
+function get_param(model::AbstractGRSMmodel) 
+    transform_rates(model.rates[model.fittedparam], model)
+end
 
 """
     get_rates(param, model::AbstractGeneTransitionModel)

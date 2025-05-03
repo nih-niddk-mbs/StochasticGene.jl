@@ -642,7 +642,7 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing)
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
     fittedindividual = hierarchical[2]
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
@@ -658,7 +658,7 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     rprior = rmean[1:nhypersets*n_all_params]
     priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor, ratetransforms)
 
-    return hierarchy, fittedparam, fixedeffects, priord
+    return hierarchy, fittedparam, fixedeffects, priord, ratetransforms
 end
 
 function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
@@ -682,13 +682,13 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::I
     end
 end
 
-function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Tuple, reporter, zeromedian)
+function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Vector, reporter, zeromedian)
     for n in eachindex(nrates)
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates[n], reporter[n], zeromedian)
     end
 end
 
-function make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
+function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
     ftransforms = Function[]
     invtransforms = Function[]
     sigmatransforms = Function[]
@@ -698,8 +698,8 @@ function make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         for i in eachindex(couplingindices)
-            push!(ftransforms, log_shift)
-            push!(invtransforms, log_shift_inv)
+            push!(ftransforms, log_shift1)
+            push!(invtransforms, invlog_shift1)
             push!(sigmatransforms, sigmalognormal)  
         end
     end
@@ -714,25 +714,24 @@ function make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid
     if !isempty(hierarchical)
         fset = ftransforms
         iset = invtransforms
-        nparams = length(hierarchical[2])
         nindividuals = length(data.trace[1])
-        for i in 1:hierarchical[1]
-            ftransforms = vcat(ftransforms, repeat([log], nparams))
-            invtransforms = vcat(invtransforms, repeat([exp], nparams))
-            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal],nparams))
+        for i in 1:hierarchical[1]-1
+            ftransforms = vcat(ftransforms, repeat([log], length(fset)))
+            invtransforms = vcat(invtransforms, repeat([exp], length(iset)))
+            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal],length(fset)))
         end
         ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
         invtransforms = vcat(invtransforms, repeat(iset, nindividuals))
         sigmatransforms = vcat(sigmatransforms, repeat(sigmatransforms, nindividuals))
     end
-    Transformation(ftransforms[fittedparam], invtransforms[fittedparam], sigmatransforms[fittedparam])
+    Transformation(ftransforms, invtransforms, sigmatransforms)
 end
 
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
-    nrates = num_rates(transitions, R, S, insertstep)       
-    ratetransforms = make_ratetransforms(data, nrates, fittedparam, reporter, coupling, grid, hierarchical, zeromedian)
+    nrates = num_rates(transitions, R, S, insertstep)   
+    ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
@@ -748,7 +747,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
         gridindices = nothing
     end
     if !isempty(hierarchical)
-        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms)
+        hierarchicaltrait, fittedparam, fixedeffects, priord = make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical, reporter, coupling, couplingindices, grid, factor, ratetransforms, zeromedian)
     else
         priord = prior_distribution(rmean, transitions, R, S, insertstep, fittedparam, priorcv, noisepriors, couplingindices, factor, ratetransforms)
     end
@@ -964,7 +963,7 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_rates(rm[fittedparam], ratetransforms.f), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv), Normal)
+        return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -990,7 +989,7 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(transform_rates(rm[fittedparam], ratetransforms.f), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv), Normal)
+        return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
