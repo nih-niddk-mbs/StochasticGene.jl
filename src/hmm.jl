@@ -298,6 +298,12 @@ end
 TBW
 """
 
+function set_d_background(noiseparams, sigma2,reporters_per_state, probfn, N)
+    n = copy(noiseparams)
+    n[2] = sqrt(n[2]^2 + sigma2^2)
+    probfn(n, reporters_per_state, N)
+end
+
 function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int) where {T<:Function}
     probfn(noiseparams, reporters_per_state, N)
 end
@@ -867,19 +873,41 @@ p_off(a, p0, offstates, nframes) = sum(p0[offstates]' * a[offstates, offstates]^
 
 L ∝ - log P(O | r) - p_inactive/p_active log (P(off | r))
 """
-function ll_off(a, p0, offstates, poff, nframes)
-    p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
-    -(1 - poff) * log(1 - p) - poff * log(p)
-end
-"""
-    ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+# function ll_off1(a, p0, offstates, poff, nframes)
+#     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+#     -(1 - poff) * log(1 - p) - poff * log(p)
+# end
 
-TBW
-"""
-function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+# function ll_off(a, p0, offstates, poff, trace)
+#     nframes = length(trace)
+#     p = sum(p0[offstates]' * a[offstates, offstates]^nframes)
+#    - poff * log(p) * nframes
+# end
+# """
+#     ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+
+# TBW
+# """
+# function ll_off_coupled(a, p0, offstates, weight::Vector, nframes)
+#     l = 0
+#     for i in eachindex(weight)
+#         l += ll_off(a, p0, offstates[i], weight[i], nframes)
+#     end
+#     l
+# end
+
+function ll_B(a, p0, offstates, weight::Float64, trace)
+    p = 0
+    for t in trace[1]
+        nframes = length(t)
+        p += log(sum(p0[offstates]' * a[offstates, offstates]^nframes)) - nframes * .2 * log(2 * π)
+    end
+    -weight * p
+end
+function ll_B(a, p0, offstates::Vector, weight::Vector, trace)
     l = 0
     for i in eachindex(weight)
-        l += ll_off(a, p0, offstates[i], weight[i], nframes)
+        l += ll_B(a, p0, offstates[i], weight[i], trace)
     end
     l
 end
@@ -892,9 +920,9 @@ TBW
 
 function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
     if trace[3] > 0.0
-        b = set_b(trace[2], d)
+        b = set_b_background(trace[2], d)
         _, C = forward(a, b, p0)
-        return sum(log.(C)) * trace[3] * length(trace[1])
+        return sum(log.(C)) *trace[4] * trace[3] * length(trace[1])
     else
         return 0.0
     end
@@ -908,10 +936,10 @@ function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, co
         if typeof(trace[3]) <: AbstractVector && trace[3][i] > 0.0
             a, p0 = make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method)
             rps = reduce_reporters_per_state(reporter[i].per_state, dims, i)
-            d = set_d(noiseparams[i], rps, reporter[i].probfn, dims[i])
-            b = set_b(trace[2][i], d)
+            d = set_d_background(noiseparams[i], trace[5][i], rps, reporter[i].probfn, dims[i])
+            b = set_b_background(trace[2][i], d)
             _, C = forward(a, b, p0)
-            l += sum(log.(C)) * trace[3][i]
+            l += sum(log.(C)) * trace[3][i] * trace[4]
         end
     end
     l * length(trace[1])
@@ -1111,13 +1139,6 @@ end
 # coupled, hierarchical
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
-    # println("rshared: ", rshared[1])
-    # println("couplingshared: ", couplingshared[1])
-    # println("noiseshared: ", noiseshared[1])
-    # println("rindividual: ", rindividual[1])
-    # println("pindividual: ", pindividual)
-    # println("noiseindividual: ", noiseindividual)
-    # println("rhyper: ", rhyper)
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     d = set_d(noiseshared[1], reporter)
     # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
@@ -1127,10 +1148,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
     else
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
-    println("ll: ", ll)
     lhp = ll_hierarchy(pindividual, rhyper)
-    println("lhp: ", lhp)
-    println("lb: ", lb)
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
 

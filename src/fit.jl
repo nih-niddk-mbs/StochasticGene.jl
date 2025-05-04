@@ -319,15 +319,15 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
 end
 
 
-function set_trace_background(traceinfo, nframes)
+function set_trace_background(traceinfo)
     if length(traceinfo) > 4
         if eltype(traceinfo[5]) <: AbstractVector
             background = Vector[]
             for t in traceinfo[5]
-                push!(background, t[1] .+ randn(nframes) .* t[2])
+                push!(background, t) 
             end
         else
-            background = traceinfo[5][1] .+ randn(nframes) .* traceinfo[5][2]
+            background = traceinfo[5]
         end
     else
         throw(ArgumentError("Must include trace background"))
@@ -349,34 +349,40 @@ function set_trace_weight(traceinfo)
 end
 
 function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
+    trace = similar(tracer)
+    medians = [median(t) for t in tracer]
+    mads = [mad(t) for t in tracer]
+    scale = maximum(medians)
+    madscale = maximum(mads)
     if zeromedian
-        trace = similar(tracer)
-        medians = [median(t) for t in tracer]
-        mads = [mad(t) for t in tracer]
-        maxmedians = maximum(medians)
         for i in eachindex(tracer)
-            trace[i] = (tracer[i] .- medians[i]) ./ maxmedians
+            trace[i] = (tracer[i] .- medians[i]) ./ scale
         end
     else
-        trace = tracer
-        maxmedians = 1.0
+        for i in eachindex(tracer)
+            trace[i] = tracer[i] ./ scale
+        end
     end
-    return trace, maxmedians
+    return trace, madscale ./ scale
 end
 
 function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractMatrix}
+    trace = similar(tracer)
+    medians = [median(t, dims=1) for t in tracer]
+    # Calculate MAD for each column of each matrix
+    mads = [reshape([mad(t[:, i]) for i in 1:size(t, 2)], 1, :) for t in tracer]
+    scale = maximum(vcat(medians...), dims=1)
+    madscale = median(vcat(mads...), dims=1)
     if zeromedian
-        trace = similar(tracer)
-        medians = [median(t, dims=1) for t in tracer]
-        maxmedians = maximum(vcat(medians...), dims=1)
         for i in eachindex(tracer)
-            trace[i] = (tracer[i] .- medians[i]) ./ maxmedians
+            trace[i] = (tracer[i] .- medians[i]) ./ scale
         end
     else
-        trace = tracer
-        maxmedians = 1.0
+        for i in eachindex(tracer)
+            trace[i] = tracer[i] ./ scale
+        end
     end
-    return trace, maxmedians
+    return trace, madscale ./ scale
 end
 
 # function robust_zscore(tracer::Vector, zeromedian=false)
@@ -405,10 +411,10 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
     println("datapath: ", datapath)
     println("datacond: ", datacond)
     println("traceinfo: ", traceinfo)
-    nframes = round(Int, mean(length.(trace)))  #mean number of frames of all traces
+    nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
     if length(traceinfo) > 3 && traceinfo[4] != 1.0
         weight = set_trace_weight(traceinfo)
-        background = set_trace_background(traceinfo, nframes)
+        background = set_trace_background(traceinfo)
     else
         weight = 0.0
         background = 0.0
@@ -700,7 +706,7 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         for i in eachindex(couplingindices)
             push!(ftransforms, log_shift1)
             push!(invtransforms, invlog_shift1)
-            push!(sigmatransforms, sigmalognormal)  
+            push!(sigmatransforms, sigmalognormal)
         end
     end
     if !isnothing(grid)
@@ -718,7 +724,7 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         for i in 1:hierarchical[1]-1
             ftransforms = vcat(ftransforms, repeat([log], length(fset)))
             invtransforms = vcat(invtransforms, repeat([exp], length(iset)))
-            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal],length(fset)))
+            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal], length(fset)))
         end
         ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
         invtransforms = vcat(invtransforms, repeat(iset, nindividuals))
@@ -730,7 +736,7 @@ end
 function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
-    nrates = num_rates(transitions, R, S, insertstep)   
+    nrates = num_rates(transitions, R, S, insertstep)
     ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
 
     if !isempty(coupling)
