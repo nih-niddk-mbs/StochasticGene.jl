@@ -644,7 +644,7 @@ function forward(a::Matrix, b, p0, N, T)
                     forward_inner_operation!(α, a, b, i, j, t)
                 end
             end
-            C[t] = 1 / sum(α[:, t])
+            C[t] = 1 / max(sum(α[:, t]), eps(Float64))
             α[:, t] *= C[t]
         end
         return α, C
@@ -1100,8 +1100,8 @@ end
 """
 # no traits
 function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
-    r, noiseparams = r
-    a, p0 = make_ap(r, interval, components, method)
+    rates, noiseparams = r
+    a, p0 = make_ap(rates, interval, components, method)
     d = set_d(noiseparams, reporter)
     # lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
     lb = ll_off(trace, d, a, p0)
