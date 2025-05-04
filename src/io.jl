@@ -68,13 +68,13 @@ Arguments
 - `measure`: measure used to assess winner
 - `assemble`: if true then assemble results into summary files
 """
-function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, fittedparams=Int[])
-    write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, fittedparams=fittedparams)
+function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
+    write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, datatype=datatype)
     write_winners(resultfolder, measure)
 end
 
-function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, fittedparams=Int[])
-    dfs = make_dataframes(resultfolder, datapath, assemble, multicond)
+function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
+    dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
     for df in dfs
         for dff in dfs
             for dfff in dff
@@ -430,6 +430,11 @@ TBW
 function assemble_burst_sizes(folder, files, label, cond, model)
     outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
+end
+
+function assemble_info(folder, files, label, cond, model)
+    outfile = joinpath(folder, "info_" * label * "_" * cond * "_" * model * ".csv")
+    assemble_files(folder, get_files(files, "info", label, cond, model), outfile, ["Gene" "Nalleles" "Interval"], read_info)
 end
 
 """
@@ -828,6 +833,7 @@ function write_info(file::String, data, model, labels)
     writedlm(f, [model.Gtransitions], ',')
     writedlm(f, [data.label], ',')
     writedlm(f, [data.gene], ',')
+    writedlm(f, [model.nalleles], ',')
     if typeof(data) <: AbstractTraceData
         writedlm(f, [data.interval], ',')
     end
@@ -1420,6 +1426,11 @@ function read_optimized(file::String)
     ll = readrow(file, 2)
     conv = readrow(file, 3)
     [rates ll conv]
+end
+
+function read_info(file::String)
+    info = readdlm(file, ',')
+    info[1, :]
 end
 
 """

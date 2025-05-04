@@ -3,10 +3,10 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datapath::String)
+    make_dataframes(resultfolder::String,datapath::String, assemble=true, multicond=false, datatype="rna")
 
 """
-function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false)
+function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
     if assemble
         assemble_all(resultfolder, multicond)
     end
@@ -184,8 +184,8 @@ function add_modelmoments!(df::DataFrame)
     v = similar(m)
     i = 1
     for gene in df.Gene
-        m[i] = model2_mean(df.Rate01[i], df.Rate10[i], df.Eject[i], df.Decay[i], df.Nalleles[i])
-        v[i] = model2_variance(df.Rate01[i], df.Rate10[i], df.Eject[i], df.Decay[i], df.Nalleles[i])
+        m[i] = model2_mean(df.Rate12[i], df.Rate21[i], df.Eject[i], df.Decay[i], df.Nalleles[i])
+        v[i] = model2_variance(df.Rate12[i], df.Rate21[i], df.Eject[i], df.Decay[i], df.Nalleles[i])
         i += 1
     end
     insertcols!(df, :Model_Expression => m, :Model_Variance => v)

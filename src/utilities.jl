@@ -1239,7 +1239,7 @@ Calculates the mean mRNA level for a two-state model with a single allele.
 # Returns
 - `Float64`: The mean mRNA level.
 """
-model2_mean(ron, roff, eject, decay, nalleles) = 2 * model2_mean(ron, roff, eject, decay)
+model2_mean(ron, roff, eject, decay, nalleles) = nalleles * model2_mean(ron, roff, eject, decay)
 
 model2_mean(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay
 
@@ -1269,7 +1269,7 @@ Calculates the variance of mRNA levels for a two-state model with a single allel
 # Returns
 - `Float64`: The variance of mRNA levels.
 """
-model2_variance(ron, roff, eject, decay, nalleles) = 2 * model2_variance(ron, roff, eject, decay)
+model2_variance(ron, roff, eject, decay, nalleles) = nalleles * model2_variance(ron, roff, eject, decay)
 
 model2_variance(ron, roff, eject, decay) = ron / (ron + roff) * eject / decay + ron * roff / (ron + roff)^2 * eject^2 / decay / (ron + roff + decay)
 
