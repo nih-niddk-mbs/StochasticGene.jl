@@ -942,7 +942,7 @@ end
 """
     readfile(file::String)
 
-read file accounting for delimiter and headers
+read file with floats accounting for delimiter and headers
 """
 function readfile(file::String)
     if isfile(file)

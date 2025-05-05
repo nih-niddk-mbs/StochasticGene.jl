@@ -1431,26 +1431,95 @@ function get_cell_counts(count_matrix::Matrix)
     return vec(c) / maximum(c), S
 end
 
+"""
+    make_gene_counts(folder, gene::String, counts::Vector, yieldfactor::Vector, label::String)
+
+Creates a file containing gene counts and yield factors for a single gene.
+
+# Arguments
+- `folder::String`: Output directory where the file will be saved
+- `gene::String`: Name of the gene
+- `counts::Vector`: Vector of RNA counts across cells
+- `yieldfactor::Vector`: Vector of yield factors for normalization
+- `label::String`: Label to append to the output filename
+
+# Description
+Creates a file named `{gene}_{label}.txt` containing two columns:
+1. RNA counts for each cell
+2. Corresponding yield factors for normalization
+
+# Example
+```julia
+make_gene_counts("output", "GENE1", [1,2,3,4], [0.5,0.5,0.5,0.5], "control")
+```
+"""
 function make_gene_counts(folder, gene::String, counts::Vector, yieldfactor::Vector, label::String)
     f = open("$folder/$(gene)_$label.txt", "w")
     writedlm(f, [counts yieldfactor])
     close(f)
 end
 
+"""
+    make_gene_counts(folder, count_matrix::Matrix, yieldfactor::Vector, label::String)
+
+Processes a count matrix to create individual files for each gene containing counts and yield factors.
+
+# Arguments
+- `folder::String`: Output directory where files will be saved
+- `count_matrix::Matrix`: Matrix where each row represents a gene and columns represent cells
+- `yieldfactor::Vector`: Vector of yield factors for normalization
+- `label::String`: Label to append to output filenames
+
+# Description
+For each gene in the count matrix:
+1. Creates a file named `{gene}_{label}.txt`
+2. Writes two columns:
+   - RNA counts for each cell (filtered to remove empty and NA values)
+   - Corresponding yield factors for normalization
+
+# Example
+```julia
+counts = [1 2 3; 4 5 6]  # 2 genes, 3 cells
+yield = [0.5, 0.5, 0.5]
+make_gene_counts("output", counts, yield, "control")
+```
+"""
 function make_gene_counts(folder, count_matrix::Matrix, yieldfactor::Vector, label::String)
     if ~ispath(folder)
         mkpath(folder)
     end
     for r in eachrow(count_matrix)
-        gene = string(r[1])
+        gene = replace(replace(string(r[1]), "/" => "-"), "\\" => "-")
         counts = r[2:end]
         counts = counts[(counts.!="").&(counts.!="NA")]
         make_gene_counts(folder, gene, counts, yieldfactor, label)
     end
 end
 
+"""
+    make_gene_counts(folder, file, label)
+
+Reads a count matrix from a file and creates individual files for each gene.
+
+# Arguments
+- `folder::String`: Output directory where files will be saved
+- `file::String`: Path to input file containing count matrix
+- `label::String`: Label to append to output filenames
+
+# Description
+1. Reads count matrix from input file
+2. Calculates yield factors from cell counts
+3. Creates individual files for each gene containing:
+   - RNA counts for each cell
+   - Corresponding yield factors
+
+# Example
+```julia
+make_gene_counts("output", "counts.csv", "control")
+```
+"""
 function make_gene_counts(folder, file, label)
-    count_matrix, _ = readdlm(file, ',', header=true)
+    count_matrix, _ = readdlm(file, header=true)
     yieldfactor, _ = get_cell_counts(count_matrix)
     make_gene_counts(folder, count_matrix, yieldfactor, label)
 end

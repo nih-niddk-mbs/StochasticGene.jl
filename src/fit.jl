@@ -285,7 +285,7 @@ end
 """
 function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
     println(now())
-    printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles)
+    printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
@@ -1287,7 +1287,7 @@ print out run information
 #     println("maxtime: ", maxtime)
 # end
 
-function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles)
+function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     if R == 0
         println("Gene: ", gene, " G: ", G, " Treatment:  ", datacond, ", nalleles: ", nalleles)
     else
@@ -1295,17 +1295,17 @@ function printinfo(gene, G::Int, R, S, insertstep, datacond, datapath, infolder,
     end
     println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)
-    println("maxtime: ", maxtime)
+    println("maxtime: ", maxtime, ", propcv: ", propcv)
 end
 
-function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime)
+function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     println("Gene: ", gene)
     for i in eachindex(G)
-        println("datacond: ", datacond[i], ", G R S insertstep: ", G[i], R[i], S[i], insertstep[i])
+        println("datacond: ", datacond[i], ", GRSinsertstep: ", G[i], R[i], S[i], insertstep[i], ", nalleles: ", nalleles)
     end
     println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)
-    println("maxtime: ", maxtime)
+    println("maxtime: ", maxtime, ", propcv: ", propcv)
 end
 
 
