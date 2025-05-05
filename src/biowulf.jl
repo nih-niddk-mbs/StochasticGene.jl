@@ -732,7 +732,7 @@ function get_file(folder, filetype, suffix)
             end
         end
     else
-        println("folder $folder does not exist")
+        println("$folder does not exist")
         return nothing
     end
 end

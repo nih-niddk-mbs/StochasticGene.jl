@@ -298,7 +298,7 @@ end
 TBW
 """
 
-function set_d_background(noiseparams, sigma2,reporters_per_state, probfn, N)
+function set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
     n = copy(noiseparams)
     n[2] = sqrt(n[2]^2 + sigma2^2)
     probfn(n, reporters_per_state, N)
@@ -593,21 +593,21 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
     #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
     # else
-        α = zeros(Nstate, Ngrid, T)
-        C = Vector{Float64}(undef, T)
-        α[:, :, 1] = p0 .* b[:, :, 1]
-        C[1] = 1 / sum(α[:, :, 1])
-        α[:, :, 1] *= C[1]
-        for t in 2:T
-            for l in 1:Ngrid, k in 1:Nstate
-                for j in 1:Ngrid, i in 1:Nstate
-                    α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-                end
+    α = zeros(Nstate, Ngrid, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
             end
-            C[t] = 1 / sum(α[:, :, t])
-            α[:, :, t] *= C[t]
         end
-        return α, C
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
     # end
 end
 
@@ -633,21 +633,21 @@ function forward(a::Matrix, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
-        α = zeros(N, T)
-        C = Vector{Float64}(undef, T)
-        α[:, 1] = p0 .* b[:, 1]
-        C[1] = 1 / sum(α[:, 1])
-        α[:, 1] *= C[1]
-        for t in 2:T
-            for j in 1:N
-                for i in 1:N
-                    forward_inner_operation!(α, a, b, i, j, t)
-                end
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(α[:, 1])
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                forward_inner_operation!(α, a, b, i, j, t)
             end
-            C[t] = 1 / max(sum(α[:, t]), eps(Float64))
-            α[:, t] *= C[t]
         end
-        return α, C
+        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
+        α[:, t] *= C[t]
+    end
+    return α, C
     # end
 end
 
@@ -677,29 +677,29 @@ Returns the forward variable α and scaling parameter array C.
 #     a_gpu = CuArray(a)
 #     b_gpu = CuArray(b)
 #     p0_gpu = CuArray(p0)
-    
+
 #     # Allocate GPU arrays for α and C
 #     α_gpu = CUDA.zeros(Float64, N, T)
 #     C_gpu = CUDA.zeros(Float64, T)
-    
+
 #     # Initialize first time step
 #     # Use proper GPU array operations instead of scalar indexing
 #     α_gpu[:, 1] .= p0_gpu .* b_gpu[:, 1]
-    
+
 #     # Use CUDA.@allowscalar for operations that require scalar indexing
 #     CUDA.@allowscalar C_gpu[1] = 1 / sum(α_gpu[:, 1])
 #     CUDA.@allowscalar α_gpu[:, 1] *= C_gpu[1]
-    
+
 #     # Compute forward probabilities using matrix multiplication on GPU
 #     for t in 2:T
 #         # Use proper GPU array operations
 #         α_gpu[:, t] .= (a_gpu * α_gpu[:, t-1]) .* b_gpu[:, t]
-        
+
 #         # Use CUDA.@allowscalar for operations that require scalar indexing
 #         CUDA.@allowscalar C_gpu[t] = 1 / sum(α_gpu[:, t])
 #         CUDA.@allowscalar α_gpu[:, t] *= C_gpu[t]
 #     end
-    
+
 #     # Return results back to CPU
 #     return Array(α_gpu), Array(C_gpu)
 # end
@@ -900,7 +900,7 @@ function ll_B(a, p0, offstates, weight::Float64, trace)
     p = 0
     for t in trace[1]
         nframes = length(t)
-        p += log(sum(p0[offstates]' * a[offstates, offstates]^nframes)) - nframes * .2 * log(2 * π)
+        p += log(sum(p0[offstates]' * a[offstates, offstates]^nframes)) - nframes * 0.2 * log(2 * π)
     end
     -weight * p
 end
@@ -918,11 +918,22 @@ end
 TBW
 """
 
-function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
+# function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
+#     if trace[3] > 0.0
+#         b = set_b_background(trace[2], d)
+#         _, C = forward(a, b, p0)
+#         return sum(log.(C)) * trace[4] * trace[3] * length(trace[1])
+#     else
+#         return 0.0
+#     end
+# end
+
+function ll_off(trace::Tuple, noiseparams, reporter, components, a::Matrix, p0)
     if trace[3] > 0.0
+        d = set_d_background(noiseparams, trace[5], reporter.per_state, reporter.probfn, components.nT)
         b = set_b_background(trace[2], d)
         _, C = forward(a, b, p0)
-        return sum(log.(C)) *trace[4] * trace[3] * length(trace[1])
+        return sum(log.(C)) * trace[3] * trace[4] * length(trace[1])
     else
         return 0.0
     end
@@ -945,7 +956,7 @@ function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, co
     l * length(trace[1])
 end
 
-    ### Called by trait likelihoods
+### Called by trait likelihoods
 
 """
     ll_hmm(a::Matrix, p0::Vector, d, traces)
@@ -1102,10 +1113,8 @@ end
 function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
     rates, noiseparams = r
     a, p0 = make_ap(rates, interval, components, method)
-    d = set_d(noiseparams, reporter)
-    # lb = trace[3] > 0.0 ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_off(trace, d, a, p0)
-    ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
+    ll, logpredictions = _ll_hmm(a, p0, set_d(noiseparams, reporter), trace[1])
+    lb = ll_off(trace, noiseparams, reporter, components, a, p0)
     ll + lb, logpredictions
 end
 
@@ -1114,9 +1123,8 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
+    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
     ll + lb, logpredictions
 end
 
@@ -1124,14 +1132,12 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
     a, p0 = make_ap(rshared[1], interval, components, method[1])
-    d = set_d(noiseshared[1], reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_off(trace, d, a, p0)
     if method[2]
         ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
         ll, logpredictions = _ll_hmm(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1])
     end
+    lb = ll_off(trace, noiseshared[1], reporter, components, a, p0)
     lhp = ll_hierarchy(pindividual, rhyper)
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
@@ -1140,14 +1146,12 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-    d = set_d(noiseshared[1], reporter)
-    # lb = any(trace[3] .> 0.0) ? length(trace[1]) * ll_off(trace[2], d, a, p0, trace[3]) : 0.0
-    lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
     if method[2]
         ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
+    lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
     lhp = ll_hierarchy(pindividual, rhyper)
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
@@ -1394,17 +1398,17 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
 
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2)*max_intensity[1]*max_intensity[2]
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)*max_intensity[1]*max_intensity[2]
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1)*max_intensity[1]^2
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2)*max_intensity[2]^2
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
     v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
     v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
     ac1 = vcat(reverse(ac1), ac1[2:end])
     ac2 = vcat(reverse(ac2), ac2[2:end])
     cc = vcat(reverse(cc21), cc12[2:end])
 
-    ac1, ac2, cc, ac1/v1, ac2/v2, cc/sqrt(v1*v2), vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
 end
 
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
@@ -1414,7 +1418,7 @@ function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags
     crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity) .^ 2
 end
 
-function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2) 
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
     crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
 end
 
