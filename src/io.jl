@@ -916,7 +916,10 @@ function read_rna(gene, cond, datapath)
 end
 
 function read_rnacount(gene, cond, datapath)
-    c = readfile(gene, cond, datapath)
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
+    # println(t)
+    # c = readfile(gene, cond, datapath)
+    c = readfile(t)
     countsRNA = round.(Int, c[:, 1])
     yieldfactor = c[:, 2]
     nhist = round(Int, max(quantile(countsRNA, 0.99), 1) + 1)
@@ -947,6 +950,7 @@ function readfile(gene::AbstractString, cond::AbstractString, path::AbstractStri
         for (root, dirs, files) in walkdir(path)
             for file in files
                 target = joinpath(root, file)
+                println(target)
                 if occursin_file(gene, cond, target)
                     return readfile(target)
                 end
