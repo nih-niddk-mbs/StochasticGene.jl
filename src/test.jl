@@ -493,3 +493,130 @@ function convert_to_m_dim(mat::Matrix{Float64})
     row1, row2 = split_matrix2(mat)
     return [[row1[j], row2[j]] for j in 1:size(mat, 2)]  # Each element is a vector of two vectors
 end
+
+
+
+
+
+"""
+    compute_psis_loo(fits::Fit)
+
+Compute PSIS-LOO (Pareto Smoothed Importance Sampling Leave-One-Out Cross-Validation).
+Returns a tuple of (elpd_loo, elpd_loo_se) where:
+- elpd_loo is the expected log pointwise predictive density for a new dataset
+- elpd_loo_se is the standard error of elpd_loo
+
+This implementation reuses the pointwise log-likelihoods stored in fits.lppd
+that were computed during MCMC sampling for WAIC.
+"""
+function compute_psis_loo(fits::Fit)
+    # Get pointwise log-likelihoods from fits.lppd
+    n_samples = size(fits.param, 2)
+    n_obs = length(fits.lppd)
+    
+    # Compute importance weights for each observation
+    r_eff = compute_relative_eff(fits.param)  # Relative effective sample size
+    
+    # Compute LOO log-likelihoods using importance sampling
+    loo_ll = zeros(n_obs)
+    for i in 1:n_obs
+        # Get pointwise log-likelihoods for this observation
+        pointwise_ll = fits.lppd[i]
+        
+        # Compute importance weights for this observation
+        weights = exp.(fits.param[i,:] .- maximum(fits.param[i,:]))
+        weights .*= r_eff[i]
+        weights ./= sum(weights)
+        
+        # Smooth weights using Pareto smoothing
+        smoothed_weights = pareto_smooth_weights(weights)
+        
+        # Compute LOO estimate using smoothed weights
+        loo_ll[i] = sum(smoothed_weights .* pointwise_ll)
+    end
+    
+    # Compute elpd_loo and its standard error
+    elpd_loo = sum(loo_ll)
+    elpd_loo_se = sqrt(n_obs * var(loo_ll))
+    
+    return (elpd_loo, elpd_loo_se)
+end
+
+"""
+    compute_relative_eff(params)
+
+Compute relative effective sample size for importance sampling.
+"""
+function compute_relative_eff(params)
+    n_samples = size(params, 2)
+    ess = compute_ess(params)
+    return ess ./ n_samples
+end
+
+"""
+    pareto_smooth_weights(weights)
+
+Apply Pareto smoothing to importance weights.
+"""
+function pareto_smooth_weights(weights)
+    # Sort weights
+    sorted_idx = sortperm(weights, rev=true)
+    sorted_weights = weights[sorted_idx]
+    
+    # Find Pareto tail
+    tail_idx = find_tail(sorted_weights)
+    
+    if tail_idx > 0
+        # Fit Pareto distribution to tail
+        k = fit_pareto(sorted_weights[tail_idx:end])
+        
+        # Replace tail with smoothed values
+        smoothed = copy(weights)
+        smoothed[sorted_idx[tail_idx:end]] = smooth_tail(sorted_weights[tail_idx:end], k)
+        return smoothed
+    end
+    
+    return weights
+end
+
+"""
+    find_tail(weights)
+
+Find the index where the Pareto tail begins.
+"""
+function find_tail(weights)
+    n = length(weights)
+    for i in 2:n
+        if weights[i] / weights[1] < 0.1
+            return i
+        end
+    end
+    return 0
+end
+
+"""
+    fit_pareto(weights)
+
+Fit a Pareto distribution to the tail of weights.
+Returns the shape parameter k.
+"""
+function fit_pareto(weights)
+    n = length(weights)
+    log_weights = log.(weights)
+    k = 1 / (mean(log_weights) - log_weights[1])
+    return k
+end
+
+"""
+    smooth_tail(weights, k)
+
+Smooth the tail of weights using the fitted Pareto distribution.
+"""
+function smooth_tail(weights, k)
+    n = length(weights)
+    smoothed = zeros(n)
+    for i in 1:n
+        smoothed[i] = weights[1] * (i/n)^(-1/k)
+    end
+    return smoothed
+end
