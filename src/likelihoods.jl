@@ -1208,4 +1208,6 @@ function num_all_parameters(model::AbstractGeneTransitionModel)
     num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
 end
 
-
+function num_fitted_core_params(model::AbstractGeneTransitionModel)
+    count(x -> x <= num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter), model.fittedparam)
+end

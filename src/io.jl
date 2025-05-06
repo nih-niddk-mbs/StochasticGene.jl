@@ -230,6 +230,15 @@ function get_resultfiles(folder::String, name)
     files[occursin.(name, files)]
 end
 
+function get_resultfile(type::String, infolder, label, gene, G, R, S, insertstep, nalleles)
+    if R == 0
+        name = filename(label, gene, G, nalleles)
+    else
+        name = filename(label, gene, G, R, S, insertstep, nalleles)
+    end
+    joinpath(infolder, type * name)
+end
+
 get_measurefiles(folder::String) = get_resultfiles(folder, "measures")
 
 get_summaryfiles(folder::String) = get_summaryfiles(readdir(folder))
@@ -352,7 +361,7 @@ write all measures into a single file
 """
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * model * ".csv")
-    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
+    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     # assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
     files = get_files(files, "measures", label, cond, model)
     f = open(outfile, "w")
@@ -387,7 +396,7 @@ remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
 function assemble_measures_model(folder::String)
     outfile = joinpath(folder, "measures.csv")
-    header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
+    header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     files = get_measurefiles(folder)
     println(files)
     f = open(outfile, "w")
@@ -744,7 +753,7 @@ write hierarchy parameters into a file for hierarchical models
 """
 function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
-    writedlm(f, labels[1:1,1:model.trait.hierarchical.nrates], ',')  # labels
+    writedlm(f, labels[1:1, 1:model.trait.hierarchical.nrates], ',')  # labels
     writedlm(f, [get_rates(fits.parml, model)[1:model.trait.hierarchical.nrates]], ',')  # max posterior
     writedlm(f, [get_rates(stats.meanparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # mean posterior
     writedlm(f, [get_rates(stats.medparam, model, false)[1:model.trait.hierarchical.nrates]], ',')  # median posterior
@@ -768,7 +777,13 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
     writedlm(f, [fits.accept fits.total], ',')
     writedlm(f, temp, ',')
     writedlm(f, measures.rhat', ',')
+    writedlm(f, measures.ess', ',')
+    writedlm(f, measures.geweke', ',')
+    writedlm(f, measures.mcse', ',')
     writedlm(f, maximum(measures.rhat), ',')
+    writedlm(f, minimum(measures.ess), ',')
+    writedlm(f, maximum(measures.geweke), ',')
+    writedlm(f, maximum(measures.mcse), ',')
     close(f)
 end
 
@@ -1263,6 +1278,8 @@ function readrates(infolder, label, gene, G, R, S, insertstep, nalleles, ratetyp
     end
     readrates(joinpath(infolder, "rates" * name), get_row(ratetype))
 end
+
+
 """
 readrates(file::String,row::Int)
 readrates(file::String)
@@ -1328,7 +1345,10 @@ function readmeasures(file::String)
     a = readaccept(file)
     t = readtemp(file)
     r = readrhat(file)
-    [d[1] w[1] w[7] w[8] w[9] a t[1] r[1]]
+    e = readess(file)
+    g = readgeweke(file)
+    m = readmcse(file)
+    [d[1] w[1] w[7] w[8] w[9] a t[1] r[1] e[1] g[1] m[1]]
 end
 
 readdeviance(file::String) = readrow(file, 2)
@@ -1342,7 +1362,13 @@ end
 
 readtemp(file::String) = readrow(file, 4)
 
-readrhat(file::String) = readrow(file, 6)
+readrhat(file::String) = readrow(file, 9)
+
+readess(file::String) = readrow(file, 10)
+
+readgeweke(file::String) = readrow(file, 11)
+
+readmcse(file::String) = readrow(file, 12)
 
 function readml(ratefile::String)
     m = readrow(ratefile, 1, true)
@@ -1397,10 +1423,49 @@ function read_covparam(c::Matrix)
     c[8+n:7+2*n, 1:n]
 end
 
+function read_covlogparam2(file::String)
+    c = readdlm(file, ',')
+    # n = length(c[1, :])
+    nrates = num_fitted_core_params(model)
+    c[8+2*nrates+1:7+3*nrates+1, 1:nrates]
+end
+
+"""
+    read_covlogparam(file::String)
+
+Robustly reads the covariance matrix of the log parameters from a param-stats file.
+Finds the last square block of size n x n, where n is the number of parameters.
+"""
 function read_covlogparam(file::String)
+    if !isfile(file)
+        println(file, " does not exist")
+        return Float64[]
+    end
     c = readdlm(file, ',')
     n = length(c[1, :])
-    c[8+2*n:7+3*n, 1:n]
+    nrates = num_fitted_core_params(model)
+    # Search for all n x n blocks in the file
+    last_block_start = 0
+    for i in 1:(size(c, 1)-nrates+1)
+        block = c[i:i+nrates-1, 1:nrates]
+        # Check if block is square and symmetric (optional, for extra safety)
+        if size(block, 1) == nrates && size(block, 2) == nrates && isapprox(block, block', atol=1e-8)
+            last_block_start = i
+        end
+    end
+    if last_block_start == 0
+        println("No n x n block found in ", file)
+        return Float64[]
+    end
+    return c[last_block_start:last_block_start+nrates-1, 1:nrates]
+end
+
+function get_covlogparam(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+    if propcv < 0.0
+        return read_bottom_float_block(get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles))
+    else
+        return propcv
+    end
 end
 
 read_crosscov(statfile::String) = read_crosscov(read_covparam(statfile))
@@ -1501,4 +1566,48 @@ end
 # function load_model(file::String, model::AbstractGRSMmodel)
 
 # end
+
+function read_bottom_float_block(file::String)
+    if !isfile(file)
+        println(file, " does not exist")
+        return 0.01
+    else
+        c = readdlm(file, ',')
+        nrows, ncols = size(c)
+        isnumlike(x) = (x isa Number) || (x isa AbstractString && occursin(r"^-?\d*\.?\d+([eE][\+\-]?\d+)?$", x)) || (x isa AbstractString && isempty(x))
+        # Find the last row that contains only numbers or numeric strings
+        last_row = nrows
+        while last_row > 0
+            row = c[last_row, :]
+            if all(isnumlike, row)
+                break
+            end
+            last_row -= 1
+        end
+        # Now, scan upwards to find the first row of the block
+        first_row = last_row
+        while first_row > 1
+            row = c[first_row-1, :]
+            if all(isnumlike, row)
+                first_row -= 1
+            else
+                break
+            end
+        end
+        block = c[first_row:last_row, :]
+        nblock = size(block, 1)
+        # Convert all entries to Float64, set empty to NaN
+        block_float = map(x -> (x isa Number) ? float(x) : (x isa AbstractString && !isempty(x) ? parse(Float64, x) : NaN), block)
+        # Now, find the largest k <= nblock such that block_float[end-k+1:end, 1:k] is all valid numbers
+        max_k = nblock
+        while max_k > 0
+            subblock = block_float[end-max_k+1:end, 1:max_k]
+            if all(!isnan, subblock)
+                return subblock
+            end
+            max_k -= 1
+        end
+        return Array{Float64}(undef, 0, 0)  # If nothing found, return empty
+    end
+end
 

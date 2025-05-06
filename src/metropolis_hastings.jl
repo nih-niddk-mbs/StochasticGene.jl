@@ -6,7 +6,15 @@
 """
 struct MHOptions <: Options
 
-Structure for MH options
+Options for Metropolis-Hastings MCMC.
+
+# Fields
+- `samplesteps::Int64`: Number of MCMC samples to collect.
+- `warmupsteps::Int64`: Number of warmup (burn-in) steps.
+- `annealsteps::Int64`: Number of annealing steps.
+- `maxtime::Float64`: Maximum allowed runtime (seconds).
+- `temp::Float64`: Final temperature for annealing.
+- `tempanneal::Float64`: Initial temperature for annealing.
 """
 struct MHOptions <: Options
     samplesteps::Int64
@@ -16,10 +24,22 @@ struct MHOptions <: Options
     temp::Float64
     tempanneal::Float64
 end
+
 """
 struct Fit <: Results
 
-Structure for MH results
+Results of a Metropolis-Hastings MCMC run.
+
+# Fields
+- `param::Array`: Matrix of sampled parameter values (parameters × samples).
+- `ll::Array`: Vector of negative log-likelihoods for each sample.
+- `parml::Array`: Parameter vector with maximum likelihood.
+- `llml::Float64`: Maximum (minimum value) negative log-likelihood.
+- `lppd::Array`: Log pointwise predictive density for WAIC.
+- `pwaic::Array`: Pointwise WAIC penalty terms.
+- `prior::Float64`: Sum of log prior probabilities for all samples.
+- `accept::Int`: Number of accepted proposals.
+- `total::Int`: Total number of proposals.
 """
 struct Fit <: Results
     param::Array
@@ -36,7 +56,17 @@ end
 """
 struct Stats
 
-Structure for parameter statistics results
+Summary statistics for MCMC parameters.
+
+# Fields
+- `meanparam::Array`: Mean of each parameter.
+- `stdparam::Array`: Standard deviation of each parameter.
+- `medparam::Array`: Median of each parameter.
+- `madparam::Array`: Median absolute deviation of each parameter.
+- `qparam::Array`: Quantiles (2.5%, 50%, 97.5%) for each parameter.
+- `corparam::Array`: Correlation matrix of parameters.
+- `covparam::Array`: Covariance matrix of parameters.
+- `covlogparam::Array`: Covariance matrix of log-parameters.
 """
 struct Stats
     meanparam::Array
@@ -55,32 +85,36 @@ Structure for computed measures
 -`waic`: Watanabe-Akaike information criterion
 -`rhat`: r-hat convergence diagnostic
 """
-struct Measures
-    waic::Tuple
-    rhat::Vector
-end
+# struct Measures
+#     waic::Tuple
+#     rhat::Vector
+# end
 
-struct MeasuresEnhanced
+"""
+    struct Measures
+
+Computed diagnostic measures for MCMC results.
+
+# Fields
+- `waic::Tuple`: Watanabe-Akaike information criterion and its standard error.
+- `rhat::Vector`: R-hat convergence diagnostic for each parameter.
+- `ess::Vector`: Effective sample size for each parameter.
+- `geweke::Vector`: Geweke z-scores for each parameter.
+- `mcse::Vector`: Monte Carlo standard error for each parameter.
+"""
+struct Measures
     waic::Tuple
     rhat::Vector
     ess::Vector
     geweke::Vector
     mcse::Vector
-    trace_analysis::Dict
 end
 
-function compute_measures(fits)
-    # Existing code
-    waic = compute_waic(fits.lppd, fits.pwaic, data)
-    rhat = compute_rhat([fits])
-
-    # New diagnostics
+function Measures(fits::Fit, waic, rhat)
     ess = compute_ess(fits.param)
     geweke = compute_geweke(fits.param)
     mcse = compute_mcse(fits.param)
-    trace_analysis = analyze_traces(fits.param)
-
-    return Measures(waic, vec(rhat), ess, geweke, mcse, trace_analysis)
+    return Measures(waic, rhat, ess, geweke, mcse)
 end
 
 """
@@ -101,7 +135,8 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
     if options.samplesteps > 0
         stats = compute_stats(fits.param, model)
         rhat = compute_rhat([fits])
-        measures = Measures(waic, vec(rhat))
+        measures = Measures(fits, waic, vec(rhat))
+        # measures = Measures(waic, vec(rhat))
     else
         stats = 0
         measures = 0
@@ -126,7 +161,7 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
             fits = merge_fit(chain)
             stats = compute_stats(fits.param, model)
             rhat = compute_rhat(chain)
-            return fits, stats, Measures(waic, vec(rhat))
+            return fits, stats, Measures(fits, waic, vec(rhat))
         end
     end
 end
@@ -150,66 +185,66 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
     if !CUDA.functional()
         error("CUDA is not available. Please use run_mh instead.")
     end
-    
+
     # Get number of available GPUs
     devices = collect(CUDA.devices())
     n_gpus = length(devices)
     if n_gpus == 0
         error("No CUDA devices available")
     end
-    
+
     # # Print GPU information
     # println("Running on $(n_gpus) GPU(s):")
     # for i in 1:n_gpus
     #     device = devices[i]
     #     println("  GPU $i: $(device) with $(device.total_memory / 1024^3) GB memory")
     # end
-    
+
     # If only one chain, run on a single GPU
     if nchains == 1
         # Set the active GPU
         CUDA.device!(0)
         println("Running single chain on GPU 0")
-        
+
         # Run the MCMC chain
         # The GPU-accelerated functions in hmm.jl will be used automatically
         fits, waic = metropolis_hastings(data, model, options)
-        
+
         # Compute statistics if needed
         if options.samplesteps > 0
             stats = compute_stats(fits.param, model)
             rhat = compute_rhat([fits])
-            measures = Measures(waic, vec(rhat))
+            measures = Measures(fits, waic, vec(rhat))
         else
             stats = 0
             measures = 0
         end
-        
+
         return fits, stats, measures
     else
         # For multiple chains, run them sequentially on different GPUs
         chain_results = Vector{Tuple}(undef, nchains)
-        
+
         # Run chains sequentially, each on a different GPU
         for chain in 1:nchains
             # Select GPU for this chain
             gpu_id = (chain - 1) % n_gpus
-            
+
             # Set the active GPU for this chain
             CUDA.device!(gpu_id)
             println("Running chain $chain on GPU $gpu_id")
-            
+
             # Run the MCMC chain
             # The GPU-accelerated functions in hmm.jl will be used automatically
             chain_results[chain] = metropolis_hastings(data, model, options)
         end
-        
+
         # Process results
         waic = pooled_waic(chain_results)
         fits = merge_fit(chain_results)
         stats = compute_stats(fits.param, model)
         rhat = compute_rhat(chain_results)
-        return fits, stats, Measures(waic, vec(rhat))
+        return fits, stats, Measures(fits, waic, vec(rhat))
     end
 end
 
@@ -274,7 +309,7 @@ function anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     step = 0
     annealrate = 3 / samplesteps
     anneal = 1 - annealrate  # annealing rate with time constant of samplesteps/3
-    proposalcv = 0.02
+    proposalcv = model.proposal
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         _, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, tempanneal)
@@ -350,6 +385,12 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     Fit(parout[:, 1:step], llout[1:step], parml, llml, lppd, pwaic, prior, accepttotal, step)
 end
 
+"""
+    sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
+
+Run the MCMC sampling phase, but only keep every `thin_interval`-th sample (thinning).
+Returns a `Fit` structure with thinned samples.
+"""
 function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
     # Number of samples to keep after thinning
     kept_samples = div(samplesteps, thin_interval)
@@ -401,6 +442,12 @@ function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposa
     return Fit(parout, llout, parml, llml, lppd, pwaic, prior, accepttotal, total_step)
 end
 
+"""
+    compute_ess(params)
+
+Compute the effective sample size (ESS) for each parameter in the MCMC chain.
+Returns a vector of ESS values.
+"""
 function compute_ess(params)
     n_params = size(params, 1)
     n_samples = size(params, 2)
@@ -421,6 +468,12 @@ function compute_ess(params)
     return ess
 end
 
+"""
+    compute_geweke(params; first_frac=0.1, last_frac=0.5)
+
+Compute Geweke z-scores for each parameter to assess MCMC convergence.
+Returns a vector of z-scores.
+"""
 function compute_geweke(params; first_frac=0.1, last_frac=0.5)
     n_params = size(params, 1)
     n_samples = size(params, 2)
@@ -446,13 +499,24 @@ function compute_geweke(params; first_frac=0.1, last_frac=0.5)
     return z_scores
 end
 
-# Helper for spectral density estimate
+"""
+    spectrum0(x)
+
+Estimate the spectral density at frequency zero for a time series `x`.
+Used in Geweke diagnostic.
+"""
 function spectrum0(x)
     n = length(x)
     spec = abs.(fft(x .- mean(x))) .^ 2 / n
     return sum(spec[2:Int(floor(n / 2))]) * 2 / n
 end
 
+"""
+    compute_mcse(params)
+
+Compute the Monte Carlo standard error (MCSE) for each parameter.
+Returns a vector of MCSE values.
+"""
 function compute_mcse(params)
     n_params = size(params, 1)
     n_samples = size(params, 2)
@@ -525,9 +589,10 @@ function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
 end
 
 """
-    compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractHistogramData) where {T}
+    compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramData) where {T}
 
-TBW
+Compute the WAIC and its standard error for histogram data.
+Returns a tuple `(waic, se)`.
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramData) where {T}
     hist = datahistogram(data)
@@ -536,14 +601,15 @@ function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramDa
 end
 
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::RNACountData) where {T}
-    se =  var(lppd - pwaic)
+    se = var(lppd - pwaic)
     return -2 * mean(lppd - pwaic), 2 * se
 end
 
 """
-    compute_waic(lppd::Array{T},pwaic::Array{T},data::AbstractTraceHistogramData) where {T}
+    compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractTraceHistogramData) where {T}
 
-histogram data precedes trace data in vectors
+Compute the WAIC and its standard error for trace histogram data (histogram data precedes trace data in vectors).
+Returns a tuple `(waic, se)`.
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractTraceHistogramData) where {T}
     hist = datahistogram(data)
@@ -556,14 +622,17 @@ function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractTraceHistog
 end
 
 """
-aic(fits::Fit)
-aic(nparams::Int,llml)
+    aic(fits::Fit)
 
--`llml`: negative of maximum loglikelihood
-
-returns AIC
+Compute the Akaike Information Criterion (AIC) for a given fit.
 """
 aic(fits::Fit) = 2 * length(fits.parml) + 2 * fits.llml
+
+"""
+    aic(nparams::Int, llml)
+
+Compute the Akaike Information Criterion (AIC) given number of parameters and maximum log-likelihood.
+"""
 aic(nparams::Int, llml) = 2 * nparams + 2 * llml
 
 """
@@ -577,24 +646,64 @@ function initial_proposal(model)
     d = proposal_dist(param, model.proposal, model)
     return param, d
 end
-"""
-proposal(d,cv)
 
-return rand(d) and proposal distribution for cv (vector or covariance)
 
-"""
+# --- Original proposal and proposal_dist for reference ---
 function proposal(d::Distribution, cv, model)
     param = rand(d)
     return param, proposal_dist(param, cv, model)
 end
 
+function proposal(d::Vector{T}, cv::Matrix, model) where T <: Distribution
+    param = Float64[]
+    for i in eachindex(d)
+        param = vcat(param..., rand(d[i]))
+    end
+    return param, proposal_dist(param, cv, model)
+end
+#
+# function proposal_dist(param::Vector, cov::Matrix, model)
+#     if isposdef(cov)
+#         return MvNormal(param, cov)
+#     else
 """
-proposal_dist(param,cv)
+    proposal(d, cv, model)
 
-return proposal distribution specified by location and scale
+Draw a new parameter vector from the proposal distribution `d` and construct a new proposal distribution centered at the new parameter with scale/covariance `cv`.
+Returns the new parameter and its proposal distribution.
+"""
+# function proposal(d, cv, model)
+#     if typeof(cv) <: Matrix && hastrait(model, :hierarchical)
+#         n_hyper = size(cv, 1)
+#         n_param = length(d.μ)  # d.μ is the mean vector for MvNormal, or use param if available
+#         # Draw hyperparameters jointly
+#         hyper_param = rand(MvNormal(d.μ[1:n_hyper], cv))
+#         # Draw individual-level parameters independently
+#         indiv_sigma = 0.01  # You may want to make this configurable
+#         indiv_param = [rand(Normal(d.μ[i], indiv_sigma)) for i in n_hyper+1:n_param]
+#         param = vcat(hyper_param, indiv_param)
+#         # Build new proposal distribution for next step
+#         new_d = proposal_dist(param, cv, model)
+#         return param, new_d
+#     else
+#         param = rand(d)
+#         return param, proposal_dist(param, cv, model)
+#     end
+# end
 
+"""
+proposal_dist(param, cv, model)
+
+Construct a proposal distribution centered at `param` with scale/covariance `cv`.
+Returns a distribution object.
 """
 proposal_dist(param::Float64, cv::Float64, model) = Normal(param, proposal_scale(cv, model))
+"""
+    proposal_dist(param::Vector, cv::Float64, model)
+
+Construct a product of Normal proposal distributions for each parameter in `param` with shared scale `cv`.
+Returns a product distribution object.
+"""
 function proposal_dist(param::Vector, cv::Float64, model)
     d = Vector{Normal{Float64}}(undef, 0)
     for i in eachindex(param)
@@ -609,28 +718,59 @@ function proposal_dist(param::Vector, cv::Vector, model)
     end
     product_distribution(d)
 end
-function proposal_dist(param::Vector, cov::Matrix, model)
-    # c = (2.4)^2 / length(param)
-    if isposdef(cov)
-        return MvNormal(param, cov)
+"""
+    proposal_dist(param::Vector, cov::Matrix, model)
+
+Construct a multivariate Normal proposal distribution for `param` with covariance matrix `cov`.
+Returns an `MvNormal` distribution object.
+"""
+function proposal_dist(param::Vector, cv::Matrix, model)
+    if hastrait(model, :hierarchical)
+        n_hyper = size(cv, 1)
+        n_param = length(param)
+        # Joint proposal for hyperparameters
+        hyper_proposal = MvNormal(param[1:n_hyper], cv)
+        # Independent proposals for individual-level parameters
+        indiv_cv = 0.001  # You may want to make this configurable
+        indiv_proposals = proposal_dist(param[n_hyper+1:n_param], indiv_cv, model)
+        # Combine into a product distribution
+        return [hyper_proposal; indiv_proposals]
     else
-        return MvNormal(param, sqrt.(abs.(diag(cov))))
+        return MvNormal(param, cv)
     end
 end
 
 """
-proposal_scale(cv::Float64,model::AbstractGeneTransitionModel)
+proposal_scale(cv::Float64, model::AbstractGeneTransitionModel)
 
-return variance of normal distribution of log(parameter)
+Compute the standard deviation for the proposal distribution given coefficient of variation `cv`.
+Returns a Float64.
 """
 proposal_scale(cv::Float64, model::AbstractGeneTransitionModel) = sqrt(log(1 + cv^2))
 
+function proposal_sigma(r, cv, sigmatransforms)
+    sigma = Vector{Float64}(undef, length(sigmatransforms))
+    for i in eachindex(sigmatransforms)
+        f = sigmatransforms[i]
+        if f === sigmalognormal
+            sigma[i] = f(cv[i])
+        elseif f === sigmanormal
+            sigma[i] = f(r[i], cv[i])
+        else
+            # Default: try with cv[i], or throw an error if you want strictness
+            sigma[i] = f(cv[i])
+        end
+    end
+    return sigma
+end
 
 """
-mhfactor(param,d,paramt,dt)
-Metropolis-Hastings correction factor for asymmetric proposal distribution
+    mhfactor(param, d, paramt, dt)
+
+Compute the Metropolis-Hastings correction factor for asymmetric proposal distributions.
+Returns the log ratio of proposal densities.
 """
-mhfactor(param, d, paramt, dt) = logpdf(dt, param) - logpdf(d, paramt) #pdf(dt,param)/pdf(d,paramt)
+mhfactor(param, d, paramt, dt) = logpdf(dt, param) - logpdf(d, paramt)
 
 
 # Functions for parallel computing on multiple chains
@@ -692,7 +832,8 @@ end
 """
     merge_param(fits::Vector)
 
-returns pooled params from multiple chains
+Concatenate parameter samples from multiple `Fit` objects into a single array.
+Returns a matrix of parameters.
 """
 function merge_param(fits::Vector)
     param = fits[1].param
@@ -704,7 +845,8 @@ end
 """
     merge_ll(fits::Vector)
 
-returns pooled negative loglikelihood from multiple chains
+Concatenate log-likelihood samples from multiple `Fit` objects into a single array.
+Returns a vector of log-likelihoods.
 """
 function merge_ll(fits::Vector)
     ll = fits[1].ll
@@ -757,7 +899,7 @@ function compute_stats(paramin::Array{Float64,2}, model)
     madparam = Array{Float64,1}(undef, np)
     qparam = Matrix{Float64}(undef, 3, 0)
     if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
-        nrates = min(num_all_parameters(model), size(param, 1))
+        nrates = num_fitted_core_params(model)
         corparam = cor(param[1:nrates, :]')
         covparam = cov(param[1:nrates, :]')
         covlogparam = cov(paramin[1:nrates, :]')
@@ -842,9 +984,10 @@ function chainlength(params)
 end
 
 """
-find_ml(fits)
+    find_ml(fits::Array)
 
-returns the negative maximum likelihood out of all the chains
+Find the parameter vector and log-likelihood with the maximum likelihood across all fits.
+Returns `(parml, llml)`.
 """
 function find_ml(fits::Array)
     llml = Array{Float64,1}(undef, length(fits))
@@ -855,22 +998,32 @@ function find_ml(fits::Array)
 end
 
 """
-crossentropy(logpredictions::Array{T},data::Array{T}) where {T}
+    crossentropy(logpredictions, hist)
 
-compute crosscentropy between data histogram and likelilhood
+Compute the cross-entropy between a data histogram and model log-likelihood predictions.
+Returns a Float64.
 """
 function crossentropy(logpredictions::Array{T1}, hist::Array{T2}) where {T1,T2}
     lltot = hist' * logpredictions
     isfinite(lltot) ? -lltot : Inf
 end
-"""
-hist_entropy(hist)
 
-returns entropy of a normalized histogram
+"""
+    hist_entropy(hist::Array{Float64,1})
+
+Compute the entropy of a normalized histogram.
+Returns a Float64.
 """
 function hist_entropy(hist::Array{Float64,1})
     -hist' * log.(normalize_histogram(max.(hist, 0)))
 end
+
+"""
+    hist_entropy(hist::Array{Array,1})
+
+Compute the entropy of a list of normalized histograms.
+Returns a Float64.
+"""
 function hist_entropy(hist::Array{Array,1})
     l = 0
     for h in hist
@@ -880,28 +1033,28 @@ function hist_entropy(hist::Array{Array,1})
 end
 
 # function run_mcmc_parallel(model::HMM, observations::AbstractArray, n_chains::Int, n_steps::Int; gpu_ids::Vector{Int}=Int[])
-    # if !CUDA.functional()
-    #     error("CUDA is not available. Please install CUDA.jl and ensure you have a compatible GPU.")
-    # end
-    
-    # # Get available GPUs
-    # available_gpus = CUDA.devices()
-    # if isempty(gpu_ids)
-    #     gpu_ids = collect(1:length(available_gpus))
-    # end
-    
-    # # Distribute chains across GPUs
-    # chains_per_gpu = ceil(Int, n_chains / length(gpu_ids))
-    
-    # Run chains in parallel
-    # results = Vector{Any}(undef, n_chains)
-    # Threads.@threads for i in 1:n_chains
-    #     # gpu_id = gpu_ids[mod1(i, length(gpu_ids))]
-    #     # device!(available_gpus[gpu_id])
-    #     results[i] = run_mcmc_chain(model, observations, n_steps)
-    # end
-    
-    # return results
+# if !CUDA.functional()
+#     error("CUDA is not available. Please install CUDA.jl and ensure you have a compatible GPU.")
+# end
+
+# # Get available GPUs
+# available_gpus = CUDA.devices()
+# if isempty(gpu_ids)
+#     gpu_ids = collect(1:length(available_gpus))
+# end
+
+# # Distribute chains across GPUs
+# chains_per_gpu = ceil(Int, n_chains / length(gpu_ids))
+
+# Run chains in parallel
+# results = Vector{Any}(undef, n_chains)
+# Threads.@threads for i in 1:n_chains
+#     # gpu_id = gpu_ids[mod1(i, length(gpu_ids))]
+#     # device!(available_gpus[gpu_id])
+#     results[i] = run_mcmc_chain(model, observations, n_steps)
+# end
+
+# return results
 # end
 
 
