@@ -110,12 +110,6 @@ struct Measures
     mcse::Vector
 end
 
-function Measures(fits::Fit, waic, rhat)
-    ess = compute_ess(fits.param)
-    geweke = compute_geweke(fits.param)
-    mcse = compute_mcse(fits.param)
-    return Measures(waic, rhat, ess, geweke, mcse)
-end
 
 """
 run_mh(data,model,options)
@@ -134,9 +128,9 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
     fits, waic = metropolis_hastings(data, model, options)
     if options.samplesteps > 0
         stats = compute_stats(fits.param, model)
-        rhat = compute_rhat([fits])
-        measures = Measures(fits, waic, vec(rhat))
-        # measures = Measures(waic, vec(rhat))
+        rhat = vec(compute_rhat([fits]))  # ensure rhat is a vector
+        ess, geweke, mcse = compute_measures(fits)
+        measures = Measures(waic, rhat, ess, geweke, mcse)
     else
         stats = 0
         measures = 0
@@ -160,8 +154,9 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
             waic = pooled_waic(chain)
             fits = merge_fit(chain)
             stats = compute_stats(fits.param, model)
-            rhat = compute_rhat(chain)
-            return fits, stats, Measures(fits, waic, vec(rhat))
+            rhat = vec(compute_rhat(chain))
+            ess, geweke, mcse = compute_measures(chain)
+            return fits, stats, Measures(waic, rhat, ess, geweke, mcse)
         end
     end
 end
@@ -214,7 +209,8 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
         if options.samplesteps > 0
             stats = compute_stats(fits.param, model)
             rhat = compute_rhat([fits])
-            measures = Measures(fits, waic, vec(rhat))
+            ess, geweke, mcse = compute_measures(fits)
+            measures = Measures(waic, rhat, ess, geweke, mcse)
         else
             stats = 0
             measures = 0
@@ -244,7 +240,8 @@ function run_mh_gpu(data::AbstractExperimentalData, model::AbstractGeneTransitio
         fits = merge_fit(chain_results)
         stats = compute_stats(fits.param, model)
         rhat = compute_rhat(chain_results)
-        return fits, stats, Measures(fits, waic, vec(rhat))
+        ess, geweke, mcse = compute_measures(chain_results)
+        return fits, stats, Measures(waic, rhat, ess, geweke, mcse)
     end
 end
 
@@ -325,10 +322,33 @@ end
 """
 warmup(logpredictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
 
-returns param,parml,ll,llml,d,proposalcv,logpredictions
+Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal distributions.
 
-runs MCMC for options.warmupstep number of samples and does not collect results
+# Arguments
+- `logpredictions`: Initial log-likelihood predictions.
+- `param`: Initial parameter vector.
+- `parml`: Initial maximum likelihood parameter vector.
+- `ll`: Initial negative log-likelihood.
+- `llml`: Initial maximum likelihood value.
+- `d`: Initial proposal distribution.
+- `proposalcv`: Initial proposal covariance or scale.
+- `data`: Experimental data structure.
+- `model`: Model structure.
+- `samplesteps`: Number of warmup steps to run.
+- `temp`: Temperature for MCMC.
+- `t1`: Start time.
+- `maxtime`: Maximum allowed time for warmup.
 
+# Returns
+- `param`: Final parameter vector after warmup.
+- `parml`: Maximum likelihood parameter vector found during warmup.
+- `ll`: Final negative log-likelihood.
+- `llml`: Minimum negative log-likelihood found during warmup.
+- `d`: Final proposal distribution.
+- `proposalcv`: Final proposal covariance or scale (can be adapted during warmup).
+- `logpredictions`: Final log-likelihood predictions.
+
+This function can be used to adapt the proposal distribution (e.g., empirical covariance) before the main MCMC sampling phase.
 """
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
     # parout = Array{Float64,2}(undef, length(param), samplesteps)
@@ -344,7 +364,7 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         # parout[:, step] = param
         # accepttotal += accept
     end
-    # covparam = cov(parout[:,1:step]')*(2.4)^2 / length(param)
+    # covparam = cov(parout[:,1:step]')*(2.38)^2 / length(param)
     # if isposdef(covparam) && step > 1000 && accepttotal/step > .25
     #     d=proposal_dist(param,covparam,model)
     #     proposalcv = covparam
@@ -442,102 +462,6 @@ function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposa
     return Fit(parout, llout, parml, llml, lppd, pwaic, prior, accepttotal, total_step)
 end
 
-"""
-    compute_ess(params)
-
-Compute the effective sample size (ESS) for each parameter in the MCMC chain.
-Returns a vector of ESS values.
-"""
-function compute_ess(params)
-    n_params = size(params, 1)
-    n_samples = size(params, 2)
-    ess = zeros(n_params)
-
-    for i in 1:n_params
-        # Calculate autocorrelation
-        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        # Find where autocorrelation drops below 0.05
-        cutoff = findfirst(x -> abs(x) < 0.05, acf)
-        cutoff = isnothing(cutoff) ? length(acf) : cutoff
-
-        # Sum of autocorrelations with appropriate cutoff
-        tau = 1 + 2 * sum(acf[2:cutoff])
-        ess[i] = n_samples / tau
-    end
-
-    return ess
-end
-
-"""
-    compute_geweke(params; first_frac=0.1, last_frac=0.5)
-
-Compute Geweke z-scores for each parameter to assess MCMC convergence.
-Returns a vector of z-scores.
-"""
-function compute_geweke(params; first_frac=0.1, last_frac=0.5)
-    n_params = size(params, 1)
-    n_samples = size(params, 2)
-
-    first_end = Int(floor(first_frac * n_samples))
-    last_start = Int(floor((1 - last_frac) * n_samples))
-
-    z_scores = zeros(n_params)
-
-    for i in 1:n_params
-        first_mean = mean(params[i, 1:first_end])
-        last_mean = mean(params[i, last_start:end])
-
-        # Spectral density estimates for variance
-        first_var = spectrum0(params[i, 1:first_end])
-        last_var = spectrum0(params[i, last_start:end])
-
-        # Z-score
-        z_scores[i] = (first_mean - last_mean) /
-                      sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
-    end
-
-    return z_scores
-end
-
-"""
-    spectrum0(x)
-
-Estimate the spectral density at frequency zero for a time series `x`.
-Used in Geweke diagnostic.
-"""
-function spectrum0(x)
-    n = length(x)
-    spec = abs.(fft(x .- mean(x))) .^ 2 / n
-    return sum(spec[2:Int(floor(n / 2))]) * 2 / n
-end
-
-"""
-    compute_mcse(params)
-
-Compute the Monte Carlo standard error (MCSE) for each parameter.
-Returns a vector of MCSE values.
-"""
-function compute_mcse(params)
-    n_params = size(params, 1)
-    n_samples = size(params, 2)
-    mcse = zeros(n_params)
-
-    for i in 1:n_params
-        # Calculate autocorrelation
-        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        # Find where autocorrelation drops below 0.05
-        cutoff = findfirst(x -> abs(x) < 0.05, acf)
-        cutoff = isnothing(cutoff) ? length(acf) : cutoff
-
-        # Sum of autocorrelations
-        tau = 1 + 2 * sum(acf[2:cutoff])
-
-        # Standard error
-        mcse[i] = sqrt(tau * var(params[i, :]) / n_samples)
-    end
-
-    return mcse
-end
 
 """
 mhstep(logpredictions,param,ll,prior,d,sigma,model,data,temp)
@@ -648,48 +572,19 @@ function initial_proposal(model)
 end
 
 
-# --- Original proposal and proposal_dist for reference ---
 function proposal(d::Distribution, cv, model)
     param = rand(d)
     return param, proposal_dist(param, cv, model)
 end
 
-function proposal(d::Vector{T}, cv::Matrix, model) where T <: Distribution
+function proposal(d::Vector{T}, cv, model) where {T<:Distribution}
     param = Float64[]
     for i in eachindex(d)
         param = vcat(param..., rand(d[i]))
     end
     return param, proposal_dist(param, cv, model)
 end
-#
-# function proposal_dist(param::Vector, cov::Matrix, model)
-#     if isposdef(cov)
-#         return MvNormal(param, cov)
-#     else
-"""
-    proposal(d, cv, model)
 
-Draw a new parameter vector from the proposal distribution `d` and construct a new proposal distribution centered at the new parameter with scale/covariance `cv`.
-Returns the new parameter and its proposal distribution.
-"""
-# function proposal(d, cv, model)
-#     if typeof(cv) <: Matrix && hastrait(model, :hierarchical)
-#         n_hyper = size(cv, 1)
-#         n_param = length(d.μ)  # d.μ is the mean vector for MvNormal, or use param if available
-#         # Draw hyperparameters jointly
-#         hyper_param = rand(MvNormal(d.μ[1:n_hyper], cv))
-#         # Draw individual-level parameters independently
-#         indiv_sigma = 0.01  # You may want to make this configurable
-#         indiv_param = [rand(Normal(d.μ[i], indiv_sigma)) for i in n_hyper+1:n_param]
-#         param = vcat(hyper_param, indiv_param)
-#         # Build new proposal distribution for next step
-#         new_d = proposal_dist(param, cv, model)
-#         return param, new_d
-#     else
-#         param = rand(d)
-#         return param, proposal_dist(param, cv, model)
-#     end
-# end
 
 """
 proposal_dist(param, cv, model)
@@ -707,14 +602,14 @@ Returns a product distribution object.
 function proposal_dist(param::Vector, cv::Float64, model)
     d = Vector{Normal{Float64}}(undef, 0)
     for i in eachindex(param)
-        push!(d, Normal(param[i], proposal_scale(cv, model)))
+        push!(d, Normal(param[i], proposal_scale(cv, model, i, param[i])))
     end
     product_distribution(d)
 end
 function proposal_dist(param::Vector, cv::Vector, model)
     d = Vector{Normal{Float64}}(undef, 0)
     for i in eachindex(param)
-        push!(d, Normal(param[i], proposal_scale(cv[i], model)))
+        push!(d, Normal(param[i], proposal_scale(cv[i], model, i, param[i])))
     end
     product_distribution(d)
 end
@@ -724,15 +619,14 @@ end
 Construct a multivariate Normal proposal distribution for `param` with covariance matrix `cov`.
 Returns an `MvNormal` distribution object.
 """
-function proposal_dist(param::Vector, cv::Matrix, model)
+function proposal_dist(param::Vector, cv::Matrix, model, indiv=0.001)
     if hastrait(model, :hierarchical)
         n_hyper = size(cv, 1)
         n_param = length(param)
         # Joint proposal for hyperparameters
         hyper_proposal = MvNormal(param[1:n_hyper], cv)
         # Independent proposals for individual-level parameters
-        indiv_cv = 0.001  # You may want to make this configurable
-        indiv_proposals = proposal_dist(param[n_hyper+1:n_param], indiv_cv, model)
+        indiv_proposals = proposal_dist(param[n_hyper+1:n_param], indiv, model)
         # Combine into a product distribution
         return [hyper_proposal; indiv_proposals]
     else
@@ -740,30 +634,25 @@ function proposal_dist(param::Vector, cv::Matrix, model)
     end
 end
 
+function proposal_dist(param::Vector, cv::Tuple, model)
+    proposal_dist(param, cv[1], model, cv[2])
+end
 """
 proposal_scale(cv::Float64, model::AbstractGeneTransitionModel)
 
 Compute the standard deviation for the proposal distribution given coefficient of variation `cv`.
 Returns a Float64.
 """
-proposal_scale(cv::Float64, model::AbstractGeneTransitionModel) = sqrt(log(1 + cv^2))
+proposal_scale(cv::Float64, model::AbstractGeneTransitionModel, i=1, param=1.) = sqrt(log(1 + cv^2))
 
-function proposal_sigma(r, cv, sigmatransforms)
-    sigma = Vector{Float64}(undef, length(sigmatransforms))
-    for i in eachindex(sigmatransforms)
-        f = sigmatransforms[i]
-        if f === sigmalognormal
-            sigma[i] = f(cv[i])
-        elseif f === sigmanormal
-            sigma[i] = f(r[i], cv[i])
+function proposal_scale(cv::Float64, model::GRSMmodel, i, param)
+        f = model.transforms.f_cv[i]
+        if f == sigmanormal
+            return f(param, cv)
         else
-            # Default: try with cv[i], or throw an error if you want strictness
-            sigma[i] = f(cv[i])
+            return f(cv)
         end
-    end
-    return sigma
 end
-
 """
     mhfactor(param, d, paramt, dt)
 
@@ -951,7 +840,6 @@ function compute_rhat(fits::Vector{Fit})
     compute_rhat(params)
 end
 
-
 """
     compute_rhat(params::Vector{Array})
 
@@ -972,6 +860,141 @@ function compute_rhat(params::Vector{Array})
     W = mean(s, dims=2)
     sqrt.((N - 1) / N .+ B ./ W / N)
 end
+
+
+function compute_measures(chain::Array{Tuple,1})
+    fits = collate_fit(chain)
+    return compute_measures(fits)
+end
+
+function compute_measures(fits::Vector{Fit})
+    # Each of these is a vector of vectors (one per chain)
+    ess_list = [compute_ess(f.param) for f in fits]
+    geweke_list = [compute_geweke(f.param) for f in fits]
+    mcse_list = [compute_mcse(f.param) for f in fits]
+
+    # Stack into matrices (parameters x chains)
+    ess_mat = reduce(hcat, ess_list)
+    geweke_mat = reduce(hcat, geweke_list)
+    mcse_mat = reduce(hcat, mcse_list)
+
+    # Pooled/summarized diagnostics
+    pooled_ess = sum(ess_mat, dims=2)[:, 1]           # sum across chains for each parameter
+    mean_geweke = mean(geweke_mat, dims=2)[:, 1]      # mean across chains for each parameter
+    mean_mcse = mean(mcse_mat, dims=2)[:, 1]          # mean across chains for each parameter
+
+    return pooled_ess, mean_geweke, mean_mcse
+end
+
+function compute_measures(fits::Fit)
+    return compute_ess(fits.param), compute_geweke(fits.param), compute_mcse(fits.param)
+end
+
+# function Measures(fits::Fit, waic, rhat)
+#     ess = compute_ess(fits.param)
+#     geweke = compute_geweke(fits.param)
+#     mcse = compute_mcse(fits.param)
+#     return Measures(waic, rhat, ess, geweke, mcse)
+# end
+"""
+    compute_ess(params)
+
+Compute the effective sample size (ESS) for each parameter in the MCMC chain.
+Returns a vector of ESS values.
+"""
+function compute_ess(params)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+    ess = zeros(n_params)
+
+    for i in 1:n_params
+        # Calculate autocorrelation
+        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+        # Find where autocorrelation drops below 0.05
+        cutoff = findfirst(x -> abs(x) < 0.05, acf)
+        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+
+        # Sum of autocorrelations with appropriate cutoff
+        tau = 1 + 2 * sum(acf[2:cutoff])
+        ess[i] = n_samples / tau
+    end
+
+    return ess
+end
+
+"""
+    compute_geweke(params; first_frac=0.1, last_frac=0.5)
+
+Compute Geweke z-scores for each parameter to assess MCMC convergence.
+Returns a vector of z-scores.
+"""
+function compute_geweke(params; first_frac=0.1, last_frac=0.5)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+
+    first_end = Int(floor(first_frac * n_samples))
+    last_start = Int(floor((1 - last_frac) * n_samples))
+
+    z_scores = zeros(n_params)
+
+    for i in 1:n_params
+        first_mean = mean(params[i, 1:first_end])
+        last_mean = mean(params[i, last_start:end])
+
+        # Spectral density estimates for variance
+        first_var = spectrum0(params[i, 1:first_end])
+        last_var = spectrum0(params[i, last_start:end])
+
+        # Z-score
+        z_scores[i] = (first_mean - last_mean) /
+                      sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
+    end
+
+    return z_scores
+end
+
+"""
+    spectrum0(x)
+
+Estimate the spectral density at frequency zero for a time series `x`.
+Used in Geweke diagnostic.
+"""
+function spectrum0(x)
+    n = length(x)
+    spec = abs.(fft(x .- mean(x))) .^ 2 / n
+    return sum(spec[2:Int(floor(n / 2))]) * 2 / n
+end
+
+"""
+    compute_mcse(params)
+
+Compute the Monte Carlo standard error (MCSE) for each parameter.
+Returns a vector of MCSE values.
+"""
+function compute_mcse(params)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+    mcse = zeros(n_params)
+
+    for i in 1:n_params
+        # Calculate autocorrelation
+        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+        # Find where autocorrelation drops below 0.05
+        cutoff = findfirst(x -> abs(x) < 0.05, acf)
+        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+
+        # Sum of autocorrelations
+        tau = 1 + 2 * sum(acf[2:cutoff])
+
+        # Standard error
+        val = tau * var(params[i, :]) / n_samples
+        mcse[i] = sqrt(max(val, 0.0))
+    end
+
+    return mcse
+end
+
+
 
 """
  chainlength(params)

@@ -509,7 +509,7 @@ function distribution_array(param::Vector, cv, dist=Normal)
 end
 
 function sigmanormal(mean, cv)
-    return max(mean * cv, 1.0)
+    return max(abs(mean * cv), abs(cv))
 end
 
 """
