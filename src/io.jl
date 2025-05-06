@@ -1462,7 +1462,8 @@ end
 
 function get_covlogparam(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
     if propcv < 0.0
-        return read_bottom_float_block(get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles))
+        println(infolder, label, gene, G, R, S, insertstep, nalleles)
+        return read_bottom_float_block(propcv, get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles))
     else
         return propcv
     end
@@ -1567,10 +1568,10 @@ end
 
 # end
 
-function read_bottom_float_block(file::String)
+function read_bottom_float_block(propcv::Float64, file::String)
     if !isfile(file)
         println(file, " does not exist")
-        return 0.01
+        return abs(propcv)
     else
         c = readdlm(file, ',')
         nrows, ncols = size(c)
@@ -1595,19 +1596,16 @@ function read_bottom_float_block(file::String)
             end
         end
         block = c[first_row:last_row, :]
-        nblock = size(block, 1)
         # Convert all entries to Float64, set empty to NaN
         block_float = map(x -> (x isa Number) ? float(x) : (x isa AbstractString && !isempty(x) ? parse(Float64, x) : NaN), block)
-        # Now, find the largest k <= nblock such that block_float[end-k+1:end, 1:k] is all valid numbers
-        max_k = nblock
-        while max_k > 0
-            subblock = block_float[end-max_k+1:end, 1:max_k]
-            if all(!isnan, subblock)
-                return subblock
-            end
-            max_k -= 1
+        # Find the bottom row, count the number of valid floats (not NaN)
+        last_valid_row = block_float[end, :]
+        k = count(!isnan, last_valid_row)
+        if k == 0 || k > size(block_float, 1) || k > size(block_float, 2)
+            return Array{Float64}(undef, 0, 0)
         end
-        return Array{Float64}(undef, 0, 0)  # If nothing found, return empty
+        # Return the bottom k rows and first k columns as a k x k square
+        return block_float[end-k+1:end, 1:k]
     end
 end
 

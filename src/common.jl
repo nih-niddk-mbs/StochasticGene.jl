@@ -346,6 +346,9 @@ Check if a trait is present in a model.
 
 """
 function hastrait(model, trait)
+    if !(model isa AbstractGRSMmodel)
+        return false
+    end
     !isnothing(model.trait) && haskey(model.trait, trait)
 end
 
