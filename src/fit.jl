@@ -326,7 +326,7 @@ function set_trace_background(traceinfo)
         if eltype(traceinfo[5]) <: AbstractVector
             background = Vector[]
             for t in traceinfo[5]
-                push!(background, t) 
+                push!(background, t)
             end
         else
             background = traceinfo[5]
@@ -1334,6 +1334,24 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
     end
     writeall(writefolder, fits, stats, measures, data, temp, model, optimized=optimized, burst=burst, writesamples=writesamples)
+end
+
+function get_covlogparam(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+    if propcv < 0.0
+        file = get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles)
+        if !isfile(file)
+            println(file, " does not exist")
+            return abs(propcv)
+        end
+        cv = read_bottom_float_block(file)
+        if isposdef(cv)
+            return cv
+        else
+            return abs(propcv)
+        end
+    else
+        return propcv
+    end
 end
 
 """

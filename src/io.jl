@@ -1464,15 +1464,6 @@ function read_covlogparam(file::String)
     return c[last_block_start:last_block_start+nrates-1, 1:nrates]
 end
 
-function get_covlogparam(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
-    if propcv < 0.0
-        println(infolder, label, gene, G, R, S, insertstep, nalleles)
-        return read_bottom_float_block(propcv, get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles))
-    else
-        return propcv
-    end
-end
-
 read_crosscov(statfile::String) = read_crosscov(read_covparam(statfile))
 
 function read_crosscov(C::Matrix)
@@ -1572,44 +1563,39 @@ end
 
 # end
 
-function read_bottom_float_block(propcv::Float64, file::String)
-    if !isfile(file)
-        println(file, " does not exist")
-        return abs(propcv)
-    else
-        c = readdlm(file, ',')
-        nrows, ncols = size(c)
-        isnumlike(x) = (x isa Number) || (x isa AbstractString && occursin(r"^-?\d*\.?\d+([eE][\+\-]?\d+)?$", x)) || (x isa AbstractString && isempty(x))
-        # Find the last row that contains only numbers or numeric strings
-        last_row = nrows
-        while last_row > 0
-            row = c[last_row, :]
-            if all(isnumlike, row)
-                break
-            end
-            last_row -= 1
+function read_bottom_float_block(file::String)
+    c = readdlm(file, ',')
+    nrows, ncols = size(c)
+    isnumlike(x) = (x isa Number) || (x isa AbstractString && occursin(r"^-?\d*\.?\d+([eE][\+\-]?\d+)?$", x)) || (x isa AbstractString && isempty(x))
+    # Find the last row that contains only numbers or numeric strings
+    last_row = nrows
+    while last_row > 0
+        row = c[last_row, :]
+        if all(isnumlike, row)
+            break
         end
-        # Now, scan upwards to find the first row of the block
-        first_row = last_row
-        while first_row > 1
-            row = c[first_row-1, :]
-            if all(isnumlike, row)
-                first_row -= 1
-            else
-                break
-            end
-        end
-        block = c[first_row:last_row, :]
-        # Convert all entries to Float64, set empty to NaN
-        block_float = map(x -> (x isa Number) ? float(x) : (x isa AbstractString && !isempty(x) ? parse(Float64, x) : NaN), block)
-        # Find the bottom row, count the number of valid floats (not NaN)
-        last_valid_row = block_float[end, :]
-        k = count(!isnan, last_valid_row)
-        if k == 0 || k > size(block_float, 1) || k > size(block_float, 2)
-            return Array{Float64}(undef, 0, 0)
-        end
-        # Return the bottom k rows and first k columns as a k x k square
-        return block_float[end-k+1:end, 1:k]
+        last_row -= 1
     end
+    # Now, scan upwards to find the first row of the block
+    first_row = last_row
+    while first_row > 1
+        row = c[first_row-1, :]
+        if all(isnumlike, row)
+            first_row -= 1
+        else
+            break
+        end
+    end
+    block = c[first_row:last_row, :]
+    # Convert all entries to Float64, set empty to NaN
+    block_float = map(x -> (x isa Number) ? float(x) : (x isa AbstractString && !isempty(x) ? parse(Float64, x) : NaN), block)
+    # Find the bottom row, count the number of valid floats (not NaN)
+    last_valid_row = block_float[end, :]
+    k = count(!isnan, last_valid_row)
+    if k == 0 || k > size(block_float, 1) || k > size(block_float, 2)
+        return Array{Float64}(undef, 0, 0)
+    end
+    # Return the bottom k rows and first k columns as a k x k square
+    return block_float[end-k+1:end, 1:k]
 end
 
