@@ -3,10 +3,10 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datapath::String; assemble=true, multicond=false, datatype="rna")
+    make_dataframes(resultfolder::String,datapath::String, assemble=true, multicond=false, datatype="rna")
 
 """
-function make_dataframes(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna")
+function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
     if assemble
         assemble_all(resultfolder, multicond)
     end
