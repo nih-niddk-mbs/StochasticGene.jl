@@ -246,7 +246,7 @@ end
 
 """
     write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
 Writes a fitfile for the fit function parameters.
@@ -271,7 +271,7 @@ end
 
 """
     write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
 
 Write fitfile for genes
@@ -988,4 +988,146 @@ function new_FISHfolder(newroot::String, oldroot::String, rep::String)
             end
         end
     end
+end
+
+"""
+    find_genes_to_rerun(datafolder::String, resultfolder::String, filetype::String, nlines_expected::Int; error_keywords=["nonconverged", "NaN", "median"], verbose=true)
+
+Systematically finds genes that are missing or nonconverged in the results folder, based on the data folder gene list.
+
+- `datafolder`: Path to the folder containing gene data files (e.g. data/U3AS4/WT-UTR/)
+- `resultfolder`: Path to the folder containing measures files (e.g. results/WT-UTR/)
+- `filetype`: e.g. "rnacount"
+- `nlines_expected`: Number of lines expected in a complete measures file
+- `error_keywords`: List of strings indicating nonconvergence or fallback (default: ["nonconverged", "NaN", "median"])
+- `verbose`: If true, prints a summary
+
+Returns a vector of gene names to rerun.
+"""
+function find_genes_to_rerun(datafolder::String, resultfolder::String, filetype::String, nlines_expected::Int; error_keywords=["nonconverged", "NaN", "median"], verbose=true)
+    # Get all gene names from the data folder (assume <gene>.txt or <gene>_*.txt)
+    datafiles = readdir(datafolder)
+    genes = String[]
+    for f in datafiles
+        m = match(r"^([A-Za-z0-9_\-]+)", f)
+        if m !== nothing
+            gene = m.captures[1]
+            push!(genes, gene)
+        end
+    end
+    genes = unique(genes)
+
+    # For each gene, check for measures file and its content
+    to_rerun = String[]
+    for gene in genes
+        # Find measures file(s) for this gene
+        pattern = r"measures_" * filetype * "-" * gene * ".*\\.txt"
+        mfiles = filter(f -> occursin(pattern, f), readdir(resultfolder))
+        if isempty(mfiles)
+            push!(to_rerun, gene)
+            if verbose
+                println("Missing measures file for gene: $gene")
+            end
+            continue
+        end
+        # Check content of the first measures file (or all, if you want)
+        file = joinpath(resultfolder, mfiles[1])
+        lines = readlines(file)
+        if length(lines) < nlines_expected || any(kw -> any(occursin(kw, l) for l in lines), error_keywords)
+            push!(to_rerun, gene)
+            if verbose
+                println("Nonconverged or incomplete measures file for gene: $gene")
+            end
+        end
+    end
+    if verbose
+        println("Total genes in data: ", length(genes))
+        println("Genes to rerun: ", length(to_rerun))
+    end
+    return to_rerun
+end
+
+"""
+    find_missing_genes(datafolder::String, resultfolder::String, filetype::String)
+
+Returns a vector of gene names in the data folder that are missing a corresponding measures file in the results folder.
+"""
+function find_missing_genes(datafolder::String, resultfolder::String, filetype::String)
+    datafiles = readdir(datafolder)
+    genes = String[]
+    for f in datafiles
+        m = match(r"^([A-Za-z0-9_\-]+)", f)
+        if m !== nothing
+            gene = m.captures[1]
+            push!(genes, gene)
+        end
+    end
+    genes = unique(genes)
+    missing = String[]
+    for gene in genes
+        pattern = r"measures_" * filetype * "-" * gene * ".*\.txt"
+        mfiles = filter(f -> occursin(Regex(pattern), f), readdir(resultfolder))
+        if isempty(mfiles)
+            push!(missing, gene)
+        end
+    end
+    return missing
+end
+
+"""
+    find_nonconverged_genes(resultfolder::String, filetype::String, nlines_expected::Int; rhat_thresh=1.1, ess_min=100, geweke_thresh=2.0, verbose=true)
+
+Checks all measures files in the results folder for nonconvergence based on R-hat, ESS, and Geweke diagnostics.
+Prints out which diagnostic(s) failed for each nonconverged gene.
+Returns a vector of nonconverged gene names.
+
+NOTE: You must adapt the parsing code to your actual measures file format!
+"""
+function find_nonconverged_genes(resultfolder::String, filetype::String, nlines_expected::Int; rhat_thresh=1.1, ess_min=100, geweke_thresh=2.0, verbose=true)
+    files = readdir(resultfolder)
+    measure_files = filter(f -> startswith(f, "measures_" * filetype * "-"), files)
+    nonconverged = String[]
+    for file in measure_files
+        gene_match = match(r"measures_" * filetype * "-([A-Za-z0-9_\-]+)_", file)
+        gene = gene_match !== nothing ? gene_match.captures[1] : nothing
+        lines = readlines(joinpath(resultfolder, file))
+        # Placeholder: parse diagnostics from lines
+        # You must adapt this to your file format!
+        rhat = Float64[]  # fill with parsed values
+        ess = Float64[]   # fill with parsed values
+        geweke = Float64[] # fill with parsed values
+        # Example: if lines 2,3,4 are rhat, ess, geweke (comma-separated)
+        # rhat = parse.(Float64, split(lines[2], ","))
+        # ess = parse.(Float64, split(lines[3], ","))
+        # geweke = parse.(Float64, split(lines[4], ","))
+        failed = false
+        if length(lines) < nlines_expected
+            failed = true
+            if verbose && gene !== nothing
+                println("$gene: incomplete file (only $(length(lines)) lines)")
+            end
+        end
+        if any(rhat .> rhat_thresh)
+            failed = true
+            if verbose && gene !== nothing
+                println("$gene: R-hat > $rhat_thresh")
+            end
+        end
+        if any(ess .< ess_min)
+            failed = true
+            if verbose && gene !== nothing
+                println("$gene: ESS < $ess_min")
+            end
+        end
+        if any(abs.(geweke) .> geweke_thresh)
+            failed = true
+            if verbose && gene !== nothing
+                println("$gene: |Geweke| > $geweke_thresh")
+            end
+        end
+        if failed && gene !== nothing
+            push!(nonconverged, gene)
+        end
+    end
+    return nonconverged
 end
