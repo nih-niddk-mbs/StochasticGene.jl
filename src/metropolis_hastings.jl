@@ -329,7 +329,7 @@ function anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         _, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, tempanneal)
-        if ll < llml
+        if ll > llml
             llml, parml = ll, param
         end
         parout[:, step] = param
@@ -377,7 +377,7 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
-        if ll < llml
+        if ll > llml
             llml, parml = ll, param
         end
         # parout[:, step] = param
@@ -411,7 +411,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
-        if ll < llml
+        if ll > llml
             llml, parml = ll, param
         end
         parout[:, step] = param
@@ -453,7 +453,7 @@ function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposa
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
 
         # Update maximum likelihood
-        if ll < llml
+        if ll > llml
             llml, parml = ll, param
         end
 
@@ -486,9 +486,9 @@ end
 mhstep(logpredictions,param,ll,prior,d,sigma,model,data,temp)
 
 returns 1,logpredictionst,paramt,llt,priort,dt if accept
-        1,logpredictionst,paramt,llt,priort,dt if not
+        0,logpredictions,param,ll,prior,d if not
 
-ll is negative log likelihood
+ll is log-likelihood (NOT negative log-likelihood)
 """
 function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
     paramt, dt = proposal(d, proposalcv, model)
@@ -499,69 +499,61 @@ end
 
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
     # mhfactor not needed for symmetric proposal distribution
-    # if rand() < exp((ll + prior - llt - priort + mhfactor(param,d,paramt,dt))/temp)
-    # if rand() < exp((ll + prior - llt - priort) / temp)
+    # if rand() < exp((llt + priort - ll - prior + mhfactor(param,d,paramt,dt))/temp)
+    
     # println(mhfactor(param,d,paramt,dt))
-    # println(ll + prior - llt - priort)
-    if log(rand()) < (ll + prior - llt - priort) / temp
+    # println(llt + priort - ll - prior)
+
+    # Accept if new log-likelihood is higher (or by probability if lower)
+    if log(rand()) < (llt + priort - ll - prior) / temp
         return 1, logpredictionst, paramt, llt, priort, dt
     else
         return 0, logpredictions, param, ll, prior, d
     end
 end
+
 """
 update_waic(lppd,pwaic,logpredictions)
 
-returns lppd and pwaic, which are the running sum and variance of -logpredictions
-(- sign needed because logpredictions is negative loglikelihood)
+returns lppd and pwaic, which are the running sum and variance of logpredictions
+(logpredictions is log-likelihood)
 """
 function update_waic(lppd, pwaic, logpredictions)
-    lppd = logsumexp(lppd, -logpredictions)
-    lppd, var_update(pwaic, -logpredictions)
+    lppd = logsumexp(lppd, logpredictions)
+    lppd, var_update(pwaic, logpredictions)
 end
 """
-computewaic(lppd::Array{T},pwaic::Array{T},data) where {T}
+    compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
 
-returns  WAIC and SE of WAIC 
+Compute the Watanabe-Akaike Information Criterion (WAIC) and its standard error.
+This is a unified implementation that works for all data types.
 
-using lppd and pwaic computed in metropolis_hastings()
+# Arguments
+- `lppd`: Log pointwise predictive density (log-likelihoods)
+- `pwaic`: Pointwise WAIC penalty terms
+- `data`: The data object (can be any type)
+
+# Returns
+- Tuple of (WAIC, standard error)
+
+# Notes
+- For histogram data: 
+  - lppd and pwaic are weighted by histogram counts
+  - Each bin's contribution is scaled by its count
+- For RNA count data: 
+  - lppd and pwaic are raw log-likelihoods
+  - Each count is an observation
+- For trace data: 
+  - lppd and pwaic include both trace and RNA components
+  - Each time point is an observation
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
-    se = sqrt(length(lppd) * var(lppd - pwaic))
-    return -2 * sum(lppd - pwaic), 2 * se
-end
-
-"""
-    compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramData) where {T}
-
-Compute the WAIC and its standard error for histogram data.
-Returns a tuple `(waic, se)`.
-"""
-function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractHistogramData) where {T}
-    hist = datahistogram(data)
-    se = sqrt(sum(hist) * var(lppd - pwaic, weights(hist), corrected=false))
-    return -2 * hist' * (lppd - pwaic), 2 * se
-end
-
-function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::RNACountData) where {T}
-    se = var(lppd - pwaic)
-    return -2 * mean(lppd - pwaic), 2 * se
-end
-
-"""
-    compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractTraceHistogramData) where {T}
-
-Compute the WAIC and its standard error for trace histogram data (histogram data precedes trace data in vectors).
-Returns a tuple `(waic, se)`.
-"""
-function compute_waic(lppd::Array{T}, pwaic::Array{T}, data::AbstractTraceHistogramData) where {T}
-    hist = datahistogram(data)
-    N = length(hist)
-    elppd = lppd - pwaic
-    vh = sum(hist) * var(elppd[1:N], weights(hist), corrected=false)
-    vt = length(elppd[N+1:end]) * var(elppd[N+1:end])
-    se = sqrt(vh + vt)
-    return -2 * hist' * (elppd[1:N]) - 2 * sum(elppd[N+1:end]), 2 * se
+    # Calculate total WAIC
+    waic = -2 * sum(lppd - pwaic)
+    # Calculate standard error for total WAIC
+    n_obs = length(pwaic)  # number of observations
+    se = 2 * sqrt(sum(pwaic)) * sqrt(n_obs)  # scale by sqrt(n_obs)
+    return waic, se
 end
 
 """
@@ -569,14 +561,14 @@ end
 
 Compute the Akaike Information Criterion (AIC) for a given fit.
 """
-aic(fits::Fit) = 2 * length(fits.parml) + 2 * fits.llml
+aic(fits::Fit) = 2 * length(fits.parml) - 2 * fits.llml
 
 """
     aic(nparams::Int, llml)
 
 Compute the Akaike Information Criterion (AIC) given number of parameters and maximum log-likelihood.
 """
-aic(nparams::Int, llml) = 2 * nparams + 2 * llml
+aic(nparams::Int, llml) = 2 * nparams - 2 * llml
 
 """
 initial_proposal(model)

@@ -361,8 +361,7 @@ write all measures into a single file
 """
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * model * ".csv")
-    header = ["Gene" "Nalleles" "Deviance" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
-    # assemble_files(folder,get_files(files,"measures",label,cond,model),outfile,header,readmeasures)
+    header = ["Gene" "Nalleles" "LogMaxLikelihood" "normalized_LL" "n_obs" "n_params" "Deviance" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     files = get_files(files, "measures", label, cond, model)
     f = open(outfile, "w")
     writedlm(f, header, ',')
@@ -666,14 +665,14 @@ filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, mode
 """
 writeall(path::String,fit,stats,measures,data,temp,model::AbstractGeneTransitionModel;optimized=0,burst=0)
 """
-function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
+function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
     if !isdir(path)
         mkpath(path)
     end
     name = filename(data, model)
     labels = rlabels(model)
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
-    write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
+    write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
     write_info(joinpath(path, "info" * name), data, model, labels)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
@@ -779,13 +778,30 @@ function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
 end
 
 """
-    write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
+    write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
 
 write_measures into a file
 """
-function write_measures(file::String, fits::Fit, measures::Measures, dev, temp)
+function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
     f = open(file, "w")
-    writedlm(f, [fits.llml mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
+    # Calculate n_obs based on data type
+    if is_histogram_compatible(data)
+        n_obs = sum(datahistogram(data))
+    elseif typeof(data) <: RNACountData
+        n_obs = length(data.countsRNA)
+    elseif typeof(data) <: AbstractTraceData
+        n_obs = length(data.trace)
+    else
+        n_obs = 1  # Default to 1 for other data types
+    end
+    
+    # Calculate n_params from model
+    n_params = length(model.fittedparam)
+    
+    # Calculate normalized LL
+    normalized_ll = fits.llml / n_obs
+    
+    writedlm(f, [fits.llml normalized_ll n_obs n_params mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
     writedlm(f, dev, ',')
     writedlm(f, [fits.accept fits.total], ',')
     writedlm(f, temp, ',')
@@ -1364,7 +1380,10 @@ function readmeasures(file::String)
     e = readess(file)
     g = readgeweke(file)
     m = readmcse(file)
-    [d[1] w[1] w[7] w[8] w[9] a t[1] r[1] e[1] g[1] m[1]]
+    ll = readrow(file, 1)
+    # Order matches assemble_measures header:
+    # LogMaxLikelihood, normalized_LL, n_obs, n_params, Deviance, WAIC, WAIC SE, AIC, Acceptance, Temperature, Rhat, ESS, Geweke, MCSE
+    [ll[1] ll[2] ll[3] ll[4] d[1] w[1] w[2] w[3] a t[1] r[1] e[1] g[1] m[1]]
 end
 
 readdeviance(file::String) = readrow(file, 2)

@@ -55,6 +55,7 @@ end
 datahistogram(data::AbstractRNAData{Array{Float64,1}}) = data.histRNA
 datahistogram(data::RNAOnOffData) = [data.OFF; data.ON; data.histRNA]
 datahistogram(data::AbstractTraceHistogramData) = data.histRNA
+datahistogram(data::RNACountData) = data.countsRNA
 
 function datahistogram(data::RNADwellTimeData)
     v = data.histRNA
@@ -429,8 +430,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
     predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, hist), -hist .* logpredictions
-    # return crossentropy(logpredictions, hist), -logpredictions
+    return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
 end
 
 function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
@@ -438,9 +438,9 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
         p = technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA)
-        logpredictions[k] = -log(max(p, eps()))
+        logpredictions[k] = log(max(p, eps()))
     end
-    return sum(logpredictions), logpredictions
+    return sum(logpredictions), logpredictions  # Convention: return log-likelihoods
 end
 
 # Helper to get the right component
@@ -467,7 +467,8 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     r = get_rates(param, model)
     predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
     logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, datahistogram(data)) + llg, vcat(-logpredictions, llgp)  # concatenate logpdf of histogram data with loglikelihood of traces
+    hist = datahistogram(data)
+    return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
 end
 
 
