@@ -429,7 +429,8 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
     predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
-    return crossentropy(logpredictions, hist), -logpredictions
+    return crossentropy(logpredictions, hist), -hist .* logpredictions
+    # return crossentropy(logpredictions, hist), -logpredictions
 end
 
 function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)

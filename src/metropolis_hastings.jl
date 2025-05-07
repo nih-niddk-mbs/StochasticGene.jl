@@ -140,6 +140,7 @@ end
 """
 run_mh(data,model,options,nchains)
 
+Run Metropolis-Hastings MCMC algorithm with multiple chains
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
     if false && CUDA.functional()
@@ -149,6 +150,7 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
         if nchains == 1
             return run_mh(data, model, options)
         else
+            Distributed.ENV["JULIA_WORKER_TIMEOUT"] = "60"  # 60 second timeout
             sd = run_chains(data, model, options, nchains)
             chain = extract_chain(sd)
             waic = pooled_waic(chain)
@@ -250,12 +252,29 @@ run_chains(data,model,options,nchains)
 
 returns an array of Futures
 
-Runs multiple chains of MCMC alorithm
+Runs multiple chains of MCMC algorithm with retry logic for worker initialization
 """
 function run_chains(data, model, options, nchains)
     sd = Array{Future,1}(undef, nchains)
+    max_retries = 3
+    retry_delay = 5  # seconds
+    
     for chain in 1:nchains
-        sd[chain] = @spawn metropolis_hastings(data, model, options)
+        retry_count = 0
+        while retry_count < max_retries
+            try
+                sd[chain] = @spawn metropolis_hastings(data, model, options)
+                break  # Success, exit retry loop
+            catch e
+                retry_count += 1
+                if retry_count == max_retries
+                    @error "Failed to initialize worker after $max_retries attempts" exception=(e, catch_backtrace())
+                    rethrow(e)
+                end
+                @warn "Worker initialization failed, attempt $retry_count of $max_retries. Retrying in $retry_delay seconds..."
+                sleep(retry_delay)
+            end
+        end
     end
     return sd
 end

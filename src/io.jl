@@ -378,7 +378,7 @@ end
 
 function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
-    header = ["Model" "Nalleles" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat"]
+    header = ["Model" "Nalleles" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     files = get_files(get_resultfiles(folder), "measures", label, cond, "")
     println(files)
     f = open(outfile, "w")
@@ -396,9 +396,22 @@ remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
 function assemble_measures_model(folder::String)
     outfile = joinpath(folder, "measures.csv")
-    header = ["Model" "normalized LL" "LogMaxLikelihood" "WAIC" "WAIC SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
+    header = ["Model" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     files = get_measurefiles(folder)
     println(files)
+    f = open(outfile, "w")
+    writedlm(f, header, ',')
+    for file in files
+        nalleles = get_nalleles(file)
+        r = readmeasures(joinpath(folder, file))
+        writedlm(f, [remove_string(file, "measures_trace-HBEC-", "_$nalleles.txt") r], ',')
+    end
+    close(f)
+end
+
+function assemble_measures_model(folder::String, outfile::String)
+    header = ["Model" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
+    files = get_measurefiles(folder)
     f = open(outfile, "w")
     writedlm(f, header, ',')
     for file in files
@@ -950,7 +963,6 @@ function readfile(gene::AbstractString, cond::AbstractString, path::AbstractStri
         for (root, dirs, files) in walkdir(path)
             for file in files
                 target = joinpath(root, file)
-                println(target)
                 if occursin_file(gene, cond, target)
                     return readfile(target)
                 end
@@ -1329,11 +1341,11 @@ function readrow(file::String, row, delim=',')
             m = contents[row, :]
             return m[.~isempty.(m)]
         else
-            println("row too large, returning median")
+            println("Row $row too large for file $file, returning median")
             return contents[3, :]
         end
     else
-        println(file, " does not exist")
+        println("File $file does not exist")
         return Float64[]
     end
 end

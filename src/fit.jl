@@ -1326,6 +1326,8 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("ess: ", minimum(measures.ess))
     println("geweke: ", maximum(measures.geweke))
     println("mcse: ", maximum(measures.mcse))
+    println("waic: ", measures.waic)
+    println("aic: ", aic(fits))
     if optimized != 0
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
