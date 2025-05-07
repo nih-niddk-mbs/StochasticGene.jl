@@ -3,10 +3,10 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datapath::String, assemble=true, multicond=false, datatype="rna")
+    make_dataframes(resultfolder::String,datapath::String; assemble=true, multicond=false, datatype="rna")
 
 """
-function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
+function make_dataframes(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna")
     if assemble
         assemble_all(resultfolder, multicond)
     end
@@ -25,7 +25,7 @@ function make_dataframes(resultfolder::String, datapath::String, assemble=true, 
                 mfiles = lfiles[model.==get_model.(lfiles)]
                 dfm = Vector{DataFrame}(undef, 0)
                 for i in eachindex(mfiles)
-                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, multicond))
+                    push!(dfm, make_dataframe(joinpath(resultfolder, mfiles[i]), datapath, multicond, datatype))
                 end
                 push!(dfl, ("Summary_$(label)_$(model).csv", stack_dataframe(dfm)))
             end
@@ -47,7 +47,7 @@ statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
 TBW
 """
-function make_dataframe(ratefile::String, datapath::String, multicond::Bool)
+function make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
     df = read_dataframe(ratefile)
     df2 = read_dataframe(statfile_from_ratefile(ratefile))
     df = leftjoin(df, df2, on=:Gene, makeunique=true)
@@ -60,7 +60,7 @@ function make_dataframe(ratefile::String, datapath::String, multicond::Bool)
         G = parse(Int, parts.model)
         insertcols!(df, :Model => fill(G, size(df, 1)))
         df = stack_dataframe(df, G, parts.cond, multicond)
-        add_moments!(df, datapath)
+        add_moments!(df, datapath, datatype)
     end
 end
 
@@ -159,19 +159,30 @@ end
 
 TBW
 """
-function add_moments!(df::DataFrame, datapath)
+function add_moments!(df::DataFrame, datapath, datatype::String)
     m = Vector{Float64}(undef, length(df.Gene))
     v = similar(m)
     t = similar(m)
     i = 1
-    for gene in df.Gene
-        _, h = read_rna(gene, df[i, :Condition], datapath)
-        m[i] = mean_histogram(h)
-        v[i] = var_histogram(h)
-        t[i] = moment_histogram(h, 3)
-        i += 1
+    if datatype == "rna"
+        for gene in df.Gene
+            _, h = read_rna(gene, df[i, :Condition], datapath)
+            m[i] = mean_histogram(h)
+            v[i] = var_histogram(h)
+            t[i] = moment_histogram(h, 3)
+            i += 1
+        end
+        insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
+    elseif datatype == "rnacount"
+        for gene in df.Gene
+            c, _, _ = read_rnacount(gene, df[i, :Condition], datapath)
+            m[i] = mean(c)
+            v[i] = var(c)
+            t[i] = moment(c, 3)
+            i += 1
+        end
+        insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
     end
-    insertcols!(df, :Expression => m, :Variance => v, :ThirdMoment => t)
 end
 
 """
@@ -1189,7 +1200,7 @@ end
 """
 function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     traces = read_tracefiles(datapath, datacond, start, stop)
-    traces, maxmedians = zero_median(traces, zeromedian)    
+    traces, maxmedians = zero_median(traces, zeromedian)
     df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
     CSV.write(outfile, df)
 end
@@ -1440,7 +1451,7 @@ function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                 ac1, ac2, cc, ac1f, ac2f, ccf, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                ac1, ac2, cc, ac1f, ac2f, ccf, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
                 CSV.write(out, DataFrame(tau=tau, crosscovariance=cc, autocovariance1=ac1, autocovariance2=ac2, cc_normalized=ccf, ac1_normalized=ac1f, ac2_normalized=ac2f))
             end
