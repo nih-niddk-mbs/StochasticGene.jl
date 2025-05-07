@@ -1056,7 +1056,7 @@ function find_missing_genes(datafolder::String, resultfolder::String, filetype::
     datafiles = readdir(datafolder)
     genes = String[]
     for f in datafiles
-        m = match(r"^([A-Za-z0-9_\-]+)", f)
+        m = match(Regex("^([A-Za-z0-9_\\-]+)"), f)
         if m !== nothing
             gene = m.captures[1]
             push!(genes, gene)
@@ -1065,7 +1065,7 @@ function find_missing_genes(datafolder::String, resultfolder::String, filetype::
     genes = unique(genes)
     missing = String[]
     for gene in genes
-        pattern = r"measures_" * filetype * "-" * gene * ".*\.txt"
+        pattern = "measures_" * filetype * "-" * gene * ".*\\.txt"
         mfiles = filter(f -> occursin(Regex(pattern), f), readdir(resultfolder))
         if isempty(mfiles)
             push!(missing, gene)
@@ -1088,7 +1088,8 @@ function find_nonconverged_genes(resultfolder::String, filetype::String, nlines_
     measure_files = filter(f -> startswith(f, "measures_" * filetype * "-"), files)
     nonconverged = String[]
     for file in measure_files
-        gene_match = match(r"measures_" * filetype * "-([A-Za-z0-9_\-]+)_", file)
+        pattern = "measures_" * filetype * "-([A-Za-z0-9_\\-]+)_"
+        gene_match = match(Regex(pattern), file)
         gene = gene_match !== nothing ? gene_match.captures[1] : nothing
         lines = readlines(joinpath(resultfolder, file))
         # Placeholder: parse diagnostics from lines
