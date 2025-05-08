@@ -1134,6 +1134,8 @@ This function computes the number of transition rates for the provided GRSM mode
 """
 num_rates(model::AbstractGRSMmodel) = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
 
+num_rates(model::AbstractGMmodel) = length(model.Gtransitions) + 2
+
 
 """
     num_rates(model::String)
