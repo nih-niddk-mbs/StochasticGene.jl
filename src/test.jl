@@ -302,6 +302,8 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
 
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
+
+    return fits, stats, measures, data, model, options
     nrates = num_rates(transitions, R, S, insertstep)
     # h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates]
     h2 = rtarget[1:nrates]

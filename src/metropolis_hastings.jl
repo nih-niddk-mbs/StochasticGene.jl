@@ -520,7 +520,7 @@ end
 
 Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
 """
-function instant_reject(paramt, param; reltol=0.7, minval=1e-6, maxval=1e6, abstol=1e-3)
+function instant_reject(paramt, param; reltol=0.7, minval=1e-4, maxval=1e8, abstol=1e-3)
     # Absolute bounds check
     if any(paramt .> maxval)
         return true
