@@ -115,6 +115,7 @@ export
     readrates,
     rna_setup,
     run_mh,
+    run_mcmc_parallel,
     set_indices,
     set_elements_TCoupledUnit,
     simulate_trace,
@@ -151,8 +152,8 @@ export
     write_traces_coupling,
     write_traces_coupling_spawn,
     write_winners,
-    forward_gpu,
-    run_mcmc_parallel
+    zero_median
+
     
 
 ### Source files

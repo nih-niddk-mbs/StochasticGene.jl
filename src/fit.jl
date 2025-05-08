@@ -453,7 +453,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
     return trace, madscale ./ scale
 end
 
-function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractMatrix}
+function zero_median(tracer::Vector{T}, zeromedian::Bool) where {T<:AbstractMatrix}
     trace = similar(tracer)
     medians = [median(t, dims=1) for t in tracer]
     # Calculate MAD for each column of each matrix
@@ -874,7 +874,7 @@ Construct and return the appropriate model struct for the given data and options
 # Returns
 - Model struct (e.g., `GMmodel`, `GRSMmodel`).
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber=1, factor=10)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
     nrates = num_rates(transitions, R, S, insertstep)
