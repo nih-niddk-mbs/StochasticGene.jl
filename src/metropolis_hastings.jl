@@ -492,7 +492,7 @@ ll is log-likelihood (NOT negative log-likelihood)
 """
 function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
     paramt, dt = proposal(d, proposalcv, model)
-    if instant_reject(paramt, param)
+    if instant_reject(paramt, model)
         return 0, logpredictions, param, ll, prior, d
     end
     priort = logprior(paramt, model)
@@ -516,30 +516,17 @@ function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, 
 end
 
 """
-    instant_reject(paramt, param; reltol=0.5, minval=1e-8, maxval=1e8, abstol=1e-6)
+    instant_reject(paramt, model; minval=1e-12, maxval=1e8)
 
 Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
 """
-function instant_reject(paramt, param; reltol=0.7, minval=1e-4, maxval=1e8, abstol=1e-3)
-    # Absolute bounds check
-    return false
-    if any(paramt .> maxval)
-        return true
-    end
-    # Relative change check (only for params not near zero)
-    for (p_new, p_old) in zip(paramt, param)
-        if abs(p_old) > minval
-            if abs(p_new - p_old) / abs(p_old) > reltol
-                return true
-            end
-        else
-            if abs(p_new - p_old) > abstol
-                return true
-            end
-        end
-        # If p_old is near zero, only absolute bound applies
-    end
-    return false
+function instant_reject(paramt, model; minval=1e-8, maxval=1e8)
+    n_rates = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
+    # Expand paramt to full rate vector (all rates, in model order)
+    # Assume get_rates(paramt, model) returns the full rate vector in model order
+    all_rates = get_rates(paramt, model)
+    rates = all_rates[1:n_rates]
+    return any(rates .< minval) || any(rates .> maxval) || any(isnan.(rates)) || any(isinf.(rates))
 end
 
 # function instant_reject(paramt, param; reltol=0.5, abstol=1e-6)
