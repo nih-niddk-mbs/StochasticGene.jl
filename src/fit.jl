@@ -302,7 +302,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `traceinfo=(1.0, 1., -1, 1., [100.,10.])`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
+- `traceinfo=(1.0, 1., -1, 1., 0.5)`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
     for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
     If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
     Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
@@ -874,7 +874,7 @@ Construct and return the appropriate model struct for the given data and options
 # Returns
 - Model struct (e.g., `GMmodel`, `GRSMmodel`).
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, factor)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber=1, factor=10)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
     nrates = num_rates(transitions, R, S, insertstep)
@@ -1347,7 +1347,7 @@ function burstsize(fits::Fit, model::AbstractGRSMmodel)
     end
 end
 
-burstsize(r, model::AbstractGRSMmodel, ejectnumber=20) = burstsize(r, model.Gtransitions, model.G, model.R, model.S, model.insertstep, model.splicetype, ejectnumber)
+burstsize(r, model::AbstractGRSMmodel, ejectnumber=1) = burstsize(r, model.Gtransitions, model.G, model.R, model.S, model.insertstep, model.splicetype, ejectnumber)
 
 function burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumber=1)
     ntransitions = num_rates(transitions, R, S, insertstep)

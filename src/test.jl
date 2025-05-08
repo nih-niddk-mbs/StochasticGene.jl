@@ -244,13 +244,14 @@ Fit a simulated trace dataset using the provided parameters and compare to the t
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], nchains=1)
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
+function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[0.0, 0.2, 1.0, 0.2], nchains=1, zeromedian=true)
+    tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
+    trace, tracescale = zero_median(tracer, zeromedian)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], noisepriors, mean_elongationtime(rtarget, transitions, R)), fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, lsoda(), tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, 100.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
-    StochasticGene.get_rates(fits.parml, model), rtarget
+    StochasticGene.get_rates(fits.parml, model)[model.fittedparam], rtarget[model.fittedparam]
 end
 
 """
@@ -267,21 +268,34 @@ Fit a simulated trace dataset using a hierarchical model and compare to the targ
 # Returns
 - Tuple of (median fitted parameters, target parameters).
 """
-function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, [6], tuple()), method=(lsoda(), true), maxtime=180.0, nchains=1)
+function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4], propcv=0.01, cv=100.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, [6], tuple()), method=(lsoda(), true), maxtime=180.0, nchains=1)
     rh = 50.0 .+ 10 * randn(ntrials)
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials, hierarchical=(6, rh))
-    data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
+    tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials, hierarchical=(6, rh))
+    trace, tracescale = zero_median(tracer, zeromedian)
+    nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
+    if length(traceinfo) > 3 && traceinfo[4] != 1.0
+        weight = set_trace_weight(traceinfo)
+        background = set_trace_background(traceinfo)
+    else
+        weight = 0.0
+        background = 0.0
+    end
+    data = TraceData{typeof(label),typeof(gene),Tuple}("trace", "gene", traceinfo[1], (trace, background, weight, nframes, tracescale))
+println("Hi")
+    # trace, tracescale = zero_median(tracer, zeromedian)
+    # data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))(trace, background, weight, nframes, tracescale)
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, tuple(), nothing)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, tuple(), tuple())
-    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, tuple(), nothing)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, tuple(), nothing, zeromedian, 1, 1)
+
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
-    # nrates = num_rates(transitions, R, S, insertstep)
-    # h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates+4]
-    # h2 = rtarget[1:nrates+4]
-    h1 = stats.medparam
-    h2 = [rtarget[fittedparam]; [50.0; 10 / 50.0]; rh]
+    nrates = num_rates(transitions, R, S, insertstep)
+    h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates]
+    h2 = rtarget[1:nrates]
+    # h1 = stats.medparam
+    # h2 = [rtarget[fittedparam]; [50.0; 10 / 50.0]; rh]
     return h1, h2
 end
 
@@ -405,15 +419,15 @@ end
 
 test_fit0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, 0.0), "test", "test", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.2, 1.0, 0.2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.01, 0.01], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 
-test_fit1(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, 0.5), "test1", "test1", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, .5, .25, 1.0, .2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [.5, 0.2, 1.0, .2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
+test_fit1(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, 0.5), "test1", "test1", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.5, 0.25, 1.0, 0.2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [0.5, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 
-test_fit2(; maxtime=6.0, propcv = 0.02, zeromedian=true)  = fit(1, "trace", String[], "data/inhibition/inhibition/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.78, 0.0), "inhibition-test", "inhibition-test", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 7, 9], (), ([1, 2], [2, 1]), 2, 4, 0, 3, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.8, 0.8, 0.8, 0.8, 1.0, 0.0, 0.25, 1.0, 0.25], [1.0, 1.0, 0.2, 0.1, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.25, 1.0, 0.25], (), "ml", propcv, 2000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian, 3, 1);
+test_fit2(; maxtime=6.0, propcv=0.02, zeromedian=true) = fit(1, "trace", String[], "data/inhibition/inhibition/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.78, 0.0), "inhibition-test", "inhibition-test", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 7, 9], (), ([1, 2], [2, 1]), 2, 4, 0, 3, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.8, 0.8, 0.8, 0.8, 1.0, 0.0, 0.25, 1.0, 0.25], [1.0, 1.0, 0.2, 0.1, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.25, 1.0, 0.25], (), "ml", propcv, 2000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian, 3, 1);
 
-test_fitt(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "trace", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", "gene", (1.0, 1.0, -1, 1.0, .5), "genetogther", "genetogther", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, .5, .2, 1.0, .2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [0.5, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
+test_fitt(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "trace", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", "gene", (1.0, 1.0, -1, 1.0, 0.5), "genetogther", "genetogther", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.5, 0.2, 1.0, 0.2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.5, 0.5, 0.1, 0.1], 1, Int64[], 1.0, "", prob_Gaussian, [0.5, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 
 test_fit_h(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.0, 1.0, -1, 0.92, 0.0), "testh", "testh", "trace-HBEC-nstate-h_gene", "trace-HBEC-nstate-h_gene", [1, 2, 3, 4, 5, 6], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.2, 1.0, 0.1, 1.0, 1.0, 1.0, 0.1, 0.1, 1.0, 1.0, 0.25, 0.25, 0.25, 0.25], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.2, 1.0, 0.1], (2, [8], ()), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
 
-test_fit_h2(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/inhibition/", "MYC", "HBEC", "gene", (1.0, 1.0, -1, 0.78, 0.0), "inhibition-test", "inhibition-test", "trace-HBEC-nstate-h_gene", "trace-HBEC-nstate-h_gene", [1, 2, 3, 4, 5, 6,8,9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.25, 1.0, 0.25, 1.0, 1.0, 1.0, 0., 0.1, 1.0, 1.0, 0.25, 0.25, 0.25, 0.25], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.25, 1.0, 0.25], (2, [8], ()), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
+test_fit_h2(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/inhibition/", "MYC", "HBEC", "gene", (1.0, 1.0, -1, 0.78, 0.0), "inhibition-test", "inhibition-test", "trace-HBEC-nstate-h_gene", "trace-HBEC-nstate-h_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.25, 1.0, 0.25, 1.0, 1.0, 1.0, 0.0, 0.1, 1.0, 1.0, 0.25, 0.25, 0.25, 0.25], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.25, 1.0, 0.25], (2, [8], ()), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
 
 test_fit_coupleda(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0.0, 0.0]), "test", "test", "tracejoint-HBEC-nstate_enhancer-geneR5", "tracejoint-HBEC-nstate_enhancer-geneR5", [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 15, 16, 17, 18, 19, 20, 21, 22, 24, 25, 28], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (3, 3), (1, 0), (1, 1), ((1, 2), ((), (1,)), ([4, 5, 6], 0), (0, 5), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.0, 0.2, 1.0, 0.1], [0.0, 0.2, 1.0, 0.1]), (), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 
@@ -422,8 +436,8 @@ test_fit_coupled2a(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fi
 test_fit_coupled(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0.5, 0.5]), "test1", "test1", "tracejoint-HBEC-nstate_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.5, 0.2, 1.0, 0.1], [0.5, 0.2, 1.0, 0.1]), (), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 test_fit_coupled0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0.0, 0.0]), "test", "test", "tracejoint-HBEC-nstate_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.0, 0.2, 1.0, 0.1], [0.0, 0.2, 1.0, 0.1]), (), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 
-test_fit_coupled_h(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [.5, .5]), "test1", "test1", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.5, 0.2, 1.0, .1], [0.5, 0.2, 1.0, .1]), (2, [9,20], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
-test_fit_coupled_h0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0., 0.]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.0, 0.2, 1.0, 0.1], [0.0, 0.2, 1.0, 0.1]), (2, [9,20], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
+test_fit_coupled_h(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=false) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0.5, 0.5]), "test1", "test1", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.5, 0.2, 1.0, 0.1], [0.5, 0.2, 1.0, 0.1]), (2, [9, 20], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
+test_fit_coupled_h0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "tracejoint", String[], "data/MYC_gene_MYC_enhancer_together/traces/", "MYC", "HBEC", ["enhancer", "gene"], (1.0, 1.0, -1, [0.46, 0.86], [0.0, 0.0]), "test", "test", "tracejoint-HBEC-nstate-h_enhancer-gene11", "tracejoint-HBEC-nstate-h_enhancer-gene11", [1, 2, 3, 4, 5, 6, 7, 13, 14, 15, 16, 17, 18, 24], (), (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (1, 1), (1, 0), (1, 1), ((1, 2), ((), (1,)), (1, 0), (0, 1), 1), nothing, ".", maxtime, (6.5, 5.0), Float64[], 10.0, 1, Int64[], 1.0, "", prob_Gaussian, ([0.0, 0.2, 1.0, 0.1], [0.0, 0.2, 1.0, 0.1]), (2, [9, 20], ()), "ml", propcv, 1000000, 0, 0, 1.0, 100.0, 1.0, false, false, false, (lsoda(), true), zeromedian)
 
 
 test_rnacount(; nchains=1, gene="RPLP1", datapath="data/U3AS4/counts/WT-UTR", maxtime=60.0, propcv=0.01) = fit(nchains=nchains, datatype="rnacount", transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, datapath=datapath, cell="U3A", gene=gene, datacond="WT-UTR", infolder="test", resultfolder="test", fittedparam=[1, 2, 3], maxtime=maxtime, ratetype="ml", propcv=propcv);
@@ -692,32 +706,32 @@ function compute_psis_loo(fits::Fit)
     # Get pointwise log-likelihoods from fits.lppd
     n_samples = size(fits.param, 2)
     n_obs = length(fits.lppd)
-    
+
     # Compute importance weights for each observation
     r_eff = compute_relative_eff(fits.param)  # Relative effective sample size
-    
+
     # Compute LOO log-likelihoods using importance sampling
     loo_ll = zeros(n_obs)
     for i in 1:n_obs
         # Get pointwise log-likelihoods for this observation
         pointwise_ll = fits.lppd[i]
-        
+
         # Compute importance weights for this observation
-        weights = exp.(fits.param[i,:] .- maximum(fits.param[i,:]))
+        weights = exp.(fits.param[i, :] .- maximum(fits.param[i, :]))
         weights .*= r_eff[i]
         weights ./= sum(weights)
-        
+
         # Smooth weights using Pareto smoothing
         smoothed_weights = pareto_smooth_weights(weights)
-        
+
         # Compute LOO estimate using smoothed weights
         loo_ll[i] = sum(smoothed_weights .* pointwise_ll)
     end
-    
+
     # Compute elpd_loo and its standard error
     elpd_loo = sum(loo_ll)
     elpd_loo_se = sqrt(n_obs * var(loo_ll))
-    
+
     return (elpd_loo, elpd_loo_se)
 end
 
@@ -741,20 +755,20 @@ function pareto_smooth_weights(weights)
     # Sort weights
     sorted_idx = sortperm(weights, rev=true)
     sorted_weights = weights[sorted_idx]
-    
+
     # Find Pareto tail
     tail_idx = find_tail(sorted_weights)
-    
+
     if tail_idx > 0
         # Fit Pareto distribution to tail
         k = fit_pareto(sorted_weights[tail_idx:end])
-        
+
         # Replace tail with smoothed values
         smoothed = copy(weights)
         smoothed[sorted_idx[tail_idx:end]] = smooth_tail(sorted_weights[tail_idx:end], k)
         return smoothed
     end
-    
+
     return weights
 end
 
@@ -795,7 +809,7 @@ function smooth_tail(weights, k)
     n = length(weights)
     smoothed = zeros(n)
     for i in 1:n
-        smoothed[i] = weights[1] * (i/n)^(-1/k)
+        smoothed[i] = weights[1] * (i / n)^(-1 / k)
     end
     return smoothed
 end
