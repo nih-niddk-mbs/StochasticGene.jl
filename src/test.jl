@@ -244,7 +244,7 @@ Fit a simulated trace dataset using the provided parameters and compare to the t
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 1.0, 200, 15, 1000, 70], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, noisepriors=[0.0, 0.25, 1.0, 0.25], nchains=1, zeromedian=true, maxtime=100.0)
+function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.05, 0.1, 0.5, 0.5, 1.0, 50, 15, 100, 70], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=collect(1:num_rates(transitions, R, S, insertstep)-1), propcv=0.01, cv=100.0, noisepriors=[0.0, 0.25, 1.0, 0.25], nchains=1, zeromedian=true, maxtime=100.0)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -279,7 +279,7 @@ Fit a simulated trace dataset using a hierarchical model and compare to the targ
 # Returns
 - Tuple of (median fitted parameters, target parameters).
 """
-function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.01, 0.03, 1.0, 200, 15, 1000, 70], rinit=[], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=30, fittedparam=[1, 2, 3, 4], propcv=0.01, cv=100.0, noisepriors=[0., 0.2, 1., 0.2], hierarchical=(2, [6], tuple()), method=(lsoda(), true), maxtime=180.0, nchains=1, zeromedian=true)
+function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.05, 0.1, 0.5, 0.5, 1.0, 50, 15, 100, 70], rinit=[], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=30, fittedparam=[1, 2, 3, 4], propcv=0.01, noisepriors=[0., 0.2, 1., 0.2], hierarchical=(2, [6], tuple()), method=(lsoda(), true), maxtime=180.0, nchains=1, zeromedian=true)
     rh = 50.0 .+ 10 * randn(ntrials)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials, hierarchical=(6, rh))
     trace, tracescale = zero_median(tracer, zeromedian)
