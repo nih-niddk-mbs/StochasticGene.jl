@@ -492,6 +492,9 @@ ll is log-likelihood (NOT negative log-likelihood)
 """
 function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
     paramt, dt = proposal(d, proposalcv, model)
+    if instant_reject(paramt, param)
+        return 0, logpredictions, param, ll, prior, d
+    end
     priort = logprior(paramt, model)
     llt, logpredictionst = loglikelihood(paramt, data, model)
     mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
@@ -511,6 +514,37 @@ function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, 
         return 0, logpredictions, param, ll, prior, d
     end
 end
+
+"""
+    instant_reject(paramt, param; reltol=0.5, minval=1e-8, maxval=1e8, abstol=1e-6)
+
+Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
+"""
+function instant_reject(paramt, param; reltol=0.5, minval=1e-6, maxval=1e6, abstol=1e-6)
+    # Absolute bounds check
+    if any(paramt .> maxval)
+        return true
+    end
+    # Relative change check (only for params not near zero)
+    for (p_new, p_old) in zip(paramt, param)
+        if abs(p_old) > minval
+            if abs(p_new - p_old) / abs(p_old) > reltol
+                return true
+            end
+        else
+            if abs(p_new - p_old) > p_old
+                return true
+            end
+        end
+        # If p_old is near zero, only absolute bound applies
+    end
+    return false
+end
+
+# function instant_reject(paramt, param; reltol=0.5, abstol=1e-6)
+#     rel_change = abs.(paramt .- param) ./ max.(abs.(param), abstol)
+#     return any(rel_change .> reltol)
+# end
 
 """
 update_waic(lppd,pwaic,logpredictions)
