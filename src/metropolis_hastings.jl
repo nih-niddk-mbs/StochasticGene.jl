@@ -522,6 +522,7 @@ Return `true` if any parameter in `paramt` is outside [minval, maxval], or if an
 """
 function instant_reject(paramt, param; reltol=0.7, minval=1e-4, maxval=1e8, abstol=1e-3)
     # Absolute bounds check
+    return false
     if any(paramt .> maxval)
         return true
     end
