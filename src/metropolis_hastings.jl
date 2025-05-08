@@ -520,7 +520,7 @@ end
 
 Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
 """
-function instant_reject(paramt, model; minval=1e-8, maxval=1e8)
+function instant_reject(paramt, model; minval=1e-4, maxval=1e2)
     n_rates = num_rates(model.Gtransitions, model.R, model.S, model.insertstep)
     # Expand paramt to full rate vector (all rates, in model order)
     # Assume get_rates(paramt, model) returns the full rate vector in model order
