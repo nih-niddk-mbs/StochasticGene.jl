@@ -84,6 +84,23 @@ end
 
 ### functions used in runtest
 
+"""
+    test_compare(; r, transitions, G, R, S, insertstep, nRNA, nalleles, bins, total, tol, onstates, dttype)
+
+Compare simulated and chemical master equation histograms for a given parameter set.
+
+# Arguments
+- `r`: Rate parameters.
+- `transitions`, `G`, `R`, `S`, `insertstep`: Model structure.
+- `nRNA`, `nalleles`: RNA and allele counts.
+- `bins`: Histogram bins.
+- `total`: Number of simulation steps.
+- `tol`: Simulation tolerance.
+- `onstates`, `dttype`: State and dwell time types.
+
+# Returns
+- Tuple of (chemical master histogram, array of simulated histograms).
+"""
 function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"])
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol)
     h = test_cm(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins)
@@ -91,6 +108,22 @@ function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02,
     return h, make_array(hs)
 end
 
+"""
+    test_compare_coupling(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling, total, tol)
+
+Compare simulated and chemical master equation histograms for coupled models.
+
+# Arguments
+- `r`: Rate parameters.
+- `transitions`, `G`, `R`, `S`, `insertstep`: Model structure.
+- `onstates`, `dttype`, `bins`: State and dwell time types, histogram bins.
+- `coupling`: Coupling structure.
+- `total`: Number of simulation steps.
+- `tol`: Simulation tolerance.
+
+# Returns
+- Tuple of (chemical master histogram, array of simulated histograms).
+"""
 function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 2.9], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), (Int[], [1]), [3, 0], [0, 4], 1), total=10000000, tol=1e-6)
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
     h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
@@ -100,6 +133,21 @@ function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 
     return make_array(vcat(h...)), make_array(vcat(hs...))
 end
 
+"""
+    test_fit_simrna(; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, nchains)
+
+Fit a simulated RNA histogram using the provided parameters and compare to the target.
+
+# Arguments
+- `rtarget`: Target rate parameters.
+- `transitions`, `G`, `nRNA`, `nalleles`: Model structure and counts.
+- `fittedparam`, `fixedeffects`, `rinit`: Fitting options.
+- `totalsteps`: Number of simulation steps.
+- `nchains`: Number of MCMC chains.
+
+# Returns
+- Tuple of (fitted rates, target rates).
+"""
 function test_fit_simrna(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000, nchains=1)
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
     data = RNAData("", "", nRNA, h)
@@ -109,6 +157,20 @@ function test_fit_simrna(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2],
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
+"""
+    test_fit_rna(; gene, G, nalleles, propcv, fittedparam, fixedeffects, transitions, rinit, datacond, datapath, label, root, nchains)
+
+Fit a real RNA histogram using the provided parameters and compare to the data.
+
+# Arguments
+- `gene`, `G`, `nalleles`: Gene and model structure.
+- `propcv`, `fittedparam`, `fixedeffects`, `transitions`, `rinit`: Fitting options.
+- `datacond`, `datapath`, `label`, `root`: Data and file options.
+- `nchains`: Number of MCMC chains.
+
+# Returns
+- Tuple of (predicted histogram, normalized data histogram).
+"""
 function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), rinit=[0.01, 0.1, 1.0, 0.01006327034802035], datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".", nchains=1)
     data = load_data("rna", [], folder_path(datapath, root, "data"), label, gene, datacond, (), 1.0)
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, 1.0, [], 1.0), fittedparam, fixedeffects, transitions, 2, 0, 0, 1, "", nalleles, 10.0, Int[], rinit[end], propcv, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
@@ -118,6 +180,20 @@ function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=
     h, normalize_histogram(data.histRNA)
 end
 
+"""
+    test_fit_rnaonoff(; G, R, S, transitions, insertstep, rtarget, rinit, nsamples, nhist, nalleles, onstates, bins, fittedparam, propcv, priorcv, splicetype, nchains)
+
+Fit a simulated RNA on-off histogram using the provided parameters and compare to the data.
+
+# Arguments
+- `G`, `R`, `S`, `transitions`, `insertstep`: Model structure.
+- `rtarget`, `rinit`: Rate parameters.
+- `nsamples`, `nhist`, `nalleles`, `onstates`, `bins`: Data and simulation options.
+- `fittedparam`, `propcv`, `priorcv`, `splicetype`, `nchains`: Fitting options.
+
+# Returns
+- Tuple of (predicted histogram, data PDF).
+"""
 function test_fit_rnaonoff(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insertstep=1, rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01], rinit=fill(0.01, num_rates(transitions, R, S, insertstep)), nsamples=100000, nhist=20, nalleles=2, onstates=Int[], bins=collect(1:1.0:200.0), fittedparam=collect(1:length(rtarget)-1), propcv=0.05, priorcv=10.0, splicetype="", nchains=1)
     # OFF, ON, mhist = test_sim(rtarget, transitions, G, R, S, nhist, nalleles, onstates, bins)
     hs = simulator(rtarget, transitions, G, R, S, insertstep, nalleles=nalleles, nhist=nhist, onstates=onstates, bins=bins, totalsteps=10000000)
@@ -130,6 +206,19 @@ function test_fit_rnaonoff(; G=2, R=1, S=1, transitions=([1, 2], [2, 1]), insert
     h, StochasticGene.datapdf(data)
 end
 
+"""
+    test_fit_rnadwelltime(; rtarget, transitions, G, R, S, insertstep, nRNA, nsamples, nalleles, onstates, bins, dttype, fittedparam, propcv, priorcv, splicetype, maxtime, nchains)
+
+Fit a simulated RNA dwell time histogram using the provided parameters and compare to the data.
+
+# Arguments
+- `rtarget`, `transitions`, `G`, `R`, `S`, `insertstep`: Model structure and rates.
+- `nRNA`, `nsamples`, `nalleles`, `onstates`, `bins`, `dttype`: Data and simulation options.
+- `fittedparam`, `propcv`, `priorcv`, `splicetype`, `maxtime`, `nchains`: Fitting options.
+
+# Returns
+- Tuple of (predicted histogram, data PDF).
+"""
 function test_fit_rnadwelltime(; rtarget=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nsamples=100000, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], dttype=["ON", "OFF", "ONG", "OFFG"], fittedparam=collect(1:length(rtarget)-1), propcv=0.01, priorcv=10.0, splicetype="", maxtime=360.0, nchains=1)
     h = test_sim(rtarget, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], 10000000, 1e-6)
     data = RNADwellTimeData("test", "test", nRNA, h[1], bins, h[2:end], dttype)
@@ -141,6 +230,20 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.
     h, StochasticGene.datapdf(data)
 end
 
+"""
+    test_fit_trace(; G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, nchains)
+
+Fit a simulated trace dataset using the provided parameters and compare to the target.
+
+# Arguments
+- `G`, `R`, `S`, `insertstep`, `transitions`: Model structure.
+- `rtarget`, `rinit`: Rate parameters.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `noisepriors`, `nchains`: Fitting options.
+
+# Returns
+- Tuple of (fitted rates, target rates).
+"""
 function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [20, 5, 100, 10]], nsamples=10000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=[collect(1:num_rates(transitions, R, S, insertstep)-1); collect(num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+4)], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], nchains=1)
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))
@@ -150,6 +253,20 @@ function test_fit_trace(; G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 
     StochasticGene.get_rates(fits.parml, model), rtarget
 end
 
+"""
+    test_fit_trace_hierarchical(; G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, hierarchical, method, maxtime, nchains)
+
+Fit a simulated trace dataset using a hierarchical model and compare to the target.
+
+# Arguments
+- `G`, `R`, `S`, `insertstep`, `transitions`: Model structure.
+- `rtarget`, `rinit`: Rate parameters.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `noisepriors`, `hierarchical`, `method`, `maxtime`, `nchains`: Fitting options.
+
+# Returns
+- Tuple of (median fitted parameters, target parameters).
+"""
 function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 1.0, 50, 15, 200, 70], rinit=[], nsamples=100000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4], propcv=0.01, cv=100.0, interval=1.0, noisepriors=[50, 15, 200, 70], hierarchical=(2, [6], tuple()), method=(lsoda(), true), maxtime=180.0, nchains=1)
     rh = 50.0 .+ 10 * randn(ntrials)
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, interval, totaltime, ntrials, hierarchical=(6, rh))
@@ -168,6 +285,20 @@ function test_fit_trace_hierarchical(; G=2, R=1, S=0, insertstep=1, transitions=
     return h1, h2
 end
 
+"""
+    test_fit_tracejoint(; coupling, G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, maxtime, method)
+
+Fit a simulated joint trace dataset for coupled models and compare to the target.
+
+# Arguments
+- `coupling`, `G`, `R`, `S`, `insertstep`, `transitions`: Model structure and coupling.
+- `rtarget`, `rinit`: Rate parameters.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `noisepriors`, `maxtime`, `method`: Fitting options.
+
+# Returns
+- Tuple of (fitted rates, target rates).
+"""
 function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 1.0, 50, 30, 100, 20, -0.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]), maxtime=300.0, method=lsoda())
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1))
@@ -181,6 +312,25 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     return rfit[1:length(rtarget)], rtarget
 end
 
+
+### end of functions used in runtest
+
+### functions to be used in the future
+"""
+    test_fit_tracejoint_hierarchical(; coupling, G, R, S, insertstep, transitions, rtarget, rinit, hierarchical, method, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, maxtime, decayrate)
+
+Fit a simulated joint trace dataset for coupled models using a hierarchical model and compare to the target.
+
+# Arguments
+- `coupling`, `G`, `R`, `S`, `insertstep`, `transitions`: Model structure and coupling.
+- `rtarget`, `rinit`: Rate parameters.
+- `hierarchical`, `method`: Hierarchical model and method options.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `noisepriors`, `maxtime`, `decayrate`: Fitting options.
+
+# Returns
+- Tuple of (fitted rates, target rates, fits, stats, measures, model, data, options).
+"""
 function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(lsoda(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]), maxtime=300.0, decayrate=1.0)
     # trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     rh = 50.0 .+ 10 * randn(ntrials)
@@ -196,6 +346,20 @@ function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)
     return rfit[1:length(rtarget)], rtarget, fits, stats, measures, model, data, options
 end
 
+"""
+    test_fit_trace_grid(; grid, G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, weight, nframes, noisepriors, maxtime)
+
+Fit a simulated trace grid dataset using the provided parameters and compare to the target.
+
+# Arguments
+- `grid`, `G`, `R`, `S`, `insertstep`, `transitions`: Model structure.
+- `rtarget`, `rinit`: Rate parameters.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `weight`, `nframes`, `noisepriors`, `maxtime`: Fitting options.
+
+# Returns
+- Tuple of (fits, stats, measures, data, model, options).
+"""
 function test_fit_trace_grid(; grid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 20, 0.2], rinit=[fill(0.1, num_rates(transitions, R, S, insertstep) - 1); 0.01; [50, 15, 200, 20]; 0.1], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4, 5, 6, 7, 8, 11], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70], maxtime=10.0)
     traces = sim_grid(r=rtarget[1:end-1], p=rtarget[end], Ngrid=grid, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, totaltime=totaltime, interval=interval, ntrials=ntrials)
     data = StochasticGene.TraceData("tracegrid", "test", interval, (traces, [], weight, nframes))
@@ -208,7 +372,21 @@ function test_fit_trace_grid(; grid=4, G=2, R=1, S=1, insertstep=1, transitions=
     fits, stats, measures, data, model, options
 end
 
+"""
+    test_fit_trace_grid_hierarchical(; grid, G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, hierarchical, totaltime, ntrials, fittedparam, propcv, cv, interval, weight, nframes, noisepriors, maxtime)
 
+Fit a simulated trace grid dataset using a hierarchical model and compare to the target.
+
+# Arguments
+- `grid`, `G`, `R`, `S`, `insertstep`, `transitions`: Model structure.
+- `rtarget`, `rinit`: Rate parameters.
+- `hierarchical`: Hierarchical model options.
+- `nsamples`, `onstates`, `totaltime`, `ntrials`: Data and simulation options.
+- `fittedparam`, `propcv`, `cv`, `interval`, `weight`, `nframes`, `noisepriors`, `maxtime`: Fitting options.
+
+# Returns
+- Tuple of (fits, stats, measures, data, model, options).
+"""
 function test_fit_trace_grid_hierarchical(; grid=4, G=2, R=1, S=1, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 20, 0.2], rinit=[], nsamples=5000, onstates=Int[], hierarchical=(2, [7], tuple()), totaltime=1000.0, ntrials=10, fittedparam=[1, 2, 3, 4, 5, 11], propcv=0.01, cv=100.0, interval=1.0, weight=0, nframes=1, noisepriors=[50, 15, 200, 70], maxtime=10.0)
     traces = sim_grid(r=rtarget[1:end-1], p=rtarget[end], Ngrid=grid, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, totaltime=totaltime, interval=interval, ntrials=ntrials)
     data = StochasticGene.TraceData("tracegrid", "test", interval, (traces, [], weight, nframes))
@@ -221,8 +399,9 @@ function test_fit_trace_grid_hierarchical(; grid=4, G=2, R=1, S=1, insertstep=1,
     fits, stats, measures, data, model, options
 end
 
-### end of functions used in runtest
+### functions to be used in the future
 
+### development test functions
 
 test_fit0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, 0.0), "test", "test", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.2, 1.0, 0.2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.01, 0.01], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, lsoda(), zeromedian)
 

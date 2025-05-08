@@ -420,15 +420,14 @@ StochasticGene assumes all rates have units of inverse minutes and the half live
 
 ### API:
 
-```
+"""
     fit(; <keyword arguments> )
 
-Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
+Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
 
-For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
-then G = (2,3). 
+For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
 
-#Arguments
+# Arguments
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
@@ -461,8 +460,8 @@ then G = (2,3).
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
 - `label::String=""`: label of output files produced
-- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
-- `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), lsoda(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
+- `maxtime=60`: maximum wall time for run (in minutes, can be an integer or float; internally converted to Float64). You may pass either an integer (e.g., 60) or a float (e.g., 60.0).
+- `method=lsoda()`: DifferentialEquations.jl numerical method (e.g. lsoda(), Tsit5(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
@@ -481,22 +480,33 @@ then G = (2,3).
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `traceinfo=(1.0, 1., -1, 1., [100.,10.])`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background noise parameters, e.g. [mean, std]); for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [[1000., 100.], [1000., 100.]]) 
+- `traceinfo=(1.0, 1., -1, 1., [100.,10.])`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
+    for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
     If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
+    Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
-- `zeromedian=false`: if true, subtract the median of each trace from each trace and add the maximum of the medians
+- `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
 
-Example:
+# Returns
+- `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
+- `stats`: Summary statistics for parameters
+- `measures`: Diagnostic measures (including WAIC and its standard error, which is now for the total WAIC and scaled by sqrt(n_obs))
+- `data`, `model`, `options`: The data, model, and options structures used
 
-If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
+# Notes
+- If `propcv < 0`, proposal covariance is read from previous run if available.
+- WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
+- File and folder conventions may have changed; see README for details.
 
-bash> julia -p 4
+# Example
+If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:
 
+```julia
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
-
+```
 """
 
 

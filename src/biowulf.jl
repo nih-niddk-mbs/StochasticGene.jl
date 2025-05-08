@@ -58,7 +58,7 @@ the function, it will parse the numerical method rather than just writing it.
 """
 function makeswarm(; gene::String="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
@@ -92,7 +92,7 @@ julia> makeswarm(genes,cell="HBEC")
 """
 function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     ngenes = length(genes)
@@ -123,7 +123,7 @@ end
 """
 function makeswarm_genes(; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv::Float64=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     genes = checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh)
     println(typeof(genes))
     makeswarm(checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datapath=datapath, cell=cell, datacond=datacond, traceinfo=traceinfo, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
@@ -143,7 +143,7 @@ and all keyword arguments in makeswarm(;<keyword arguments>)
 """
 function makeswarm_models(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test",
     fittedparam::Vector=Int[], grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="lsoda()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1)
     juliafile = juliafile * "_" * gene * "_" * datacond * ".jl"
     sfile = swarmfile * "_" * gene * "_" * datacond * ".swarm"
     write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, datatype, datacond, cell, models)

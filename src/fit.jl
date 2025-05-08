@@ -13,9 +13,16 @@ MS2end_hbec() = Dict([("Sec16A", 5220); ("SLC2A1", 26001); ("ERRFI1", 5324); ("R
 halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPNB1", 9.0), ("MYH9", 10.0), ("Rab7a", 50.0), ("RHOA", 50.0), ("RPAP3", 7.5), ("Sec16A", 8.0), ("SLC2A1", 5.0), ("RAB7A", 50.0), ("SEC16A", 8.0)])
 
 """
-    get_transitions(G, TransitionType)
+    get_transitions(G::Int, TransitionType)
 
-Create transitions tuple
+Return the default transitions tuple for a given number of gene states `G` and a transition type string.
+
+# Arguments
+- `G::Int`: Number of gene states.
+- `TransitionType`: String describing the transition type (e.g., "KP", "cyclic").
+
+# Returns
+- Tuple of allowed transitions for the specified model.
 """
 function get_transitions(G::Int, TransitionType)
     typeof(G) <: AbstractString && (G = parse(Int, G))
@@ -49,24 +56,19 @@ const SUPPORTED_DATATYPES = Set([
 ])
 
 """
-    normalize_datatype(datatype::AbstractString) -> Symbol
     normalize_datatype(datatype::Symbol) -> Symbol
 
-Normalize a user-supplied or internal data type into a lowercase `Symbol`
-and validate against supported types.
-
-Accepts either a `String` or `Symbol`. Strings are lowercased and converted.
+Normalize and validate a user-supplied or internal data type symbol.
 
 # Arguments
-- `datatype`: A string (e.g. "RNA") or symbol (e.g. :rna)
+- `datatype::Symbol`: Data type symbol (e.g., :rna, :tracegrid).
 
 # Returns
-- A validated lowercase `Symbol` (e.g. `:rna`, `:tracegrid`)
+- Validated lowercase `Symbol`.
 
 # Throws
-- `ArgumentError` if the type is unsupported
+- `ArgumentError` if the type is unsupported.
 """
-
 function normalize_datatype(datatype::Symbol)
     datatype ∈ SUPPORTED_DATATYPES || error(
         "Unsupported datatype '$datatype'. Supported types: $(join(SUPPORTED_DATATYPES, ", "))"
@@ -74,6 +76,20 @@ function normalize_datatype(datatype::Symbol)
     return datatype
 end
 
+"""
+    normalize_datatype(datatype::AbstractString) -> Symbol
+
+Normalize and validate a user-supplied or internal data type string.
+
+# Arguments
+- `datatype::AbstractString`: Data type string (e.g., "RNA", "tracegrid").
+
+# Returns
+- Validated lowercase `Symbol`.
+
+# Throws
+- `ArgumentError` if the type is unsupported.
+"""
 function normalize_datatype(datatype::AbstractString)
     return normalize_datatype(Symbol(lowercase(datatype)))
 end
@@ -81,12 +97,31 @@ end
 """
     get_transitions(G::Tuple, TransitionType)
 
-TBW
+Return a tuple of transitions for each element in `G` (for coupled models).
+
+# Arguments
+- `G::Tuple`: Tuple of gene state counts.
+- `TransitionType`: String describing the transition type.
+
+# Returns
+- Tuple of transitions for each model.
 """
 function get_transitions(G::Tuple, TransitionType)
     Tuple([get_transitions(G, TransitionType) for G in G])
 end
 
+"""
+    make_coupling(source::UnitRange{Int64}=1:3, target::UnitRange{Int64}=1:3)
+
+Construct a default coupling structure for coupled models.
+
+# Arguments
+- `source::UnitRange{Int64}`: Source unit indices (default 1:3).
+- `target::UnitRange{Int64}`: Target unit indices (default 1:3).
+
+# Returns
+- Array of coupling tuples.
+"""
 function make_coupling(source::UnitRange{Int64}=1:3, target::UnitRange{Int64}=1:3)
     coupling = []
     for s in source, t in target
@@ -98,7 +133,16 @@ end
 """
     set_decayrate(decayrate::Float64, gene, cell, root)
 
-TBW
+Return the decay rate, using the provided value or looking it up if negative.
+
+# Arguments
+- `decayrate::Float64`: Decay rate (if < 0, will be looked up).
+- `gene`: Gene name.
+- `cell`: Cell type.
+- `root`: Root directory.
+
+# Returns
+- Decay rate as Float64.
 """
 function set_decayrate(decayrate::Float64, gene, cell, root)
     if decayrate < 0
@@ -111,7 +155,16 @@ end
 """
     set_decayrate(decayrate::Tuple, gene, cell, root)
 
-TBW
+Return a tuple of decay rates, using the provided values or looking them up if negative.
+
+# Arguments
+- `decayrate::Tuple`: Tuple of decay rates (if any < 0, will be looked up).
+- `gene`: Gene name(s).
+- `cell`: Cell type.
+- `root`: Root directory.
+
+# Returns
+- Tuple of decay rates.
 """
 function set_decayrate(decayrate::Tuple, gene, cell, root)
     for i in eachindex(decayrate)
@@ -127,7 +180,15 @@ end
 """
     reset_S(S::Int, R::Int, insertstep::Int)
 
-Set S to R - insertstep + 1 if greater than zero
+Adjust the number of splice sites S if it exceeds R - insertstep + 1.
+
+# Arguments
+- `S::Int`: Number of splice sites.
+- `R::Int`: Number of pre-RNA steps.
+- `insertstep::Int`: Reporter insertion step.
+
+# Returns
+- Adjusted value of S.
 """
 function reset_S(S::Int, R::Int, insertstep::Int)
     if S > R - insertstep + 1
@@ -140,6 +201,15 @@ end
 """
     reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
 
+Adjust each element of S if it exceeds R - insertstep + 1 for coupled models.
+
+# Arguments
+- `S::Tuple`: Tuple of splice site counts.
+- `R::Tuple`: Tuple of pre-RNA step counts.
+- `insertstep::Tuple`: Tuple of reporter insertion steps.
+
+# Returns
+- Tuple of adjusted S values.
 """
 function reset_S(S::Tuple, R::Tuple, insertstep::Tuple)
     S = collect(S)
@@ -155,7 +225,14 @@ end
 """
     reset_nalleles(nalleles, coupling)
 
-TBW
+Set nalleles to 1 if coupling is nonempty (for coupled models).
+
+# Arguments
+- `nalleles`: Number of alleles.
+- `coupling`: Coupling structure (tuple).
+
+# Returns
+- Adjusted nalleles value.
 """
 function reset_nalleles(nalleles, coupling)
     if !isempty(coupling)
@@ -168,10 +245,9 @@ end
 """
     fit(; <keyword arguments> )
 
-Fit steady state or transient GM model to RNA data for a single gene, write the result (through function finalize), and return nothing.
+Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
 
-For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G= 2 and G=3 then
-then G = (2,3). 
+For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
 
 #Arguments
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
@@ -206,8 +282,8 @@ then G = (2,3).
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted
 - `label::String=""`: label of output files produced
-- `maxtime=Float64=60.`: maximum wall time for run, default = 60 min
-- `method=lsoda()`: DifferentialEquations.jl numerical method (e.g. lsoda(), lsoda(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
+- `maxtime=60`: maximum wall time for run, default = 60 min
+- `method=lsoda()`: DifferentialEquations.jl numerical method (e.g. lsoda(), Tsit5(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
 - `noisepriors=[]`: priors of observation noise (use empty set if not fitting traces), superseded if priormean is set
@@ -236,16 +312,25 @@ then G = (2,3).
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
 
-Example:
+# Returns
+- `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
+- `stats`: Summary statistics for parameters
+- `measures`: Diagnostic measures (including WAIC and its standard error, which is now for the total WAIC and scaled by sqrt(n_obs))
+- `data`, `model`, `options`: The data, model, and options structures used
 
-If you are in the folder where data/HCT116_testdata is installed, then you can fit the mock RNA histogram running 4 mcmc chains with
+# Notes
+- If `propcv < 0`, proposal covariance is read from previous run if available.
+- WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
+- File and folder conventions may have changed; see README for details.
 
-bash> julia -p 4
+# Example
+If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:
 
+```julia
 julia> fits, stats, measures, data, model, options = fit(nchains = 4)
-
+```
 """
-function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime::Float64=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
+function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime=60, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if isnothing(rinit)
         fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber)
@@ -258,7 +343,7 @@ end
     fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda())
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
     transitions = get_transitions(G, TransitionType)
     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling, grid)
     println("transitions: ", transitions)
@@ -273,7 +358,7 @@ end
 
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
     propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
@@ -284,7 +369,7 @@ end
     fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda())
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
@@ -650,6 +735,22 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
+"""
+    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
+
+Construct hierarchical model traits and priors.
+
+# Arguments
+- `data`: Data structure.
+- `rmean`: Prior means.
+- `fittedparam`: Fitted parameter indices.
+- `fixedeffects`: Fixed effects tuple.
+- `transitions`, `R`, `S`, `insertstep`: Model structure.
+- `priorcv`, `noisepriors`, `hierarchical`, `reporter`, `coupling`, `couplingindices`, `grid`, `factor`, `ratetransforms`, `zeromedian`: Model options.
+
+# Returns
+- Tuple of (hierarchical trait, fittedparam, fixedeffects, priord, ratetransforms).
+"""
 function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
     fittedindividual = hierarchical[2]
     fittedshared = setdiff(fittedparam, fittedindividual)
@@ -669,6 +770,20 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord, ratetransforms
 end
 
+"""
+    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
+
+Populate transformation functions for rates and noise parameters.
+
+# Arguments
+- `ftransforms`, `invtransforms`, `sigmatransforms`: Arrays to populate.
+- `nrates`: Number of rates.
+- `reporter`: Reporter structure.
+- `zeromedian`: Whether to zero-center traces.
+
+# Returns
+- None (modifies arrays in place).
+"""
 function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
     for i in 1:nrates
         push!(ftransforms, log)
@@ -696,6 +811,18 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::V
     end
 end
 
+"""
+    make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
+
+Create transformation functions for all model parameters.
+
+# Arguments
+- `data`: Data structure.
+- `nrates`, `transitions`, `G`, `R`, `S`, `insertstep`, `reporter`, `coupling`, `grid`, `hierarchical`, `zeromedian`: Model structure and options.
+
+# Returns
+- `Transformation` struct with forward/inverse/sigma transforms.
+"""
 function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
     ftransforms = Function[]
     invtransforms = Function[]
@@ -735,7 +862,19 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     Transformation(ftransforms, invtransforms, sigmatransforms)
 end
 
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
+"""
+    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, factor)
+
+Construct and return the appropriate model struct for the given data and options.
+
+# Arguments
+- `data`: Data structure.
+- `r`, `rmean`, `fittedparam`, `fixedeffects`, `transitions`, `G`, `R`, `S`, `insertstep`, `splicetype`, `nalleles`, `priorcv`, `onstates`, `decayrate`, `propcv`, `probfn`, `noisepriors`, `method`, `hierarchical`, `coupling`, `grid`, `zeromedian`, `ejectnumber`, `factor`: Model options.
+
+# Returns
+- Model struct (e.g., `GMmodel`, `GRSMmodel`).
+"""
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, factor)
     reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
 
     nrates = num_rates(transitions, R, S, insertstep)
@@ -802,7 +941,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 end
 
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=lsoda(), zeromedian=false, datacol=3, ejectnumber=1)
     gene = check_genename(gene, "[")
     S = reset_S(S, R, insertstep)
     nalleles = reset_nalleles(nalleles, coupling)
@@ -814,7 +953,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber)
-    options = MHOptions(samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal)
+    options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     return data, model, options
 end
 

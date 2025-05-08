@@ -546,6 +546,7 @@ This is a unified implementation that works for all data types.
 - For trace data: 
   - lppd and pwaic include both trace and RNA components
   - Each time point is an observation
+- The standard error returned is for the **total WAIC** (not per observation), and is scaled by the square root of the number of observations (n_obs).
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
     # Calculate total WAIC
