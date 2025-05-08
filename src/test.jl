@@ -261,8 +261,8 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, lsoda(), tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
-    return fits, stats, measures, data, model, options
-    get_rates(fits.parml, model)[model.fittedparam], rtarget[model.fittedparam]
+    # return fits, stats, measures, data, model, options
+    stats.medparam, rtarget[model.fittedparam]
 end
 
 """
@@ -303,9 +303,9 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     nrates = num_rates(transitions, R, S, insertstep)
-    h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates]
+    # h1 = StochasticGene.get_rates(fits.parml, model)[1:nrates]
     h2 = rtarget[1:nrates]
-    # h1 = stats.medparam
+    h1 = stats.medparam
     # h2 = [rtarget[fittedparam]; [50.0; 10 / 50.0]; rh]
     return h1, h2
 end
