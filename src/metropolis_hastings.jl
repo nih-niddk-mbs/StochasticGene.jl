@@ -390,19 +390,15 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     d_param = length(param)
     covparam = cov(parout[:,1:step]')
     scaling = (2.38^2) / d_param
-    println(step)
-    println(accepttotal/step)
     if step > 1000 && accepttotal/step > .15
         if isposdef(covparam)
             proposalcv = covparam * scaling
             d = proposal_dist(param, proposalcv, model)
-            println(d)
         else
             # Fallback: use scaled diagonal covariance
             diag_cov = Diagonal(diag(covparam) * scaling)
             proposalcv = diag_cov
             d = proposal_dist(param, diag_cov, model)
-            println(d)
         end
         @info "Updated proposal covariance (scaled)" proposalcv
     end
