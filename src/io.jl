@@ -366,10 +366,20 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
     f = open(outfile, "w")
     writedlm(f, header, ',')
     for file in files
-        gene = get_gene(file)
-        nalleles = get_nalleles(file)
-        r = readmeasures(joinpath(folder, file))
-        writedlm(f, [gene nalleles r], ',')
+        try
+            fullfile = joinpath(folder, file)
+            if !isfile(fullfile) || isempty(read(fullfile))
+                @warn "Skipping missing or empty file: $file"
+                continue
+            end
+            gene = get_gene(file)
+            nalleles = get_nalleles(file)
+            r = readmeasures(fullfile)
+            writedlm(f, [gene nalleles r], ',')
+        catch e
+            @warn "Skipping file due to error: $file" exception=(e, catch_backtrace())
+            continue
+        end
     end
     close(f)
 end

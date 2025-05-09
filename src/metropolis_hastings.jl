@@ -390,7 +390,9 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     d_param = length(param)
     covparam = cov(parout[:,1:step]')
     scaling = (2.38^2) / d_param
-    if step > 1000 && accepttotal/step > .25
+    println(step)
+    println(accepttotal/step)
+    if step > 1000 && accepttotal/step > .15
         if isposdef(covparam)
             proposalcv = covparam * scaling
             d = proposal_dist(param, proposalcv, model)
