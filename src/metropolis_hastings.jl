@@ -301,11 +301,14 @@ function metropolis_hastings(data, model, options)
     llml = ll
     proposalcv = model.proposal
     if options.annealsteps > 0
+        println("Annealing")
         param, parml, ll, llml, logpredictions, temp = anneal(logpredictions, param, parml, ll, llml, d, model.proposal, data, model, options.annealsteps, options.temp, options.tempanneal, time(), maxtime * options.annealsteps / totalsteps)
     end
     if options.warmupsteps > 0
+        println("Warmup")
         param, parml, ll, llml, d, proposalcv, logpredictions = warmup(logpredictions, param, param, ll, ll, d, model.proposal, data, model, options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps)
     end
+    println("Sampling")
     fits = sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, options.samplesteps, options.temp, time(), maxtime * options.samplesteps / totalsteps)
     waic = compute_waic(fits.lppd, fits.pwaic, data)
     return fits, waic
@@ -370,25 +373,37 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 This function can be used to adapt the proposal distribution (e.g., empirical covariance) before the main MCMC sampling phase.
 """
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
-    # parout = Array{Float64,2}(undef, length(param), samplesteps)
+    parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
-    # accepttotal = 0
+    accepttotal = 0
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
         if ll > llml
             llml, parml = ll, param
         end
-        # parout[:, step] = param
-        # accepttotal += accept
+        parout[:, step] = param
+        accepttotal += accept
     end
-    # covparam = cov(parout[:,1:step]')*(2.38)^2 / length(param)
-    # if isposdef(covparam) && step > 1000 && accepttotal/step > .25
-    #     d=proposal_dist(param,covparam,model)
-    #     proposalcv = covparam
-    #     println(proposalcv)
-    # end
+    # Compute and scale covariance for proposal adaptation
+    d_param = length(param)
+    covparam = cov(parout[:,1:step]')
+    scaling = (2.38^2) / d_param
+    if step > 1000 && accepttotal/step > .25
+        if isposdef(covparam)
+            proposalcv = covparam * scaling
+            d = proposal_dist(param, proposalcv, model)
+            println(d)
+        else
+            # Fallback: use scaled diagonal covariance
+            diag_cov = Diagonal(diag(covparam) * scaling)
+            proposalcv = diag_cov
+            d = proposal_dist(param, diag_cov, model)
+            println(d)
+        end
+        @info "Updated proposal covariance (scaled)" proposalcv
+    end
     return param, parml, ll, llml, d, proposalcv, logpredictions
 end
 
@@ -520,10 +535,9 @@ end
 
 Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
 """
-function instant_reject(paramt, model; minval=1e-6, maxval=2e2)
-    return false
+function instant_reject(paramt, model; minval=1e-7, maxval=1e3)
     n_rates = num_rates(model)
-    if n_rates isa Tuple
+    if n_rates isa Vector
         n_rates = sum(n_rates)
     end
     # Expand paramt to full rate vector (all rates, in model order)
@@ -658,9 +672,9 @@ Construct a multivariate Normal proposal distribution for `param` with covarianc
 Returns an `MvNormal` distribution object.
 """
 function proposal_dist(param::Vector, cv::Matrix, model, indiv=0.001)
-    if hastrait(model, :hierarchical)
-        n_hyper = size(cv, 1)
-        n_param = length(param)
+    n_hyper = size(cv, 1)
+    n_param = length(param)
+    if hastrait(model, :hierarchical) && n_param > n_hyper
         # Joint proposal for hyperparameters
         hyper_proposal = MvNormal(param[1:n_hyper], cv)
         # Independent proposals for individual-level parameters
@@ -825,19 +839,21 @@ function compute_stats(paramin::Array{Float64,2}, model)
     np = size(param, 1)
     madparam = Array{Float64,1}(undef, np)
     qparam = Matrix{Float64}(undef, 3, 0)
-    if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
-        nrates = num_fitted_core_params(model)
-        corparam = cor(param[1:nrates, :]')
-        covparam = cov(param[1:nrates, :]')
-        covlogparam = cov(paramin[1:nrates, :]')
-    else
-        corparam = cor(param')
-        covparam = cov(param')
-        covlogparam = cov(paramin')
-    end
     for i in 1:np
         madparam[i] = mad(param[i, :], normalize=false)
         qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
+    end
+    # Thin for covariance/correlation calculations
+    param_thin = thin_columns(param)
+    if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
+        nrates = num_fitted_core_params(model)
+        corparam = cor(param_thin[1:nrates, :]')
+        covparam = cov(param_thin[1:nrates, :]')
+        covlogparam = cov(paramin[1:nrates, :]')
+    else
+        corparam = cor(param_thin')
+        covparam = cov(param_thin')
+        covlogparam = cov(paramin')
     end
     Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
 end
@@ -1117,5 +1133,21 @@ end
 
 # return results
 # end
+
+"""
+    thin_columns(mat; maxcols=5000)
+
+Thins the columns of `mat` so that the number of columns does not exceed `maxcols`.
+Returns the thinned matrix.
+"""
+function thin_columns(mat; maxcols=5000)
+    ncols = size(mat, 2)
+    if ncols > maxcols
+        thin_factor = div(ncols, maxcols)
+        return mat[:, 1:thin_factor:end]
+    else
+        return mat
+    end
+end
 
 

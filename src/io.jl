@@ -801,7 +801,7 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
     # Calculate normalized LL
     normalized_ll = fits.llml / n_obs
     
-    writedlm(f, [fits.llml normalized_ll n_obs n_params mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
+    writedlm(f, [fits.llml normalized_ll Int(n_obs) Int(n_params) mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
     writedlm(f, dev, ',')
     writedlm(f, [fits.accept fits.total], ',')
     writedlm(f, temp, ',')
@@ -1373,7 +1373,7 @@ end
 
 function readmeasures(file::String)
     d = readdeviance(file)
-    w = readwaic(file)
+    # w = readwaic(file)
     a = readaccept(file)
     t = readtemp(file)
     r = readrhat(file)
@@ -1383,12 +1383,12 @@ function readmeasures(file::String)
     ll = readrow(file, 1)
     # Order matches assemble_measures header:
     # LogMaxLikelihood, normalized_LL, n_obs, n_params, Deviance, WAIC, WAIC SE, AIC, Acceptance, Temperature, Rhat, ESS, Geweke, MCSE
-    [ll[1] ll[2] ll[3] ll[4] d[1] w[1] w[2] w[3] a t[1] r[1] e[1] g[1] m[1]]
+    [ll[1] ll[2] ll[3] ll[4] d[1] ll[8] ll[9] ll[10] a t[1] r[1] e[1] g[1] m[1]]
 end
 
 readdeviance(file::String) = readrow(file, 2)
 
-readwaic(file::String) = readrow(file, 1)
+# readwaic(file::String) = readrow(file, 1)
 
 function readaccept(file::String)
     a = readrow(file, 3)

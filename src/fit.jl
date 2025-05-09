@@ -438,7 +438,7 @@ end
 function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
     trace = similar(tracer)
     medians = [median(t) for t in tracer]
-    mads = [mad(t) for t in tracer]
+    mads = [mad(t, normalize=false) for t in tracer]
     scale = maximum(medians)
     madscale = maximum(mads)
     if zeromedian
@@ -457,7 +457,7 @@ function zero_median(tracer::Vector{T}, zeromedian::Bool) where {T<:AbstractMatr
     trace = similar(tracer)
     medians = [median(t, dims=1) for t in tracer]
     # Calculate MAD for each column of each matrix
-    mads = [reshape([mad(t[:, i]) for i in 1:size(t, 2)], 1, :) for t in tracer]
+    mads = [reshape([mad(t[:, i], normalize=false) for i in 1:size(t, 2)], 1, :) for t in tracer]
     scale = maximum(vcat(medians...), dims=1)
     madscale = median(vcat(mads...), dims=1)
     if zeromedian
@@ -1324,7 +1324,7 @@ function burstsize(fits, model::AbstractGMmodel)
             r = get_rates(p, model)
             push!(b, r[2*model.G-1] / r[2*model.G-2])
         end
-        return BurstMeasures(mean(b), std(b), median(b), mad(b), quantile(b, [0.025; 0.5; 0.975]))
+        return BurstMeasures(mean(b), std(b), median(b), mad(b, normalize=false), quantile(b, [0.025; 0.5; 0.975]))
     else
         return 0
     end
