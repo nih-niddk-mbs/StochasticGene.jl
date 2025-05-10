@@ -591,7 +591,7 @@ function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
     waic = -2 * sum(lppd - pwaic)
     # Calculate standard error for total WAIC
     n_obs = length(pwaic)  # number of observations
-    se = 2 * sqrt(sum(pwaic)) * sqrt(n_obs)  # scale by sqrt(n_obs)
+    se = 2 * sqrt(max(sum(pwaic), 0.0)) * sqrt(n_obs)  # scale by sqrt(n_obs)
     return waic, se
 end
 
