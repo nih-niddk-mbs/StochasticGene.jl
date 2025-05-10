@@ -1174,10 +1174,10 @@ function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, inse
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     if hierarchical
         h = (2, [8], ())
-        method = (lsoda(), true)
+        method = (Tsit5(), true)
     else
         h = ()
-        method = lsoda()
+        method = Tsit5()
     end
     if !isempty(coupling)
         model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, grid, zeromedian)

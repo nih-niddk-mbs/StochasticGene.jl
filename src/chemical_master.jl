@@ -32,7 +32,7 @@ end
 # Functions to compute dwell time distributions
 
 """
-    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=lsoda())
+    dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
 
   return dwell time CDF (cumulative distribution function) to reach barrier states starting from Sinit in live states
   live U barrier = all states
@@ -45,23 +45,23 @@ end
 - `Sinit`: initial state
 - `method`: 1 for directly solving ODE otherwise use eigendecomposition
 """
-function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=lsoda())
+function dwelltimeCDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
     t = [max(2 * tin[1] - tin[2], 0.); tin]
     S = time_evolve(t, Td, Sinit, method)
     return vec(sum(S[:, barrier], dims=1))
 end
 
 """
-    dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=lsoda())
+    dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5())
 
 return dwell time PDF (probability density function)
 """
-dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=lsoda()) = pdf_from_cdf(dwelltimeCDF(tin, Td, barrier, Sinit, method))
+dwelltimePDF(tin::Vector, Td::AbstractMatrix, barrier, Sinit::Vector, method=Tsit5()) = pdf_from_cdf(dwelltimeCDF(tin, Td, barrier, Sinit, method))
 
 
-ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method=lsoda()) = dwelltimePDF(tin, TA, offstates, SAinit, method)
+ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method=Tsit5()) = dwelltimePDF(tin, TA, offstates, SAinit, method)
 
-offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method=lsoda()) = dwelltimePDF(tin, TI, onstates, SIinit, method)
+offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method=Tsit5()) = dwelltimePDF(tin, TI, onstates, SIinit, method)
 
 function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix, nT::Int, elementsT::Vector, onstates::Vector)
     pss = normalized_nullspace(T)

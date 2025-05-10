@@ -624,7 +624,7 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, save=false, method=lsoda())
+function kolmogorov_forward(Q, interval, save=false, method=Tsit5())
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
@@ -638,7 +638,7 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_backward(Q, interval, save=false, method=lsoda())
+function kolmogorov_backward(Q, interval, save=false, method=Tsit5())
     tspan = (0.0, interval)
     prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
