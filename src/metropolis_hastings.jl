@@ -533,7 +533,7 @@ end
 
 Return `true` if any parameter in `paramt` is outside [minval, maxval], or if any parameter changes by more than `reltol` (default 0.5 = 50%) relative to `param` (for |param| > abstol). For parameters near zero, only the absolute bound applies.
 """
-function instant_reject(paramt, model; minval=1e-7, maxval=1e3)
+function instant_reject(paramt, model; minval=1e-7, maxval=300.0)
     n_rates = num_rates(model)
     if n_rates isa Vector
         n_rates = sum(n_rates)

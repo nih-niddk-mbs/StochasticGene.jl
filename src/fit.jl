@@ -1171,8 +1171,8 @@ end
 
 set rinit to prior if empty
 """
-function set_rinit(r, priormean)
-    if isempty(r)
+function set_rinit(r, priormean, minval=1e-7, maxval=300.0)
+    if isempty(r) || any(r .< minval) || any(r .> maxval) || any(isnan.(r)) || any(isinf.(r))
         println("No rate file, set rate to prior")
         r = priormean
     end
@@ -1186,8 +1186,8 @@ end
 
 set rinit for hierarchical models
 """
-function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing)
-    if isempty(r)
+function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
+    if isempty(r) || any(r .< minval) || any(r .> maxval) || any(isnan.(r)) || any(isinf.(r))
         println("No rate file, set rate to prior")
         r = copy(priormean)
         c = isempty(coupling) ? 0 : coupling[5]
