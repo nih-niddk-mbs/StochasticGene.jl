@@ -154,14 +154,12 @@ function prepare_rates_inplace(r, hierarchy::HierarchicalTrait)
 end
 
 function prepare_rates(r, hierarchy::HierarchicalTrait)
-    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
-    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     nallparams = hierarchy.nrates
     rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
     rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
-    # Instead of mutating, create a new array with the correct values
-    rindividual_new = copy(rindividual)
-    rindividual_new[hierarchy.fittedshared, :] = rshared[hierarchy.fittedshared, 1]
+    # Build a new matrix, column by column, without mutation
+    rindividual_new = [i in hierarchy.fittedshared ? rshared[i, 1] : rindividual[i, j]
+                       for i in 1:nallparams, j in 1:hierarchy.nindividuals]
     return collect(eachcol(rshared)), collect(eachcol(rindividual_new))
 end
 
