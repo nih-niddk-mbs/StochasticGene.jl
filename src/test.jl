@@ -468,7 +468,7 @@ fit_myc2(; nchains=1, maxtime=60.0, propcv=0.05) = fit(nchains=nchains, datatype
 ###### test autodiff
 
 
-function trace_model(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian=true, maxtime=100.0, initprior=0.1)
+function test_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], zeromedian=true, maxtime=100.0, initprior=0.1)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -487,10 +487,23 @@ function trace_model(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insert
 
     rinit = isempty(tuple()) ? set_rinit([], priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
-    return param, data, model, options
+    return data, model
 end
 
+# function test_ad_loglikelihood()
+#     # Use your existing test function to get data/model/param
+#     data, model = test_trace()  # or whatever function returns these
+#     param = get_param(model)
+#     ll_wrap = param -> loglikelihood(param, data, model)
+#     grad = Zygote.gradient(ll_wrap, param)
+#     return grad
+# end
 
+# function ll_wrap(param)
+#     loglikelihood(param, data, model)
+# end
+
+# grads = Zygote.gradient(ll_wrap, param)
 
 #####
 
@@ -544,8 +557,6 @@ function test_load(; traceinfo=(1.0, 1.0, -1, 1.0), datapath="data/inhibition/co
     data = load_data_trace(datapath, label, gene, datacond, traceinfo, datatype, 3, zscoretrace)
     return data
 end
-
-
 
 
 marg(p, dims) = dropdims(sum(p, dims=dims), dims=dims)
