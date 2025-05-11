@@ -135,26 +135,34 @@ end
 """
 function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
-    rhyper = Vector{Float64}[]
-    for i in hierarchy.hyperindices
-        push!(rhyper, r[i])
-    end
+    rhyper = [r[i] for i in hierarchy.hyperindices]
     return pindividual, rhyper
 end
 
 """
     prepare_rates(r, hierarchy::HierarchicalTrait)
 """
-function prepare_rates(r, hierarchy::HierarchicalTrait)
+
+function prepare_rates_inplace(r, hierarchy::HierarchicalTrait)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
-
     nallparams = hierarchy.nrates
     rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
     rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
     rindividual[hierarchy.fittedshared, :] .= rshared[hierarchy.fittedshared, 1]
-
     return collect(eachcol(rshared)), collect(eachcol(rindividual))
+end
+
+function prepare_rates(r, hierarchy::HierarchicalTrait)
+    # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
+    # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
+    nallparams = hierarchy.nrates
+    rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
+    rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
+    # Instead of mutating, create a new array with the correct values
+    rindividual_new = copy(rindividual)
+    rindividual_new[hierarchy.fittedshared, :] = rshared[hierarchy.fittedshared, 1]
+    return collect(eachcol(rshared)), collect(eachcol(rindividual_new))
 end
 
 """
@@ -234,12 +242,18 @@ function prepare_coupling(rates::Vector{Float64}, couplingindices)
     rates[couplingindices]
 end
 
-function prepare_coupling(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
+
+
+function prepare_coupling_inplace(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
     coupling = Vector{Float64}[]
     for i in eachindex(rates)
         push!(coupling, rates[i][couplingindices])
     end
     return coupling
+end
+
+function prepare_coupling(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
+    [rates[i][couplingindices] for i in eachindex(rates)]
 end
 
 """
@@ -249,12 +263,16 @@ function prepare_grid(rates, ngrid)
     rates[ngrid]
 end
 
-function prepare_grid(rates::Vector{T}, ngrid) where {T<:AbstractArray}
+function prepare_grid_inplace(rates::Vector{T}, ngrid) where {T<:AbstractArray}
     grid = Vector{Float64}[]
     for i in eachindex(rates)
         push!(grid, rates[i][ngrid])
     end
     return grid
+end
+
+function prepare_grid(rates::Vector{T}, ngrid) where {T<:AbstractArray}
+    [rates[i][ngrid] for i in eachindex(rates)]
 end
 
 """
@@ -1094,6 +1112,16 @@ This function applies fixed effects to the rates by setting specified rates equa
 - `Vector{Float64}`: The modified rates with fixed effects applied.
 """
 function fixed_rates(r, fixedeffects)
+    rnew = copy(r)
+    if ~isempty(fixedeffects)
+        for effect in fixedeffects
+            rnew[effect[2:end]] .= rnew[effect[1]]
+        end
+    end
+    return rnew
+end
+
+function fixed_rates_inplace(r, fixedeffects)
     if ~isempty(fixedeffects)
         for effect in fixedeffects
             r[effect[2:end]] .= r[effect[1]]
@@ -1101,8 +1129,6 @@ function fixed_rates(r, fixedeffects)
     end
     return r
 end
-
-
 """
     copy_r(model)
 
