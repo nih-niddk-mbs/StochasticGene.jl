@@ -211,18 +211,22 @@ Solve master equation problem using DifferentialEquations.jl
 """
 function time_evolve_diff(t, Q::SparseMatrixCSC, P0, method=Rosenbrock23())
     tspan = (t[1], t[end])
-    prob = ODEProblem(fevolve!, P0, tspan, Q)
+    prob = ODEProblem(fevolve, P0, tspan, Q)
     sol = solve(prob, method, saveat=t)
     return sol'
 end
 
 """
-    fevolve!(du,u::Vector, p, t)
+    fevolve_inplace(du, u::Vector, p, t)
 
 in place update of du of ODE system for DifferentialEquations,jl
 """
-function fevolve!(du, u::Vector, p, t)
+function fevolve_inplace!(du, u::Vector, p, t)
     du .= p * u
+end
+
+function fevolve(u::Vector, p, t)
+    return p * u
 end
 
 
@@ -292,6 +296,25 @@ function normalized_nullspace(M::SparseMatrixCSC)
     end
     max.(pp / sum(pp), 0)
 
+end
+
+function normalized_nullspace_ad(M::SparseMatrixCSC)
+    m = size(M, 1)
+    F = qr(M)
+    R = F.R
+    # Back substitution to solve R*p = 0, with p[end] = 1.0
+    function backsub(R)
+        p = [1.0]
+        for i in m-1:-1:1
+            val = -R[i, i+1:end]' * reverse(p) / R[i, i]
+            p = [val; p]
+        end
+        p
+    end
+    p = backsub(R)
+    # AD-friendly permutation
+    pp = [p[findfirst(==(i), F.pcol)] for i in 1:length(p)]
+    max.(pp / sum(pp), 0)
 end
 """
     allele_convolve(mhist,nalleles)

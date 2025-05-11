@@ -48,9 +48,12 @@ in place update of du of Kolmogorov backward equation for DifferentialEquations.
 function fkb!(du, u::Matrix, p, t)
     du .= -u * p
 end
-
 """
     kolmogorov_forward_ad(Q, interval, method=Tsit5(), save=false)
+"""
+
+"""
+    kolmogorov_forward(Q, interval, method=Tsit5(), save=false)
 
 return the solution of the Kolmogorov forward equation 
 returns initial condition and solution at time = interval
@@ -81,7 +84,6 @@ function kolmogorov_forward_inplace(Q, interval, method=Rosenbrock23(), save=fal
     solve(prob, method, save_everystep=save)[:, 2]
 end
 
-
 """
     kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
 
@@ -98,7 +100,6 @@ function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
     solve(prob, method, save_everystep=save)[:, 2]
 end
 
-
 """
     kolmogorov_backward_inplace(Q, interval, method=Tsit5(), save=false)
 
@@ -113,8 +114,6 @@ function kolmogorov_backward_inplace(Q, interval, method=Tsit5(), save=false)
     prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
 end
-
-
 function prob_Gaussian(par, reporters::Int)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
@@ -129,7 +128,20 @@ variance = sum of variances of background and reporters_per_state
 - `reporters_per_state`: number of reporters per HMM state
 -`N`: number of HMM states
 """
+function prob_Gaussian_inplace(par, reporters_per_state::T, N) where {T<:Vector}
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = prob_Gaussian(par, reporters_per_state[i])
+    end
+    d
+end
+
 function prob_Gaussian(par, reporters_per_state::T, N) where {T<:Vector}
+    [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
+end
+
+function prob_Gaussian_inplace(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
         d[i] = prob_Gaussian(par, reporters_per_state[i])
@@ -139,11 +151,7 @@ end
 
 function prob_Gaussian(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
-    d = Array{Distribution{Univariate,Continuous}}(undef, N)
-    for i in 1:N
-        d[i] = prob_Gaussian(par, reporters_per_state[i])
-    end
-    d
+    [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
 end
 
 """
@@ -447,7 +455,7 @@ end
 
 TBW
 """
-function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
+function set_b_inplace(trace::Vector, d::Vector{T}) where {T<:Distribution}
     N = length(d)
     b = Matrix{Float64}(undef, N, length(trace))
     for (t, obs) in enumerate(trace)
@@ -458,7 +466,13 @@ function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
     return b
 end
 
-function set_b(trace, d::Vector{T}) where {T<:Vector}
+function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
+    N = length(d)
+    Tlen = length(trace)
+    [pdf(d[j], trace[t]) for j in 1:N, t in 1:Tlen]
+end
+
+function set_b_inplace(trace, d::Vector{T}) where {T<:Vector}
     N = length(d[1])
     b = ones(N, size(trace, 1))
     t = 1
@@ -471,6 +485,12 @@ function set_b(trace, d::Vector{T}) where {T<:Vector}
         t += 1
     end
     return b
+end
+
+function set_b(trace, d::Vector{T}) where {T<:Vector}
+    N = length(d[1])
+    Tlen = size(trace, 1)
+    [prod(pdf(d[i][j], trace[t, i]) for i in eachindex(d)) for j in 1:N, t in 1:Tlen]
 end
 
 function set_b(trace, d::Array{T,3}) where {T<:Distribution}
@@ -627,7 +647,8 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
-function set_b_background_inplace(obs, d::Vector{Distribution{Univariate,Continuous}})
+
+function set_b_background_inplace(obs, d::Vector{<:Distribution})
     b = Array{Float64}(undef, size(d))
     for j in CartesianIndices(d)
         b[j] = pdf(d[j], obs)
@@ -643,7 +664,8 @@ function set_b_background_inplace(obs, d::Vector{<:Vector}, k::Int, N)
     return reshape(b, :, 1)
 end
 
-function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+
+function set_b_background(obs, d::Vector{<:Distribution})
     b = [pdf(dj, obs) for dj in d]
     return reshape(b, :, 1)
 end
@@ -766,36 +788,36 @@ function forward_inplace(a::Matrix, b, p0, N, T)
 end
 
 function forward(a::Matrix, b, p0, N, T)
-    # Regularize b to avoid exact zeros
     b = max.(b, eps(Float64))
-    αs = Vector{Vector{Float64}}(undef, T)
-    C = Vector{Float64}(undef, T)
-    αs[1] = p0 .* b[:, 1]
-    s1 = sum(αs[1])
-    if s1 == 0.0
-        # If all emission probabilities are zero, set uniform
-        αs[1] .= 1.0 / N
-        s1 = 1.0
-    end
-    C[1] = 1 / s1
-    αs[1] *= C[1]
-    for t in 2:T
-        α_new = zeros(N)
-        for j in 1:N
-            for i in 1:N
-                α_new[j] += αs[t-1][i] * a[i, j] * b[j, t]
-            end
-        end
+    function step(α_prev, t)
+        α_new = [sum(α_prev[i] * a[i, j] * b[j, t] for i in 1:N) for j in 1:N]
         st = sum(α_new)
         if st == 0.0
-            α_new .= 1.0 / N
+            α_new = fill(1.0 / N, N)
             st = 1.0
         end
-        C[t] = 1 / max(st, eps(Float64))
-        αs[t] = α_new * C[t]
+        c = 1 / max(st, eps(Float64))
+        α_new = α_new .* c
+        return α_new, c
     end
-    α = hcat(αs...)  # Convert vector of vectors to matrix
-    return α, C
+    # Initial step
+    α1 = p0 .* b[:, 1]
+    s1 = sum(α1)
+    if s1 == 0.0
+        α1 = fill(1.0 / N, N)
+        s1 = 1.0
+    end
+    c1 = 1 / s1
+    α1 = α1 .* c1
+
+    # Recurrence using foldl to avoid mutation
+    function recur((αs, cs, α_prev), t)
+        α_new, c = step(α_prev, t)
+        (vcat(αs, [α_new]), vcat(cs, [c]), α_new)
+    end
+    αs, cs, _ = foldl(recur, 2:T; init=([α1], [c1], α1))
+    α = hcat(αs...)
+    return α, cs
 end
 
 """
@@ -1176,7 +1198,7 @@ end
     ll_hmm(a::Matrix, p0::Vector, d, traces)
 
 """
-function _ll_hmm(a::Matrix, p0::Vector, d, traces)
+function _ll_hmm_inplace(a::Matrix, p0::Vector, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], d)
@@ -1188,6 +1210,18 @@ function _ll_hmm(a::Matrix, p0::Vector, d, traces)
         end
         @inbounds logpredictions[i] = -sum(log.(C))
     end
+    sum(logpredictions), logpredictions
+end
+
+function _ll_hmm(a::Matrix, p0::Vector, d, traces)
+    logpredictions = [
+        begin
+            b = set_b(traces[i], d)
+            _, C = forward(a, b, p0)
+            -sum(log.(C))
+        end
+        for i in eachindex(traces)
+    ]
     sum(logpredictions), logpredictions
 end
 
