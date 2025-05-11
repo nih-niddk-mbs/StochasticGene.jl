@@ -433,7 +433,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
     return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
 end
 
-function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
+function loglikelihood_inplace(param, data::RNACountData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
@@ -441,6 +441,16 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
         logpredictions[k] = log(max(p, eps()))
     end
     return sum(logpredictions), logpredictions  # Convention: return log-likelihoods
+end
+
+# AD-friendly version (no in-place mutation)
+function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
+    predictions = predictedfn(param, data, model)
+    logpredictions = [
+        log(max(technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA), eps()))
+        for k in eachindex(data.countsRNA)
+    ]
+    return sum(logpredictions), logpredictions
 end
 
 # Helper to get the right component
@@ -534,12 +544,24 @@ Calculates the likelihood for multiple histograms and returns an array of PDFs.
 # Returns
 - `Array{Array{Float64,1},1}`: An array of PDFs for the histograms.
 """
-function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+function predictedarray_inplace(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
     h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
     for i in eachindex(data.nRNA)
         M = make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G])
         h[i] = steady_state(M, model.G, model.nalleles, data.nRNA[i])
     end
+    trim_hist(h, data.nRNA)
+end
+
+# AD-friendly version (no in-place mutation)
+function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+    h = [
+        steady_state(
+            make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G]),
+            model.G, model.nalleles, data.nRNA[i]
+        )
+        for i in eachindex(data.nRNA)
+    ]
     trim_hist(h, data.nRNA)
 end
 
@@ -625,7 +647,7 @@ This function calculates the likelihood array for various types of data, includi
 """
 
 
-function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray_inplace(r, G::Int, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -653,6 +675,37 @@ function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
     return hists
 end
 
+# AD-friendly version (no in-place mutation)
+function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
+    elementsT = tcomponents.elementsT
+    T = make_mat(elementsT, r, tcomponents.nT)
+    pss = normalized_nullspace(T)
+    elementsG = tcomponents.elementsG
+    TG = make_mat(elementsG, r, G)
+    pssG = normalized_nullspace(TG)
+    [
+        Dtype == "OFF" ? begin
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+            nonzeros = nonzero_rows(TD)
+            offtimePDF(bins[i], TD[nonzeros, nonzeros], nonzero_states(onstates[i], nonzeros), init_SI(r, onstates[i], elementsT, pss, nonzeros))
+        end :
+        Dtype == "ON" ? begin
+            TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
+            ontimePDF(bins[i], TD, off_states(tcomponents.nT, onstates[i]), init_SA(r, onstates[i], elementsT, pss))
+        end :
+        Dtype == "OFFG" ? begin
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            offtimePDF(bins[i], TD, onstates[i], init_SI(r, onstates[i], elementsG, pssG, collect(1:G)))
+        end :
+        Dtype == "ONG" ? begin
+            TD = make_mat(tcomponents.elementsTD[i], r, G)
+            ontimePDF(bins[i], TD, off_states(G, onstates[i]), init_SA(r, onstates[i], elementsG, pssG))
+        end :
+        error("Unknown Dtype: $Dtype")
+        for (i, Dtype) in enumerate(dttype)
+    ]
+end
+
 function steady_state_dist(r, components, dt)
     pss = nothing
     pssG = nothing
@@ -666,7 +719,7 @@ function steady_state_dist(r, components, dt)
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function predictedarray(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray_inplace(r, components::TDComponents, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt)
@@ -681,6 +734,19 @@ function predictedarray(r, components::TDComponents, bins, reporter, dttype)
         end
     end
     hists
+end
+
+# AD-friendly version (no in-place mutation)
+function predictedarray(r, components::TDComponents, bins, reporter, dttype)
+    sojourn, nonzeros = reporter
+    dt = occursin.("G", dttype)
+    p = steady_state_dist(r, components, dt)
+    [
+        dt[i] ?
+            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)) :
+            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i])[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]))
+        for i in eachindex(sojourn)
+    ]
 end
 
 function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA)
@@ -730,7 +796,7 @@ function empty_cache!(cache)
     end
 end
 
-function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray_inplace(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -748,6 +814,24 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
         empty_cache!(cache)
     end
     return hists
+end
+
+# AD-friendly version (no in-place mutation)
+function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+    sojourn, nonzeros = reporter
+    sources = components.sources
+    model = components.model
+    T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
+    [
+        [
+            compute_dwelltime!(
+                CoupledDTCache(Dict(), Dict()), α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model,
+                sojourn[α][i], occursin("G", dttype[α][i]), nonzeros[α][i], bins[α][i]
+            )
+            for i in eachindex(sojourn[α])
+        ]
+        for α in eachindex(components.modelcomponents)
+    ]
 end
 
 """

@@ -1457,7 +1457,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
     println("ML rates: ", inverse_transform_params(fits.parml, model))
-    println("Acceptance: ", fits.accept, "/", fits.total)
+    println("Acceptance: ", fits.accept, "/", fits.total, " (", fits.accept/fits.total*100, "% )    ")
     if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))
     end

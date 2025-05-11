@@ -13,6 +13,15 @@
 # using CUDA: @allowscalar
 
 """
+    fkf(u::Matrix, p, t)
+
+update of u of Kolmogorov forward equation for DifferentialEquations.jl
+"""
+function fkf(u::Matrix, p, t)
+    u * p
+end
+
+"""
     fkf!(du,u::Matrix, p, t)
 
 in place update of du of Kolmogorov forward equation for DifferentialEquations.jl
@@ -23,6 +32,15 @@ function fkf!(du, u::Matrix, p, t)
 end
 
 """
+    fkb(u::Matrix, p, t)
+
+update of u of Kolmogorov backward equation for DifferentialEquations.jl
+"""
+function fkb(u::Matrix, p, t)
+    -u * p
+end
+
+"""
     fkb!(du,u::Matrix, p, t)
 
 in place update of du of Kolmogorov backward equation for DifferentialEquations.jl
@@ -30,8 +48,9 @@ in place update of du of Kolmogorov backward equation for DifferentialEquations.
 function fkb!(du, u::Matrix, p, t)
     du .= -u * p
 end
+
 """
-kolmogorov_forward(Q::Matrix,interval)
+    kolmogorov_forward_ad(Q, interval, method=Tsit5(), save=false)
 
 return the solution of the Kolmogorov forward equation 
 returns initial condition and solution at time = interval
@@ -39,21 +58,57 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, method=Rosenbrock23(), save=false)
+function kolmogorov_forward(Q, interval, method=Tsit5(), save=false)
+    tspan = (zero(eltype(Q)), interval)
+    u0 = Matrix{eltype(Q)}(I, size(Q)...)
+    prob = ODEProblem(fkf, u0, tspan, Q)
+    sol = solve(prob, method; save_everystep=save)
+    return sol[:, 2]
+end
+
+"""
+    kolmogorov_forward_inplace(Q, interval, method=Rosenbrock23(), save=false)
+
+return the solution of the Kolmogorov forward equation 
+returns initial condition and solution at time = interval
+
+- `Q`: transition rate matrix
+- `interval`: interval between frames (total integration time)
+"""
+function kolmogorov_forward_inplace(Q, interval, method=Rosenbrock23(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
 end
-"""
-kolmogorov_backward(Q::Matrix,interval)
 
-return the solution of the Kolmogorov forward equation 
+
+"""
+    kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
+
+return the solution of the Kolmogorov backward equation 
 returns initial condition and solution at time = interval
 
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
 function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
+    tspan = (0.0, interval)
+    u0 = Matrix{eltype(Q)}(I, size(Q)...)
+    prob = ODEProblem(fkb, u0, tspan, Q)
+    solve(prob, method, save_everystep=save)[:, 2]
+end
+
+
+"""
+    kolmogorov_backward_inplace(Q, interval, method=Tsit5(), save=false)
+
+return the solution of the Kolmogorov forward equation 
+returns initial condition and solution at time = interval
+
+- `Q`: transition rate matrix
+- `interval`: interval between frames (total integration time)
+"""
+function kolmogorov_backward_inplace(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
     solve(prob, method, save_everystep=save)[:, 2]
@@ -234,6 +289,7 @@ function make_ap(rates, interval, components::TComponents, method=Rosenbrock23()
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
+
 function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Rosenbrock23())
     Qtr = make_mat_TC(components, rates, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
@@ -308,12 +364,16 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int)
     probfn(noiseparams, reporters_per_state, N)
 end
 
-function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
+function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
     d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
     end
     return d
+end
+
+function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
+    [probfn[i](noiseparams[i], reporters_per_state[i], N) for i in eachindex(noiseparams)]
 end
 
 function set_d(noiseparams, reporters_per_state, probfn, Nstate::Int, Ngrid::Int)
@@ -353,12 +413,16 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T) where {
     probfn(noiseparams, reporters_per_state)
 end
 
-function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
+function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
     d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
     end
     return d
+end
+
+function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
+    [probfn[i](noiseparams[i], reporters_per_state[i]) for i in eachindex(noiseparams)]
 end
 
 """
@@ -531,12 +595,7 @@ function set_logb(trace, params, reporters_per_state, probfn::Function, N)
     return logb
 end
 
-"""
-    set_logb_coupled(trace, params, reporter, N)
-
-
-"""
-function set_logb_coupled(trace, params, reporter, N)
+function set_logb_coupled_inplace(trace, params, reporter, N)
     d = Vector[]
     for i in eachindex(params)
         rep = reporter[i]
@@ -555,7 +614,20 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
-function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+"""
+    set_logb_coupled(trace, params, reporter, N)
+
+    returns log of matrix b
+"""
+function set_logb_coupled(trace, params, reporter, N)
+    # Build d as a vector of matrices, one for each param/reporter
+    d = [reporter[i].probfn(params[i], reporter[i].per_state, N) for i in eachindex(params)]
+    # Compute logb as a matrix using comprehensions
+    logb = [sum(logpdf(d[i][j, 1], obs[i]) for i in eachindex(d)) for j in 1:N, obs in eachrow(trace)]
+    return logb
+end
+
+function set_b_background_inplace(obs, d::Vector{Distribution{Univariate,Continuous}})
     b = Array{Float64}(undef, size(d))
     for j in CartesianIndices(d)
         b[j] = pdf(d[j], obs)
@@ -563,11 +635,21 @@ function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
     return reshape(b, :, 1)
 end
 
-function set_b_background(obs, d::Vector{<:Vector}, k::Int, N)
+function set_b_background_inplace(obs, d::Vector{<:Vector}, k::Int, N)
     b = ones(N)
     for j in 1:N
         b[j] *= pdf(d[k][j], obs)
     end
+    return reshape(b, :, 1)
+end
+
+function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+    b = [pdf(dj, obs) for dj in d]
+    return reshape(b, :, 1)
+end
+
+function set_b_background(obs, d::Vector{<:Vector}, k::Int, N)
+    b = [pdf(d[k][j], obs) for j in 1:N]
     return reshape(b, :, 1)
 end
 
@@ -576,12 +658,24 @@ end
 
 TBW
 """
-function forward_inner_operation!(α, a, b::Vector, i, j, t)
+function forward_inner_operation_inplace!(α, a, b::Vector, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j]
 end
 
-function forward_inner_operation!(α, a, b::Matrix, i, j, t)
+function forward_inner_operation(α, a, b::Vector, i, j, t)
+    α_new = copy(α)
+    α_new[j, t] += α[i, t-1] * a[i, j] * b[j]
+    return α_new
+end
+
+function forward_inner_operation_inplace!(α, a, b::Matrix, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
+end
+
+function forward_inner_operation(α, a, b::Matrix, i, j, t)
+    α_new = copy(α)
+    α_new[j, t] += α[i, t-1] * a[i, j] * b[j, t]
+    return α_new
 end
 
 """
@@ -589,7 +683,7 @@ end
 
 TBW
 """
-function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+function forward_grid_inplace(a, a_grid, b, p0, Nstate, Ngrid, T)
     # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
     #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
     # else
@@ -611,6 +705,26 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     # end
 end
 
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    αs = Vector{Matrix{Float64}}(undef, T)
+    C = Vector{Float64}(undef, T)
+    αs[1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(αs[1])
+    αs[1] *= C[1]
+    for t in 2:T
+        α_new = zeros(Nstate, Ngrid)
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α_new[i, j] += αs[t-1][k, l] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α_new)
+        αs[t] = α_new * C[t]
+    end
+    α = cat(αs..., dims=3)  # Stack along the 3rd dimension
+    return α, C
+end
+
 """
     forward_grid(a, a_grid, b, p0)
 
@@ -629,7 +743,7 @@ returns forward variable α, and scaling parameter array C using scaled forward 
 Ct = Prod_t 1/∑_i α[i,t]
 
 # """
-function forward(a::Matrix, b, p0, N, T)
+function forward_inplace(a::Matrix, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
@@ -649,6 +763,39 @@ function forward(a::Matrix, b, p0, N, T)
     end
     return α, C
     # end
+end
+
+function forward(a::Matrix, b, p0, N, T)
+    # Regularize b to avoid exact zeros
+    b = max.(b, eps(Float64))
+    αs = Vector{Vector{Float64}}(undef, T)
+    C = Vector{Float64}(undef, T)
+    αs[1] = p0 .* b[:, 1]
+    s1 = sum(αs[1])
+    if s1 == 0.0
+        # If all emission probabilities are zero, set uniform
+        αs[1] .= 1.0 / N
+        s1 = 1.0
+    end
+    C[1] = 1 / s1
+    αs[1] *= C[1]
+    for t in 2:T
+        α_new = zeros(N)
+        for j in 1:N
+            for i in 1:N
+                α_new[j] += αs[t-1][i] * a[i, j] * b[j, t]
+            end
+        end
+        st = sum(α_new)
+        if st == 0.0
+            α_new .= 1.0 / N
+            st = 1.0
+        end
+        C[t] = 1 / max(st, eps(Float64))
+        αs[t] = α_new * C[t]
+    end
+    α = hcat(αs...)  # Convert vector of vectors to matrix
+    return α, C
 end
 
 """
@@ -780,7 +927,7 @@ end
 
 TBW
 """
-function forward_matrixmult(a, b, p0, N, T)
+function forward_matrixmult_inplace(a, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
     α[:, 1] = p0 .* b[:, 1]
@@ -794,6 +941,21 @@ function forward_matrixmult(a, b, p0, N, T)
     return α, C
 end
 
+function forward_matrixmult(a, b, p0, N, T)
+    αs = Vector{Vector{Float64}}(undef, T)
+    C = Vector{Float64}(undef, T)
+    αs[1] = p0 .* b[:, 1]
+    C[1] = 1 / sum(αs[1])
+    αs[1] *= C[1]
+    for t in 2:T
+        α_new = αs[t-1] .* (a' * b[:, t])
+        C[t] = 1 / sum(α_new)
+        αs[t] = α_new * C[t]
+    end
+    α = hcat(αs...)  # Convert vector of vectors to matrix
+    return α, C
+end
+
 """
 forward_log(a, b, p0, N, T)
 forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
@@ -803,13 +965,13 @@ returns log α
 (computations are numerically stable)
 
 """
-function forward_log(loga, logb, logp0, N, T)
+function forward_log_inplace(loga, logb, logp0, N, T)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
     forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     return ϕ
 end
-function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
+function forward_log_inplace!(ϕ, ψ, loga, logb, logp0, N, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
     for t in 2:T
         for k in 1:N
@@ -821,6 +983,23 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
+function forward_log(loga, logb, logp0, N, T)
+    ϕs = Vector{Vector{Float64}}(undef, T)
+    ψ = zeros(N)
+    ϕs[1] = logp0 + logb[:, 1]
+    for t in 2:T
+        ϕ_new = zeros(N)
+        for k in 1:N
+            for j in 1:N
+                ψ[j] = ϕs[t-1][j] + loga[j, k] + logb[k, t]
+            end
+            ϕ_new[k] = logsumexp(ψ)
+        end
+        ϕs[t] = ϕ_new
+    end
+    ϕ = hcat(ϕs...)  # Convert vector of vectors to matrix
+    return ϕ
+end
 
 """
 backward_scaled(a,b)
@@ -830,7 +1009,7 @@ return backward variable β using scaled backward algorithm
 β[i,T] = P(O[t+1]...O[t] | qT = Si,λ)
 
 """
-function backward(a, b, C, N, T)
+function backward_scaled_inplace(a, b, C, N, T)
     β = ones(N, T)
     β[:, T] /= C[T]
     for t in T-1:-1:1
@@ -844,13 +1023,29 @@ function backward(a, b, C, N, T)
     return β
 end
 
+function backward_scaled(a, b, C, N, T)
+    βs = Vector{Vector{Float64}}(undef, T)
+    βs[T] = ones(N) / C[T]
+    for t in (T-1):-1:1
+        β_new = zeros(N)
+        for i in 1:N
+            for j in 1:N
+                β_new[i] += a[i, j] * b[j, t+1] * βs[t+1][j]
+            end
+        end
+        βs[t] = β_new / C[t]
+    end
+    β = hcat(βs...)  # Convert vector of vectors to matrix
+    return β
+end
+
 """
 backward_log(a, b, N, T)
 
 return log β
 
 """
-function backward_log(a, b, N, T)
+function backward_log_inplace(a, b, N, T)
     loga = log.(a)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
@@ -863,6 +1058,25 @@ function backward_log(a, b, N, T)
             ϕ[i, t] = logsumexp(ψ)
         end
     end
+    return ϕ
+end
+
+function backward_log(a, b, N, T)
+    loga = log.(a)
+    ψ = zeros(N)
+    ϕs = Vector{Vector{Float64}}(undef, T)
+    ϕs[T] = zeros(N)  # or [0.0, 0.0] if N == 2
+    for t in (T-1):-1:1
+        ϕ_new = zeros(N)
+        for i in 1:N
+            for j in 1:N
+                ψ[j] = ϕs[t+1][j] + loga[i, j] + log(b[j, t+1])
+            end
+            ϕ_new[i] = logsumexp(ψ)
+        end
+        ϕs[t] = ϕ_new
+    end
+    ϕ = hcat(ϕs...)  # Convert vector of vectors to matrix
     return ϕ
 end
 
@@ -967,6 +1181,11 @@ function _ll_hmm(a::Matrix, p0::Vector, d, traces)
     for i in eachindex(traces)
         b = set_b(traces[i], d)
         _, C = forward(a, b, p0)
+        if any(isnan, C) || any(x -> x <= 0, C)
+            println("Problem in C for trace $i: ", C)
+            println("b: ", b)
+            println("p0: ", p0)
+        end
         @inbounds logpredictions[i] = -sum(log.(C))
     end
     sum(logpredictions), logpredictions
@@ -991,15 +1210,20 @@ end
     ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
 
 """
+# function _ll_hmm(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+#     logpredictions = Array{Float64}(undef, length(traces))
+#     for i in eachindex(traces)
+#         a, p0 = make_ap(r[i], interval, components, method)
+#         d = set_d(noiseparams[i], reporter)
+#         b = set_b(traces[i], d)
+#         _, C = forward(a, b, p0)
+#         @inbounds logpredictions[i] = -sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
+
 function _ll_hmm(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-    logpredictions = Array{Float64}(undef, length(traces))
-    for i in eachindex(traces)
-        a, p0 = make_ap(r[i], interval, components, method)
-        d = set_d(noiseparams[i], reporter)
-        b = set_b(traces[i], d)
-        _, C = forward(a, b, p0)
-        @inbounds logpredictions[i] = -sum(log.(C))
-    end
+    logpredictions = [-sum(log.(last(forward(make_ap(r[i], interval, components, method)..., set_b(traces[i], set_d(noiseparams[i], reporter)), p0)))) for i in eachindex(traces)]
     sum(logpredictions), logpredictions
 end
 
@@ -1841,3 +2065,6 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
     end
     states, observation_dist
 end
+
+
+
