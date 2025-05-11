@@ -1181,11 +1181,6 @@ function _ll_hmm(a::Matrix, p0::Vector, d, traces)
     for i in eachindex(traces)
         b = set_b(traces[i], d)
         _, C = forward(a, b, p0)
-        if any(isnan, C) || any(x -> x <= 0, C)
-            println("Problem in C for trace $i: ", C)
-            println("b: ", b)
-            println("p0: ", p0)
-        end
         @inbounds logpredictions[i] = -sum(log.(C))
     end
     sum(logpredictions), logpredictions
