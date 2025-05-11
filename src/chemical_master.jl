@@ -279,7 +279,7 @@ normalized_nullspace(M::SparseMatrixCSC)
 Compute the normalized null space of a nxn matrix
 of rank n-1 using QR decomposition with pivoting
 """
-function normalized_nullspace_inplace(M::SparseMatrixCSC)
+function normalized_nullspace(M::SparseMatrixCSC)
     m = size(M, 1)
     p = zeros(m)
     F = qr(M)   #QR decomposition
@@ -298,7 +298,7 @@ function normalized_nullspace_inplace(M::SparseMatrixCSC)
 
 end
 
-function normalized_nullspace(M::SparseMatrixCSC)
+function normalized_nullspace_ad(M::SparseMatrixCSC)
     m = size(M, 1)
     F = qr(M)
     R = F.R

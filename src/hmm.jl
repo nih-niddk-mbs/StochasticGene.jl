@@ -648,7 +648,7 @@ function set_logb_coupled(trace, params, reporter, N)
     return logb
 end
 
-function set_b_background_inplace(obs, d::Vector{Distribution{Univariate,Continuous}})
+function set_b_background_inplace(obs, d::Vector{<:Distribution})
     b = Array{Float64}(undef, size(d))
     for j in CartesianIndices(d)
         b[j] = pdf(d[j], obs)
@@ -664,7 +664,7 @@ function set_b_background_inplace(obs, d::Vector{<:Vector}, k::Int, N)
     return reshape(b, :, 1)
 end
 
-function set_b_background(obs, d::Vector{Distribution{Univariate,Continuous}})
+function set_b_background(obs, d::Vector{<:Distribution})
     b = [pdf(dj, obs) for dj in d]
     return reshape(b, :, 1)
 end
