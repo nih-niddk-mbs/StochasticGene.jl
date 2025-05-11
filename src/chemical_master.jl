@@ -290,7 +290,7 @@ function normalized_nullspace(M::SparseMatrixCSC)
     for i in eachindex(p)
         pp[F.pcol[i]] = p[i]
     end
-    pp / sum(pp)
+    max.(pp / sum(pp), 0)
 
 end
 """
