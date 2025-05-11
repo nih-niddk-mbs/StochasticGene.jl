@@ -294,15 +294,8 @@ function normalized_nullspace(M::SparseMatrixCSC)
     for i in eachindex(p)
         pp[F.pcol[i]] = p[i]
     end
-    # Ensure non-negativity
-    pp = max.(pp, 0.0)
-    s = sum(pp)
-    if s == 0.0
-        pp .= 1.0 / m
-    else
-        pp ./= s
-    end
-    return pp
+    max.(pp / sum(pp), 0)
+
 end
 """
     allele_convolve(mhist,nalleles)
