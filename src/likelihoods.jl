@@ -133,7 +133,7 @@ end
 """
     prepare_hyper(r, param, hierarchy::HierarchicalTrait)
 """
-function prepare_hyper_ad(r, param, hierarchy::HierarchicalTrait)
+function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
     rhyper = [r[i] for i in hierarchy.hyperindices]
     return pindividual, rhyper
