@@ -1172,8 +1172,11 @@ end
 set rinit to prior if empty
 """
 function set_rinit(r, priormean, minval=1e-7, maxval=300.0)
-    if isempty(r) || any(r .< minval) || any(r .> maxval) || any(isnan.(r)) || any(isinf.(r))
+    if isempty(r) 
         println("No rate file, set rate to prior")
+        r = priormean
+    elseif any(r .< minval) || any(r .> maxval) || any(isnan.(r)) || any(isinf.(r))
+        println("r out of bounds, set to prior: ", r)
         r = priormean
     end
     println("initial: ", r)
