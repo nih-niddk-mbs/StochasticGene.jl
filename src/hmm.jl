@@ -679,22 +679,22 @@ end
 
 TBW
 """
-function forward_inner_operation_inplace!(α, a, b::Vector, i, j, t)
+function forward_inner_operation!(α, a, b::Vector, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j]
 end
 
 function forward_inner_operation(α, a, b::Vector, i, j, t)
-    α_new = copy(α)
+    α_new = similar(α)
     α_new[j, t] += α[i, t-1] * a[i, j] * b[j]
     return α_new
 end
 
-function forward_inner_operation_inplace!(α, a, b::Matrix, i, j, t)
+function forward_inner_operation!(α, a, b::Matrix, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
 end
 
 function forward_inner_operation(α, a, b::Matrix, i, j, t)
-    α_new = copy(α)
+    α_new = similar(α)
     α_new[j, t] += α[i, t-1] * a[i, j] * b[j, t]
     return α_new
 end
@@ -704,7 +704,7 @@ end
 
 TBW
 """
-function forward_grid_inplace(a, a_grid, b, p0, Nstate, Ngrid, T)
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
     #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
     # else
@@ -726,7 +726,7 @@ function forward_grid_inplace(a, a_grid, b, p0, Nstate, Ngrid, T)
     # end
 end
 
-function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+function forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
     αs = Vector{Matrix{Float64}}(undef, T)
     C = Vector{Float64}(undef, T)
     αs[1] = p0 .* b[:, :, 1]
@@ -764,7 +764,7 @@ returns forward variable α, and scaling parameter array C using scaled forward 
 Ct = Prod_t 1/∑_i α[i,t]
 
 # """
-function forward_inplace(a::Matrix, b, p0, N, T)
+function forward(a::Matrix, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
@@ -786,7 +786,7 @@ function forward_inplace(a::Matrix, b, p0, N, T)
     # end
 end
 
-function forward(a::Matrix, b, p0, N, T)
+function forward_ad(a::Matrix, b, p0, N, T)
     b = max.(b, eps(Float64))
     function step(α_prev, t)
         α_new = [sum(α_prev[i] * a[i, j] * b[j, t] for i in 1:N) for j in 1:N]
@@ -986,13 +986,13 @@ returns log α
 (computations are numerically stable)
 
 """
-function forward_log_inplace(loga, logb, logp0, N, T)
+function forward_log(loga, logb, logp0, N, T)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
     forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     return ϕ
 end
-function forward_log_inplace!(ϕ, ψ, loga, logb, logp0, N, T)
+function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
     for t in 2:T
         for k in 1:N
@@ -1004,7 +1004,7 @@ function forward_log_inplace!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
-function forward_log(loga, logb, logp0, N, T)
+function forward_log_ad(loga, logb, logp0, N, T)
     ϕs = Vector{Vector{Float64}}(undef, T)
     ψ = zeros(N)
     ϕs[1] = logp0 + logb[:, 1]
@@ -1030,7 +1030,7 @@ return backward variable β using scaled backward algorithm
 β[i,T] = P(O[t+1]...O[t] | qT = Si,λ)
 
 """
-function backward_scaled_inplace(a, b, C, N, T)
+function backward_scaled(a, b, C, N, T)
     β = ones(N, T)
     β[:, T] /= C[T]
     for t in T-1:-1:1
@@ -1044,7 +1044,7 @@ function backward_scaled_inplace(a, b, C, N, T)
     return β
 end
 
-function backward_scaled(a, b, C, N, T)
+function backward_scaled_ad(a, b, C, N, T)
     βs = Vector{Vector{Float64}}(undef, T)
     βs[T] = ones(N) / C[T]
     for t in (T-1):-1:1
@@ -1066,7 +1066,7 @@ backward_log(a, b, N, T)
 return log β
 
 """
-function backward_log_inplace(a, b, N, T)
+function backward_log(a, b, N, T)
     loga = log.(a)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
@@ -1082,7 +1082,7 @@ function backward_log_inplace(a, b, N, T)
     return ϕ
 end
 
-function backward_log(a, b, N, T)
+function backward_log_ad(a, b, N, T)
     loga = log.(a)
     ψ = zeros(N)
     ϕs = Vector{Vector{Float64}}(undef, T)
@@ -1197,7 +1197,7 @@ end
     ll_hmm(a::Matrix, p0::Vector, d, traces)
 
 """
-function _ll_hmm_inplace(a::Matrix, p0::Vector, d, traces)
+function _ll_hmm(a::Matrix, p0::Vector, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], d)
@@ -1207,7 +1207,7 @@ function _ll_hmm_inplace(a::Matrix, p0::Vector, d, traces)
     sum(logpredictions), logpredictions
 end
 
-function _ll_hmm(a::Matrix, p0::Vector, d, traces)
+function _ll_hmm_ad(a::Matrix, p0::Vector, d, traces)
     logpredictions = [
         begin
             b = set_b(traces[i], d)

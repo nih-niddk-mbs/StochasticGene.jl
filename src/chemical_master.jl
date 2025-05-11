@@ -221,7 +221,7 @@ end
 
 in place update of du of ODE system for DifferentialEquations,jl
 """
-function fevolve_inplace!(du, u::Vector, p, t)
+function fevolve!(du, u::Vector, p, t)
     du .= p * u
 end
 
@@ -341,8 +341,6 @@ end
     Deconvolve to compute distribution of one allele from contributions of multiple alleles
 """
 allele_deconvolve(mhist, nalleles) = irfft((rfft(mhist)) .^ (1 / nalleles), length(mhist))
-
-
 
 
 """

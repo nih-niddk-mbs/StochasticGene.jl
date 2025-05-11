@@ -133,7 +133,7 @@ end
 """
     prepare_hyper(r, param, hierarchy::HierarchicalTrait)
 """
-function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
+function prepare_hyper_ad(r, param, hierarchy::HierarchicalTrait)
     pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
     rhyper = [r[i] for i in hierarchy.hyperindices]
     return pindividual, rhyper
@@ -143,7 +143,7 @@ end
     prepare_rates(r, hierarchy::HierarchicalTrait)
 """
 
-function prepare_rates_inplace(r, hierarchy::HierarchicalTrait)
+function prepare_rates(r, hierarchy::HierarchicalTrait)
     # rates reshaped from a vector into a vector of vectors pertaining to shared params, hyper params and individual params 
     # (shared parameters are considered to be hyper parameters without other hyper parameters (e.g. mean without variance))
     nallparams = hierarchy.nrates
@@ -153,7 +153,7 @@ function prepare_rates_inplace(r, hierarchy::HierarchicalTrait)
     return collect(eachcol(rshared)), collect(eachcol(rindividual))
 end
 
-function prepare_rates(r, hierarchy::HierarchicalTrait)
+function prepare_rates_ad(r, hierarchy::HierarchicalTrait)
     nallparams = hierarchy.nrates
     rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
     rindividual = reshape(r[hierarchy.individualstart:end], nallparams, hierarchy.nindividuals)
@@ -449,7 +449,7 @@ function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTr
     return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
 end
 
-function loglikelihood_inplace(param, data::RNACountData, model::AbstractGeneTransitionModel)
+function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
@@ -460,7 +460,7 @@ function loglikelihood_inplace(param, data::RNACountData, model::AbstractGeneTra
 end
 
 # AD-friendly version (no in-place mutation)
-function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
+function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     logpredictions = [
         log(max(technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA), eps()))
@@ -560,7 +560,7 @@ Calculates the likelihood for multiple histograms and returns an array of PDFs.
 # Returns
 - `Array{Array{Float64,1},1}`: An array of PDFs for the histograms.
 """
-function predictedarray_inplace(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
     h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
     for i in eachindex(data.nRNA)
         M = make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G])
@@ -570,7 +570,7 @@ function predictedarray_inplace(r, data::RNAData{T1,T2}, model::AbstractGMmodel)
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+function predictedarray_ad(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
     h = [
         steady_state(
             make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G]),
@@ -663,7 +663,7 @@ This function calculates the likelihood array for various types of data, includi
 """
 
 
-function predictedarray_inplace(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -692,7 +692,7 @@ function predictedarray_inplace(r, G::Int, tcomponents, bins, onstates, dttype)
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
     pss = normalized_nullspace(T)
@@ -735,7 +735,7 @@ function steady_state_dist(r, components, dt)
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function predictedarray_inplace(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray(r, components::TDComponents, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt)
@@ -753,7 +753,7 @@ function predictedarray_inplace(r, components::TDComponents, bins, reporter, dtt
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
     p = steady_state_dist(r, components, dt)
@@ -812,7 +812,7 @@ function empty_cache!(cache)
     end
 end
 
-function predictedarray_inplace(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -833,7 +833,7 @@ function predictedarray_inplace(r, coupling_strength, components::TCoupledCompon
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
