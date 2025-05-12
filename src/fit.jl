@@ -1176,7 +1176,7 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     if isempty(r) 
         println("No rate file, set rate to prior")
         r = priormean
-    elseif any(isnan.(r)) || any(isinf.(r)) || any(abs.(r) .< minval) || any(abs.(r) .> maxval)
+    elseif any(isnan.(r)) || any(isinf.(r))
         println("r out of bounds: ", r)
         r = priormean
     end
