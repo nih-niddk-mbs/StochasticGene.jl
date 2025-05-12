@@ -371,7 +371,6 @@ end
 """
 function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
     println(now())
-    println("rinit: ", rinit)
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber)
@@ -1191,8 +1190,10 @@ end
 set rinit for hierarchical models
 """
 function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
-    if isempty(r) || any(r .< minval) || any(r .> maxval) || any(isnan.(r)) || any(isinf.(r))
-        println("No rate file, set rate to prior")
+    if isempty(r) || any(isnan.(r)) || any(isinf.(r))
+        isempty(r) && println("No rate file, set rate to prior")
+        any(isnan.(r)) && println("r contains NaN, set rate to prior")
+        any(isinf.(r)) && println("r contains Inf, set rate to prior")
         r = copy(priormean)
         c = isempty(coupling) ? 0 : coupling[5]
         g = isnothing(grid) ? 0 : 1
