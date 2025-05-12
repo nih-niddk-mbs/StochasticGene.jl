@@ -771,7 +771,7 @@ function forward(a::Matrix, b, p0, N, T)
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
     α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / sum(α[:, 1])
+    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
     α[:, 1] *= C[1]
     for t in 2:T
         for j in 1:N
