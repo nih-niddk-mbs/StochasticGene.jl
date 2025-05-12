@@ -377,7 +377,7 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
             r = readmeasures(fullfile)
             writedlm(f, [gene nalleles r], ',')
         catch e
-            @warn "Skipping file due to error: $file" exception=(e, catch_backtrace())
+            @warn "Skipping file due to error: $file" exception = (e, catch_backtrace())
             continue
         end
     end
@@ -387,27 +387,19 @@ end
 
 function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
-    header = ["Model" "Nalleles" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     files = get_files(get_resultfiles(folder), "measures", label, cond, "")
-    println(files)
-    f = open(outfile, "w")
-    writedlm(f, header, ',')
-    for file in files
-        nalleles = get_nalleles(file)
-        r = readmeasures(joinpath(folder, file))
-        writedlm(f, [get_model(file) nalleles r], ',')
-    end
-    close(f)
+    assemble_measures_model(folder, files, outfile)
 end
 
 remove_string(str, st1) = replace(str, st1 => "")
 remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
 function assemble_measures_model(folder::String)
-    outfile = joinpath(folder, "measures.csv")
-    header = ["Model" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
-    files = get_measurefiles(folder)
-    println(files)
+        assemble_measures_model(folder, get_measurefiles(folder), joinpath(folder, "measures.csv"))
+end
+
+function assemble_measures_model(folder::String, files::Vector, outfile::String)
+    header = ["Model" "LogMaxLikelihood" "normalized_LL" "n_obs" "n_params" "Deviance" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     f = open(outfile, "w")
     writedlm(f, header, ',')
     for file in files
@@ -418,18 +410,21 @@ function assemble_measures_model(folder::String)
     close(f)
 end
 
-function assemble_measures_model(folder::String, outfile::String)
-    header = ["Model" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
-    files = get_measurefiles(folder)
-    f = open(outfile, "w")
-    writedlm(f, header, ',')
-    for file in files
-        nalleles = get_nalleles(file)
-        r = readmeasures(joinpath(folder, file))
-        writedlm(f, [remove_string(file, "measures_trace-HBEC-", "_$nalleles.txt") r], ',')
-    end
-    close(f)
-end
+# function assemble_measures_model(folder::String, outfile::String)
+#     # header = ["Model" "normalized_LL" "LogMaxLikelihood" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
+#     header = ["Model" "LogMaxLikelihood" "normalized_LL" "n_obs" "n_params" "Deviance" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
+#     files = get_measurefiles(folder)
+#     f = open(outfile, "w")
+#     writedlm(f, header, ',')
+#     for file in files
+#         nalleles = get_nalleles(file)
+#         r = readmeasures(joinpath(folder, file))
+#         writedlm(f, [remove_string(file, "measures_trace-HBEC-", "_$nalleles.txt") r], ',')
+#     end
+#     close(f)
+# end
+
+
 
 """
     assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
@@ -800,17 +795,17 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
     elseif typeof(data) <: RNACountData
         n_obs = length(data.countsRNA)
     elseif typeof(data) <: AbstractTraceData
-        n_obs = length(data.trace)
+        n_obs = length(data.trace[1])
     else
         n_obs = 1  # Default to 1 for other data types
     end
-    
+
     # Calculate n_params from model
     n_params = length(model.fittedparam)
-    
+
     # Calculate normalized LL
     normalized_ll = fits.llml / n_obs
-    
+
     writedlm(f, [fits.llml normalized_ll Int(n_obs) Int(n_params) mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
     writedlm(f, dev, ',')
     writedlm(f, [fits.accept fits.total], ',')
@@ -1393,7 +1388,9 @@ function readmeasures(file::String)
     ll = readrow(file, 1)
     # Order matches assemble_measures header:
     # LogMaxLikelihood, normalized_LL, n_obs, n_params, Deviance, WAIC, WAIC SE, AIC, Acceptance, Temperature, Rhat, ESS, Geweke, MCSE
-    [ll[1] ll[2] ll[3] ll[4] d[1] ll[8] ll[9] ll[10] a t[1] r[1] e[1] g[1] m[1]]
+    # writedlm(f, [fits.llml normalized_ll Int(n_obs) Int(n_params) mean(fits.ll) std(fits.ll) quantile(fits.ll, [0.025; 0.5; 0.975])' measures.waic[1] measures.waic[2] aic(fits)], ',')
+
+    [ll[1] ll[2] ll[3] ll[4] d[1] ll[10] ll[11] ll[12] a t[1] r[1] e[1] g[1] m[1]]
 end
 
 readdeviance(file::String) = readrow(file, 2)

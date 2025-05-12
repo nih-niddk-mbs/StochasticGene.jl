@@ -13,9 +13,9 @@ Constructor for TComponents structure
 
 # Arguments
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `splicetype`: Splice type.
 
@@ -55,9 +55,9 @@ This function returns a TAIComponents structure, which includes matrix component
 - `nT::Int`: Number of transition elements.
 - `onstates::Vector`: Vector of on states.
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `splicetype`: Splice type (default is an empty string).
 
@@ -141,9 +141,9 @@ This function returns a TRGCoupledComponents structure for coupled models, which
 - `source_state`: Source state.
 - `target_transition`: Target transition.
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `splicetype`: Splice type (default is an empty string).
 
@@ -180,9 +180,9 @@ This function returns a TCoupledComponents structure for coupled models, which i
 # Arguments
 - `coupling::Tuple`: Tuple of coupling parameters.
 - `transitions::Tuple`: Tuple of transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `splicetype`: Splice type (default is an empty string).
 - `unit_model`: Unit model.
@@ -230,8 +230,8 @@ This function returns an MComponents structure, which includes matrix components
 
 # Arguments
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
 - `nhist`: Number of histograms.
 - `decay`: Decay rates.
 - `splicetype`: Splice type.
@@ -257,9 +257,9 @@ This function creates an MTAI structure for GRS models, which is used for fittin
 
 # Arguments
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `onstates`: Vector of on states.
 - `nhist`: Number of histograms.
@@ -285,9 +285,9 @@ This function creates an MTD structure for GRS models, which is used for various
 
 # Arguments
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `onstates`: Vector of on states.
 - `dttype`: Data type.
@@ -313,9 +313,9 @@ This function returns an MTComponents structure for GRS models, which is used fo
 
 # Arguments
 - `transitions`: Transition rates.
-- `G`: Total number of genes.
-- `R`: Number of reporters.
-- `S`: Number of states.
+- `G`: Total number of gene states.
+- `R`: Number of reporter steps.
+- `S`: Number of splice sites.
 - `insertstep`: Insert step.
 - `nhist`: Number of histograms.
 - `decay`: Decay rates.
@@ -336,9 +336,9 @@ MTComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="
 
 # # Arguments
 # - `transitions`: Transition rates.
-# - `G`: Total number of genes.
-# - `R`: Number of reporters.
-# - `S`: Number of states.
+# - `G`: Total number of gene states.
+# - `R`: Number of reporter steps.
+# - `S`: Number of splice sites.
 # - `insertstep`: Insert step.
 # - `nhist`: Number of histograms.
 # - `decay`: Decay rates.

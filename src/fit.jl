@@ -307,7 +307,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
     Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
-- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model
+- `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
@@ -944,6 +944,10 @@ end
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
     gene = check_genename(gene, "[")
     S = reset_S(S, R, insertstep)
+    if G == 1 && !isempty(transitions)
+        println("G=1, transitions are ignored")
+        transitions = tuple()
+    end
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")

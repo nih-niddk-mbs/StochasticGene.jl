@@ -107,6 +107,20 @@ function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02,
     hs = StochasticGene.normalize_histogram.(hs)
     return h, make_array(hs)
 end
+function test_fit_simrna_compare(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000, nchains=1)
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
+    data = RNAData("", "", nRNA, h)
+    model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options, nchains)
+    hc = predictedfn(fits.parml, data, model)
+    return hc, h
+end
+
+function compare_data_model(data, model, parml)
+    hc = predictedfn(parml, data, model)
+    return hc, normalize_histogram(data.histRNA)
+end
 
 """
     test_compare_coupling(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling, total, tol)
@@ -268,6 +282,29 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     # return fits, stats, measures, data, model, options
     nrates = num_rates(model)
     stats.medparam[1:nrates-1], rtarget[1:nrates-1]
+end
+
+function test_fit_trace_compare(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime=100.0, initprior=0.1)
+    tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
+    trace, tracescale = zero_median(tracer, zeromedian)
+    nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
+    if length(traceinfo) > 3 && traceinfo[4] != 1.0
+        weight = set_trace_weight(traceinfo)
+        background = set_trace_background(traceinfo)
+    else
+        weight = 0.0
+        background = 0.0
+    end
+    data = TraceData{String,String,Tuple}("trace", "gene", traceinfo[1], (trace, background, weight, nframes, tracescale))
+    priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), tuple(), nothing)
+    elongationtime = mean_elongationtime(rtarget, transitions, R)
+    priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors]
+    priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
+    rinit = isempty(tuple()) ? set_rinit([], priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options, nchains)
+
 end
 
 """
