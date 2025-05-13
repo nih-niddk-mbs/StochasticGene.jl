@@ -921,12 +921,22 @@ determine if string a or string b occurs in file (case insensitive)
 """
 function occursin_file(a, b, file::String)
     occursin(Regex("DS_Store", "i"), file) && return false
+
+    function token_regex(token)
+        isempty(token) && return ""
+        # Match token not surrounded by alphanumerics (word boundary for filenames)
+        return "(?<![A-Za-z0-9])" * escape_string(token) * "(?![A-Za-z0-9])"
+    end
+
+    ra = token_regex(a)
+    rb = token_regex(b)
+
     if isempty(a)
-        return occursin(Regex(b, "i"), file)
+        return occursin(Regex(rb, "i"), file)
     elseif isempty(b)
-        return occursin(Regex(a, "i"), file)
+        return occursin(Regex(ra, "i"), file)
     else
-        return occursin(Regex(a, "i"), file) && occursin(Regex(b, "i"), file)
+        return occursin(Regex(ra, "i"), file) && occursin(Regex(rb, "i"), file)
     end
 end
 
@@ -936,8 +946,11 @@ end
 read in rna histograms 
 """
 function read_rna(gene, cond, datapath)
-    h = readfile(gene, cond, datapath)[:, 1]
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
+    h = readfile(t)[:, 1]
+    # h = readfile(gene, cond, datapath)[:, 1]
     # Only truncate if histogram has more than 40 elements
+    println(h)
     if length(h) > 200
         h = truncate_histogram(h, 0.99, 1000)
     end
