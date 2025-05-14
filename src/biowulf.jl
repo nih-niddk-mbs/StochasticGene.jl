@@ -1132,3 +1132,62 @@ function find_nonconverged_genes(resultfolder::String, filetype::String, nlines_
     end
     return nonconverged
 end
+
+"""
+    find_highly_nonconverged_genes(measures_file::String; 
+        rhat_thresh=1.2, ess_min=500, geweke_thresh=3.0, mcse_max=0.5, 
+        accept_min=0.05, temp_val=1.0, verbose=true)
+
+Scan an assembled measures file and return a vector of gene names that are highly nonconverged by relaxed criteria.
+"""
+function find_highly_nonconverged_genes(measures_file::String; 
+        rhat_thresh=1.2, ess_min=500, geweke_thresh=3.0, mcse_max=0.5, 
+        accept_min=0.05, temp_val=1.0, verbose=true)
+
+    df = CSV.read(measures_file, DataFrame)
+    bad_genes = String[]
+    for row in eachrow(df)
+        gene = row.Gene
+        waic = row.WAIC
+        rhat = row.Rhat
+        ess = row.ESS
+        geweke = row.Geweke
+        mcse = row.MCSE
+        accept = row.Acceptance
+        temp = row.Temperature
+
+        is_bad = false
+        if ismissing(rhat) || isnan(rhat) || rhat > rhat_thresh
+            is_bad = true
+            verbose && println("$gene: Rhat = $rhat")
+        end
+        if ismissing(ess) || isnan(ess) || ess < ess_min
+            is_bad = true
+            verbose && println("$gene: ESS = $ess")
+        end
+        if ismissing(geweke) || isnan(geweke) || abs(geweke) > geweke_thresh
+            is_bad = true
+            verbose && println("$gene: Geweke = $geweke")
+        end
+        if ismissing(mcse) || isnan(mcse) || mcse > mcse_max
+            is_bad = true
+            verbose && println("$gene: MCSE = $mcse")
+        end
+        if ismissing(waic) || isnan(waic)
+            is_bad = true
+            verbose && println("$gene: WAIC is NaN")
+        end
+        if ismissing(accept) || isnan(accept) || accept < accept_min
+            is_bad = true
+            verbose && println("$gene: Acceptance = $accept")
+        end
+        if ismissing(temp) || isnan(temp) || temp != temp_val
+            is_bad = true
+            verbose && println("$gene: Temperature = $temp")
+        end
+        if is_bad
+            push!(bad_genes, gene)
+        end
+    end
+    return bad_genes
+end

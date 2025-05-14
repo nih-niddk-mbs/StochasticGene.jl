@@ -1235,28 +1235,28 @@ function _ll_hmm(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
 end
 
 """
-    ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    _ll_hmm(r::Vector, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
 
 """
-# function _ll_hmm(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
-#     logpredictions = Array{Float64}(undef, length(traces))
-#     for i in eachindex(traces)
-#         a, p0 = make_ap(r[i], interval, components, method)
-#         d = set_d(noiseparams[i], reporter)
-#         b = set_b(traces[i], d)
-#         _, C = forward(a, b, p0)
-#         @inbounds logpredictions[i] = -sum(log.(C))
-#     end
-#     sum(logpredictions), logpredictions
-# end
-
 function _ll_hmm(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        a, p0 = make_ap(r[i], interval, components, method)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        _, C = forward(a, b, p0)
+        @inbounds logpredictions[i] = -sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function _ll_hmm_ad(r::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = [-sum(log.(last(forward(make_ap(r[i], interval, components, method)..., set_b(traces[i], set_d(noiseparams[i], reporter)), p0)))) for i in eachindex(traces)]
     sum(logpredictions), logpredictions
 end
 
 """
-    ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+    _ll_hmm(r, couplingStrength, noiseparams, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
 
 """
 function _ll_hmm(r::Vector, couplingStrength::Vector, noiseparams::Vector, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())

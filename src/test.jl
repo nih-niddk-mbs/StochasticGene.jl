@@ -467,6 +467,78 @@ end
 
 ### functions to be used in the future
 
+
+function burst_aic(model, a::Matrix, b, p0, N, T, data)
+    α, C = forward(a, b, p0, N, T)
+    final_alpha = α[:, T]
+    burst_indices = on_states(model)
+    burst_sum = sum(final_alpha[burst_indices])
+    LL_burst_focused = log(max(burst_sum, eps(Float64)))
+    k = number_of_parameters(model) # You'll need a function to get the number of free parameters
+    AIC_burst_focused = 2 * k - 2 * LL_burst_focused
+    return AIC_burst_focused
+end
+
+function aic_onstates(ratefile, datapath, gene, datacond, traceinfo, label, fittedparam, transitions, G, R, S, insertstep, hierarchical, ratetype)
+    r = readrates(ratefile, ratetype)
+    data =load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian)
+    model = load_model(data, r, r, fittedparam, [], transitions, G, R, S, insertstep, "", 1, .1, Int[], 1., .1, prob_Gaussian, [0.0, 0.2, 1.0, 0.2], Tsit5(), hierarchical, tuple(), nothing, zeromedian, 1)
+    aic_onstates(r, data, model)
+end
+
+function aic_onstates(param, data, model::AbstractGRSMmodel)
+    r = prepare_rates(param, model)
+    components = get_components(model, data)
+    aic_onstates(r, components, model.reporter, data.interval, data.trace, model.method)
+end
+
+function aic_onstates(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
+    rates, noiseparams = r
+    a, p0 = make_ap(rates, interval, components, method)
+    onstates = reporter.per_state .> 0
+    ll_on, ll = _ll_onstates(a, p0, set_d(noiseparams, reporter), trace[1], onstates)
+    2*length(rates) - 2* ll_on, ll
+end
+
+function aic_onstates(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
+    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    onstates = reporter.per_state .> 0
+    if method[2]
+        ll_on, ll = _ll_onstates(noiseindividual, a, p0, reporter, trace[1], onstates)
+        aic = 2 * length(rshared[1]) - 2 * ll_on
+    else
+        # ll_on = _ll_on(rindividual, noiseindividual, interval, components, reporter, trace[1], method[1], onstates)
+        # aic = 2 * length(rshared) * (length(rindividual) + 1) - 2 * ll_on
+    end
+    return aic, ll
+end
+
+function _ll_onstates(a::Matrix, p0::Vector, d, traces, onstates)
+    ll_on = 0
+    ll = 0
+    for i in eachindex(traces)
+        b = set_b(traces[i], d)
+        α, C = forward(a, b, p0)
+        ll_on += log(sum(max.(α[onstates, end], 0.)))
+        ll -= sum(log.(C))
+    end
+    ll_on, ll
+end
+
+function _ll_onstates(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces, onstates)
+    ll_on = 0
+    ll = 0
+    for i in eachindex(traces)
+        d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        α, C = forward(a, b, p0)
+        ll_on += log(sum(max.(α[onstates, end], 0.)))
+        ll -= sum(log.(C))
+    end
+    ll_on, ll   
+end
+
 ### development test functions
 
 test_fit0(; nchains=1, maxtime=6.0, propcv=0.01, zeromedian=true) = fit(nchains, "trace", String[], "data/inhibition/control/", "MYC", "HBEC", "gene", (1.6666666666666667, 1.0, -1, 0.92, 0.0), "test", "test", "trace-HBEC-nstate_gene", "trace-HBEC-nstate_gene", [1, 2, 3, 4, 5, 6, 8, 9], (), ([1, 2], [2, 1]), 2, 3, 0, 1, (), nothing, ".", maxtime, 5.0, [0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.2, 1.0, 0.2], [5.0, 5.0, 0.2, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.01, 0.01], 1, Int64[], 1.0, "", prob_Gaussian, [0.0, 0.2, 1.0, 0.2], (), "ml", propcv, 200000, 0, 0, 1.0, 100.0, 1.0, false, false, false, Tsit5(), zeromedian)
