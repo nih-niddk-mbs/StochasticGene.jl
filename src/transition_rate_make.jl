@@ -391,10 +391,17 @@ This function returns an nT x nT sparse matrix T, with elements set according to
 # Returns
 - `SparseMatrixCSC`: The created sparse matrix T.
 """
-function make_mat(elements::Vector, rates::Vector, nT::Int)
+function make_mat_inplace(elements::Vector, rates::Vector, nT::Int)
     T = spzeros(nT, nT)
     make_mat!(T, elements, rates)
     return T
+end
+
+function make_mat(elements::Vector, rates::Vector, nT::Int)
+    I = [e.a for e in elements]
+    J = [e.b for e in elements]
+    V = [e.pm * rates[e.index] for e in elements]
+    sparse(I, J, V, nT, nT)
 end
 
 """
@@ -462,12 +469,34 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, tota
     make_mat_M(T, B, U, Uminus, Uplus)
 end
 
-function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
+function make_mat_M_inplace(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
     nT = size(T, 1)
     total = size(U, 1)
     M = kron(U, sparse(I, nT, nT)) + kron(sparse(I, total, total), T - B) + kron(Uminus, B) + kron(Uplus, sparse(I, nT, nT))
     M[end-size(B, 1)+1:end, end-size(B, 1)+1:end] .+= B  # boundary condition to ensure probability is conserved
     return M
+end
+
+using SparseArrays
+
+function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, Uminus::SparseMatrixCSC, Uplus::SparseMatrixCSC)
+    nT = size(T, 1)
+    total = size(U, 1)
+    nB = size(B, 1)
+    M0 = kron(U, sparse(I, nT, nT)) +
+         kron(sparse(I, total, total), T - B) +
+         kron(Uminus, B) +
+         kron(Uplus, sparse(I, nT, nT))
+    # Build the lower-right block with B, rest zeros
+    N = total * nT
+    # Indices for the lower-right block
+    rows, cols, vals = findnz(B)
+    # Offset indices to the lower-right block
+    offset = N - nB
+    I_block = [r + offset for r in rows]
+    J_block = [c + offset for c in cols]
+    M_bc = sparse(I_block, J_block, vals, N, N)
+    return M0 + M_bc
 end
 
 function make_mat_M(components::MComponents, rates::Vector)

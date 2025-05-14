@@ -445,8 +445,11 @@ This function calculates the negative loglikelihood for different types of data 
 function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     hist = datahistogram(data)
-    logpredictions = log.(max.(predictions, eps()))
-    return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
+    T = eltype(predictions)
+    # Ensure hist is the same type as predictions for AD
+    hist = convert.(T, hist)
+    logpredictions = log.(predictions)
+    return sum(hist .* logpredictions), hist .* logpredictions
 end
 
 function loglikelihood_inplace(param, data::RNACountData, model::AbstractGeneTransitionModel)
@@ -500,9 +503,14 @@ end
 
 # Predicted histogram functions
 
-function predictedRNA(r, mcomponents, nalleles, nRNA)
+function predictedRNA_sparse(r, mcomponents, nalleles, nRNA)
     M = make_mat_M(mcomponents, r)
     steady_state(M, mcomponents.nT, nalleles, nRNA)
+end
+
+function predictedRNA(r, mcomponents, nalleles, nRNA)
+    M = make_mat_M(mcomponents, r)
+    steady_state(Matrix(M), mcomponents.nT, nalleles, nRNA)
 end
 
 
@@ -519,13 +527,17 @@ Calculates the likelihood for a single RNA histogram.
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
+function predictedfn_sparse(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
     steady_state(M, model.components.nT, model.nalleles, data.nRNA)
 end
 
-
+function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
+    r = get_rates(param, model)
+    M = make_mat_M(model.components, r)
+    steady_state(Matrix(M), model.components.nT, model.nalleles, data.nRNA)
+end
 
 
 """
@@ -1054,9 +1066,19 @@ function get_rates!(r, param, model, inverse)
     end
 end
 
-function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
+function get_rates_inplace(param, model::AbstractGeneTransitionModel, inverse=true)
     r = copy_r(model)
     get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
+end
+
+function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
+    base = model.rates
+    newvals = inverse ? inverse_transform_params(param, model) : param
+    # Build a new vector, replacing only the fittedparam indices, functionally
+    fitted_set = Set(model.fittedparam)
+    idxmap = Dict(model.fittedparam .=> 1:length(model.fittedparam))
+    r = [i in fitted_set ? newvals[idxmap[i]] : base[i] for i in eachindex(base)]
     fixed_rates(r, model.fixedeffects)
 end
 

@@ -5,6 +5,7 @@
 # Functions to solve the chemical master equation
 # operates on the transpose of the Markov process transition rate matrix
 
+using LinearAlgebra
 
 # Functions to compute steady state mRNA histograms
 """
@@ -166,7 +167,7 @@ marginalize(P::Matrix)
 
 Marginalize over G states
 """
-function marginalize(p::Vector, nT, nhist)
+function marginalize_inplace(p::Vector, nT, nhist)
     mhist = zeros(nhist)
     for m in 1:nhist
         i = (m - 1) * nT
@@ -182,7 +183,9 @@ end
 
 marginalize(P::Matrix; dims=1) = sum(P, dims=dims)
 
-
+function marginalize(p::AbstractVector, nT, nhist)
+    [sum(p[(m-1)*nT+1:m*nT]) for m in 1:nhist]
+end
 
 """
     unfold(P::Matrix)
@@ -316,12 +319,23 @@ function normalized_nullspace_ad(M::SparseMatrixCSC)
     pp = [p[findfirst(==(i), F.pcol)] for i in 1:length(p)]
     max.(pp / sum(pp), 0)
 end
+
+function normalized_nullspace(M::AbstractMatrix)
+    n = size(M, 1)
+    A = [M'; ones(1, n)]
+    b = [zeros(n); one(eltype(M))]
+    p = A \ b
+    p = max.(p, zero(eltype(p)))
+    p = p / sum(p)
+    return p
+end
+
 """
     allele_convolve(mhist,nalleles)
 
     Convolve to compute distribution for contributions from multiple alleles
 """
-function allele_convolve(mhist, nalleles)
+function allele_convolve_inplace(mhist, nalleles)
     nhist = length(mhist)
     mhists = Array{Array{Float64,1}}(undef, nalleles)
     mhists[1] = float.(mhist)
@@ -334,6 +348,17 @@ function allele_convolve(mhist, nalleles)
         end
     end
     return mhists[nalleles]
+end
+
+
+function allele_convolve(mhist, nalleles)
+    nhist = length(mhist)
+    # Helper: convolve two histograms
+    function convolve(a, b)
+        [sum(a[m-m2+1] * b[m2+1] for m2 in 0:min(nhist - 1, m)) for m in 0:nhist-1]
+    end
+    # Use foldl to apply convolution nalleles times
+    foldl((a, _) -> convolve(a, mhist), 2:nalleles; init=mhist)
 end
 """
     allele_deconvolve(mhist,nalleles)
@@ -448,3 +473,12 @@ function solve_vector(A::Matrix, b::Vector, th=1e-16, tol=1e-1)
 end
 
 
+function normalized_nullspace(M::AbstractMatrix)
+    n = size(M, 1)
+    A = [M'; ones(1, n)]
+    b = [zeros(n); one(eltype(M))]
+    p = A \ b
+    p = max.(p, zero(eltype(p)))
+    p = p / sum(p)
+    return p
+end

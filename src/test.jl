@@ -490,6 +490,37 @@ function test_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, inserts
     return data, model
 end
 
+function test_simrna(; rtarget=[0.1, 0.2, .2, 0.01], transitions=([1, 2], [2, 1]), G=2, nRNA=10, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100, nchains=1)
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
+    data = RNAData("", "", nRNA, h)
+    model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    return data, model
+end
+
+function ll_wrap(param)
+    ll, _ = loglikelihood(param, data, model)
+    return ll
+end
+
+function finite_difference_gradient(f, x; h=1e-6)
+    grad = similar(x)
+    fx = f(x)
+    for i in eachindex(x)
+        xph = copy(x)
+        xph[i] += h
+        grad[i] = (f(xph) - fx) / h
+    end
+    grad
+end
+
+# function test_ad_loglikelihood()
+#     data, model = test_simrna()
+#     param = get_param(model)
+#     ll_wrap = param -> loglikelihood(param, data, model)
+#     grad = Zygote.gradient(ll_wrap, param)
+#     return grad
+# end
+
 # function test_ad_loglikelihood()
 #     # Use your existing test function to get data/model/param
 #     data, model = test_trace()  # or whatever function returns these
