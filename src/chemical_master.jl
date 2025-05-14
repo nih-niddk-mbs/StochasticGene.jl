@@ -301,32 +301,71 @@ function normalized_nullspace(M::SparseMatrixCSC)
 
 end
 
-function normalized_nullspace_ad(M::SparseMatrixCSC)
-    m = size(M, 1)
-    F = qr(M)
-    R = F.R
-    # Back substitution to solve R*p = 0, with p[end] = 1.0
-    function backsub(R)
-        p = [1.0]
-        for i in m-1:-1:1
-            val = -R[i, i+1:end]' * reverse(p) / R[i, i]
-            p = [val; p]
-        end
-        p
-    end
-    p = backsub(R)
-    # AD-friendly permutation
-    pp = [p[findfirst(==(i), F.pcol)] for i in 1:length(p)]
-    max.(pp / sum(pp), 0)
-end
+# function normalized_nullspace_ad(M::SparseMatrixCSC)
+#     m = size(M, 1)
+#     F = qr(M)
+#     R = F.R
+#     # Back substitution to solve R*p = 0, with p[end] = 1.0
+#     function backsub(R)
+#         p = [1.0]
+#         for i in m-1:-1:1
+#             val = -R[i, i+1:end]' * reverse(p) / R[i, i]
+#             p = [val; p]
+#         end
+#         p
+#     end
+#     p = backsub(R)
+#     # AD-friendly permutation
+#     pp = [p[findfirst(==(i), F.pcol)] for i in 1:length(p)]
+#     max.(pp / sum(pp), 0)
+# end
 
-function normalized_nullspace(M::AbstractMatrix)
+function normalized_nullspace1(M::AbstractMatrix)
     n = size(M, 1)
     A = [M'; ones(1, n)]
     b = [zeros(n); one(eltype(M))]
     p = A \ b
     p = max.(p, zero(eltype(p)))
     p = p / sum(p)
+    return p
+end
+
+function normalized_nullspace_zygote(M::AbstractMatrix)
+    # Convert to dense matrix for better numerical stability
+    MT = Matrix(transpose(M))
+    m, n = size(MT)
+    
+    # Use a more robust approach for finding the nullspace
+    # We'll solve (M' * M + εI)x = 1 where ε is a small regularization parameter
+    # This is equivalent to finding the nullspace but more stable
+    ε = 1e-10 * norm(MT, Inf)
+    A = MT' * MT + ε * I
+    b = ones(eltype(MT), n)
+    
+    # Solve the regularized system
+    # This is differentiable and numerically stable
+    p_raw = A \ b
+    
+    # Use a more precise smooth approximation for non-negativity
+    # This is differentiable and maintains better numerical properties
+    β = 1e3  # Sharpness parameter
+    p_pos = 0.5 .* (p_raw .+ sqrt.(p_raw .^ 2 .+ 4 / β))
+    
+    # Normalize with better numerical stability
+    p = p_pos ./ (sum(p_pos) + 1e-10)
+    
+    # Ensure we're close to the true nullspace
+    residual = norm(MT * p, Inf)
+    if residual > 1e-6
+        # If residual is too large, fall back to a more stable method
+        # This is still differentiable but more expensive
+        A = [MT; ones(eltype(MT), 1, n)]
+        b = [zeros(eltype(MT), m); one(eltype(MT))]
+        p = A \ b
+        p = max.(p, zero(eltype(p)))
+        p = p ./ sum(p)
+    end
+    
     return p
 end
 
