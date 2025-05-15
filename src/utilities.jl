@@ -508,6 +508,12 @@ function distribution_array(param::Vector, cv, dist=Normal)
     return d
 end
 
+function truncated_normal(μ, σ, k=4)
+    lower = μ - k * σ
+    upper = μ + k * σ
+    Truncated(Normal(μ, σ), lower, upper)
+end
+
 function sigmanormal(mean, cv)
     return max(abs(mean * cv), abs(cv))
 end
@@ -1943,5 +1949,24 @@ function replace_outlier!(x::AbstractArray{T}) where {T<:Number}
         return true
     end
     return false
+end
+
+# Soft truncated normal: returns a callable logpdf-like function
+# Within [μ-kσ, μ+kσ]: logpdf(Normal(μ, σ), x)
+# Outside: logpdf at boundary minus a quadratic penalty
+function soft_truncated_normal(μ, σ, k=4, penalty=10.0)
+    lower = μ - k * σ
+    upper = μ + k * σ
+    norm = Normal(μ, σ)
+    function logpdf_soft(x)
+        if x < lower
+            return logpdf(norm, lower) - penalty * (lower - x)^2
+        elseif x > upper
+            return logpdf(norm, upper) - penalty * (x - upper)^2
+        else
+            return logpdf(norm, x)
+        end
+    end
+    return logpdf_soft
 end
 

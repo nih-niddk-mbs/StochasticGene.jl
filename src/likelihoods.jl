@@ -1173,7 +1173,7 @@ function logprior(param, model::AbstractGeneTransitionModel)
     d = model.rateprior
     p = 0
     for i in eachindex(d)
-        p -= logpdf(d[i], param[i])
+        p += logpdf(d[i], param[i])
     end
     return p
 end

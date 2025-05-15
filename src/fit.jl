@@ -1114,7 +1114,8 @@ function prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insert
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
+        # return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
+        return prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -1140,7 +1141,8 @@ function prior_distribution(rm, transitions, R::Int, S::Int, insertstep, fittedp
         rcv = priorcv
     end
     if length(rcv) == length(rm)
-        return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
+        # return distribution_array(apply_transform(rm[fittedparam], ratetransforms.f[fittedparam]), prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam]), Normal)
+        return prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
     else
         throw(ArgumentError("priorcv not the same length as prior mean"))
     end
@@ -1167,6 +1169,25 @@ function prior_sigma(r, cv, sigmatransforms)
         end
     end
     return sigma
+end
+
+function prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
+    means = apply_transform(rm[fittedparam], ratetransforms.f[fittedparam])
+    sigmas = prior_sigma(rm[fittedparam], rcv[fittedparam], ratetransforms.f_cv[fittedparam])
+    transforms = ratetransforms.f[fittedparam]
+    prior_distribution_array(means, sigmas, transforms)
+end
+
+function prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=6)
+    d = []
+        for i in eachindex(transforms)
+            if transforms[i] == log || transforms[i] == log_shift1
+                push!(d, truncated_normal(position[i], scale[i], k))
+            else
+                push!(d, Normal(position[i], scale[i]))
+            end
+        end
+    return d
 end
 
 # function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
@@ -1596,3 +1617,7 @@ function alleles(gene::String, path::String; nalleles::Int=2, col::Int=3)
         return isnothing(a) ? nalleles : Int(a)
     end
 end
+
+
+
+

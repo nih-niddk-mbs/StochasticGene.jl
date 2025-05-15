@@ -950,7 +950,6 @@ function read_rna(gene, cond, datapath)
     h = readfile(t)[:, 1]
     # h = readfile(gene, cond, datapath)[:, 1]
     # Only truncate if histogram has more than 40 elements
-    println(h)
     if length(h) > 200
         h = truncate_histogram(h, 0.99, 1000)
     end
