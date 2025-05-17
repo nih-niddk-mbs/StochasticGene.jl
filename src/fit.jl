@@ -1178,7 +1178,7 @@ function prior_distribution_array(rm, rcv, ratetransforms, fittedparam)
     prior_distribution_array(means, sigmas, transforms)
 end
 
-function prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=6)
+function prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=10)
     d = []
         for i in eachindex(transforms)
             if transforms[i] == log || transforms[i] == log_shift1
@@ -1497,6 +1497,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("mcse: ", maximum(measures.mcse))
     println("waic: ", measures.waic)
     println("aic: ", aic(fits))
+    println("aic_onstates: ", aic_onstates(fits.parml, data, model))
     if optimized != 0
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))

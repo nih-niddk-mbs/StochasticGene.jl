@@ -468,17 +468,6 @@ end
 ### functions to be used in the future
 
 
-function burst_aic(model, a::Matrix, b, p0, N, T, data)
-    α, C = forward(a, b, p0, N, T)
-    final_alpha = α[:, T]
-    burst_indices = on_states(model)
-    burst_sum = sum(final_alpha[burst_indices])
-    LL_burst_focused = log(max(burst_sum, eps(Float64)))
-    k = number_of_parameters(model) # You'll need a function to get the number of free parameters
-    AIC_burst_focused = 2 * k - 2 * LL_burst_focused
-    return AIC_burst_focused
-end
-
 function aic_onstates(ratefile, datapath, gene, datacond, traceinfo, label, fittedparam, transitions, G, R, S, insertstep, hierarchical, ratetype)
     r = readrates(ratefile, ratetype)
     data =load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian)
@@ -497,7 +486,7 @@ function aic_onstates(r::Tuple{T1,T2}, components::TComponents, reporter::HMMRep
     a, p0 = make_ap(rates, interval, components, method)
     onstates = reporter.per_state .> 0
     ll_on, ll = _ll_onstates(a, p0, set_d(noiseparams, reporter), trace[1], onstates)
-    2*length(rates) - 2* ll_on, ll
+    2 * length(rates) - 2 * ll_on, 2 * length(rates) - 2 * ll, ll_on, ll
 end
 
 function aic_onstates(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
@@ -520,7 +509,8 @@ function _ll_onstates(a::Matrix, p0::Vector, d, traces, onstates)
     for i in eachindex(traces)
         b = set_b(traces[i], d)
         α, C = forward(a, b, p0)
-        ll_on += log(sum(max.(α[onstates, end], 0.)))
+        # Normalize by dividing by C to get proper likelihood
+        ll_on += log(sum(max.(α[onstates, end], 0.))) - sum(log.(C))
         ll -= sum(log.(C))
     end
     ll_on, ll
