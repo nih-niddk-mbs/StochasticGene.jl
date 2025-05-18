@@ -89,7 +89,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
 
 """
-function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
+function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
 
     r = copy(rin)
     if !isempty(coupling)
@@ -176,7 +176,7 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
             println(initial, "->", final)
         end
 
-        m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+        m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber, verbose)
 
         if onoff
             set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G, R, insertstep, verbose)
@@ -267,7 +267,7 @@ function simulator_ss(rin, transitions, G, R, S, insertstep; warmupsteps=0, coup
 
         update_sshist!(sshist, state, dth, G, R, S)
 
-        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose)
+        update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber, verbose)
 
     end  # while
     # verbose && println(steps)
@@ -853,7 +853,7 @@ function set_reactions(Gtransitions, G::Int, R, S, insertstep)
     return reactions
 end
 """
-    update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling=0)
+    update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber=1, verbose=false)
 
 updates proposed next reaction time and state given the selected action and returns updated number of mRNA
 
@@ -862,7 +862,7 @@ updates proposed next reaction time and state given the selected action and retu
 Arguments are same as defined in simulator
 
 """
-function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, verbose=false)
+function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling, ejectnumber=1, verbose=false)
     !isempty(coupling) && (initialstate = copy(state[index[1], 1]))
     if action < 5
         if action < 3
@@ -883,7 +883,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
             if action == 5
                 transitionR!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final)
             else
-                m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial)
+                m = eject!(tau, state, index, t, m, r, allele, G, R, S, disabled, enabled, initial, ejectnumber)
             end
         else
             if action == 7
@@ -1082,8 +1082,8 @@ end
 
 
 """
-function eject!(tau::Vector, state, index::Tuple, t, m, r, allele, G::Tuple, R::Tuple, S, disabled, enabled, initial)
-    m[index[1]] = eject!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial)
+function eject!(tau::Vector, state, index::Tuple, t, m, r, allele, G::Tuple, R::Tuple, S, disabled, enabled, initial, ejectnumber=1)
+    m[index[1]] = eject!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], allele, G[index[1]], R[index[1]], S[index[1]], disabled, enabled, initial, ejectnumber)
     m
 end
 """
@@ -1091,7 +1091,7 @@ end
 
 TBW
 """
-function eject!(tau::Matrix, state, index::Int, t, m, r, allele, G::Int, R::Int, S, disabled, enabled, initial)
+function eject!(tau::Matrix, state, index::Int, t, m, r, allele, G::Int, R::Int, S, disabled, enabled, initial, ejectnumber=1)
     if state[initial-1, allele] > 0
         tau[enabled[1], allele] = -log(rand()) / (r[enabled[1]]) + t
     end
@@ -1101,7 +1101,7 @@ function eject!(tau::Matrix, state, index::Int, t, m, r, allele, G::Int, R::Int,
     if R > 0
         state[initial, allele] = 0
     end
-    set_decay!(tau, enabled[end], t, m, r)
+    set_decay!(tau, enabled[end], t, m, r, ejectnumber)
 end
 """
     splice!(tau, state, index::Tuple, t, m, r, allele, G, R, initial)
@@ -1150,8 +1150,8 @@ end
 update tau matrix for decay rate
 
 """
-function set_decay!(tau::Vector, index::Tuple, t, m, r)
-    m[index[1]] = set_decay!(tau[index[1]], index[2], t, m[index[1]], r[index[1]])
+function set_decay!(tau::Vector, index::Tuple, t, m, r, ejectnumber=1)
+    m[index[1]] = set_decay!(tau[index[1]], index[2], t, m[index[1]], r[index[1]], ejectnumber)
     m
 end
 """
@@ -1159,13 +1159,14 @@ end
 
 TBW
 """
-function set_decay!(tau::Matrix, index::Int, t, m, r)
-    m += 1
-    if m == 1
-        tau[index, 1] = -log(rand()) / r[index] + t
-    else
-        tau[index, 1] = (m - 1) / m * (tau[index, 1] - t) + t
-    end
+function set_decay!(tau::Matrix, index::Int, t, m, r, ejectnumber=1)
+    m += ejectnumber
+    tau[index, 1] = -log(rand()) / (m * r[index]) + t
+    # if m == 1
+    #     tau[index, 1] = -log(rand()) / r[index] + t
+    # else
+    #     tau[index, 1] = (m - ejectnumber) / m * (tau[index, 1] - t) + t
+    # end
     m
 end
 
