@@ -323,7 +323,7 @@ Fit a simulated trace dataset using a hierarchical model and compare to the targ
 - Tuple of (median fitted parameters, target parameters).
 """
 function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], rinit=[], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1, 2, 3, 4, 5, 6], propcv=0.01, noisepriors=[0.0, 0.1, 1.0, 0.1], hierarchical=(2, [7], tuple()), method=(Tsit5(), true), maxtime=180.0, nchains=1, zeromedian=true)
-    rh = 50.0 .+  1.0 * randn(ntrials)
+    rh = 50.0 .+ 1.0 * randn(ntrials)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials, hierarchical=(6, rh))
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -470,8 +470,8 @@ end
 
 function aic_onstates(ratefile, datapath, gene, datacond, traceinfo, label, fittedparam, transitions, G, R, S, insertstep, hierarchical, ratetype)
     r = readrates(ratefile, ratetype)
-    data =load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian)
-    model = load_model(data, r, r, fittedparam, [], transitions, G, R, S, insertstep, "", 1, .1, Int[], 1., .1, prob_Gaussian, [0.0, 0.2, 1.0, 0.2], Tsit5(), hierarchical, tuple(), nothing, zeromedian, 1)
+    data = load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian)
+    model = load_model(data, r, r, fittedparam, [], transitions, G, R, S, insertstep, "", 1, 0.1, Int[], 1., 0.1, prob_Gaussian, [0.0, 0.2, 1.0, 0.2], Tsit5(), hierarchical, tuple(), nothing, zeromedian, 1)
     aic_onstates(r, data, model)
 end
 
@@ -526,7 +526,7 @@ function _ll_onstates(noiseparams::Vector, a::Matrix, p0::Vector, reporter, trac
         ll_on += log(sum(max.(α[onstates, end], 0.)))
         ll -= sum(log.(C))
     end
-    ll_on, ll   
+    ll_on, ll
 end
 
 ### development test functions
@@ -973,4 +973,138 @@ function smooth_tail(weights, k)
     return smoothed
 end
 
+"""
+    read_measures_csv(filename::String)
+
+Read the measures.csv file and return a DataFrame with the results.
+"""
+function read_measures_csv(filename::String)
+    df = CSV.read(filename, DataFrame)
+    # Sort by AIC to find best model
+    sort!(df, :AIC)
+    return df
+end
+
+
+function read_rates(rates_dir::String, model_name::String)
+    if occursin("-h", model_name)
+        rates_file = joinpath(rates_dir, "shared_trace-HBEC-$(model_name)_1.txt")
+    else
+        rates_file = joinpath(rates_dir, "rates_trace-HBEC-$(model_name)_1.txt")
+    end
+    readrates(rates_file)
+end
+
+function decompose_nstate(model_name::String)
+    parts = split(model_name, "_")
+    G, R, S, insertstep = decompose_model(String(parts[end]))
+    if G == 2
+        transitions = ([1, 2], [2, 1])
+    else
+        transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
+    end
+    return G, R, S, insertstep, transitions
+end
+"""
+    evaluate_models_on_simulated_trace(measures_file::String, rates_dir::String)
+
+Read measures.csv, find the best model by AIC, simulate a single long trace using only the shared parameters of the best model, then for all other models, read their rates, replace their noise/observation parameters with those from the simulation, and for hierarchical models use only the shared/hyper parameters for both rates and noise. Compute loglikelihood and AIC for all models on the simulated data using the existing loglikelihood functions. Returns a DataFrame with the new AIC and loglikelihood values for all models.
+"""
+function simulated_AIC(rates_dir::String; traceinterval=1.0, totaltime=1000.0, probfn=prob_Gaussian, n_noise=4, zeromedian=true, noisepriors=[0.0, 0.2, 1.0, 0.2], ntrials=40, nalleles = 1)
+    # using CSV, DataFrames
+
+    # 1. Read measures file and sort by AIC
+    measures_df = CSV.read(joinpath(rates_dir, "measures.csv"), DataFrame)
+    sort!(measures_df, :AIC)
+
+    # 2. Find the best model (lowest AIC)
+    best_model = measures_df[1, :]
+    best_model_name = String(best_model.Model)
+
+    println(best_model_name)
+
+    rates = read_rates(rates_dir, best_model_name)
+    sim_noise = noisepriors
+    if length(rates) >= n_noise
+        rates[end-n_noise+1:end] .= sim_noise
+    end
+
+    G, R, S, insertstep, transitions = decompose_nstate(best_model_name)
+
+    trace = simulate_trace_vector(rates, transitions, G, R, S, insertstep, traceinterval, totaltime, ntrials)
+
+    nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
+
+    data = TraceData{String,String,Tuple}("trace", "gene", traceinterval, (trace, 0.0, 0.0, nframes, 1.))
+
+    results = DataFrame(Model=String[], AIC=Float64[], LogLikelihood=Float64[])
+    for row in eachrow(measures_df)
+        model_name = String(row.Model)
+
+        rates = read_rates(rates_dir, model_name)
+
+        # Replace noise parameters with those from the simulation
+        if length(rates) >= n_noise
+            rates[end-n_noise+1:end] .= sim_noise
+        end
+
+        G, R, S, insertstep, transitions = decompose_nstate(model_name)
+        n = num_rates(transitions, R, S, insertstep)
+        fittedparam = [collect(1:length(transitions)+2); collect(length(transitions)+R+1:n-1-max(0, S - 1))]
+
+        model = load_model(data, rates, rates, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, .1, Int[], 1., .01, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+
+        param = transform_rates(rates[fittedparam], model)
+        ll, _ = loglikelihood(param, data, model)
+        n_params = length(fittedparam)
+        aic = 2 * n_params - 2 * ll
+        push!(results, (model_name, aic, ll))
+    end
+    sort!(results, :AIC), data
+end
+
+function dwelltime_AIC(rates_dir::String; bins=[collect(1:20), collect(0:100)], nhist=20, dttype=["ON", "OFF"], nalleles=1, onstates=[Int[], Int[]], total=1000000, tol=1e-6)
+    # using CSV, DataFrames
+
+    # 1. Read measures file and sort by AIC
+    measures_df = CSV.read(joinpath(rates_dir, "measures.csv"), DataFrame)
+    sort!(measures_df, :AIC)
+
+    # 2. Find the best model (lowest AIC)
+    best_model = measures_df[1, :]
+    best_model_name = String(best_model.Model)
+
+    println(best_model_name)
+
+    G, R, S, insertstep, transitions = decompose_nstate(best_model_name)
+
+    n = num_rates(transitions, R, S, insertstep)
+    rates = read_rates(rates_dir, best_model_name)[1:n]
+
+    dwelltimes = simulator(rates, transitions, G, R, S, insertstep, nalleles=nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
+
+    data = DwellTimeData("test", "test", bins, dwelltimes[2:end], dttype)
+    
+    results = DataFrame(Model=String[], AIC=Float64[], LogLikelihood=Float64[])
+    for row in eachrow(measures_df)
+        model_name = String(row.Model)
+
+        rates = read_rates(rates_dir, model_name)
+
+        G, R, S, insertstep, transitions = decompose_nstate(model_name)
+        n = num_rates(transitions, R, S, insertstep)
+        fittedparam = [collect(1:length(transitions)+2); collect(length(transitions)+R+1:n-1-max(0, S - 1))]
+
+        model = load_model(data, rates, rates, fittedparam, tuple(), transitions, G, R, S, insertstep, "", nalleles, 0.1, onstates, 1., 0.1, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+
+        param = transform_rates(rates[fittedparam], model)
+
+        ll, _ = loglikelihood(param, data, model)
+
+        n_params = length(fittedparam)
+        aic = 2 * n_params - 2 * ll
+        push!(results, (model_name, aic, ll))
+    end
+    sort!(results, :AIC), data
+end
 
