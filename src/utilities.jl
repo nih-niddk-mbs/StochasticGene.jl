@@ -511,7 +511,7 @@ end
 function truncated_normal(μ, σ, k=4)
     lower = μ - k * σ
     upper = μ + k * σ
-    Truncated(Normal(μ, σ), lower, upper)
+    truncated(Normal(μ, σ), lower, upper)
 end
 
 function sigmanormal(mean, cv)
