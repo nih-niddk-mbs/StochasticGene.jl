@@ -297,23 +297,22 @@ Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
 
-function make_ap(rates, interval, components::TComponents, method=Tsit5())
+# function make_ap(rates, interval, components::TComponents, method=Tsit5())
+#     Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
+#     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+# end
+
+function make_ap(rates::Vector, interval, components::TComponents, method=Tsit5())
     Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
-
-function make_ap(rates, interval, components::TComponents, method=Tsit5())
-    Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
-end
-
 
 function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Tsit5())
     Qtr = make_mat_TC(components, rates, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
-function make_ap(r::Tuple, interval, components::TComponents, method=Tsit5())
+function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=Tsit5())
     r, couplingStrength = r
     Qtr = make_mat_TC(components, r, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
