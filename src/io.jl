@@ -1425,12 +1425,12 @@ readgeweke(file::String) = readrow(file, 11)
 readmcse(file::String) = readrow(file, 12)
 
 function readml(ratefile::String)
-    m = readrow(ratefile, 1, true)
+    m = readrow(ratefile, 1)
     reshape(m, 1, length(m))
 end
 
 function readmean(ratefile::String)
-    m = readrow(ratefile, 2, true)
+    m = readrow(ratefile, 2)
     reshape(m, 1, length(m))
 end
 
