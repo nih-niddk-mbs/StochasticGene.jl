@@ -344,13 +344,13 @@ end
 
 TBW
 """
-function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false)
+function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction = readml)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
     ratefiles = get_files(files, "rates", label, cond, model)
     labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
     # header = ratelabels(model, split(cond, "-"))
     header = ratelabels(labels, split_conditions(cond, multicond))
-    assemble_files(folder, ratefiles, outfile, header, readmedian)
+    assemble_files(folder, ratefiles, outfile, header, readfunction)
     return labels
 end
 
