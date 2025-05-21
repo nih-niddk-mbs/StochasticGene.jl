@@ -995,6 +995,12 @@ function read_rates(rates_dir::String, model_name::String)
     readrates(rates_file)
 end
 
+function read_rates_params(rates_dir::String, model_name::String)
+    rates_file = joinpath(rates_dir, "rates_trace-HBEC-$(model_name)_1.txt")
+    param_file = joinpath(rates_dir, "param-stats_trace-HBEC-$(model_name)_1.txt")
+    readrates(rates_file), readrates(param_file)
+end
+
 function decompose_nstate(model_name::String)
     parts = split(model_name, "_")
     G, R, S, insertstep = decompose_model(String(parts[end]))
@@ -1063,7 +1069,7 @@ function simulated_AIC(rates_dir::String; traceinterval=1.0, totaltime=1000.0, p
     sort!(results, :AIC), data
 end
 
-function dwelltime_AIC(rates_dir::String; bins=[collect(1:20), collect(0:100)], nhist=20, dttype=["ON", "OFF"], nalleles=1, onstates=[Int[], Int[]], total=1000000, tol=1e-6)
+function dwelltime_AIC(rates_dir::String; bins=[collect(1:100), collect(0:100)], nhist=20, dttype=["ON", "OFF"], nalleles=1, onstates=[Int[], Int[]], total=10000000, tol=1e-6)
     # using CSV, DataFrames
 
     # 1. Read measures file and sort by AIC
@@ -1079,9 +1085,9 @@ function dwelltime_AIC(rates_dir::String; bins=[collect(1:20), collect(0:100)], 
     G, R, S, insertstep, transitions = decompose_nstate(best_model_name)
 
     n = num_rates(transitions, R, S, insertstep)
-    rates = read_rates(rates_dir, best_model_name)[1:n]
-
-    dwelltimes = simulator(rates, transitions, G, R, S, insertstep, nalleles=nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
+    rates, _ = read_rates_params(rates_dir, best_model_name)
+    
+    dwelltimes = simulator(rates[1:n], transitions, G, R, S, insertstep, nalleles=nalleles, onstates=onstates[1], bins=bins[1], totalsteps=total, tol=tol)
 
     data = DwellTimeData("test", "test", bins, dwelltimes[2:end], dttype)
     
@@ -1089,7 +1095,10 @@ function dwelltime_AIC(rates_dir::String; bins=[collect(1:20), collect(0:100)], 
     for row in eachrow(measures_df)
         model_name = String(row.Model)
 
-        rates = read_rates(rates_dir, model_name)
+        rates, params = read_rates_params(rates_dir, model_name)
+
+        n_params = length(params)
+        println(n_params)
 
         G, R, S, insertstep, transitions = decompose_nstate(model_name)
         n = num_rates(transitions, R, S, insertstep)
@@ -1101,10 +1110,346 @@ function dwelltime_AIC(rates_dir::String; bins=[collect(1:20), collect(0:100)], 
 
         ll, _ = loglikelihood(param, data, model)
 
-        n_params = length(fittedparam)
         aic = 2 * n_params - 2 * ll
         push!(results, (model_name, aic, ll))
     end
     sort!(results, :AIC), data
 end
+
+
+# using StatsBase # For creating histograms later, if needed
+
+"""
+    process_reporter_times(df::DataFrame)
+
+Analyzes a DataFrame to find columns named "Reporters..." and computes ON and OFF time durations.
+`missing` values are ignored; the series is processed only up to the first `missing` value.
+Typically, `missing` values are expected at the end of the series.
+
+ON is defined as when the reporter value > 0. OFF is when reporter value == 0.
+Edge effects are excluded:
+- An OFF time is valid only if it's preceded by an ON state and followed by an ON state (ON -> OFF -> ON).
+- An ON time is valid only if it's preceded by an OFF state and followed by an OFF state (OFF -> ON -> OFF).
+
+# Arguments
+- `df::DataFrame`: The input DataFrame. Reporter columns can contain numeric or missing values.
+
+# Returns
+- `Dict{String, Dict{String, Vector{Int}}}`: A dictionary where keys are reporter column names.
+  Each value is another dictionary with keys "on_times" and "off_times",
+  which are vectors of integers representing the durations of valid ON and OFF periods.
+"""
+function process_reporter_times(df::DataFrame)
+    
+    on_durations = Int[]
+    off_durations = Int[]
+
+    for rep_col_symb in reporter_col_symbols
+        rep_col_name = string(rep_col_symb)
+        series_with_potential_missing = df[!, rep_col_symb]
+
+        # Determine the effective length of the series (up to the first 'missing')
+        first_missing_index = findfirst(ismissing, series_with_potential_missing)
+
+        local series::AbstractVector # Ensure series is defined in this scope
+        if isnothing(first_missing_index)
+            # No missing values, use the whole series
+            series = series_with_potential_missing
+        else
+            # Truncate the series before the first missing value
+            series = view(series_with_potential_missing, 1:(first_missing_index-1))
+        end
+
+        # 1. Determine states (True for ON, False for OFF) for the non-missing part
+        # Now, 'val' is guaranteed not to be missing within the 'series'
+        states = Bool[val > 0 for val in series]
+
+        # 2. Identify blocks of consecutive states
+        blocks = []
+        if !isempty(states) # This check might be redundant given isempty(series) above, but safe
+            current_block_start_idx = 1
+            for i in 2:length(states)
+                if states[i] != states[current_block_start_idx]
+                    push!(blocks, (start_idx=current_block_start_idx, end_idx=i - 1, state=states[current_block_start_idx]))
+                    current_block_start_idx = i
+                end
+            end
+            push!(blocks, (start_idx=current_block_start_idx, end_idx=length(states), state=states[current_block_start_idx]))
+        end
+
+        num_blocks = length(blocks)
+
+        # 3. Iterate through blocks to find valid ON/OFF durations
+        if num_blocks >= 3
+            for k in 2:(num_blocks-1)
+                prev_block = blocks[k-1]
+                current_block = blocks[k]
+                next_block = blocks[k+1]
+
+                duration = current_block.end_idx - current_block.start_idx + 1
+
+                if current_block.state # Current block is ON
+                    if !prev_block.state && !next_block.state # Preceded and followed by OFF
+                        push!(on_durations, duration)
+                    end
+                else # Current block is OFF
+                    if prev_block.state && next_block.state # Preceded and followed by ON
+                        push!(off_durations, duration)
+                    end
+                end
+            end
+        end
+        # results[rep_col_name] = Dict("on_times" => on_durations, "off_times" => off_durations)
+    end
+    return on_durations, off_durations, make_histogram(on_durations, normalize=true), make_histogram(off_durations, normalize=true)
+end
+
+
+
+
+# This is a conceptual example based on your hmm.jl and metropolis_hastings.jl
+# You'll need to integrate these ideas into your actual codebase.
+
+# Assumed necessary imports and struct definitions (HMMReporter, TComponents, etc.)
+# using Distributions, LinearAlgebra, LogExpFunctions, CUDA, Distributed, StatsBase, LoopVectorization
+# (Add other necessary structs and using statements from your project)
+
+# --- Potentially Modified HMM functions (hmm.jl) ---
+
+"""
+set_b!(b_buffer::AbstractMatrix, trace_segment::AbstractVector, d::Vector{<:Distribution})
+
+In-place version of set_b. Fills the pre-allocated b_buffer.
+Assumes b_buffer has dimensions (N_states, length(trace_segment)).
+"""
+function set_b!(b_buffer::AbstractMatrix, trace_segment::AbstractVector, d::Vector{T_dist}) where {T_dist<:Distribution}
+    N_states = length(d)
+    T_len_segment = length(trace_segment)
+
+    if size(b_buffer, 1) != N_states || size(b_buffer, 2) < T_len_segment
+        # Or resize, or error more gracefully depending on strategy
+        error("b_buffer dimensions are incompatible with N_states or trace_segment length.")
+    end
+
+    # Use a view if b_buffer is larger than needed for this specific trace_segment
+    b_view = view(b_buffer, 1:N_states, 1:T_len_segment)
+
+    for (t_idx, obs) in enumerate(trace_segment)
+        for j_state in 1:N_states
+            # Use @inbounds for slight performance gain if confident about bounds
+            b_view[j_state, t_idx] = pdf(d[j_state], obs)
+        end
+    end
+    # No return needed, b_buffer (via b_view) is modified
+end
+
+# Example for the multi-dimensional trace variant of set_b!
+# function set_b!(b_buffer::AbstractMatrix, trace_segment_row::AbstractMatrix, d_vec_of_dist_vec::Vector{<:Vector{<:Distribution}})
+#     N_states = length(d_vec_of_dist_vec[1]) # Assuming all inner vectors have same N_states
+#     T_len_segment = size(trace_segment_row, 1) # Assuming trace_segment_row is T x num_features
+
+#     if size(b_buffer, 1) != N_states || size(b_buffer, 2) < T_len_segment
+#         error("b_buffer dimensions incompatible.")
+#     end
+#     b_view = view(b_buffer, 1:N_states, 1:T_len_segment)
+#     fill!(b_view, 1.0) # Initialize with 1.0 for product
+
+#     for t_idx in 1:T_len_segment
+#         obs_features = view(trace_segment_row, t_idx, :) # Get the features for this time step
+#         for j_state in 1:N_states
+#             for i_feature in eachindex(d_vec_of_dist_vec) # Iterate over each feature's distributions
+#                 b_view[j_state, t_idx] *= pdf(d_vec_of_dist_vec[i_feature][j_state], obs_features[i_feature])
+#             end
+#         end
+#     end
+# end
+
+
+"""
+forward!(alpha_buffer::AbstractMatrix, C_buffer::AbstractVector, a::AbstractMatrix, b_view::AbstractMatrix, p0::AbstractVector)
+
+In-place version of the forward algorithm.
+Fills pre-allocated alpha_buffer and C_buffer.
+Assumes alpha_buffer has dimensions (N_states, T_len_segment)
+Assumes C_buffer has length T_len_segment
+Assumes b_view is already computed and has dimensions (N_states, T_len_segment)
+"""
+function forward!(alpha_buffer::AbstractMatrix, C_buffer::AbstractVector, a::AbstractMatrix, b_view::AbstractMatrix, p0::AbstractVector)
+    N_states = size(a, 1)
+    T_len_segment = size(b_view, 2)
+
+    if size(alpha_buffer, 1) != N_states || size(alpha_buffer, 2) < T_len_segment || length(C_buffer) < T_len_segment
+        error("Buffer dimensions are incompatible.")
+    end
+
+    # Use views for the buffers to only operate on the necessary part
+    alpha_view = view(alpha_buffer, 1:N_states, 1:T_len_segment)
+    C_view = view(C_buffer, 1:T_len_segment)
+
+    # Initial step
+    # Element-wise multiplication, then assign to the first column of alpha_view
+    # Ensure p0 and b_view[:,1] are compatible for broadcasting if needed, or loop
+    for j_state in 1:N_states
+        alpha_view[j_state, 1] = p0[j_state] * b_view[j_state, 1]
+    end
+
+    current_sum = sum(view(alpha_view, :, 1))
+    C_view[1] = 1.0 / max(current_sum, eps(Float64))
+    # alpha_view[:, 1] .*= C_view[1] # In-place scaling
+    for j_state in 1:N_states
+        alpha_view[j_state, 1] *= C_view[1]
+    end
+
+
+    # Recursive step
+    for t_idx in 2:T_len_segment
+        fill!(view(alpha_view, :, t_idx), 0.0) # Zero out current time step in alpha_view
+        for j_state in 1:N_states       # Current state
+            sum_val = 0.0
+            for i_state in 1:N_states   # Previous state
+                sum_val += alpha_view[i_state, t_idx-1] * a[i_state, j_state]
+            end
+            alpha_view[j_state, t_idx] = sum_val * b_view[j_state, t_idx]
+        end
+        current_sum = sum(view(alpha_view, :, t_idx))
+        C_view[t_idx] = 1.0 / max(current_sum, eps(Float64))
+        # alpha_view[:, t_idx] .*= C_view[t_idx] # In-place scaling
+        for j_state in 1:N_states
+            alpha_view[j_state, t_idx] *= C_view[t_idx]
+        end
+    end
+    # No explicit return needed, buffers are modified.
+    # However, returning the sum of log(C) is often useful for log-likelihood.
+    # This function would be part of a larger log-likelihood calculation.
+end
+
+
+# --- Modified _ll_hmm (conceptual) ---
+# This is for the hierarchical case where `a` and `p0` are shared,
+# but `noiseindividual` means `d` (and thus `b`) is trace-specific.
+
+# Helper function to get max trace length if not already available
+function get_max_trace_length(traces::Vector{<:AbstractArray})
+    isempty(traces) && return 0
+    # Assuming traces[i] is T_frames x N_features or just T_frames
+    return maximum(size(t, 1) for t in traces)
+end
+
+"""
+_ll_hmm_preallocated(
+    a::AbstractMatrix, p0::AbstractVector,
+    noiseindividual::Vector{<:Vector{Float64}}, # Vector of noise params for each trace
+    reporter::HMMReporter, # Or Vector{HMMReporter} if it varies per trace (unlikely)
+    traces::Vector{<:AbstractArray}, # Vector of trace matrices/vectors
+    # Pre-allocated buffers:
+    b_buffer::AbstractMatrix,
+    alpha_buffer::AbstractMatrix,
+    C_buffer::AbstractVector,
+    d_buffer::Vector{<:Distribution} # Buffer for distributions if `set_d` allocates
+)
+
+Calculates log-likelihood using pre-allocated buffers.
+"""
+function _ll_hmm_preallocated(
+    a::AbstractMatrix, p0::AbstractVector,
+    noiseindividual::Vector{<:Vector{Float64}},
+    reporter::HMMReporter, # Assuming a single reporter structure for all traces for simplicity
+    traces::Vector{<:AbstractArray},
+    b_buffer::AbstractMatrix,
+    alpha_buffer::AbstractMatrix,
+    C_buffer::AbstractVector,
+    d_buffer::Vector{T_dist} # Buffer for the distributions
+) where {T_dist<:Distribution}
+
+    total_log_likelihood = 0.0
+    # logpredictions = Vector{Float64}(undef, length(traces)) # If you need individual logpreds
+
+    N_states = size(a, 1)
+
+    for i in eachindex(traces)
+        current_trace = traces[i]
+        current_trace_len = size(current_trace, 1) # Assuming trace is T x features or T-vector
+
+        # 1. Set distributions `d` for the current trace's noise parameters
+        # If set_d itself allocates, you might need a set_d!
+        # For now, assume set_d is relatively cheap or d_buffer is used by it.
+        # This example assumes set_d! populates d_buffer
+        # set_d!(d_buffer, noiseindividual[i], reporter)
+        # If set_d returns a new vector of distributions:
+        current_d = set_d(noiseindividual[i], reporter) # Original call from your code
+
+        # 2. Compute emission probabilities `b` into b_buffer
+        # Pass only the relevant part of the trace if it's a matrix (e.g. trace[i] for vector of traces)
+        set_b!(b_buffer, current_trace, current_d)
+        b_view_for_current_trace = view(b_buffer, 1:N_states, 1:current_trace_len)
+
+        # 3. Run forward algorithm using alpha_buffer and C_buffer
+        forward!(alpha_buffer, C_buffer, a, b_view_for_current_trace, p0)
+
+        # Calculate log-likelihood for this trace
+        # C_view_for_current_trace = view(C_buffer, 1:current_trace_len) # Not strictly needed if sum is done carefully
+        current_trace_log_likelihood = -sum(log.(view(C_buffer, 1:current_trace_len)))
+        total_log_likelihood += current_trace_log_likelihood
+        # logpredictions[i] = current_trace_log_likelihood
+    end
+
+    return total_log_likelihood #, logpredictions (if needed)
+end
+
+
+# --- How to integrate into your metropolis_hastings or main MCMC loop ---
+
+# Inside the function that calls _ll_hmm (e.g., within metropolis_hastings or a worker function):
+# This would be done ONCE per worker process, before the MCMC loop starts.
+
+# Example:
+# function run_single_mcmc_chain(data, model, options, trace_data_for_this_chain)
+# ... (setup a, p0, initial params etc.) ...
+
+# Determine max_trace_len and N_states from data/model
+# max_T = get_max_trace_length(trace_data_for_this_chain) # Or data.trace[1] if all traces are there
+# N_states = model.components.nT # Or derive appropriately
+
+# Pre-allocate buffers based on max possible dimensions
+# b_buffer = Matrix{Float64}(undef, N_states, max_T)
+# alpha_buffer = Matrix{Float64}(undef, N_states, max_T)
+# C_buffer = Vector{Float64}(undef, max_T)
+# d_buffer = Vector{Distribution{Univariate, Continuous}}(undef, N_states) # Example
+
+# Inside your MCMC loop (e.g., in mhstep, which calls loglikelihood, which calls _ll_hmm):
+# ...
+# current_loglik, _ = _ll_hmm_preallocated(
+#                             a, p0,
+#                             current_noise_individual_params, # Extracted for current MCMC sample
+#                             model.reporter,
+#                             trace_data_for_this_chain, # Or data.trace[1]
+#                             b_buffer, alpha_buffer, C_buffer, d_buffer
+#                         )
+# ...
+# end
+
+
+# --- Notes on the `set_d` function family ---
+# Your `set_d` functions often return newly created arrays of Distributions.
+# e.g., `probfn(noiseparams, reporters_per_state, N)`
+# If `probfn` itself is allocating significantly or if creating Distribution objects is costly,
+# you might also need to make `set_d` in-place (`set_d!`) if the `Distribution` objects
+# can be updated rather than recreated. This is more complex as Distributions are often immutable.
+# A simpler approach for `d_buffer` is if `probfn` can take a pre-allocated
+# vector and fill it with *new* Distribution objects. This still allocates the Distribution
+# objects themselves but not the outer vector.
+
+# Example `set_d!` (conceptual, depends on how Distributions can be handled)
+# function set_d!(d_buffer::Vector{<:Distribution}, noiseparams, reporter::HMMReporter)
+#     # This is tricky if Distribution objects are immutable and can't be updated.
+#     # More likely, you'd fill d_buffer with newly created distributions.
+#     temp_d_vector = reporter.probfn(noiseparams, reporter.per_state) # Original call
+#     if length(d_buffer) == length(temp_d_vector)
+#         d_buffer .= temp_d_vector # Copies references if temp_d_vector holds objects
+#     else
+#         error("d_buffer size mismatch")
+#     end
+# end
+# This `set_d!` example might not save much if the main cost is creating the Distribution objects.
+# The primary win is usually from pre-allocating the large Float64 matrices like `b_buffer` and `alpha_buffer`.
 

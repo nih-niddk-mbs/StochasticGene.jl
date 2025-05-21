@@ -58,16 +58,16 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward(Q, interval, method=Tsit5(), save=false)
+function kolmogorov_forward_ad(Q, interval, method=Tsit5(), save=false)
     tspan = (zero(eltype(Q)), interval)
     u0 = Matrix{eltype(Q)}(I, size(Q)...)
     prob = ODEProblem(fkf, u0, tspan, Q)
     sol = solve(prob, method; save_everystep=save)
-    return sol[:, 2]
+    return sol.u[end]
 end
 
 """
-    kolmogorov_forward_inplace(Q, interval, method=Rosenbrock23(), save=false)
+    kolmogorov_forward_inplace(Q, interval, method=Tsit5(), save=false)
 
 return the solution of the Kolmogorov forward equation 
 returns initial condition and solution at time = interval
@@ -75,10 +75,11 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_forward_inplace(Q, interval, method=Rosenbrock23(), save=false)
+function kolmogorov_forward(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkf!, Matrix(I, size(Q)), tspan, Q)
-    solve(prob, method, save_everystep=save)[:, 2]
+    sol = solve(prob, method, save_everystep=save)
+    sol.u[end]
 end
 
 
@@ -91,11 +92,12 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
+function kolmogorov_backward_ad(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     u0 = Matrix{eltype(Q)}(I, size(Q)...)
     prob = ODEProblem(fkb, u0, tspan, Q)
-    solve(prob, method, save_everystep=save)[:, 2]
+    sol = solve(prob, method, save_everystep=save)
+    sol.u[end]
 end
 
 
@@ -108,10 +110,11 @@ returns initial condition and solution at time = interval
 - `Q`: transition rate matrix
 - `interval`: interval between frames (total integration time)
 """
-function kolmogorov_backward_inplace(Q, interval, method=Tsit5(), save=false)
+function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
     tspan = (0.0, interval)
     prob = ODEProblem(fkb!, Matrix(I, size(Q)), tspan, Q)
-    solve(prob, method, save_everystep=save)[:, 2]
+    sol = solve(prob, method, save_everystep=save)
+    sol.u[end]
 end
 
 
@@ -293,18 +296,24 @@ Arguments:
 Qtr is the transpose of the Markov process transition rate matrix Q
 
 """
-function make_ap(rates, interval, components::TComponents, method=Rosenbrock23())
+
+function make_ap(rates, interval, components::TComponents, method=Tsit5())
+    Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+end
+
+function make_ap(rates, interval, components::TComponents, method=Tsit5())
     Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
 
-function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Rosenbrock23())
+function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Tsit5())
     Qtr = make_mat_TC(components, rates, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
-function make_ap(r::Tuple, interval, components::TComponents, method=Rosenbrock23())
+function make_ap(r::Tuple, interval, components::TComponents, method=Tsit5())
     r, couplingStrength = r
     Qtr = make_mat_TC(components, r, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
