@@ -781,7 +781,7 @@ end
 Concatenate parameter samples from multiple `Fit` objects into a single array.
 Returns a matrix of parameters.
 """
-function merge_param(fits::Vector)
+function merge_param_old(fits::Vector)
     param = fits[1].param
     for i in 2:length(fits)
         param = [param fits[i].param]
@@ -789,18 +789,60 @@ function merge_param(fits::Vector)
     return param
 end
 """
+    merge_param(fits::Vector)
+
+Horizontally concatenate the `param` matrices from a collection of
+`Fit` objects (possibly of differing lengths).  Returns a
+`d × total_samples` matrix.
+"""
+function merge_param(fits::Vector)
+    d = size(fits[1].param, 1)
+    @assert all(size(f.param, 1) == d for f in fits) "parameter dimension differs"
+
+    n_tot = sum(size(f.param, 2) for f in fits)
+    out = Matrix{Float64}(undef, d, n_tot)
+
+    col = 1
+    for f in fits
+        n = size(f.param, 2)
+        @inbounds copyto!(out, (col - 1) * d + 1, f.param, 1, n * d)
+        col += n
+    end
+    return out
+end
+
+"""
     merge_ll(fits::Vector)
 
 Concatenate log-likelihood samples from multiple `Fit` objects into a single array.
 Returns a vector of log-likelihoods.
 """
-function merge_ll(fits::Vector)
+function merge_ll_old(fits::Vector)
     ll = fits[1].ll
     for i in 2:length(fits)
         ll = [ll; fits[i].ll]
     end
     return ll
 end
+"""
+    merge_ll(fits::Vector)
+
+Concatenate the `ll` vectors from a collection of `Fit` objects into
+one long `Vector{Float64}`.
+"""
+function merge_ll(fits::Vector)
+    n_tot = sum(length(f.ll) for f in fits)
+    out = Vector{Float64}(undef, n_tot)
+
+    pos = 1
+    for f in fits
+        n = length(f.ll)
+        @inbounds copyto!(out, pos, f.ll, 1, n)
+        pos += n
+    end
+    return out
+end
+
 
 """
     merge_fit(chain::Array{Tuple,1})
