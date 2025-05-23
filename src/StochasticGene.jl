@@ -35,6 +35,7 @@ This module provides a comprehensive set of tools for simulating stochastic mode
 
 """
 module StochasticGene
+__precompile__(true)
 
 using CSV
 using DataFrames
