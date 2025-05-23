@@ -413,17 +413,23 @@ returns Fit structure
 ll is negative loglikelihood
 
 """
-function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
-    llout = Array{Float64,1}(undef, samplesteps)
+function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, SLAB=10000)
+    llout = Array{Float64,1}(undef, SLAB)
+    parout = Array{Float64,2}(undef, length(param), SLAB)
     pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
     lppd = fill(-Inf, length(logpredictions))
     accepttotal = 0
-    parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
+
+        if step > length(llout)
+            parout = hcat(parout, Matrix{Float64}(undef, length(param), SLAB))
+            resize!(llout, length(llout) + SLAB)
+        end
+
         if ll > llml
             llml, parml = ll, param
         end
@@ -437,62 +443,63 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     Fit(parout[:, 1:step], llout[1:step], parml, llml, lppd, pwaic, prior, accepttotal, step)
 end
 
-"""
-    sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
 
-Run the MCMC sampling phase, but only keep every `thin_interval`-th sample (thinning).
-Returns a `Fit` structure with thinned samples.
-"""
-function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
-    # Number of samples to keep after thinning
-    kept_samples = div(samplesteps, thin_interval)
+# """
+#     sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
 
-    llout = Array{Float64,1}(undef, kept_samples)
-    parout = Array{Float64,2}(undef, length(param), kept_samples)
+# Run the MCMC sampling phase, but only keep every `thin_interval`-th sample (thinning).
+# Returns a `Fit` structure with thinned samples.
+# """
+# function sample_with_thinning(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, thin_interval=10)
+#     # Number of samples to keep after thinning
+#     kept_samples = div(samplesteps, thin_interval)
 
-    # WAIC components
-    pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
-    lppd = fill(-Inf, length(logpredictions))
+#     llout = Array{Float64,1}(undef, kept_samples)
+#     parout = Array{Float64,2}(undef, length(param), kept_samples)
 
-    accepttotal = 0
-    prior = logprior(param, model)
-    total_step = 0
-    saved_step = 0
+#     # WAIC components
+#     pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
+#     lppd = fill(-Inf, length(logpredictions))
 
-    while total_step < samplesteps && time() - t1 < maxtime
-        total_step += 1
+#     accepttotal = 0
+#     prior = logprior(param, model)
+#     total_step = 0
+#     saved_step = 0
 
-        # MCMC step
-        accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
+#     while total_step < samplesteps && time() - t1 < maxtime
+#         total_step += 1
 
-        # Update maximum likelihood
-        if ll > llml
-            llml, parml = ll, param
-        end
+#         # MCMC step
+#         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
 
-        # Save only every thin_interval steps
-        if total_step % thin_interval == 0
-            saved_step += 1
-            parout[:, saved_step] = param
-            llout[saved_step] = ll
-            lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
-        end
+#         # Update maximum likelihood
+#         if ll > llml
+#             llml, parml = ll, param
+#         end
 
-        accepttotal += accept
-    end
+#         # Save only every thin_interval steps
+#         if total_step % thin_interval == 0
+#             saved_step += 1
+#             parout[:, saved_step] = param
+#             llout[saved_step] = ll
+#             lppd, pwaic = update_waic(lppd, pwaic, logpredictions)
+#         end
 
-    # Adjust for actual number of samples saved
-    if saved_step < kept_samples
-        parout = parout[:, 1:saved_step]
-        llout = llout[1:saved_step]
-    end
+#         accepttotal += accept
+#     end
 
-    # Adjust WAIC components
-    pwaic = saved_step > 1 ? pwaic[3] / (saved_step - 1) : pwaic[3]
-    lppd .-= log(saved_step)
+#     # Adjust for actual number of samples saved
+#     if saved_step < kept_samples
+#         parout = parout[:, 1:saved_step]
+#         llout = llout[1:saved_step]
+#     end
 
-    return Fit(parout, llout, parml, llml, lppd, pwaic, prior, accepttotal, total_step)
-end
+#     # Adjust WAIC components
+#     pwaic = saved_step > 1 ? pwaic[3] / (saved_step - 1) : pwaic[3]
+#     lppd .-= log(saved_step)
+
+#     return Fit(parout, llout, parml, llml, lppd, pwaic, prior, accepttotal, total_step)
+# end
 
 
 """
