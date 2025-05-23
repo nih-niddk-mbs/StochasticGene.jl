@@ -58,12 +58,12 @@ the function, it will parse the numerical method rather than just writing it.
 """
 function makeswarm(; gene::String="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1, project="", prerun=false)
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian::Bool=false, datacol=3, ejectnumber=1, project="", prerun=false, sysimage="")
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
     sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
-    write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, project)
+    write_swarmfile(joinpath(root, sfile), nchains, nthreads, juliafile, project, sysimage)
     write_fitfile(joinpath(root, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, prerun)
@@ -167,12 +167,14 @@ Writes a swarmfile for a single Julia file.
 # Description
 This function writes a swarmfile that specifies how to run a single Julia file with the given number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="")
+function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project="", sysimage = "")
     f = open(sfile, "w")
     if isempty(project)
         writedlm(f, ["julia -t $nthreads -p" nchains juliafile])
-    else
+    elseif isempty(sysimage)
         writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile])
+    else
+        writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains juliafile])
     end
     close(f)
 end
