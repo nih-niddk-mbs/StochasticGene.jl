@@ -1003,25 +1003,25 @@ end
 Compute the effective sample size (ESS) for each parameter in the MCMC chain.
 Returns a vector of ESS values.
 """
-function compute_ess(params)
-    n_params = size(params, 1)
-    n_samples = size(params, 2)
-    ess = zeros(n_params)
+# function compute_ess(params)
+#     n_params = size(params, 1)
+#     n_samples = size(params, 2)
+#     ess = zeros(n_params)
 
-    for i in 1:n_params
-        # Calculate autocorrelation
-        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        # Find where autocorrelation drops below 0.05
-        cutoff = findfirst(x -> abs(x) < 0.05, acf)
-        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+#     for i in 1:n_params
+#         # Calculate autocorrelation
+#         acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+#         # Find where autocorrelation drops below 0.05
+#         cutoff = findfirst(x -> abs(x) < 0.05, acf)
+#         cutoff = isnothing(cutoff) ? length(acf) : cutoff
 
-        # Sum of autocorrelations with appropriate cutoff
-        tau = 1 + 2 * sum(acf[2:cutoff])
-        ess[i] = n_samples / tau
-    end
+#         # Sum of autocorrelations with appropriate cutoff
+#         tau = 1 + 2 * sum(acf[2:cutoff])
+#         ess[i] = n_samples / tau
+#     end
 
-    return ess
-end
+#     return ess
+# end
 
 """
     compute_geweke(params; first_frac=0.1, last_frac=0.5)
@@ -1029,9 +1029,41 @@ end
 Compute Geweke z-scores for each parameter to assess MCMC convergence.
 Returns a vector of z-scores.
 """
+# function compute_geweke(params; first_frac=0.1, last_frac=0.5)
+#     n_params = size(params, 1)
+#     n_samples = size(params, 2)
+
+#     first_end = Int(floor(first_frac * n_samples))
+#     last_start = Int(floor((1 - last_frac) * n_samples))
+
+#     z_scores = zeros(n_params)
+
+#     for i in 1:n_params
+#         first_mean = mean(params[i, 1:first_end])
+#         last_mean = mean(params[i, last_start:end])
+
+#         # Spectral density estimates for variance
+#         first_var = spectrum0(params[i, 1:first_end])
+#         last_var = spectrum0(params[i, last_start:end])
+
+#         # Z-score
+#         z_scores[i] = (first_mean - last_mean) /
+#                       sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
+#     end
+
+#     return z_scores
+# end
+
 function compute_geweke(params; first_frac=0.1, last_frac=0.5)
     n_params = size(params, 1)
     n_samples = size(params, 2)
+
+    min_samples_needed = 10 # You can adjust this minimum as needed
+
+    if n_samples < min_samples_needed
+        @warn "Insufficient number of samples ($n_samples) to compute Geweke diagnostic. Skipping calculation."
+        return fill(NaN, n_params) # Return NaN for all parameters
+    end
 
     first_end = Int(floor(first_frac * n_samples))
     last_start = Int(floor((1 - last_frac) * n_samples))
@@ -1047,8 +1079,8 @@ function compute_geweke(params; first_frac=0.1, last_frac=0.5)
         last_var = spectrum0(params[i, last_start:end])
 
         # Z-score
-        z_scores[i] = (first_mean - last_mean) /
-                      sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
+        denominator = sqrt(first_var / first_end + last_var / (n_samples - last_start + 1))
+        z_scores[i] = iszero(denominator) ? NaN : (first_mean - last_mean) / denominator
     end
 
     return z_scores
@@ -1072,28 +1104,101 @@ end
 Compute the Monte Carlo standard error (MCSE) for each parameter.
 Returns a vector of MCSE values.
 """
+# function compute_mcse(params)
+#     n_params = size(params, 1)
+#     n_samples = size(params, 2)
+#     mcse = zeros(n_params)
+
+#     for i in 1:n_params
+#         # Calculate autocorrelation
+#         acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+#         # Find where autocorrelation drops below 0.05
+#         cutoff = findfirst(x -> abs(x) < 0.05, acf)
+#         cutoff = isnothing(cutoff) ? length(acf) : cutoff
+
+#         # Sum of autocorrelations
+#         tau = 1 + 2 * sum(acf[2:cutoff])
+
+#         # Standard error
+#         val = tau * var(params[i, :]) / n_samples
+#         mcse[i] = sqrt(max(val, 0.0))
+#     end
+
+#     return mcse
+# end
+
+
+
+function compute_ess(params)
+    n_params = size(params, 1)
+    n_samples = size(params, 2)
+    min_samples_needed = 10 # Adjust as needed
+    ess = zeros(n_params)
+
+    if n_samples < min_samples_needed
+        @warn "Insufficient number of samples ($n_samples) to compute ESS. Returning NaN."
+        return fill(NaN, n_params)
+    end
+
+    for i in 1:n_params
+        acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
+        cutoff = findfirst(x -> abs(x) < 0.05, acf)
+        cutoff = isnothing(cutoff) ? length(acf) : cutoff
+        tau = 1 + 2 * sum(acf[2:cutoff])
+        ess[i] = n_samples / tau
+    end
+    return ess
+end
+
 function compute_mcse(params)
     n_params = size(params, 1)
     n_samples = size(params, 2)
+    min_samples_needed = 10 # Adjust as needed
     mcse = zeros(n_params)
 
+    if n_samples < min_samples_needed
+        @warn "Insufficient number of samples ($n_samples) to compute MCSE. Returning NaN."
+        return fill(NaN, n_params)
+    end
+
     for i in 1:n_params
-        # Calculate autocorrelation
         acf = autocor(params[i, :], 0:min(1000, n_samples - 1))
-        # Find where autocorrelation drops below 0.05
         cutoff = findfirst(x -> abs(x) < 0.05, acf)
         cutoff = isnothing(cutoff) ? length(acf) : cutoff
-
-        # Sum of autocorrelations
         tau = 1 + 2 * sum(acf[2:cutoff])
-
-        # Standard error
         val = tau * var(params[i, :]) / n_samples
         mcse[i] = sqrt(max(val, 0.0))
     end
-
     return mcse
 end
+
+function compute_rhat(params::Vector{Array})
+    N = chainlength(params)
+    M = length(params)
+    n_params = size(params[1], 1)
+    min_samples_needed = 10 # Adjust as needed
+
+    if M < 2
+        @warn "Insufficient number of chains ($M) to compute R-hat. Returning NaN."
+        return fill(NaN, n_params)
+    elseif N < min_samples_needed
+        @warn "Insufficient number of samples per chain ($N) to compute R-hat. Returning NaN."
+        return fill(NaN, n_params)
+    end
+
+    m = Matrix{Float64}(undef, n_params, 2 * M)
+    s = similar(m)
+    for i in 1:M
+        m[:, 2*i-1] = mean(params[i][:, 1:N], dims=2)
+        m[:, 2*i] = mean(params[i][:, N+1:2*N], dims=2)
+        s[:, 2*i-1] = var(params[i][:, 1:N], dims=2)
+        s[:, 2*i] = var(params[i][:, N+1:2*N], dims=2)
+    end
+    B = N * var(m, dims=2)
+    W = mean(s, dims=2)
+    return sqrt.((N - 1) / N .+ B ./ W / N)
+end
+
 
 
 
