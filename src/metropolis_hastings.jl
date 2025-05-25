@@ -852,7 +852,7 @@ returns Fit structure merged from multiple runs
 """
 merge_fit(chain::Array{Tuple,1}) = merge_fit(collate_fit(chain))
 
-function merge_fit(fits::Array{Fit,1})
+function merge_fit_old(fits::Array{Fit,1})
     param = merge_param(fits)
     ll = merge_ll(fits)
     parml, llml = find_ml(fits)
@@ -1324,6 +1324,7 @@ function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
     if total_bytes < max_memory
         return fits
     end
+    @warn "Thinning chains to fit within memory limit."
 
     # Calculate required thinning factor
     required_thinning = ceil(Int, total_bytes / max_memory)
@@ -1340,7 +1341,7 @@ function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
     return thinned_fits
 end
 
-function merge_fit_memory_aware(fits::Array{Fit,1}, max_memory::Int=64 * 1024^3)
+function merge_fit(fits::Array{Fit,1}, max_memory::Int=48*1024^3)
     # First thin chains if necessary
     thinned_fits = memory_aware_thin(fits, max_memory)
 
