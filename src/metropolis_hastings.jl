@@ -946,7 +946,7 @@ end
 
 
 """
-function compute_rhat(params::Vector{Array})
+function compute_rhat_old(params::Vector{Array})
     N = chainlength(params)
     M = length(params)
     m = Matrix{Float64}(undef, size(params[1], 1), 2 * M)
@@ -1303,3 +1303,66 @@ function thin_columns(mat; maxcols=5000)
 end
 
 
+function estimate_memory_usage(fits::Vector{Fit})
+    # Estimate memory usage in bytes
+    # Each Float64 is 8 bytes
+    # We need to account for both param and ll arrays
+    total_bytes = 0
+    for f in fits
+        param_bytes = size(f.param, 1) * size(f.param, 2) * 8
+        ll_bytes = length(f.ll) * 8
+        total_bytes += param_bytes + ll_bytes
+    end
+    return total_bytes
+end
+
+function memory_aware_thin(fits::Vector{Fit}, max_memory::Int=48 * 1024^3)
+    # First estimate total memory usage
+    total_bytes = estimate_memory_usage(fits)
+
+    # If we're already below the limit, no need to thin
+    if total_bytes < max_memory
+        return fits
+    end
+
+    # Calculate required thinning factor
+    required_thinning = ceil(Int, total_bytes / max_memory)
+
+    # Apply thinning to each chain
+    thinned_fits = similar(fits)
+    for i in 1:length(fits)
+        f = fits[i]
+        param = f.param[:, 1:size(f.param, 2):required_thinning]
+        ll = f.ll[1:length(f.ll):required_thinning]
+        thinned_fits[i] = Fit(param, ll, f.parml, f.llml, f.lppd, f.pwaic, f.prior, f.accept, f.total)
+    end
+
+    return thinned_fits
+end
+
+function merge_fit_memory_aware(fits::Array{Fit,1}, max_memory::Int=64 * 1024^3)
+    # First thin chains if necessary
+    thinned_fits = memory_aware_thin(fits, max_memory)
+
+    # Then proceed with normal merge
+    param = merge_param(thinned_fits)
+    ll = merge_ll(thinned_fits)
+    parml, llml = find_ml(thinned_fits)
+    lppd = thinned_fits[1].lppd
+    pwaic = thinned_fits[1].pwaic
+    prior = thinned_fits[1].prior
+    accept = thinned_fits[1].accept
+    total = thinned_fits[1].total
+
+    for i in 2:length(thinned_fits)
+        accept += thinned_fits[i].accept
+        total += thinned_fits[i].total
+        prior += thinned_fits[i].prior
+        lppd = logsumexp(lppd, thinned_fits[i].lppd)
+        pwaic += thinned_fits[i].pwaic
+    end
+
+    return Fit(param, ll, parml, llml, lppd .- log(length(thinned_fits)),
+        pwaic / length(thinned_fits), prior / length(thinned_fits),
+        accept, total)
+end
