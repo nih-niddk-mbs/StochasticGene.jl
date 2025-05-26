@@ -1501,7 +1501,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     println("mcse: ", maximum(measures.mcse))
     println("waic: ", measures.waic)
     println("aic: ", aic(fits))
-    println("aic_onstates: ", aic_onstates(fits.parml, data, model))
+    # println("aic_onstates: ", aic_onstates(fits.parml, data, model))
     if optimized != 0
         println("Optimized ML: ", Optim.minimum(optimized))
         println("Optimized rates: ", exp.(Optim.minimizer(optimized)))
