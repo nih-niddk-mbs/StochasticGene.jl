@@ -412,7 +412,7 @@ This function returns matrices U, Uminus, and Uplus for m transitions, using the
 # Returns
 - `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices U, Uminus, and Uplus.
 """
-function make_mat_U(total::Int, decay::Float64, ejectnumber=1)
+function make_mat_U_old(total::Int, decay::Float64, ejectnumber=1)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
@@ -427,6 +427,53 @@ function make_mat_U(total::Int, decay::Float64, ejectnumber=1)
     Uminus[total, total-1] = 1
     return U, Uminus, Uplus
 end
+
+"""
+    make_mat_U(total::Int, decay::Float64, mean_eject::Float64)
+
+Create U matrix with Poisson-distributed ejection
+
+# Arguments
+- `total::Int`: Total number of mRNA states
+- `decay::Float64`: mRNA decay rate
+- `mean_eject::Float64`: Mean number of mRNAs ejected
+
+# Returns
+- `U::SparseMatrixCSC`: Transition matrix
+- `Uminus::SparseMatrixCSC`: Ejection matrix
+- `Uplus::SparseMatrixCSC`: Birth matrix
+"""
+function make_mat_U(total::Int, decay::Float64, mean_eject = 1)
+    max_eject = ceil(Int, mean_eject + 3*sqrt(mean_eject))  # 3 standard deviations
+    
+    # Create matrices
+    U = spzeros(total, total)
+    Uminus = spzeros(total, total)
+    Uplus = spzeros(total, total)
+    
+    # Set decay terms
+    for m = 2:total-1
+        U[m, m] = -decay * (m - 1)
+        Uplus[m, m+1] = decay * m
+    end
+    U[total, total] = -decay * (total - 1)
+    Uplus[total, total+1] = decay * total
+
+    d = Poisson(mean_eject)
+    
+    # Set ejection terms using Poisson distribution
+    for m = 1:total
+        # Calculate Poisson probabilities
+        for k = 0:min(m, max_eject)
+            if m - k >= 1
+                Uminus[m, m-k] = pdf(d, k)
+            end
+        end
+    end
+    
+    return U, Uminus, Uplus
+end
+
 
 """
     make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, decay::Float64, total::Int)
