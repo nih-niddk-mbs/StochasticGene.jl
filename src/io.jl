@@ -861,10 +861,14 @@ function write_info(file::String, data, model, labels)
     f = open(file, "w")
     if typeof(model) <: GRSMmodel && hasproperty(model.trait, :hierarchical)
         # writedlm(f, labels[1:1, 1:num_all_parameters(model)], ',')  # labels
+        println(model.trait) 
         writedlm(f, labels[1:1, model.trait[1].fittedpriors], ',')  # labels
+        writedlm(f, apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait[1].fittedpriors])', ',')
     else
         writedlm(f, labels[1:1, model.fittedparam], ',')  # labels
+        writedlm(f, apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])', ',')
     end
+    
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
     writedlm(f, [model.Gtransitions], ',')
