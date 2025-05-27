@@ -305,6 +305,7 @@ struct HierarchicalTrait
     paramstart::Int
     hyperindices::Vector{Vector}
     fittedshared::Vector{Int}
+    fittedpriors::Vector{Int}
 end
 
 """

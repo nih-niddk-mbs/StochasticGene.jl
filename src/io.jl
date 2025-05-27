@@ -859,8 +859,12 @@ TBW
 """
 function write_info(file::String, data, model, labels)
     f = open(file, "w")
-    writedlm(f, labels, ',')
-    writedlm(f, [exp.(mean.(model.rateprior))], ',')
+    if typeof(model) <: GRSMmodel && hasproperty(model.trait, :hierarchical)
+        # writedlm(f, labels[1:1, 1:num_all_parameters(model)], ',')  # labels
+        writedlm(f, labels[1:1, model.trait[1].fittedpriors], ',')  # labels
+    else
+        writedlm(f, labels[1:1, model.fittedparam], ',')  # labels
+    end
     writedlm(f, [mean.(model.rateprior)], ',')
     writedlm(f, [std.(model.rateprior)], ',')
     writedlm(f, [model.Gtransitions], ',')
@@ -941,7 +945,7 @@ function read_rna(gene, cond, datapath)
     if length(h) < 4
         h = vcat(h, zeros(4 - length(h)))
     end
-    println("sum(h): ", sum(h))
+    println("Histogram count: ", sum(h))
     nhist = length(h)
     return nhist, h
 end

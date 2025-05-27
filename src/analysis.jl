@@ -1189,10 +1189,6 @@ function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, inse
     make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, coupling)
 end
 
-########
-# load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
-
-
 """
     write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
 

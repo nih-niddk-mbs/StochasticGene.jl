@@ -154,10 +154,10 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
     elementsRGbar::Vector{Element}
     elementsRG::Vector{Element}
 end
-struct TCoupledUnitComponents <: AbstractTComponents
+struct TCoupledUnitComponents{sourceType, targetType} <: AbstractTComponents
     nT::Int
-    sourceState::Union{Int,Vector{Int}}
-    targetTransition::Union{Int,Vector{Int}}
+    sourceState::sourceType
+    targetTransition::targetType
     elementsT::Vector{Element}
     elementsSource::Vector{Element}
     elementsTarget::Vector{Element}

@@ -165,7 +165,7 @@ end
 function TCoupledUnitComponents(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, elementsSource, elementsTarget, nT = set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    TCoupledUnitComponents(nT, source_state, target_transition, elementsT, elementsSource, elementsTarget)
+    TCoupledUnitComponents{typeof(source_state), typeof(target_transition)}(nT, source_state, target_transition, elementsT, elementsSource, elementsTarget)
 end
 
 """
@@ -213,7 +213,7 @@ TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype="") 
 function TCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = TCoupledUnitComponents[]
     for i in eachindex(G)
-        push!(comp, TCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(comp, TCoupledUnitComponents{typeof(source_state[i]), typeof(target_transition[i])}(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
