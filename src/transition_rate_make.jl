@@ -443,36 +443,57 @@ Create U matrix with Poisson-distributed ejection
 - `Uminus::SparseMatrixCSC`: Ejection matrix
 - `Uplus::SparseMatrixCSC`: Birth matrix
 """
-function make_mat_U(total::Int, decay::Float64, mean_eject = 1)
-    max_eject = ceil(Int, mean_eject + 3*sqrt(mean_eject))  # 3 standard deviations
-    
-    # Create matrices
+
+function make_mat_U(total::Int, decay::Float64, mean_eject=1.)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
-    
-    # Set decay terms
+    # Generate matrices for m transitions
+    Uplus[1, 2] = decay
+    d = Poisson(mean_eject)
     for m = 2:total-1
         U[m, m] = -decay * (m - 1)
-        Uplus[m, m+1] = decay * m
-    end
-    U[total, total] = -decay * (total - 1)
-    Uplus[total, total+1] = decay * total
-
-    d = Poisson(mean_eject)
-    
-    # Set ejection terms using Poisson distribution
-    for m = 1:total
-        # Calculate Poisson probabilities
-        for k = 0:min(m, max_eject)
+        for k = 0:min(m, mean_eject)
             if m - k >= 1
                 Uminus[m, m-k] = pdf(d, k)
             end
         end
+        Uplus[m, m+1] = decay * m
     end
-    
+    U[total, total] = -decay * (total - 1)
+    Uminus[total, total-1] = 1
     return U, Uminus, Uplus
 end
+# function make_mat_U(total::Int, decay::Float64, mean_eject = 1)
+#     max_eject = ceil(Int, mean_eject + 3*sqrt(mean_eject))  # 3 standard deviations
+    
+#     # Create matrices
+#     U = spzeros(total, total)
+#     Uminus = spzeros(total, total)
+#     Uplus = spzeros(total, total)
+    
+#     # Set decay terms
+#     for m = 2:total-1
+#         U[m, m] = -decay * (m - 1)
+#         Uplus[m, m+1] = decay * m
+#     end
+#     U[total, total] = -decay * (total - 1)
+#     Uplus[total, total+1] = decay * total
+
+#     d = Poisson(mean_eject)
+    
+#     # Set ejection terms using Poisson distribution
+#     for m = 1:total
+#         # Calculate Poisson probabilities
+#         for k = 0:min(m, max_eject)
+#             if m - k >= 1
+#                 Uminus[m, m-k] = pdf(d, k)
+#             end
+#         end
+#     end
+    
+#     return U, Uminus, Uplus
+# end
 
 
 """

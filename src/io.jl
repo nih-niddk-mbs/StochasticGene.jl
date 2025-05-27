@@ -933,14 +933,15 @@ function read_rna(gene, cond, datapath)
     t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
     h = readfile(t)[:, 1]
     # h = readfile(gene, cond, datapath)[:, 1]
-    # Only truncate if histogram has more than 40 elements
-    if length(h) > 200
+    # Only truncate if histogram has more than 400 elements
+    if length(h) > 300
         h = truncate_histogram(h, 0.99, 1000)
     end
     # Ensure h has at least 10 elements by padding with zeros if needed
     if length(h) < 4
         h = vcat(h, zeros(4 - length(h)))
     end
+    println("sum(h): ", sum(h))
     nhist = length(h)
     return nhist, h
 end
