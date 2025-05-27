@@ -1399,10 +1399,11 @@ This function creates a histogram from the provided vector of data values `r`. I
 - `Vector{Int}`: A vector representing the histogram, where each element corresponds to the count of a unique value in the input vector.
 """
 function make_histogram(r; normalize=false)
-    nhist = maximum(r)
+    c = Int.(r)
+    nhist = maximum(c)
     h = zeros(Int, nhist + 1)
-    for c in r
-        h[c] += 1
+    for i in c
+        h[i+1] += 1
     end
     if normalize
         return h / sum(h)
