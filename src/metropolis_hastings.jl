@@ -1178,10 +1178,11 @@ function compute_rhat(params::Vector{Array})
     n_params = size(params[1], 1)
     min_samples_needed = 10 # Adjust as needed
 
-    if M < 2
-        @warn "Insufficient number of chains ($M) to compute R-hat. Returning NaN."
-        return fill(NaN, n_params)
-    elseif N < min_samples_needed
+    # if M < 2
+    #     @warn "Insufficient number of chains ($M) to compute R-hat. Returning NaN."
+    #     return fill(NaN, n_params)
+    # end
+    if N < min_samples_needed
         @warn "Insufficient number of samples per chain ($N) to compute R-hat. Returning NaN."
         return fill(NaN, n_params)
     end

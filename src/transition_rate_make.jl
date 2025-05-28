@@ -162,12 +162,6 @@ function TRGCoupledUnitComponents(source_state, target_transition, transitions, 
     TRGCoupledUnitComponents(nT, G, nR, source_state, target_transition, elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG)
 end
 
-function TCoupledUnitComponents(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
-    indices = set_indices(length(transitions), R, S, insertstep)
-    elementsT, elementsSource, elementsTarget, nT = set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
-    TCoupledUnitComponents{typeof(source_state), typeof(target_transition)}(nT, source_state, target_transition, elementsT, elementsSource, elementsTarget)
-end
-
 """
     make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
     make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
@@ -210,10 +204,16 @@ make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, inserts
 
 TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
 
+function TCoupledUnitComponents(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, elementsSource, elementsTarget, nT = set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+    TCoupledUnitComponents{typeof(source_state),typeof(target_transition)}(nT, source_state, target_transition, elementsT, elementsSource, elementsTarget)
+end
+
 function TCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
     comp = TCoupledUnitComponents[]
     for i in eachindex(G)
-        push!(comp, TCoupledUnitComponents{typeof(source_state[i]), typeof(target_transition[i])}(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
+        push!(comp, TCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
 end
@@ -412,7 +412,7 @@ This function returns matrices U, Uminus, and Uplus for m transitions, using the
 # Returns
 - `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices U, Uminus, and Uplus.
 """
-function make_mat_U_old(total::Int, decay::Float64, ejectnumber=1)
+function make_mat_U(total::Int, decay::Float64, ejectnumber::Int)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
@@ -424,7 +424,7 @@ function make_mat_U_old(total::Int, decay::Float64, ejectnumber=1)
         Uplus[m, m+1] = decay * m
     end
     U[total, total] = -decay * (total - 1)
-    Uminus[total, total-1] = 1
+    total - ejectnumber > 0 && (Uminus[total, total-ejectnumber] = 1)
     return U, Uminus, Uplus
 end
 
@@ -444,56 +444,33 @@ Create U matrix with Poisson-distributed ejection
 - `Uplus::SparseMatrixCSC`: Birth matrix
 """
 
-function make_mat_U(total::Int, decay::Float64, mean_eject=1.)
+function make_mat_U(total::Int, decay::Float64, mean_eject::Float64)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
+
     # Generate matrices for m transitions
     Uplus[1, 2] = decay
-    d = Poisson(mean_eject)
     for m = 2:total-1
         U[m, m] = -decay * (m - 1)
-        for k = 0:min(m, mean_eject)
+        Uplus[m, m+1] = decay * m
+    end
+    U[total, total] = -decay * (total - 1)
+
+    d = Poisson(mean_eject)
+    max_eject = ceil(Int, mean_eject + 3 * sqrt(mean_eject))  # 3 standard deviations
+    # Set ejection terms using Poisson distribution
+    for m = 1:total
+        # Calculate Poisson probabilities
+        for k = 0:min(m, max_eject)
             if m - k >= 1
                 Uminus[m, m-k] = pdf(d, k)
             end
         end
-        Uplus[m, m+1] = decay * m
     end
-    U[total, total] = -decay * (total - 1)
-    Uminus[total, total-1] = 1
+
     return U, Uminus, Uplus
 end
-# function make_mat_U(total::Int, decay::Float64, mean_eject = 1)
-#     max_eject = ceil(Int, mean_eject + 3*sqrt(mean_eject))  # 3 standard deviations
-    
-#     # Create matrices
-#     U = spzeros(total, total)
-#     Uminus = spzeros(total, total)
-#     Uplus = spzeros(total, total)
-    
-#     # Set decay terms
-#     for m = 2:total-1
-#         U[m, m] = -decay * (m - 1)
-#         Uplus[m, m+1] = decay * m
-#     end
-#     U[total, total] = -decay * (total - 1)
-#     Uplus[total, total+1] = decay * total
-
-#     d = Poisson(mean_eject)
-    
-#     # Set ejection terms using Poisson distribution
-#     for m = 1:total
-#         # Calculate Poisson probabilities
-#         for k = 0:min(m, max_eject)
-#             if m - k >= 1
-#                 Uminus[m, m-k] = pdf(d, k)
-#             end
-#         end
-#     end
-    
-#     return U, Uminus, Uplus
-# end
 
 
 """
