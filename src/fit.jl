@@ -266,7 +266,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
 - `datapath=""`: path to data file or folder or array of files or folders
 - `decayrate=1.0`: decay rate of mRNA, if set to -1, value in halflives folder will be used if it exists
-- `ejectnumber=1`: number of mRNAs produced per burst, default is 1, if Int then deterministic, if Float then stochastic with Poisson distribution with mean ejectnumber
+- `ejectnumber=1`: number of mRNAs produced per burst, default is 1, if Int then deterministic, if Tuple = (r, p) then stochastic obeying NegativeBinomial(r, p)
 - `dttype=String[]`: dwelltime types, choices are "OFF", "ON", for R states and "OFFG", "ONG" for G states
 - `elongationtime=6.0`: average time for elongation, vector of times for coupled model
 - `fittedparam::Vector=Int[]`: vector of rate indices to be fit, e.g. [1,2,3,5,6,7]  (applies to shared rates for hierarchical models, fitted hyper parameters are specified by individual fittedparams)
@@ -335,7 +335,7 @@ function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=Str
     if isnothing(rinit)
         fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber)
     else
-        fit(readrates(rinit, inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber)
+        fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber)
     end
 end
 
