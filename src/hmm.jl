@@ -260,9 +260,9 @@ Generates a 3D array of Normal distributions based on the given parameters and r
 """
 function prob_Gaussian_grid(par, reporters_per_state, Nstate::Int, Ngrid::Int, f::Function=kronecker_delta)
     d = Array{Distribution{Univariate,Continuous}}(undef, Nstate, Ngrid, Ngrid)
-    for j in 1:Nstate
+    for l in 1:Nstate
         for k in 1:Ngrid
-            for l in 1:Ngrid
+            for j in 1:Ngrid
                 σ = sqrt(par[2]^2 + reporters_per_state[j] * par[4]^2 * f(k, l))
                 d[j, k, l] = Normal(par[1] + reporters_per_state[j] * par[3] * f(k, l), σ)
             end
@@ -350,8 +350,8 @@ TBW
 function make_a_grid(param, Ngrid)
     as = zeros(Ngrid, Ngrid)
     # d = zeros(Ngrid, Ngrid)
-    for i in 1:Ngrid
-        for j in 1:Ngrid
+    for j in 1:Ngrid
+        for i in 1:Ngrid
             as[i, j] = exp(-grid_distance(i, j, round(Int, sqrt(Ngrid)))^2 / (2 * param^2))
             # d[i, j] = grid_distance(i, j, div(Ngrid, 2))
         end
@@ -486,8 +486,8 @@ function set_b_inplace(trace, d::Vector{T}) where {T<:Vector}
     b = ones(N, size(trace, 1))
     t = 1
     for obs in eachrow(trace)
-        for j in 1:N
-            for i in eachindex(d)
+        for i in eachindex(d)
+            for j in 1:N
                 b[j, t] *= pdf(d[i][j], obs[i])
             end
         end
@@ -507,9 +507,9 @@ function set_b(trace, d::Array{T,3}) where {T<:Distribution}
     b = ones(Nstate, Ngrid, size(trace, 2))
     t = 1
     for obs in eachcol(trace)
-        for j in 1:Nstate
+        for l in 1:Ngrid
             for k in 1:Ngrid
-                for l in 1:Ngrid
+                for j in 1:Nstate
                     b[j, k, t] *= pdf(d[j, k, l], obs[l])
                 end
             end
@@ -534,9 +534,6 @@ function set_b(trace::Vector, d::Vector, N)
     return b
 end
 
-
-
-
 function set_b(trace, d::Vector{T}, N) where {T<:Vector}
     b = ones(N, size(trace, 1))
     t = 1
@@ -551,15 +548,13 @@ function set_b(trace, d::Vector{T}, N) where {T<:Vector}
     return b
 end
 
-
-
 function set_b(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, size(trace, 2))
     t = 1
     for obs in eachcol(trace)
-        for j in 1:Nstate
+        for l in 1:Ngrid
             for k in 1:Ngrid
-                for l in 1:Ngrid
+                for j in 1:Nstate
                     b[j, k, t] *= pdf(d[j, k, l], obs[l])
                 end
             end
