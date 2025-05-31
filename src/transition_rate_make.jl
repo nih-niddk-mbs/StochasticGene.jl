@@ -444,7 +444,7 @@ Create U matrix with Poisson-distributed ejection
 - `Uplus::SparseMatrixCSC`: Birth matrix
 """
 
-function make_mat_U(total::Int, decay::Float64, mean_eject::Float64)
+function make_mat_U(total::Int, decay::Float64, ejectnumber::Tuple)
     U = spzeros(total, total)
     Uminus = spzeros(total, total)
     Uplus = spzeros(total, total)
@@ -457,8 +457,8 @@ function make_mat_U(total::Int, decay::Float64, mean_eject::Float64)
     end
     U[total, total] = -decay * (total - 1)
 
-    d = Poisson(mean_eject)
-    max_eject = ceil(Int, mean_eject + 3 * sqrt(mean_eject))  # 3 standard deviations
+    d = NegativeBinomial(ejectnumber[1], ejectnumber[2])
+    max_eject = ceil(Int, mean(d) + 3 * std(d))  # 3 standard deviations
     # Set ejection terms using Poisson distribution
     for m = 1:total
         # Calculate Poisson probabilities
