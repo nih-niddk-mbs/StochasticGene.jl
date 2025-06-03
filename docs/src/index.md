@@ -1,42 +1,32 @@
 # StochasticGene.jl
 
-StochasticGene.jl is a Julia package for simulating and fitting stochastic models of gene transcription to experimental data. It supports a variety of data types and model configurations, making it versatile for different biological applications.
+**Package version:** {{pkg_version}}  
+**Julia version:** {{julia_version}}
+
+StochasticGene.jl is a Julia package for simulating and fitting stochastic models of gene transcription to experimental data. It supports:
+
+- Arbitrary numbers of gene states (G), pre-RNA steps (R), and splice sites (S)
+- mRNA count distributions (smFISH, scRNA), live cell imaging traces, and dwell time distributions
+- Bayesian parameter estimation and MCMC fitting
+- Parallel and hierarchical model fitting
 
 ## Features
 
-- **Flexible Model Architecture**
-  - Arbitrary number of gene states (G)
-  - Pre-RNA steps (R)
-  - Splice sites (S)
-  - Reporter insertion steps
-  - Multiple alleles support
-
-- **Data Types Supported**
-  - mRNA count distributions (smFISH, scRNA)
-  - Image intensity traces (live cell imaging)
-  - Dwell time distributions
-  - Combined data types
-
-- **Advanced Fitting**
-  - Bayesian parameter estimation
-  - MCMC sampling
-  - Hierarchical modeling
-  - Parallel processing support
-
-- **Analysis Tools**
-  - Trace simulation
-  - ON/OFF dwell time analysis
-  - G state residency probabilities
-  - Burst size analysis
+- Flexible model specification (G, R, S, alleles, splicing)
+- Support for multiple experimental data types
+- Tools for simulation, fitting, and analysis
+- Designed for both small and large-scale (cluster) use
 
 ## Quick Start
-
-To get started with StochasticGene.jl:
 
 ```julia
 using StochasticGene
 
-# Fit a basic model
+# Set up directory structure and mock data
+rna_setup("scRNA")
+cd("scRNA")
+
+# Fit a simple two-state telegraph model to mock data
 fits = fit(
     G = 2,  # Number of gene states
     R = 0,  # Number of pre-RNA steps

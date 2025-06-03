@@ -15,14 +15,38 @@ halflife_hbec() = Dict([("CANX", 50.0), ("DNAJC5", 5.0), ("ERRFI1", 1.35), ("KPN
 """
     get_transitions(G::Int, TransitionType)
 
-Return the default transitions tuple for a given number of gene states `G` and a transition type string.
+Return the default transitions tuple for a given number of gene states `G` and transition type.
+
+This function provides predefined transition patterns for different gene state models, including
+kinetic proofreading (KP) and cyclic models.
 
 # Arguments
 - `G::Int`: Number of gene states.
-- `TransitionType`: String describing the transition type (e.g., "KP", "cyclic").
+- `TransitionType::String`: Type of transition model. Supported values:
+  - "KP" or contains "KP": Kinetic proofreading model
+  - "cyclic" or contains "cyclic": Cyclic transition model
+  - Any other string: Default reversible transitions between states
 
 # Returns
-- Tuple of allowed transitions for the specified model.
+- `::Tuple`: Tuple of vectors, where each vector contains two integers representing
+  a transition between states (from, to).
+
+# Examples
+```julia
+# Get transitions for a 2-state model
+get_transitions(2, "")  # Returns ([1, 2], [2, 1])
+
+# Get transitions for a 3-state kinetic proofreading model
+get_transitions(3, "KP")  # Returns ([1, 2], [2, 1], [2, 3], [3, 1])
+
+# Get transitions for a 4-state cyclic model
+get_transitions(4, "cyclic")  # Returns ([1, 2], [2, 3], [3, 4], [4, 1])
+```
+
+# Notes
+- For G=2: Always returns simple two-state transitions ([1,2], [2,1])
+- For G=3 and G=4: Behavior depends on TransitionType
+- Throws an ArgumentError for unsupported values of G
 """
 function get_transitions(G::Int, TransitionType)
     typeof(G) <: AbstractString && (G = parse(Int, G))
@@ -321,11 +345,9 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 # Notes
 - If `propcv < 0`, proposal covariance is read from previous run if available.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
-- File and folder conventions may have changed; see README for details.
+- For coupled transcription units, arguments `transitions`, `G`, `R`, `S`, and `insertstep` should be tuples of the same length.
 
-# Example
-If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:
-
+# Example 1: Basic RNA count fitting
 ```julia
 fits = fit(
     G = 2,
@@ -338,8 +360,7 @@ fits = fit(
 )
 ```
 
-Trace data fit:
-
+# Example 2: Time series trace fitting
 ```julia
 fits = fit(
     G = 3,
@@ -352,9 +373,124 @@ fits = fit(
     cell = "TEST",
     gene = "test",
     datacond = "testtrace",
-    traceinfo = (1.0, 1., -1, 1.),
-    noisepriors = [40., 20., 200., 10.],
+    traceinfo = (1.0, 1.0, -1, 1.0),
+    noisepriors = [40.0, 20.0, 200.0, 10.0],
     nchains = 4
+)
+```
+
+# Example 3: Hierarchical model with multiple alleles
+```julia
+fits = fit(
+    G = 2,
+    R = 1,
+    datatype = "rna",
+    datapath = "data/experiment1/",
+    gene = "MYC",
+    cell = "HCT116",
+    datacond = "TREATMENT",
+    nalleles = 3,
+    hierarchical = (2, [1,2,3]),  # Share hyperparameters across 2 conditions
+    nchains = 4,
+    warmupsteps = 10000,
+    samplesteps = 100000
+)
+```
+"""
+"""
+    fit(; <keyword arguments> )
+
+Fit steady state or transient GM/GRSM model to RNA data for a single gene using MCMC or optimization.
+
+This is the main function for fitting generalized telegraph models to gene expression data. It supports:
+- Multiple gene states (G), pre-mRNA steps (R), and splice sites (S)
+- Both steady-state and time-series data
+- Coupled transcription units
+- Hierarchical modeling
+- Various data types including RNA counts and live cell imaging
+
+# Arguments
+- `G`: Number of gene states (default: 2)
+- `R`: Number of pre-mRNA steps (default: 0)
+- `S`: Number of splice sites (default: 0)
+- `transitions`: Tuple of allowed state transitions (default: ([1,2], [2,1]))
+- `datatype`: Type of data ("rna" for RNA counts, "trace" for time series, etc.)
+- `datapath`: Path to input data files
+- `gene`: Gene name
+- `cell`: Cell type
+- `datacond`: Data condition identifier
+- `traceinfo`: Tuple of trace information (dt, nframes, startframe, scale)
+- `nalleles`: Number of alleles (default: 1)
+- `decayrate`: mRNA decay rate (default: -1.0, will be looked up if < 0)
+- `splicetype`: Type of splicing model (default: "")
+- `nchains`: Number of MCMC chains (default: 2)
+- `samplesteps`: Number of MCMC sampling steps (default: 1,000,000)
+- `warmupsteps`: Number of warmup steps (default: 0)
+- `annealsteps`: Number of annealing steps (default: 0)
+- `propcv`: Proposal covariance (default: 0.01)
+- `temp`: Temperature for parallel tempering (default: 1.0)
+- `optimize`: Whether to perform optimization (default: false)
+- `writesamples`: Whether to write MCMC samples to disk (default: false)
+- `zeromedian`: If true, subtract median of each trace and scale by max median (default: false)
+
+# Returns
+- `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
+- `stats`: Summary statistics for parameters
+- `measures`: Diagnostic measures (including WAIC and its standard error)
+- `data`, `model`, `options`: The data, model, and options structures used
+
+# Notes
+- If `propcv < 0`, proposal covariance is read from previous run if available.
+- WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
+- For coupled transcription units, arguments `transitions`, `G`, `R`, `S`, and `insertstep` should be tuples of the same length.
+
+# Example 1: Basic RNA count fitting
+```julia
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/HCT116_testdata/",
+    gene = "MYC",
+    datacond = "MOCK"
+)
+```
+
+# Example 2: Time series trace fitting
+```julia
+fits = fit(
+    G = 3,
+    R = 2,
+    S = 2,
+    insertstep = 1,
+    transitions = ([1,2], [2,1], [2,3], [3,1]),
+    datatype = "trace",
+    datapath = "data/testtraces",
+    cell = "TEST",
+    gene = "test",
+    datacond = "testtrace",
+    traceinfo = (1.0, 1.0, -1, 1.0),
+    noisepriors = [40.0, 20.0, 200.0, 10.0],
+    nchains = 4
+)
+```
+
+# Example 3: Hierarchical model with multiple alleles
+```julia
+fits = fit(
+    G = 2,
+    R = 1,
+    datatype = "rna",
+    datapath = "data/experiment1/",
+    gene = "MYC",
+    cell = "HCT116",
+    datacond = "TREATMENT",
+    nalleles = 3,
+    hierarchical = (2, [1,2,3]),  # Share hyperparameters across 2 conditions
+    nchains = 4,
+    warmupsteps = 10000,
+    samplesteps = 100000
 )
 ```
 """
@@ -587,18 +723,75 @@ const TRACE_DATATYPES = Set([
 """
     load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
 
-Load RNA or trace data based on the provided `datatype` string or symbol.
+Load and preprocess RNA or trace data for model fitting.
 
-Supports multiple data formats, including steady-state RNA histograms,
-dwell time distributions, ON/OFF state durations, and fluorescence traces.
+This function handles various data formats used in gene expression analysis, including:
+- Steady-state RNA count histograms
+- Dwell time distributions for different molecular states
+- Time-series fluorescence traces
+- Joint analysis of transcription and RNA data
 
 # Arguments
-- `datatype`: String or Symbol describing the data type (e.g. "rna", "tracegrid")
-- `dttype`: Dwell time type (used only for rnadwelltime and dwelltime)
-- `datapath`: Path(s) to the data file(s)
-- `label`: Label for the dataset
-- `gene`: Gene name
-- `datacond`: Experimental condition
+  - `datatype`: String or Symbol specifying the data type. Supported values:
+  - `:rna` or `"rna"`: RNA count histogram data
+  - `:trace` or `"trace"`: Single fluorescence trace
+  - `:tracegrid` or `"tracegrid"`: Multiple traces on a grid
+  - `:tracejoint` or `"tracejoint"`: Joint trace analysis
+  - `:tracerna` or `"tracerna"`: Combined trace and RNA data
+  - `:rnadwelltime` or `"rnadwelltime"`: RNA dwell time distributions
+  - `:dwelltime` or `"dwelltime"`: General dwell time data
+
+- `dttype`: String or Vector{String} specifying dwell time type (used only for rnadwelltime and dwelltime):
+  - `"OFF"`, `"ON"`: For R states
+  - `"OFFG"`, `"ONG"`: For G states
+
+- `datapath`: Union{String, Vector{String}}
+  - For `:rna`/`"rna"`: Path to CSV/TSV file with RNA counts
+  - For `:trace*` types: Path to trace data file(s)
+  - Can be a single path or vector of paths for multiple conditions
+
+- `label`: String identifier for the dataset
+- `gene::String`: Gene symbol/name
+- `datacond`: String or Vector{String} describing experimental condition(s)
+- `traceinfo`: Tuple containing trace metadata:
+  - For traces: (frame_interval, start_time, end_time, active_fraction, background)
+  - Set end_time = -1 for last frame
+  - active_fraction can be a vector for joint traces
+- `temprna::Float64`: Temperature scaling factor for RNA data
+- `datacol::Int=3`: Column index containing the data (default: 3)
+- `zeromedian::Bool=false`: If true, center and scale traces by median
+
+# Returns
+- For `:rna`: `RNAHistogramData` object
+- For `:trace*`: `TraceData` or `TraceRNAData` object
+- For `:rnadwelltime`/`:dwelltime`: `DwellTimeData` object
+
+# Examples
+```julia
+# Load RNA count data
+rna_data = load_data(
+    "rna", "", "path/to/counts.tsv", "exp1", "MYC", "WT",
+    (0.0, 0.0, 0.0, 1.0, 0.0), 1.0
+)
+
+# Load single trace data
+trace_data = load_data(
+    :trace, "", "path/to/trace.csv", "cell1", "MYC", "DMSO",
+    (1.0, 0.0, 300.0, 1.0, 0.5), 1.0
+)
+
+# Load dwell time data
+dt_data = load_data(
+    "dwelltime", ["OFF", "ON"], "path/to/dwelltimes.csv",
+    "exp2", "MYC", "TREATMENT", (0.0, 0.0, 0.0, 1.0, 0.0), 1.0
+)
+```
+
+# Notes
+- For trace data, the function automatically handles background subtraction and scaling
+- RNA counts are log-transformed if `temprna != 1.0`
+- When `zeromedian=true`, traces are centered using median subtraction and scaled by max median
+- The function automatically detects file formats based on extensions (.csv, .tsv, .txt)
 - `traceinfo`: Tuple of trace metadata
 - `temprna`: Integer divisor for histogram normalization
 - `datacol`: Column of trace data to extract (default = 3)
@@ -732,6 +925,58 @@ function make_reporter_components(data::AbstractTraceData, transitions, G, R, S,
     make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
 end
 
+"""
+    make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
+
+Construct reporter and model components for trace histogram data analysis.
+
+This function creates the necessary components for fitting generalized telegraph models to 
+time-series fluorescence data with RNA count information. It combines the reporter components
+with model-specific components to create a complete model representation.
+
+# Arguments
+- `data::AbstractTraceHistogramData`: Input trace histogram data
+- `transitions::Tuple`: Allowed state transitions (e.g., ([1,2], [2,1]) for 2-state model)
+- `G::Int`: Number of gene states
+- `R::Int`: Number of pre-RNA steps
+- `S::Int`: Number of splice sites
+- `insertstep::Int`: Reporter insertion step in the transcription cycle
+- `splicetype::String`: Type of splicing model (e.g., "offeject")
+- `onstates`: Vector of active state indices
+- `decayrate::Float64`: mRNA decay rate
+- `probfn::Function`: Probability function for observation model
+- `noisepriors::Vector`: Prior parameters for observation noise
+- `coupling`: Coupling information for multi-unit models
+- `ejectnumber::Int=1`: Number of mRNAs produced per initiation event
+
+# Returns
+- `reporter`: Reporter component with observation model
+- `components::MTComponents`: Combined model components including:
+  - `mcomponents`: Model-specific components (transcription, splicing, etc.)
+  - `tcomponents`: Time-series specific components
+
+# Example
+```julia
+# For a simple 2-state model with trace data
+reporter, components = make_reporter_components(
+    trace_data,         # TraceHistogramData
+    ([1,2], [2,1]),     # transitions
+    2, 0, 0, 1,         # G, R, S, insertstep
+    "",                 # splicetype
+    [2],                # onstates
+    0.1,                # decayrate
+    prob_Gaussian,      # probfn
+    [10.0, 1.0],        # noisepriors
+    tuple(),            # coupling
+    1                   # ejectnumber
+)
+```
+
+# Notes
+- The function automatically handles both single-molecule and population-level data
+- For coupled models, the coupling structure affects how the components are connected
+- The `ejectnumber` parameter can be used to model burst-like transcription events
+"""
 function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
     reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
     mcomponents = MComponents(transitions, G, R, data.nRNA, decayrate, splicetype, ejectnumber)

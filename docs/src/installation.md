@@ -2,47 +2,53 @@
 
 ## Local Installation
 
-To install StochasticGene on a local computer:
+To install StochasticGene on your computer:
 
 ```julia
 julia> ] add StochasticGene
 ```
 
-After installation, you can test it with:
+To test the installation:
 
 ```julia
 julia> ] test StochasticGene
 ```
 
-To update to a new version:
+To update to the latest version:
 
 ```julia
 julia> ] update StochasticGene
 ```
 
-## Biowulf Installation
+## Biowulf Installation (NIH HPC)
 
-To install StochasticGene on NIH Biowulf:
+1. Start an interactive session:
 
 ```bash
 [username@biowulf ~]$ sinteractive --constraint=x2695 --mem=64G
+```
+
+2. Load Julia:
+
+```bash
 [username@biowulf ~]$ module load julialang
 [username@biowulf ~]$ julia -t 1
 ```
 
-Then install StochasticGene:
+3. Install StochasticGene:
 
 ```julia
 julia> ] add StochasticGene
 ```
 
-If you encounter Julia crashes due to updates, try:
+If you encounter Julia crashes after an update, remove your Julia depot and reinstall:
 
 ```bash
 [username@biowulf ~]$ rm -r --force .julia
 ```
 
-Then restart Julia and reinstall StochasticGene.
+Then start Julia and re-add StochasticGene as above.
+
 
 ## Requirements
 

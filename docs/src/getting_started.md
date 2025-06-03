@@ -1,64 +1,36 @@
 # Getting Started
 
-## Setting Up Your Project
+## Folder Structure
 
-StochasticGene requires a specific directory structure:
+StochasticGene expects a specific directory structure for data and results:
 
 ```bash
-root/
+project_root/
 ├── data/
 │   ├── alleles/
 │   └── halflives/
 └── results/
 ```
 
-To set up this structure:
+## Setting Up
+
+Use the built-in helper to set up a new project folder with mock data:
 
 ```julia
 using StochasticGene
 rna_setup("scRNA")  # Creates the structure in the "scRNA" folder
+cd("scRNA")         # Move into the project directory
 ```
 
-The `rna_setup()` command creates:
-- A `data` folder with `alleles` and `halflives` subfolders
-- A `results` folder for storing analysis results
-- Mock data in the `data` folder
+## Fitting a Model
 
-## Basic Model Fitting
-
-StochasticGene can fit various data types:
-- mRNA count distributions (smFISH, scRNA)
-- Image intensity traces (live cell imaging)
-- Dwell time distributions
-- Combined data types
-
-Models can include:
-- Arbitrary number of G (gene) states
-- Pre-RNA steps (R)
-- Splice sites (S)
-- Reporter insertion steps
-- Multiple alleles
-- Coupled genes/alleles
-
-To fit a basic model:
+Fit a simple two-state model to the mock data:
 
 ```julia
-fits = fit(
-    G = 2,  # Number of gene states
-    R = 0,  # Number of pre-RNA steps
-    transitions = ([1,2], [2,1]),  # Gene state transitions
-    datatype = "rna",  # Data type
-    datapath = "data/HCT116_testdata/",  # Path to data
-    root = pwd()  # Root directory
-)
+fits = fit(G=2, R=0, transitions=([1,2],[2,1]), datatype="rna", datapath="data/HCT116_testdata/")
+```
 
-The `fit` function returns six variables:
-- Model parameters
-- Posterior distributions
-- Predicted data
-- Goodness of fit metrics
-- Model diagnostics
-- Analysis results
+This will use the default mock data and model settings. For more advanced usage, see the API and Examples sections.
 
 ## Model Components
 

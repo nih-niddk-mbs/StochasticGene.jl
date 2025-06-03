@@ -11,58 +11,70 @@ StochasticGene.jl is a comprehensive Julia package for simulating and fitting st
 
 1. **Model Simulation**
    - Generalized telegraph models (GRSM)
-   - Multiple gene states
-   - Pre-RNA steps
-   - Splice sites
+   - Multiple gene states (G)
+   - Pre-RNA steps (R)
+   - Splice sites (S)
    - Reporter insertion
    - Multiple alleles
+   - Coupled gene models
 
 2. **Parameter Inference**
-   - Bayesian parameter estimation
-   - MCMC sampling
+   - Bayesian parameter estimation via MCMC
+   - Maximum likelihood estimation
    - Hierarchical modeling
-   - Parallel processing
+   - Parallel processing support
+   - Adaptive proposal distributions
 
 3. **Data Types**
-   - mRNA count distributions
+   - mRNA count distributions (smFISH, scRNA-seq)
    - Live cell imaging traces
    - Dwell time distributions
    - Combined data types
+   - Time-series data
 
 4. **Analysis Tools**
-   - Model fitting
-   - Post-fit analysis
-   - Hidden Markov models
+   - Model fitting and comparison
+   - Hidden Markov model analysis
    - Burst size analysis
    - ON/OFF state analysis
+   - Model diagnostics
+   - Posterior analysis
 
 # Key Features
 
-1. **Flexible Model Architecture**
-   - Arbitrary number of gene states
-   - Pre-RNA steps
-   - Splice sites
-   - Reporter insertion
-   - Multiple alleles
+## Model Flexibility
+- **Gene States (G)**: Arbitrary number of states
+- **Pre-RNA Steps (R)**: Multiple elongation steps
+- **Splice Sites (S)**: Support for splicing dynamics
+- **Coupled Models**: Multiple interacting alleles/genes
+- **Hierarchical Models**: Share information across conditions
 
-2. **Advanced Fitting**
-   - Bayesian parameter estimation
-   - MCMC sampling
-   - Hierarchical modeling
-   - Parallel processing
+## Inference Methods
+- **MCMC Sampling**: Robust parameter estimation
+- **Adaptive Proposals**: Efficient exploration of parameter space
+- **Parallel Chains**: Multi-core and distributed computing
+- **Convergence Diagnostics**: Ensure reliable results
 
-3. **Data Compatibility**
-   - mRNA count distributions
-   - Live cell imaging traces
-   - Dwell time distributions
-   - Combined data types
+## Performance
+- **Optimized Backend**: For fast simulations
+- **Automatic Differentiation**: For gradient-based methods
+- **Memory Efficiency**: Handles large datasets
 
-4. **Analysis Tools**
-   - Model fitting
-   - Post-fit analysis
-   - Hidden Markov models
-   - Burst size analysis
-   - ON/OFF state analysis
+# Quick Start
+
+```julia
+using StochasticGene
+
+# Set up a simple two-state model
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/example_data/",
+    gene = "MYC"
+)
+```
 
 # Module Structure
 
@@ -89,31 +101,10 @@ StochasticGene.jl is a comprehensive Julia package for simulating and fitting st
 - `Plots`: Visualization
 - `ProgressMeter`: Progress tracking
 - `StatsBase`: Statistical functions
-- `Turing`: Bayesian inference
 
-# Usage Example
+# Documentation
 
-```julia
-using StochasticGene
-
-# Fit a basic model
-fits = fit(
-    G = 2,  # Number of gene states
-    R = 0,  # Number of pre-RNA steps
-    transitions = ([1,2], [2,1]),  # Gene state transitions
-    datatype = "rna",  # Data type
-    datapath = "data/HCT116_testdata/",  # Path to data
-    gene = "MYC",  # Gene name
-    datacond = "MOCK"  # Data condition
-)
-```
-
-# References
-
-- Rodriguez, J., et al. (2018). Cell
-- Wan, L., et al. (2021). Cell
-- Trzaskoma, M., et al. (2024). Science Advances
-
+For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
 """
 module StochasticGene
 __precompile__(true)
