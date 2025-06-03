@@ -3,8 +3,26 @@
 # io.jl
 ### Files for saving and reading mh results
 
+# File handling types and structures
+
+"""
+Abstract type for file field definitions
+"""
 abstract type Fields end
 
+"""
+    Result_Fields
+
+Structure for defining fields in result files
+
+Fields:
+- `name`: File name
+- `label`: Run label
+- `cond`: Condition identifier
+- `gene`: Gene name
+- `model`: Model type
+- `nalleles`: Number of alleles
+"""
 struct Result_Fields <: Fields
     name::String
     label::String
@@ -14,6 +32,17 @@ struct Result_Fields <: Fields
     nalleles::String
 end
 
+"""
+    Summary_Fields
+
+Structure for defining fields in summary files
+
+Fields:
+- `name`: File name
+- `label`: Run label
+- `cond`: Condition identifier
+- `model`: Model type
+"""
 struct Summary_Fields <: Fields
     name::String
     label::String
@@ -22,11 +51,18 @@ struct Summary_Fields <: Fields
 end
 
 """
-struct BurstMeasures <: Results
+    BurstMeasures
 
-Structure for Burst measures
+Structure for storing burst size statistics
+
+Fields:
+- `mean`: Mean burst size
+- `std`: Standard deviation of burst size
+- `median`: Median burst size
+- `mad`: Median absolute deviation
+- `quantiles`: Array of burst size quantiles
 """
-struct BurstMeasures <: Results
+struct BurstMeasures
     mean::Float64
     std::Float64
     median::Float64
@@ -37,7 +73,21 @@ end
 """
     decompose_model(model::String)
 
-return G, R, S, insertstep given model string
+Parse model string into component parameters
+
+# Arguments
+- `model::String`: Model identifier string
+
+# Returns
+- Tuple containing:
+  - `G`: Number of gene states
+  - `R`: Number of pre-RNA steps
+  - `S`: Number of splice sites
+  - `insertstep`: Reporter insertion step
+
+# Notes
+- Model string format: GRSI (e.g., "2121" for G=2, R=1, S=2, insertstep=1)
+- For models with more than 4 digits, returns array of tuples
 """
 function decompose_model(model::String)
     m = parse(Int, model)
@@ -56,17 +106,28 @@ end
 # statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
 
 """
-    write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, fittedparams=Int[])
+    write_dataframes(resultfolder::String, datapath::String; kwargs...)
 
-  write_dataframes(resultfolder::String,datapath::String;measure::Symbol=:AIC,assemble::Bool=true)
+Write and assemble model fitting results into CSV files
 
-  collates run results into a csv file
+# Arguments
+- `resultfolder::String`: Path to folder containing result files
+- `datapath::String`: Path to folder containing input data
+- `measure::Symbol=:AIC`: Model selection criterion
+- `assemble::Bool=true`: Whether to assemble results into summary files
+- `multicond::Bool=false`: Whether to handle multiple conditions
+- `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
 
-Arguments
-- `resultfolder`: name of folder with result files
-- `datapath`: name of folder where data is stored
-- `measure`: measure used to assess winner
-- `assemble`: if true then assemble results into summary files
+# Returns
+- Nothing, but writes:
+  - Individual result files
+  - Summary files (if assemble=true)
+  - Winner files based on selected measure
+
+# Notes
+- Creates hierarchical directory structure for results
+- Uses CSV format for better readability and compatibility
+- Automatically handles multiple conditions if specified
 """
 function write_dataframes(resultfolder::String, datapath::String; measure::Symbol=:AIC, assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
     write_dataframes_only(resultfolder, datapath, assemble=assemble, multicond=multicond, datatype=datatype)
@@ -87,10 +148,23 @@ function write_dataframes_only(resultfolder::String, datapath::String; assemble:
 end
 
 """
-write_winners(resultfolder,measure)
+    write_winners(resultfolder, measure)
 
-Write best performing model for measure
+Write best performing model parameters based on selected measure
 
+# Arguments
+- `resultfolder`: Path to results folder
+- `measure`: Model selection criterion (e.g., :AIC, :BIC, :WAIC)
+
+# Returns
+- Nothing, but writes:
+  - CSV files containing best model parameters
+  - Summary statistics for winning models
+
+# Notes
+- Automatically selects best model based on measure
+- Handles multiple conditions if present
+- Preserves original file structure
 """
 function write_winners(resultfolder, measure)
     df = best_measure(resultfolder, measure)

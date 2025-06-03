@@ -327,7 +327,35 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:
 
 ```julia
-julia> fits, stats, measures, data, model, options = fit(nchains = 4)
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/HCT116_testdata/",
+    gene = "MYC",
+    datacond = "MOCK"
+)
+```
+
+Trace data fit:
+
+```julia
+fits = fit(
+    G = 3,
+    R = 2,
+    S = 2,
+    insertstep = 1,
+    transitions = ([1,2], [2,1], [2,3], [3,1]),
+    datatype = "trace",
+    datapath = "data/testtraces",
+    cell = "TEST",
+    gene = "test",
+    datacond = "testtrace",
+    traceinfo = (1.0, 1., -1, 1.),
+    noisepriors = [40., 20., 200., 10.],
+    nchains = 4
+)
 ```
 """
 function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime=60, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian::Bool=false, datacol=3, ejectnumber=1)

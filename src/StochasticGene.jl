@@ -4,34 +4,115 @@
 """
     module StochasticGene
 
-A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.
+A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
 # Overview
-This module provides a comprehensive set of tools for simulating stochastic models of gene transcription and performing Bayesian inference on model parameters. It includes functions for:
+StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
 
-- Transition rate calculations
-- Metropolis Hastings MCMC for computing posterior distributions
-- Input/output operations
-- Chemical master equation solutions for likelihood functions
-- Commonly used utility functions
-- Probability distributions via direct simulation using Gillespie and Gibson-Bruck algorithms
-- Model fitting to data
-- Post-fit analysis and plotting
-- Functions for use on the NIH cluster Biowulf
-- Hidden Markov models
-# - GPU-accelerated computations using CUDA (optional)
+1. **Model Simulation**
+   - Generalized telegraph models (GRSM)
+   - Multiple gene states
+   - Pre-RNA steps
+   - Splice sites
+   - Reporter insertion
+   - Multiple alleles
 
-# Included Files
-- `transition_rate_make.jl`: Functions for transition rate calculations.
-- `metropolis_hastings.jl`: Metropolis Hastings MCMC for computing posterior distributions of model parameters.
-- `io.jl`: Input/output functions.
-- `chemical_master.jl`: Chemical master equation solutions of stochastic models for likelihood functions in fitting algorithms.
-- `utilities.jl`: Commonly used utility functions.
-- `simulator_coupled.jl`: Probability distributions by direct simulation of stochastic models using Gillespie and Gibson-Bruck algorithms.
-- `fit.jl`: Functions for fitting models to data.
-- `analysis.jl`: Functions for post-fit analysis and plots.
-- `biowulf.jl`: Functions for use on NIH cluster Biowulf.
-- `hmm.jl`: Functions for hidden Markov models.
+2. **Parameter Inference**
+   - Bayesian parameter estimation
+   - MCMC sampling
+   - Hierarchical modeling
+   - Parallel processing
+
+3. **Data Types**
+   - mRNA count distributions
+   - Live cell imaging traces
+   - Dwell time distributions
+   - Combined data types
+
+4. **Analysis Tools**
+   - Model fitting
+   - Post-fit analysis
+   - Hidden Markov models
+   - Burst size analysis
+   - ON/OFF state analysis
+
+# Key Features
+
+1. **Flexible Model Architecture**
+   - Arbitrary number of gene states
+   - Pre-RNA steps
+   - Splice sites
+   - Reporter insertion
+   - Multiple alleles
+
+2. **Advanced Fitting**
+   - Bayesian parameter estimation
+   - MCMC sampling
+   - Hierarchical modeling
+   - Parallel processing
+
+3. **Data Compatibility**
+   - mRNA count distributions
+   - Live cell imaging traces
+   - Dwell time distributions
+   - Combined data types
+
+4. **Analysis Tools**
+   - Model fitting
+   - Post-fit analysis
+   - Hidden Markov models
+   - Burst size analysis
+   - ON/OFF state analysis
+
+# Module Structure
+
+- `transition_rate_make.jl`: Transition rate calculations
+- `metropolis_hastings.jl`: MCMC parameter estimation
+- `io.jl`: Input/output operations
+- `chemical_master.jl`: Chemical master equation solutions
+- `utilities.jl`: Common utility functions
+- `simulator_coupled.jl`: Stochastic simulation algorithms
+- `fit.jl`: Model fitting functions
+- `analysis.jl`: Post-fit analysis tools
+- `biowulf.jl`: NIH Biowulf cluster support
+- `hmm.jl`: Hidden Markov model functions
+
+# Dependencies
+
+- `CSV`: Data handling
+- `DataFrames`: Data manipulation
+- `Distributed`: Parallel processing
+- `Distributions`: Statistical distributions
+- `LSODA`: ODE solvers
+- `MultivariateStats`: Statistical analysis
+- `Optim`: Optimization algorithms
+- `Plots`: Visualization
+- `ProgressMeter`: Progress tracking
+- `StatsBase`: Statistical functions
+- `Turing`: Bayesian inference
+
+# Usage Example
+
+```julia
+using StochasticGene
+
+# Fit a basic model
+fits = fit(
+    G = 2,  # Number of gene states
+    R = 0,  # Number of pre-RNA steps
+    transitions = ([1,2], [2,1]),  # Gene state transitions
+    datatype = "rna",  # Data type
+    datapath = "data/HCT116_testdata/",  # Path to data
+    gene = "MYC",  # Gene name
+    datacond = "MOCK"  # Data condition
+)
+```
+
+# References
+
+- Rodriguez, J., et al. (2018). Cell
+- Wan, L., et al. (2021). Cell
+- Trzaskoma, M., et al. (2024). Science Advances
 
 """
 module StochasticGene

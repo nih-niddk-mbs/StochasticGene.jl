@@ -1,0 +1,6 @@
+name = "StochasticGeneDocs"
+version = "1.5.9"
+
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+StochasticGene = "a2598c62-e771-4eb8-9887-959a94ab00ef"
