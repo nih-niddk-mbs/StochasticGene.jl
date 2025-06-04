@@ -21,11 +21,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          julia --project -e 'import Pkg; Pkg.instantiate()'
-          julia --project=docs -e 'import Pkg; Pkg.instantiate()'
+          # First, install the main package dependencies
+          julia --project=. -e 'import Pkg; Pkg.instantiate()'
+          # Then install the docs dependencies
+          cd docs
+          julia --project=. -e 'import Pkg; Pkg.instantiate()'
+          cd ..
 
       - name: Build and deploy documentation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          julia --project=docs docs/make.jl
+          cd docs
+          julia --project=. -e 'include("make.jl")'
