@@ -1117,6 +1117,18 @@ function dwelltime_AIC(rates_dir::String; bins=[collect(1:100), collect(0:100)],
     sort!(results, :AIC), data
 end
 
+function dwelltime_matrices(rate_file::String, bins=[collect(1:100), collect(0:100)], onstates=[Int[], Int[]], dttype=["ON", "OFF"])
+    model_name = remove_string(rate_file, "rates_trace-HBEC-", "_1.txt")
+    rates = readrates(rate_file)
+    data = DwellTimeData("test", "test", bins, ones(100), dttype)
+    G, R, S, insertstep, transitions = decompose_nstate(model_name)
+    println(G,R,S,insertstep)
+    model = load_model(data, rates, rates, [], tuple(), transitions, G, R, S, insertstep, "", 1, 0.1, onstates, 1., 0.1, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    TI = make_mat(model.components.elementsTD[2], rates, model.components.nT)
+    TA = make_mat(model.components.elementsTD[1], rates, model.components.nT)
+    return TI, TA
+end
+
 
 # using StatsBase # For creating histograms later, if needed
 
