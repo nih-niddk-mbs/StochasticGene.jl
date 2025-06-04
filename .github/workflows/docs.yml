@@ -34,3 +34,21 @@ jobs:
         run: |
           cd docs
           julia --project=. -e 'include("make.jl")'
+          # Deploy to GitHub Pages
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Copy built docs to gh-pages branch
+          git checkout --orphan gh-pages
+          git reset
+          git clean -fd
+          
+          # Copy the built documentation
+          cp -r build/* .
+          
+          # Add and commit
+          git add .
+          git commit -m "Update documentation"
+          
+          # Push to gh-pages branch
+          git push origin gh-pages --force
