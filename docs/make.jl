@@ -3,7 +3,10 @@ using StochasticGene
 using Pkg
 
 # Read version from main Project.toml for synchronization
-pkg_version = Pkg.TOML.parsefile("../Project.toml")["version"]
+using Pkg: Pkg
+project_path = abspath(joinpath(@__DIR__, "..", "Project.toml"))
+@info "Looking for Project.toml at: $project_path"
+pkg_version = Pkg.TOML.parsefile(project_path)["version"]
 
 makedocs(
     sitename = "StochasticGene.jl",
