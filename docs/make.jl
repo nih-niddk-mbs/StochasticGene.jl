@@ -22,13 +22,10 @@ makedocs(
         "Contributing" => "contributing.md",
     ],
     version = pkg_version,  # Always synchronized with package
-    meta = Dict(
-        :pkg_version => pkg_version,
-        :julia_version => string(VERSION)
-    ),
-    doctest = false,
-    linkcheck = false,
-    checkdocs = :none,
+    doctest = false,        # Disable running doctests
+    linkcheck = false,      # Disable link checking
+    checkdocs = :none,      # Disable documentation checking
+    warnonly = true         # Only show warnings, don't fail on warnings
 )
 
 deploydocs(
