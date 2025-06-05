@@ -34,6 +34,10 @@ makedocs(
 deploydocs(
     repo = "github.com/nih-niddk-mbs/StochasticGene.jl.git",
     devbranch = "main",
+    target = "build",
+    branch = "gh-pages",
     push_preview = true,
     forcepush = true,
+    versions = ["stable" => "v^", "v#.#"],
+    make = nothing,
 )
