@@ -1,7 +1,7 @@
 # StochasticGene.jl
 
-**Package version:** {{pkg_version}}  
-**Julia version:** {{julia_version}}
+**Package version:** 1.5.9  
+**Julia version:** 1.11.4
 
 StochasticGene.jl is a Julia package for simulating and fitting stochastic models of gene transcription to experimental data. It supports:
 
