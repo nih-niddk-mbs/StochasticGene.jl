@@ -1,6 +1,103 @@
 # StochasticGene.jl
 
-Julia package to simulate and fit stochastic models of gene transcription to experimental data. The data acceptable include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells, and in combination. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, S splice sites (up to R), and reporter insertion step (insertstep). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps at and after step 3 are considered visible. The genes/alleles can also be coupled. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather than the usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors). The model can also be run on multiple processors and has been used to fit scRNA from the entire genome. Trzaskoma et al. Science Advances (2024).
+[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/)
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/)
+[![Build Status](https://github.com/nih-niddk-mbs/StochasticGene.jl/workflows/CI/badge.svg)](https://github.com/nih-niddk-mbs/StochasticGene.jl/actions)
+[![Coverage](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl)
+
+A Julia package for stochastic modeling of gene transcription and Bayesian inference.
+
+## Installation
+
+The package can be installed using the Julia package manager. From the Julia REPL, type `]` to enter the Pkg REPL mode and run:
+
+```julia
+pkg> add StochasticGene
+```
+
+## Quick Start
+
+```julia
+using StochasticGene
+
+# Set up a simple two-state model
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/example_data/",
+    gene = "MYC"
+)
+```
+
+## Key Features
+
+### Model Simulation
+- Generalized telegraph models (GRSM)
+- Multiple gene states (G)
+- Pre-RNA steps (R)
+- Splice sites (S)
+- Reporter insertion
+- Multiple alleles
+- Coupled gene models
+
+### Parameter Inference
+- Bayesian parameter estimation via MCMC
+- Maximum likelihood estimation
+- Hierarchical modeling
+- Parallel processing support
+- Adaptive proposal distributions
+
+### Data Types
+- mRNA count distributions (smFISH, scRNA-seq)
+- Live cell imaging traces
+- Dwell time distributions
+- Combined data types
+- Time-series data
+
+### Analysis Tools
+- Model fitting and comparison
+- Hidden Markov model analysis
+- Burst size analysis
+- ON/OFF state analysis
+- Model diagnostics
+- Posterior analysis
+
+## Module Structure
+
+- `transition_rate_make.jl`: Transition rate calculations
+- `metropolis_hastings.jl`: MCMC parameter estimation
+- `io.jl`: Input/output operations
+- `chemical_master.jl`: Chemical master equation solutions
+- `utilities.jl`: Common utility functions
+- `simulator_coupled.jl`: Stochastic simulation algorithms
+- `fit.jl`: Model fitting functions
+- `analysis.jl`: Post-fit analysis tools
+- `biowulf.jl`: NIH Biowulf cluster support
+- `hmm.jl`: Hidden Markov model functions
+
+## Dependencies
+
+- `CSV`: Data handling
+- `DataFrames`: Data manipulation
+- `Distributed`: Parallel processing
+- `Distributions`: Statistical distributions
+- `LSODA`: ODE solvers
+- `MultivariateStats`: Statistical analysis
+- `Optim`: Optimization algorithms
+- `ProgressMeter`: Progress tracking
+- `StatsBase`: Statistical functions
+
+## Documentation
+
+For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+The data acceptable include distributions of mRNA counts per cell (e.g. single molecule FISH (smFISH) or single cell RNA sequence (scRNA) data)), image intensity traces from live cell imaging, dwell time distributions of reporters (e.g. MS2 or PP7) imaged in live cells, and in combination. The transcription models considered are stochastic (continuous Markov systems) with an arbitrary number of G (gene) states, R (pre-RNA) steps, S splice sites (up to R), and reporter insertion step (insertstep). The gene always occupies one of the G states and there are random (user specified) transitions between G states.  One of the G states is an active state where transcription can be initiated and the first R step becomes occupied. An irreversible forward transition can then occur to the next R step if that step is unoccupied mimicking elongation. An mRNA molecule is ejected from the final (termination) R step where it then decays stochastically. The model can account for multiple alleles of the gene in the same cell. The user can specify which R step is considered visible when occupied (i.e. contains a reporter). For example, if the pre-RNA MS2 construct is inserted into an intron that is transcribed early then you could make the reporter insertstep to be 1 and all R steps will be visible. But if the reporter is transcribed late then you could choose a later R step, like step 3, and only R steps at and after step 3 are considered visible. The genes/alleles can also be coupled. In the original model in Rodriguez et al. Cell (2018), the reporter was in an exon and was visible at all steps and then ejected. In Wan et al. Cell (2021), the reporter is inserted into an intron and thus can be spliced out before the polymerase reaches the final R step. Models are allowed to have no R steps (i.e. classic telegraph models but with arbitrary numbers of G states (rather than the usual two)) where an mRNA molecule can be stochastically produced when the gene occupies the active G state. You can also specify reporters for G states (e.g. transcription factors) and more than one simultaneous reporter (e.g. reporters for introns and transcription factors). The model can also be run on multiple processors and has been used to fit scRNA from the entire genome. Trzaskoma et al. Science Advances (2024).
 
 The package has functions to specify the models, prepare the data, compute the predicted data, apply a Metropolis-Hastings markov chain monte carlo (MCMC) algorithm to fit the parameters of the models to the data (i.e. compute Bayesian posterior distributions), explicitly simulate models, and analyze the results. Unfortunately, not all capabilities are documented so just send me a message if you have any questions.
 
