@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Joint Trace Analysis · StochasticGene.jl</title><meta name="title" content="Joint Trace Analysis · StochasticGene.jl"/><meta property="og:title" content="Joint Trace Analysis · StochasticGene.jl"/><meta property="twitter:title" content="Joint Trace Analysis · StochasticGene.jl"/><meta name="description" content="Documentation for StochasticGene.jl."/><meta property="og:description" content="Documentation for StochasticGene.jl."/><meta property="twitter:description" content="Documentation for StochasticGene.jl."/><meta property="og:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/examples/joint_trace.html"/><meta property="twitter:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/examples/joint_trace.html"/><link rel="canonical" href="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/examples/joint_trace.html"/><script async src="https://www.googletagmanager.com/gtag/js?id=UA-XXXXXXXXX-X"></script><script>  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'UA-XXXXXXXXX-X', {'page_path': location.pathname + location.search + location.hash});
+</script><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script><link href="../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../index.html">StochasticGene.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../index.html">Home</a></li><li><a class="tocitem" href="../installation.html">Installation</a></li><li><a class="tocitem" href="../getting_started.html">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="index.html">Overview</a></li><li><input class="collapse-toggle" id="menuitem-4-2" type="checkbox"/><label class="tocitem" for="menuitem-4-2"><span class="docs-label">Basic Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="basic_telegraph.html">Basic Telegraph Model</a></li><li><a class="tocitem" href="multi_state_rna.html">Multi-State Model</a></li><li><a class="tocitem" href="rna_histogram.html">RNA Histogram Analysis</a></li><li><a class="tocitem" href="ms2_analysis.html">MS2 Reporter Analysis</a></li><li><a class="tocitem" href="dual_reporter.html">Dual Reporter System</a></li><li><a class="tocitem" href="trace_analysis.html">Trace Analysis</a></li><li><a class="tocitem" href="dwell_time_analysis.html">Basic Dwell Times</a></li><li><a class="tocitem" href="rna_dwell_time.html">RNA Dwell Time Analysis</a></li><li><a class="tocitem" href="rna_onoff.html">RNA On-Off Analysis</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-4-3" type="checkbox" checked/><label class="tocitem" for="menuitem-4-3"><span class="docs-label">Advanced Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="parallel_processing.html">Parallel Processing</a></li><li><a class="tocitem" href="hierarchical_trace.html">Hierarchical Trace Analysis</a></li><li class="is-active"><a class="tocitem" href="joint_trace.html">Joint Trace Analysis</a><ul class="internal"><li><a class="tocitem" href="#Setup"><span>Setup</span></a></li><li><a class="tocitem" href="#Data-Preparation"><span>Data Preparation</span></a></li><li><a class="tocitem" href="#Model-Definition"><span>Model Definition</span></a></li><li><a class="tocitem" href="#Fitting-the-Model"><span>Fitting the Model</span></a></li><li><a class="tocitem" href="#Analyzing-Results"><span>Analyzing Results</span></a></li><li><a class="tocitem" href="#Advanced-Analysis"><span>Advanced Analysis</span></a></li><li><a class="tocitem" href="#Best-Practices"><span>Best Practices</span></a></li><li><a class="tocitem" href="#Common-Issues-and-Solutions"><span>Common Issues and Solutions</span></a></li><li><a class="tocitem" href="#Next-Steps"><span>Next Steps</span></a></li></ul></li><li><a class="tocitem" href="coupled_models.html">Coupled Model Analysis</a></li></ul></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../api/index.html">API Reference</a></li></ul></li><li><a class="tocitem" href="../contributing.html">Contributing</a></li></ul><div class="docs-version-selector field has-addons visible"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"><option value="#" selected="selected">1.5.9</option></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li><a class="is-disabled">Advanced Examples</a></li><li class="is-active"><a href="joint_trace.html">Joint Trace Analysis</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href="joint_trace.html">Joint Trace Analysis</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl/blob/main/docs/src/examples/joint_trace.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Joint-Trace-Analysis"><a class="docs-heading-anchor" href="#Joint-Trace-Analysis">Joint Trace Analysis</a><a id="Joint-Trace-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Joint-Trace-Analysis" title="Permalink"></a></h1><p>This example demonstrates how to analyze joint trace data from multiple reporters (e.g., MS2 and PP7) in live cell imaging experiments.</p><h2 id="Setup"><a class="docs-heading-anchor" href="#Setup">Setup</a><a id="Setup-1"></a><a class="docs-heading-anchor-permalink" href="#Setup" title="Permalink"></a></h2><p>First, let&#39;s set up our project directory and load the package:</p><pre><code class="language-julia hljs">using StochasticGene
+
+# Create project directory
+rna_setup(&quot;joint_trace_example&quot;)
+cd(&quot;joint_trace_example&quot;)</code></pre><h2 id="Data-Preparation"><a class="docs-heading-anchor" href="#Data-Preparation">Data Preparation</a><a id="Data-Preparation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Preparation" title="Permalink"></a></h2><p>Place your joint trace data in the <code>data/</code> directory. The data should be organized as follows:</p><pre><code class="nohighlight hljs">data/
+├── gene_name/
+│   ├── condition1/
+│   │   ├── ms2_traces.csv
+│   │   ├── pp7_traces.csv
+│   │   └── metadata.csv
+│   └── condition2/
+│       ├── ms2_traces.csv
+│       ├── pp7_traces.csv
+│       └── metadata.csv</code></pre><p>Each trace CSV file should contain:</p><ul><li>Time points</li><li>Fluorescence intensity values</li><li>Optional background values</li></ul><h2 id="Model-Definition"><a class="docs-heading-anchor" href="#Model-Definition">Model Definition</a><a id="Model-Definition-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Definition" title="Permalink"></a></h2><p>We&#39;ll fit a joint model with:</p><ul><li>2 gene states (G=2) - ON and OFF</li><li>2 pre-RNA steps (R=2)</li><li>Simple transitions between states</li><li>Reporter positions for MS2 and PP7</li></ul><pre><code class="language-julia hljs"># Define model parameters
+G = 2  # Number of gene states (ON and OFF)
+R = 2  # Number of pre-RNA steps
+
+# Define state transitions
+# Format: (from_states, to_states)
+transitions = (
+    [1, 2],  # From states
+    [2, 1]   # To states
+)
+
+# Define transcription rates for each state
+transcription_rates = [0.0, 1.0]  # No transcription in OFF state
+
+# Define reporter positions
+reporter_positions = (
+    ms2 = 1,  # MS2 reporter at first step
+    pp7 = 2   # PP7 reporter at second step
+)</code></pre><h2 id="Fitting-the-Model"><a class="docs-heading-anchor" href="#Fitting-the-Model">Fitting the Model</a><a id="Fitting-the-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Fitting-the-Model" title="Permalink"></a></h2><p>Now we can fit the joint model to our trace data:</p><pre><code class="language-julia hljs"># Fit the model
+fits, stats, measures, data, model, options = fit(
+    G = G,
+    R = R,
+    transitions = transitions,
+    transcription_rates = transcription_rates,
+    datatype = &quot;joint_trace&quot;,
+    datapath = &quot;data/&quot;,
+    gene = &quot;MYC&quot;,
+    datacond = &quot;CONTROL&quot;,
+    reporter_positions = reporter_positions
+)</code></pre><h2 id="Analyzing-Results"><a class="docs-heading-anchor" href="#Analyzing-Results">Analyzing Results</a><a id="Analyzing-Results-1"></a><a class="docs-heading-anchor-permalink" href="#Analyzing-Results" title="Permalink"></a></h2><h3 id="Basic-Analysis"><a class="docs-heading-anchor" href="#Basic-Analysis">Basic Analysis</a><a id="Basic-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Analysis" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Print basic statistics
+println(stats)
+
+# Plot the results
+using Plots
+plot(fits)
+
+# Save results
+save_results(fits, &quot;results/&quot;)</code></pre><h3 id="Reporter-Specific-Analysis"><a class="docs-heading-anchor" href="#Reporter-Specific-Analysis">Reporter-Specific Analysis</a><a id="Reporter-Specific-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Reporter-Specific-Analysis" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Analyze MS2 reporter
+ms2_analysis = analyze_reporter(fits, &quot;ms2&quot;)
+plot_reporter(ms2_analysis, &quot;results/ms2/&quot;)
+
+# Analyze PP7 reporter
+pp7_analysis = analyze_reporter(fits, &quot;pp7&quot;)
+plot_reporter(pp7_analysis, &quot;results/pp7/&quot;)</code></pre><h3 id="Cross-Correlation-Analysis"><a class="docs-heading-anchor" href="#Cross-Correlation-Analysis">Cross-Correlation Analysis</a><a id="Cross-Correlation-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Cross-Correlation-Analysis" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Calculate cross-correlation
+cross_corr = calculate_cross_correlation(fits)
+plot_cross_correlation(cross_corr, &quot;results/cross_correlation/&quot;)
+
+# Analyze time lag
+time_lag = analyze_time_lag(fits)
+plot_time_lag(time_lag, &quot;results/time_lag/&quot;)</code></pre><h2 id="Advanced-Analysis"><a class="docs-heading-anchor" href="#Advanced-Analysis">Advanced Analysis</a><a id="Advanced-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Advanced-Analysis" title="Permalink"></a></h2><h3 id="Burst-Analysis"><a class="docs-heading-anchor" href="#Burst-Analysis">Burst Analysis</a><a id="Burst-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Burst-Analysis" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Analyze transcriptional bursts
+burst_stats = analyze_bursts(fits)
+println(burst_stats)
+
+# Plot burst statistics
+plot_bursts(fits, &quot;results/bursts/&quot;)</code></pre><h3 id="Multiple-Conditions"><a class="docs-heading-anchor" href="#Multiple-Conditions">Multiple Conditions</a><a id="Multiple-Conditions-1"></a><a class="docs-heading-anchor-permalink" href="#Multiple-Conditions" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Compare different conditions
+conditions = [&quot;CONTROL&quot;, &quot;TREATMENT&quot;]
+condition_fits = []
+
+for cond in conditions
+    fits, stats, measures, data, model, options = fit(
+        G = G,
+        R = R,
+        transitions = transitions,
+        transcription_rates = transcription_rates,
+        datatype = &quot;joint_trace&quot;,
+        datapath = &quot;data/&quot;,
+        gene = &quot;MYC&quot;,
+        datacond = cond,
+        reporter_positions = reporter_positions
+    )
+    push!(condition_fits, (fits, stats))
+end
+
+# Compare conditions
+compare_conditions(condition_fits, conditions, &quot;results/condition_comparison/&quot;)</code></pre><h2 id="Best-Practices"><a class="docs-heading-anchor" href="#Best-Practices">Best Practices</a><a id="Best-Practices-1"></a><a class="docs-heading-anchor-permalink" href="#Best-Practices" title="Permalink"></a></h2><ol><li><p><strong>Data Quality</strong></p><ul><li>Check for photobleaching</li><li>Verify signal-to-noise ratio</li><li>Consider background correction</li></ul></li><li><p><strong>Model Selection</strong></p><ul><li>Start with simple models</li><li>Use model selection criteria</li><li>Validate assumptions</li></ul></li><li><p><strong>Analysis Pipeline</strong></p><ul><li>Document preprocessing steps</li><li>Save intermediate results</li><li>Version control your analysis</li></ul></li></ol><h2 id="Common-Issues-and-Solutions"><a class="docs-heading-anchor" href="#Common-Issues-and-Solutions">Common Issues and Solutions</a><a id="Common-Issues-and-Solutions-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Issues-and-Solutions" title="Permalink"></a></h2><h3 id="Photobleaching"><a class="docs-heading-anchor" href="#Photobleaching">Photobleaching</a><a id="Photobleaching-1"></a><a class="docs-heading-anchor-permalink" href="#Photobleaching" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Check for photobleaching
+bleaching = check_photobleaching(fits)
+plot_photobleaching(bleaching, &quot;results/photobleaching/&quot;)
+
+# Correct for photobleaching
+corrected_fits = correct_photobleaching(fits)</code></pre><h3 id="Background-Noise"><a class="docs-heading-anchor" href="#Background-Noise">Background Noise</a><a id="Background-Noise-1"></a><a class="docs-heading-anchor-permalink" href="#Background-Noise" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Analyze background noise
+noise = analyze_background_noise(fits)
+plot_background_noise(noise, &quot;results/background_noise/&quot;)
+
+# Apply background correction
+corrected_fits = correct_background(fits)</code></pre><h2 id="Next-Steps"><a class="docs-heading-anchor" href="#Next-Steps">Next Steps</a><a id="Next-Steps-1"></a><a class="docs-heading-anchor-permalink" href="#Next-Steps" title="Permalink"></a></h2><ul><li>Try different reporter configurations</li><li>Experiment with preprocessing steps</li><li>Compare results across different genes</li></ul><p>For more advanced examples, see:</p><ul><li><a href="index.html#Hierarchical-Models">Hierarchical Models</a></li><li><a href="@ref">Coupled Models</a></li><li><a href="@ref">Time Series Analysis</a> </li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="hierarchical_trace.html">« Hierarchical Trace Analysis</a><a class="docs-footer-nextpage" href="coupled_models.html">Coupled Model Analysis »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.11.4 on <span class="colophon-date" title="Thursday 5 June 2025 13:15">Thursday 5 June 2025</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

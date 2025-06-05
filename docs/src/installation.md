@@ -1,5 +1,67 @@
 # Installation
 
+## Prerequisites
+
+- Julia version 1.9.3 or higher
+- Git (for development installation)
+
+## Basic Installation
+
+To install StochasticGene.jl, open the Julia REPL and run:
+
+```julia
+using Pkg
+Pkg.add("StochasticGene")
+```
+
+## Development Installation
+
+To install the development version:
+
+```julia
+using Pkg
+Pkg.develop(url="https://github.com/nih-niddk-mbs/StochasticGene.jl")
+```
+
+## Required Packages
+
+The following packages will be automatically installed as dependencies:
+
+- Distributions
+- StatsBase
+- DataFrames
+- CSV
+- Plots
+- ProgressMeter
+- MCMCChains
+- Turing
+- DifferentialEquations
+- Optim
+- ForwardDiff
+- SpecialFunctions
+- Random
+- Statistics
+- LinearAlgebra
+
+## Verification
+
+To verify the installation, run:
+
+```julia
+using StochasticGene
+```
+
+If no errors occur, the package is installed correctly.
+
+## Troubleshooting
+
+If you encounter any issues during installation:
+
+1. Ensure you have the correct Julia version
+2. Try updating your packages: `Pkg.update()`
+3. Check the [GitHub issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) for known problems
+4. Open a new issue if your problem persists
+
 ## Local Installation
 
 To install StochasticGene on your computer:

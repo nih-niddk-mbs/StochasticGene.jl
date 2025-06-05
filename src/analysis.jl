@@ -3,8 +3,24 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datapath::String, assemble=true, multicond=false, datatype="rna")
+    make_dataframes(resultfolder::String, datapath::String; assemble=true, multicond=false, datatype="rna")
 
+Create DataFrames from analysis results and experimental data.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing analysis results
+- `datapath::String`: Path to experimental data
+- `assemble::Bool=true`: Whether to assemble all results first
+- `multicond::Bool=false`: Whether data has multiple conditions
+- `datatype::String="rna"`: Type of data ("rna" or "rnacount")
+
+# Returns
+- Vector of DataFrames containing analysis results and experimental data
+
+# Example
+```julia
+df = make_dataframes("results/", "data/", datatype="rna")
+```
 """
 function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
     if assemble
@@ -43,9 +59,23 @@ TBW
 statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
 """
-    make_dataframe(ratefile::String, datapath::String)
+    make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
 
-TBW
+Create a DataFrame from a single rate file and experimental data.
+
+# Arguments
+- `ratefile::String`: Path to rate file
+- `datapath::String`: Path to experimental data
+- `multicond::Bool`: Whether data has multiple conditions
+- `datatype::String`: Type of data ("rna" or "rnacount")
+
+# Returns
+- DataFrame containing rate estimates and experimental data
+
+# Example
+```julia
+df = make_dataframe("results/rates_G2.csv", "data/", false, "rna")
+```
 """
 function make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
     df = read_dataframe(ratefile)
@@ -67,7 +97,18 @@ end
 """
     parse_model(name::String)
 
-TBW
+Parse a model name string into its components.
+
+# Arguments
+- `name::String`: Model name (e.g. "G2" for 2-state model)
+
+# Returns
+- Vector of integers representing model components
+
+# Example
+```julia
+model = parse_model("G2")  # Returns [2]
+```
 """
 function parse_model(name::String)
     d = parse(Int, name)
@@ -97,7 +138,19 @@ end
 """
     make_measure_df(resultfolder::String, G::String)
 
-TBW
+Create a DataFrame from measure summary files.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing measure files
+- `G::String`: Model type (e.g. "G2" for 2-state model)
+
+# Returns
+- DataFrame containing measure summaries
+
+# Example
+```julia
+df = make_measure_df("results/", "G2")
+```
 """
 function make_measure_df(resultfolder::String, G::String)
     files = get_measuresummaryfiles(resultfolder)
@@ -118,7 +171,18 @@ end
 """
     join_cols(d)
 
-TBW
+Determine columns to join on for DataFrame operations.
+
+# Arguments
+- `d::DataFrame`: Input DataFrame
+
+# Returns
+- Vector of column symbols to join on
+
+# Example
+```julia
+cols = join_cols(df)  # Returns [:Gene] or [:Gene, :Condition]
+```
 """
 function join_cols(d)
     if ismissing(d.Condition[1])
@@ -131,7 +195,20 @@ end
 """
     add_measures(df, resultfolder::String, G)
 
-TBW
+Add additional measures to a DataFrame.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame
+- `resultfolder::String`: Path to folder containing measure files
+- `G::String`: Model type
+
+# Returns
+- DataFrame with additional measure columns
+
+# Example
+```julia
+df = add_measures(df, "results/", "G2")
+```
 """
 function add_measures(df, resultfolder::String, G)
     dm = make_measure_df(resultfolder, G)
@@ -141,7 +218,19 @@ end
 """
     add_mean!(df::DataFrame, datapath)
 
-TBW
+Add mean expression values to a DataFrame.
+
+# Arguments
+- `df::DataFrame`: DataFrame to modify
+- `datapath::String`: Path to experimental data
+
+# Modifies
+- Adds column `:Expression` with mean expression values
+
+# Example
+```julia
+add_mean!(df, "data/")
+```
 """
 function add_mean!(df::DataFrame, datapath)
     # root = string(split(abspath(datapath),"data")[1])
@@ -205,8 +294,21 @@ end
 """
     add_residenceprob!(df::DataFrame)
 
-add residence probability of G states to dataframe
-Convention changed from original code. G states are now labeled starting from 1 rather than zero
+Add residence probabilities to a DataFrame.
+
+# Arguments
+- `df::DataFrame`: DataFrame containing rate estimates
+
+# Modifies
+- Adds columns:
+  - `:ResidenceProb1`: Probability of being in state 1
+  - `:ResidenceProb2`: Probability of being in state 2
+  - etc. for each state
+
+# Example
+```julia
+add_residenceprob!(df)
+```
 """
 function add_residenceprob!(df::DataFrame)
     n = df.Model[1] - 1

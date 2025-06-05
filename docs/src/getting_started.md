@@ -66,3 +66,50 @@ The package can handle:
 - Image intensity traces (live cell imaging)
 - Dwell time distributions
 - Combined data types
+
+## Basic Usage Examples
+
+### RNA Count Analysis
+```julia
+# Fit a two-state model to RNA count data
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/",
+    gene = "MYC"
+)
+```
+
+### Live Cell Imaging
+```julia
+# Analyze MS2 reporter data
+fits = fit(
+    G = 2,
+    R = 1,
+    transitions = ([1,2], [2,1]),
+    datatype = "trace",
+    datapath = "data/",
+    gene = "MS2"
+)
+```
+
+### Dwell Time Analysis
+```julia
+# Analyze dwell time distributions
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "dwell",
+    datapath = "data/",
+    gene = "PP7"
+)
+```
+
+## Next Steps
+
+- Check the [Examples](@ref) section for more complex usage scenarios
+- Read the [API Reference](@ref) for detailed function documentation
+- Join the [GitHub discussions](https://github.com/nih-niddk-mbs/StochasticGene.jl/discussions) for community support

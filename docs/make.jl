@@ -19,6 +19,26 @@ makedocs(
         "Home" => "index.md",
         "Installation" => "installation.md",
         "Getting Started" => "getting_started.md",
+        "Examples" => [
+            "Overview" => "examples/index.md",
+            "Basic Examples" => [
+                "Basic Telegraph Model" => "examples/basic_telegraph.md",
+                "Multi-State Model" => "examples/multi_state_rna.md",
+                "RNA Histogram Analysis" => "examples/rna_histogram.md",
+                "MS2 Reporter Analysis" => "examples/ms2_analysis.md",
+                "Dual Reporter System" => "examples/dual_reporter.md",
+                "Trace Analysis" => "examples/trace_analysis.md",
+                "Basic Dwell Times" => "examples/dwell_time_analysis.md",
+                "RNA Dwell Time Analysis" => "examples/rna_dwell_time.md",
+                "RNA On-Off Analysis" => "examples/rna_onoff.md",
+            ],
+            "Advanced Examples" => [
+                "Parallel Processing" => "examples/parallel_processing.md",
+                "Hierarchical Trace Analysis" => "examples/hierarchical_trace.md",
+                "Joint Trace Analysis" => "examples/joint_trace.md",
+                "Coupled Model Analysis" => "examples/coupled_models.md",
+            ],
+        ],
         "API" => [
             "API Reference" => "api/index.md"
         ],
