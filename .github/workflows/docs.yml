@@ -31,28 +31,40 @@ jobs:
           # Build the package first to ensure it's precompiled
           julia --project=. -e 'import Pkg; Pkg.build("StochasticGene")'
           # Build documentation
-          cd docs
-          julia --project=. -e 'import Pkg; Pkg.build("Documenter"); include("make.jl")'
+          julia --project=docs -e 'import Pkg; Pkg.build("Documenter"); include("docs/make.jl")'
 
       - name: Deploy documentation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Copy documentation directly to docs/ directory
-          cp -r docs/build/* ../
+          # Ensure we're in the correct directory and verify
+          echo "Current directory: $(pwd)"
+          echo "Directory contents:"
+          ls -la
           
-          # Add and commit
-          cd ..
+          # Create docs directory if it doesn't exist
+          mkdir -p docs
+          
+          # Copy documentation to docs/ directory
+          cp -r docs/build/* docs/ 2>/dev/null || true
+          
+          # Add and commit documentation changes
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
+          # Add all changes and commit
           git add .
           git commit -m "Update documentation" --allow-empty
-          git add .
-          git commit -m "Update documentation"
+          
+          # Add CNAME file for custom domain if needed
+          echo "stochasticgene.github.io" > docs/CNAME
+          git add docs/CNAME
+          git commit -m "Add CNAME file"
           
           # Push to main branch
           git push origin main --force
           
-          # Add CNAME file for custom domain if needed
-          echo "stochasticgene.github.io" > CNAME
-          git add CNAME
-          git commit -m "Add CNAME file"
-          git push origin main --force
+          # Clean up
+          rm -rf docs/build
+          git clean -fd
+          git reset --hard HEAD
