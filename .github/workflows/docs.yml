@@ -26,21 +26,14 @@ jobs:
           # Create a fresh environment for docs
           julia --project=docs -e 'import Pkg; Pkg.activate("."); Pkg.instantiate(); Pkg.precompile()'
 
-      - name: Build documentation
-        run: |
-          # Build the package first to ensure it's precompiled
-          julia --project=. -e 'import Pkg; Pkg.build("StochasticGene")'
-          # Build documentation
-          julia --project=docs -e 'import Pkg; Pkg.build("Documenter"); include("docs/make.jl")'
-
-      - name: Deploy documentation
+      - name: Build and deploy documentation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Ensure we're in the correct directory and verify
-          echo "Current directory: $(pwd)"
-          echo "Directory contents:"
-          ls -la
+          # Build the package first to ensure it's precompiled
+          julia --project=. -e 'import Pkg; Pkg.build("StochasticGene")'
+          # Build and deploy documentation using Documenter's built-in functionality
+          julia --project=docs -e 'import Pkg; Pkg.build("Documenter"); include("docs/make.jl")'
           
           # Create docs directory if it doesn't exist
           mkdir -p docs
