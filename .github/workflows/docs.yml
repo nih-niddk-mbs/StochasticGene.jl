@@ -38,17 +38,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Initialize git repository
-          git init
-          git remote add origin https://${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
           # Copy documentation directly to docs/ directory
           cp -r docs/build/* ../
           
           # Add and commit
           cd ..
+          git add .
+          git commit -m "Update documentation" --allow-empty
           git add .
           git commit -m "Update documentation"
           
