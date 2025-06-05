@@ -21,38 +21,6 @@ fits = fit(; kwargs...)
 - `transitions::Tuple`: Tuple of vectors specifying state transitions
 
 ### Data Parameters
-- `datatype`: Data type (supported: :rna, :rnacount, :rnaonoff, :rnadwelltime, :dwelltime, :trace, :tracerna, :tracejoint, :tracegrid)
-- `datapath`: Path to data files
-- `root`: Root directory containing data and results folders
-- `gene`: Gene name(s)
-- `cell`: Cell type
-- `decayrate`: mRNA decay rate (if < 0, will be looked up)
-
-### Coupled Models
-- `coupling`: Coupling structure between units
-- `nalleles`: Number of alleles (automatically set to 1 if coupling is nonempty)
-
-### Transition Types
-- `TransitionType`: String specifying transition pattern (e.g., "KP", "cyclic")
-
-## Returns
-
-- Model parameters
-- Posterior distributions
-- Predicted data
-- Goodness of fit metrics
-- Model diagnostics
-- Analysis results
-
-## Notes
-
-- For coupled models, many parameters become tuples (e.g., G = (2,3) for two units with 2 and 3 gene states)
-- The number of splice sites S cannot exceed R - insertstep + 1
-- If coupling is used, nalleles is automatically set to 1
-- Default transitions can be generated using the `get_transitions` function
-
-### Data Parameters
-
 - `datatype::String = "rna"`: Data type:
   - "rna": mRNA count distributions
   - "trace": Intensity traces
@@ -81,7 +49,6 @@ fits = fit(; kwargs...)
 - `noisepriors::Vector = []`: Observation noise priors
 - `fittedparams::Vector{Int} = Int[]`: Indices of rates to fit
 - `fixedeffects::Tuple = tuple()`: Fixed effects specification
-- `hierarchical::Tuple = tuple()`: Hierarchical model specification
 
 ### Trace Parameters (for trace data)
 

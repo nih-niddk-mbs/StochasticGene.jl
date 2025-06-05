@@ -5,7 +5,6 @@
 ### Model Fitting
 - [`fit`](@ref): Main function for fitting models to data
 - [`fit_parallel`](@ref): Parallel version of fit for large datasets
-- [`fit_hierarchical`](@ref): Hierarchical model fitting
 
 ### Data Analysis
 - [`analyze_results`](@ref): Analyze fitting results
@@ -18,42 +17,36 @@
 - [`DwellTimeData`](@ref): Dwell time data structure
 
 ### Model Types
-- [`HMMReporter`](@ref): Hidden Markov model for reporter data
 - [`GMmodel`](@ref): Gene model structure
 - [`Transformation`](@ref): Data transformation structure
 
-### Traits
-- [`HierarchicalTrait`](@ref): Hierarchical model trait
-- [`GridTrait`](@ref): Grid search trait
-- [`CouplingTrait`](@ref): Coupled model trait
-
-## Utility Functions
-
-### Data Management
+### Utility Functions
 - [`rna_setup`](@ref): Set up project directory structure
-- [`load_data`](@ref): Load data from files
-- [`save_data`](@ref): Save data to files
+- [`write_traces`](@ref): Generate model-predicted intensity traces
+- [`write_ONOFFhistograms`](@ref): Generate ON/OFF dwell time histograms
+- [`write_residency_G_folder`](@ref): Generate G state residency probabilities
 
-### Model Management
-- [`create_model`](@ref): Create a new model instance
-- [`register_model`](@ref): Register a model type
-- [`print_model`](@ref): Print model details
+## Model Components
 
-### Analysis Tools
-- [`calculate_statistics`](@ref): Calculate basic statistics
-- [`generate_plots`](@ref): Generate standard plots
-- [`export_results`](@ref): Export results to various formats
+### Gene States (G)
+- Arbitrary number of gene states
+- User-specified transitions between states
+- One active state for transcription initiation
 
-## Advanced Features
+### Pre-RNA Steps (R)
+- Irreversible forward transitions
+- mRNA ejection from final R step
+- Optional reporter insertion step
 
-### Parallel Processing
-- [`setup_parallel`](@ref): Set up parallel processing
-- [`cleanup_parallel`](@ref): Clean up parallel resources
+### Splicing (S)
+- Up to R splice sites
+- PreRNA with or without spliced intron
+- Multiple configurations per R step
 
-### Bayesian Analysis
-- [`bayesian_fit`](@ref): Bayesian model fitting
-- [`mcmc_analysis`](@ref): MCMC analysis tools
+## Data Types
 
-### Model Validation
-- [`validate_model`](@ref): Validate model assumptions
-- [`cross_validate`](@ref): Cross-validation tools
+The package can handle:
+- mRNA count distributions (smFISH, scRNA)
+- Image intensity traces (live cell imaging)
+- Dwell time distributions
+- Combined data types

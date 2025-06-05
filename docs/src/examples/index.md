@@ -11,27 +11,20 @@ This section contains detailed examples of using StochasticGene.jl for various a
 
 ### Live Cell Imaging
 - [MS2 Reporter Analysis](ms2_analysis.md): Analyzing MS2 reporter data
-- [Dual Reporter System](dual_reporter.md): Working with multiple reporters
 - [Trace Analysis](trace_analysis.md): Analyzing time series data
 
 ### Dwell Time Analysis
 - [Basic Dwell Times](dwell_time_analysis.md): Analyzing basic dwell time distributions
 - [RNA Dwell Time Analysis](rna_dwell_time.md): Advanced dwell time analysis
-- [RNA On-Off Analysis](rna_onoff.md): Analyzing gene state transitions
 
 ## Advanced Examples
 
 ### Parallel Processing
 - [Parallel Processing](parallel_processing.md): Using parallel processing for large datasets
 
-### Hierarchical Models
-- [Hierarchical Trace Analysis](hierarchical_trace.md): Analyzing trace data with hierarchical models
-
-### Joint Analysis
-- [Joint Trace Analysis](joint_trace.md): Analyzing multiple reporters simultaneously
-
-### Coupled Models
-- [Coupled Model Analysis](coupled_models.md): Analyzing coupled gene expression models
+### Model Analysis
+- [Model Validation](model_validation.md): Validating model assumptions and results
+- [Parameter Analysis](parameter_analysis.md): Analyzing model parameters and their uncertainties
 
 ## Contributing Examples
 

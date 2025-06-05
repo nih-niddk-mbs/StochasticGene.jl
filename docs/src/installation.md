@@ -57,10 +57,14 @@ If no errors occur, the package is installed correctly.
 
 If you encounter any issues during installation:
 
-1. Ensure you have the correct Julia version
-2. Try updating your packages: `Pkg.update()`
-3. Check the [GitHub issues](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) for known problems
-4. Open a new issue if your problem persists
+1. Ensure you have the correct Julia version (1.9.3 or higher)
+2. Try updating your package registry:
+   ```julia
+   using Pkg
+   Pkg.update()
+   ```
+3. If problems persist, check the [GitHub Issues page](https://github.com/nih-niddk-mbs/StochasticGene.jl/issues) for known issues
+4. For additional help, open a new issue on GitHub
 
 ## Local Installation
 
