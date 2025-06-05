@@ -26,38 +26,11 @@ jobs:
           # Create a fresh environment for docs
           julia --project=docs -e 'import Pkg; Pkg.activate("."); Pkg.instantiate(); Pkg.precompile()'
 
-      - name: Build and deploy documentation
+      - name: Build documentation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Build the package first to ensure it's precompiled
           julia --project=. -e 'import Pkg; Pkg.build("StochasticGene")'
-          # Build and deploy documentation using Documenter's built-in functionality
+          # Build documentation using Documenter's built-in functionality
           julia --project=docs -e 'import Pkg; Pkg.build("Documenter"); include("docs/make.jl")'
-          
-          # Create docs directory if it doesn't exist
-          mkdir -p docs
-          
-          # Copy documentation to docs/ directory
-          cp -r docs/build/* docs/ 2>/dev/null || true
-          
-          # Add and commit documentation changes
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Add all changes and commit
-          git add .
-          git commit -m "Update documentation" --allow-empty
-          
-          # Add CNAME file for custom domain if needed
-          echo "stochasticgene.github.io" > docs/CNAME
-          git add docs/CNAME
-          git commit -m "Add CNAME file"
-          
-          # Push to main branch
-          git push origin main --force
-          
-          # Clean up
-          rm -rf docs/build
-          git clean -fd
-          git reset --hard HEAD
