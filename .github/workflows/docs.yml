@@ -34,15 +34,3 @@ jobs:
           julia --project=. -e 'import Pkg; Pkg.build("StochasticGene")'
           # Build documentation using Documenter's built-in functionality
           julia --project=docs -e 'import Pkg; Pkg.build("Documenter"); include("docs/make.jl")'
-          
-          # Configure git for deployment
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Add CNAME file for custom domain
-          echo "stochasticgene.github.io" > docs/CNAME
-          git add docs/CNAME
-          git commit -m "Add CNAME file"
-          
-          # Push to gh-pages branch
-          git push origin gh-pages --force
