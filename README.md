@@ -1,9 +1,9 @@
 # StochasticGene.jl
 
-# [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl)
+<!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl)
-[![Build Status](https://github.com/nih-niddk-mbs/StochasticGene.jl/workflows/CI/badge.svg)](https://github.com/nih-niddk-mbs/StochasticGene.jl/actions)
-[![Coverage](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl)
+<!-- [![Build Status](https://github.com/nih-niddk-mbs/StochasticGene.jl/workflows/CI/badge.svg)](https://github.com/nih-niddk-mbs/StochasticGene.jl/actions) 
+[![Coverage](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/nih-niddk-mbs/StochasticGene.jl)-->
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
