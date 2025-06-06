@@ -38,6 +38,12 @@ count3
 ...
 ```
 
+The data will be loaded into an `RNAData` structure with the following fields:
+- `histRNA`: Vector of RNA counts
+- `gene`: Gene name
+- `condition`: Experimental condition
+- `nalleles`: Number of alleles
+
 ### Live Cell Imaging Data
 For live cell imaging data, provide a text file with time series data:
 ```text

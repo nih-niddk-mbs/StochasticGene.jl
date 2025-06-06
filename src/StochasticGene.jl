@@ -107,7 +107,7 @@ fits = fit(
 For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
 """
 module StochasticGene
-__precompile__(true)
+# __precompile__(true)
 
 using CSV
 using DataFrames

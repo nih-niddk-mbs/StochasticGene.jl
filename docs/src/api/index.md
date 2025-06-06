@@ -12,7 +12,29 @@
 - [`save_results`](@ref): Save results to disk
 
 ### Data Types
-- [`RNAData`](@ref): RNA count data structure
+
+#### RNAData
+```julia
+struct RNAData
+    histRNA::Vector{Float64}  # Histogram of RNA counts
+    gene::String             # Gene name
+    condition::String        # Experimental condition
+    nalleles::Int           # Number of alleles
+end
+```
+
+A concrete struct for storing RNA histogram data. This is used for steady-state RNA count distributions from techniques like smFISH or scRNA-seq.
+
+Example:
+```julia
+data = RNAData(
+    histRNA=[1,2,3,4,5],
+    gene="GENE1",
+    condition="control",
+    nalleles=2
+)
+```
+
 - [`TraceData`](@ref): Live cell imaging data structure
 - [`DwellTimeData`](@ref): Dwell time data structure
 
