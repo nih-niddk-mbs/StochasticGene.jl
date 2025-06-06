@@ -1667,57 +1667,6 @@ function alleles(gene::String, path::String; nalleles::Int=2, col::Int=3)
     end
 end
 
-"""
-    fit(data, model::AbstractGMmodel; kwargs...)
-
-Fit a stochastic gene expression model to data using MCMC.
-
-# Arguments
-- `data`: The data to fit. Can be one of:
-  - `RNAData`: RNA histogram data
-  - `RNAOnOffData`: RNA on/off data
-  - `RNADwellTimeData`: RNA dwell time data
-  - `TraceData`: Time trace data
-- `model::AbstractGMmodel`: The model to fit. Can be one of:
-  - `GMmodel`: Gene-only model
-  - `GRSMmodel`: Gene-Reporter-Splicing model
-
-# Keyword Arguments
-- `nchains::Int=4`: Number of MCMC chains to run
-- `nsteps::Int=1000`: Number of MCMC steps per chain
-- `nburnin::Int=100`: Number of burn-in steps
-- `thin::Int=1`: Thinning interval for MCMC samples
-- `parallel::Bool=true`: Whether to run chains in parallel
-- `temperatures::Vector{Float64}=[1.0]`: Temperature ladder for parallel tempering
-- `priors::Dict=Dict()`: Prior distributions for parameters
-- `initial_values::Vector{Float64}=[]`: Initial parameter values
-- `proposal_sd::Vector{Float64}=[]`: Standard deviations for proposal distributions
-
-# Returns
-- `Dict`: A dictionary containing:
-  - `:chains`: MCMC chains
-  - `:acceptance`: Acceptance rates
-  - `:loglikelihood`: Log-likelihood values
-  - `:parameters`: Parameter estimates
-  - `:convergence`: Convergence diagnostics
-
-# Example
-```julia
-# Fit a simple gene model to RNA histogram data
-data = RNAData(histRNA=[1,2,3,4,5])
-model = GMmodel(G=2, transitions=([1,2], [2,1]))
-result = fit(data, model, nchains=4, nsteps=1000)
-
-# Fit a GRS model to time trace data
-data = TraceData(traces=[...])
-model = GRSMmodel(G=2, R=2, S=1, transitions=([1,2], [2,1]))
-result = fit(data, model, parallel=true, temperatures=[1.0, 2.0, 4.0])
-```
-"""
-function fit(data, model::AbstractGMmodel; kwargs...)
-    # ... existing implementation ...
-end
-
 
 
 

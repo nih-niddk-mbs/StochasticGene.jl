@@ -49,31 +49,21 @@ abstract type AbstractTraceHistogramData <: AbstractTraceData end
 # Do not use underscore "_" in label
 
 """
-    RNAData
+    RNAData{nType,hType}
 
-Data structure for RNA histogram data.
+Structure for storing RNA histogram data.
 
 # Fields
-- `histRNA::Vector{Float64}`: Histogram of RNA counts
-- `gene::String`: Gene name
-- `condition::String`: Experimental condition
-- `nalleles::Int`: Number of alleles
-
-# Example
-```julia
-data = RNAData(
-    histRNA=[1,2,3,4,5],
-    gene="GENE1",
-    condition="control",
-    nalleles=2
-)
-```
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::nType`: Length of the histogram.
+- `histRNA::hType`: RNA histograms.
 """
-struct RNAData
-    histRNA::Vector{Float64}
+struct RNAData{nType,hType} <: AbstractRNAData{hType}
+    label::String
     gene::String
-    condition::String
-    nalleles::Int
+    nRNA::nType
+    histRNA::hType
 end
 
 struct RNACountData <: AbstractRNAData{Vector{Int}}
@@ -95,99 +85,66 @@ end
 """
     RNAOnOffData
 
-Data structure for RNA on/off data.
+Structure for storing RNA ON/OFF time data.
 
 # Fields
-- `ON::Vector{Float64}`: Histogram of ON dwell times
-- `OFF::Vector{Float64}`: Histogram of OFF dwell times
-- `histRNA::Vector{Float64}`: Histogram of RNA counts
-- `gene::String`: Gene name
-- `condition::String`: Experimental condition
-- `nalleles::Int`: Number of alleles
-
-# Example
-```julia
-data = RNAOnOffData(
-    ON=[1,2,3,4,5],
-    OFF=[1,2,3,4,5],
-    histRNA=[1,2,3,4,5],
-    gene="GENE1",
-    condition="control",
-    nalleles=2
-)
-```
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::Int`: Length of the histogram.
+- `histRNA::Vector`: RNA histograms.
+- `bins::Vector`: Number of live cell recording time bins.
+- `ON::Vector`: ON time probability density.
+- `OFF::Vector`: OFF time probability density.
 """
-struct RNAOnOffData
-    ON::Vector{Float64}
-    OFF::Vector{Float64}
-    histRNA::Vector{Float64}
+struct RNAOnOffData <: AbstractHistogramData
+    label::String
     gene::String
-    condition::String
-    nalleles::Int
+    nRNA::Int
+    histRNA::Vector
+    bins::Vector
+    ON::Vector
+    OFF::Vector
 end
-
 """
     RNADwellTimeData
 
-Data structure for RNA dwell time data.
+Structure for storing RNA dwell time data.
 
 # Fields
-- `DwellTimes::Vector{Vector{Float64}}`: Vector of dwell time histograms
-- `histRNA::Vector{Float64}`: Histogram of RNA counts
-- `gene::String`: Gene name
-- `condition::String`: Experimental condition
-- `nalleles::Int`: Number of alleles
-
-# Example
-```julia
-data = RNADwellTimeData(
-    DwellTimes=[[1,2,3], [4,5,6]],
-    histRNA=[1,2,3,4,5],
-    gene="GENE1",
-    condition="control",
-    nalleles=2
-)
-```
+- `label::String`: Label for the data set.
+- `gene::String`: Gene name (case sensitive).
+- `nRNA::Int`: Length of the histogram.
+- `histRNA::Array`: RNA histograms.
+- `bins::Vector{Vector}`: Number of live cell recording time bins.
+- `DwellTimes::Vector{Vector}`: Dwell times.
+- `DTtypes::Vector`: Types of dwell times.
 """
-struct RNADwellTimeData
-    DwellTimes::Vector{Vector{Float64}}
-    histRNA::Vector{Float64}
+struct RNADwellTimeData <: AbstractHistogramData
+    label::String
     gene::String
-    condition::String
-    nalleles::Int
+    nRNA::Int
+    histRNA::Array
+    bins::Vector{Vector}
+    DwellTimes::Vector{Vector}
+    DTtypes::Vector
 end
-
 """
-    TraceData
+    TraceData{labelType,geneType,traceType}
 
-Data structure for time trace data.
+Structure for storing trace data.
 
 # Fields
-- `traces::Vector{Vector{Float64}}`: Vector of time traces
-- `gene::String`: Gene name
-- `condition::String`: Experimental condition
-- `nalleles::Int`: Number of alleles
-- `dt::Float64`: Time step between measurements
-
-# Example
-```julia
-data = TraceData(
-    traces=[[1,2,3], [4,5,6]],
-    gene="GENE1",
-    condition="control",
-    nalleles=2,
-    dt=1.0
-)
-```
+- `label::labelType`: Label for the data set.
+- `gene::geneType`: Gene name (case sensitive).
+- `interval::Float64`: Time interval between trace points.
+- `trace::traceType`: Trace data.
 """
-struct TraceData
-    traces::Vector{Vector{Float64}}
-    gene::String
-    condition::String
-    nalleles::Int
-    dt::Float64
+struct TraceData{labelType,geneType,traceType} <: AbstractTraceData
+    label::labelType
+    gene::geneType
+    interval::Float64
+    trace::traceType
 end
-
 """
     TraceRNAData{traceType,hType}
 
