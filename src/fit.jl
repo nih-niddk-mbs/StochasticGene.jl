@@ -291,7 +291,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
-- `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution)
+- `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. ((prob_Gaussian, prob_Gaussian), (prob_Gaussian, prob_Gaussian)) for coupled models, use 1 for deterministic/degenerate distribution (e.g. for driven coupled models)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `resultfolder::String=test`: folder for results of MCMC run
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
