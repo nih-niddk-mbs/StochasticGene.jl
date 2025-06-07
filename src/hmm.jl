@@ -132,30 +132,31 @@ variance = sum of variances of background and reporters_per_state
 - `reporters_per_state`: number of reporters per HMM state
 -`N`: number of HMM states
 """
-function prob_Gaussian_inplace(par, reporters_per_state::T, N) where {T<:Vector}
-    d = Array{Distribution{Univariate,Continuous}}(undef, N)
-    for i in 1:N
-        d[i] = prob_Gaussian(par, reporters_per_state[i])
-    end
-    d
-end
-
 function prob_Gaussian(par, reporters_per_state::T, N) where {T<:Vector}
-    [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
-end
-
-function prob_Gaussian_inplace(par, reporters_per_state::T) where {T<:Vector}
-    N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
         d[i] = prob_Gaussian(par, reporters_per_state[i])
     end
     d
+end
+
+function prob_Gaussian_ad(par, reporters_per_state::T, N) where {T<:Vector}
+    [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
 end
 
 function prob_Gaussian(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
-    [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
+    prob_Gaussian(par, reporters_per_state, N)
+    # d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    # for i in 1:N
+    #     d[i] = prob_Gaussian(par, reporters_per_state[i])
+    # end
+    # d
+end
+
+function prob_Gaussian_ad(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
+    [prob_Gaussian_ad(par, reporters_per_state[i]) for i in 1:N]
 end
 
 """
@@ -366,7 +367,7 @@ end
 
 
 """
-    set_d(noiseparams, reporters_per_state, probfn, N)
+    set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
 
 TBW
 """
@@ -377,11 +378,17 @@ function set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
     probfn(n, reporters_per_state, N)
 end
 
+"""
+    set_d(noiseparams, reporters_per_state, probfn, N)
+
+TBW
+"""
+
 function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int) where {T<:Function}
     probfn(noiseparams, reporters_per_state, N)
 end
 
-function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
+function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
     d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i], N))
@@ -389,17 +396,17 @@ function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vecto
     return d
 end
 
-function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
+function set_d_ad(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector, N::Int) where {T<:AbstractVector}
     [probfn[i](noiseparams[i], reporters_per_state[i], N) for i in eachindex(noiseparams)]
 end
 
-function set_d(noiseparams, reporters_per_state, probfn, Nstate::Int, Ngrid::Int)
-    probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
-end
+# function set_d(noiseparams, reporters_per_state, probfn, Nstate::Int, Ngrid::Int)
+#     probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
+# end
 
-function set_d(noiseparams, reporters_per_state, probfn, Ngrid::Int)
-    probfn(noiseparams, reporters_per_state, Ngrid)
-end
+# function set_d(noiseparams, reporters_per_state, probfn, Ngrid::Int)
+#     probfn(noiseparams, reporters_per_state, Ngrid)
+# end
 
 
 """
@@ -430,7 +437,7 @@ function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T) where {
     probfn(noiseparams, reporters_per_state)
 end
 
-function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
+function set_d(noiseparams::Vector{T1}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector{T2}) where {T1<:AbstractVector, T2<:Function}
     d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
         push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
@@ -438,7 +445,7 @@ function set_d_inplace(noiseparams::Vector{T}, reporters_per_state::Vector{Vecto
     return d
 end
 
-function set_d(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
+function set_d_ad(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector) where {T<:AbstractVector}
     [probfn[i](noiseparams[i], reporters_per_state[i]) for i in eachindex(noiseparams)]
 end
 
@@ -464,7 +471,7 @@ end
 
 TBW
 """
-function set_b_inplace(trace::Vector, d::Vector{T}) where {T<:Distribution}
+function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
     N = length(d)
     b = Matrix{Float64}(undef, N, length(trace))
     for (t, obs) in enumerate(trace)
@@ -475,13 +482,13 @@ function set_b_inplace(trace::Vector, d::Vector{T}) where {T<:Distribution}
     return b
 end
 
-function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
+function set_b_ad(trace::Vector, d::Vector{T}) where {T<:Distribution}
     N = length(d)
     Tlen = length(trace)
     [pdf(d[j], trace[t]) for j in 1:N, t in 1:Tlen]
 end
 
-function set_b_inplace(trace, d::Vector{T}) where {T<:Vector}
+function set_b(trace, d::Vector{T}) where {T<:Vector}
     N = length(d[1])
     b = ones(N, size(trace, 1))
     t = 1
@@ -496,7 +503,7 @@ function set_b_inplace(trace, d::Vector{T}) where {T<:Vector}
     return b
 end
 
-function set_b(trace, d::Vector{T}) where {T<:Vector}
+function set_b_ad(trace, d::Vector{T}) where {T<:Vector}
     N = length(d[1])
     Tlen = size(trace, 1)
     [prod(pdf(d[i][j], trace[t, i]) for i in eachindex(d)) for j in 1:N, t in 1:Tlen]
@@ -682,82 +689,34 @@ end
 
 TBW
 """
-function forward_inner_operation!(α, a, b::Vector, i, j, t)
+function forward_inner_operation!(α, a::Matrix, b::Vector, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j]
 end
 
-function forward_inner_operation(α, a, b::Vector, i, j, t)
+function forward_inner_operation_ad(α, a, b::Vector, i, j, t)
     α_new = similar(α)
     α_new[j, t] += α[i, t-1] * a[i, j] * b[j]
     return α_new
 end
 
-function forward_inner_operation!(α, a, b::Matrix, i, j, t)
+function forward_inner_operation!(α, a::Matrix, b::Matrix, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
 end
 
-function forward_inner_operation(α, a, b::Matrix, i, j, t)
+function forward_inner_operation_ad(α, a::Matrix, b::Matrix, i, j, t)
     α_new = similar(α)
     α_new[j, t] += α[i, t-1] * a[i, j] * b[j, t]
     return α_new
 end
 
-"""
-    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-
-TBW
-"""
-function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-    # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
-    #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
-    # else
-    α = zeros(Nstate, Ngrid, T)
-    C = Vector{Float64}(undef, T)
-    α[:, :, 1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(α[:, :, 1])
-    α[:, :, 1] *= C[1]
-    for t in 2:T
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α[:, :, t])
-        α[:, :, t] *= C[t]
+function forward_inner_operation!(α, a::Vector{Matrix}, b::Vector{T}, i, j, t) where {T<:AbstractVector}
+    if b[1] == 0
+        α[j, t] += α[i, t-1] * a[1][i, j] * b[2][j]
+    else
+        α[j, t] += α[i, t-1] * a[2][i, j] * b[2][j]
     end
-    return α, C
-    # end
 end
 
-function forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
-    αs = Vector{Matrix{Float64}}(undef, T)
-    C = Vector{Float64}(undef, T)
-    αs[1] = p0 .* b[:, :, 1]
-    C[1] = 1 / sum(αs[1])
-    αs[1] *= C[1]
-    for t in 2:T
-        α_new = zeros(Nstate, Ngrid)
-        for l in 1:Ngrid, k in 1:Nstate
-            for j in 1:Ngrid, i in 1:Nstate
-                α_new[i, j] += αs[t-1][k, l] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            end
-        end
-        C[t] = 1 / sum(α_new)
-        αs[t] = α_new * C[t]
-    end
-    α = cat(αs..., dims=3)  # Stack along the 3rd dimension
-    return α, C
-end
-
-"""
-    forward_grid(a, a_grid, b, p0)
-
-TBW
-"""
-function forward_grid(a, a_grid, b, p0)
-    Nstate, Ngrid, T = size(b)
-    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
-end
 
 """
 forward(a, b, p0, N, T)
@@ -768,6 +727,28 @@ Ct = Prod_t 1/∑_i α[i,t]
 
 # """
 function forward(a::Matrix, b, p0, N, T)
+    # if CUDA.functional() && (N * N * T > 1000)
+    #     return forward_gpu(a, b, p0, N, T)
+    # else
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    α[:, 1] = p0 .* b[:, 1]
+    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                forward_inner_operation!(α, a, b, i, j, t)
+            end
+        end
+        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
+        α[:, t] *= C[t]
+    end
+    return α, C
+    # end
+end
+
+function forward_deterministic(a::Matrix, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
@@ -874,6 +855,63 @@ Returns the forward variable α and scaling parameter array C.
 #     # Return results back to CPU
 #     return Array(α_gpu), Array(C_gpu)
 # end
+
+"""
+    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+
+TBW
+"""
+function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+    # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
+    #     return forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+    # else
+    α = zeros(Nstate, Ngrid, T)
+    C = Vector{Float64}(undef, T)
+    α[:, :, 1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(α[:, :, 1])
+    α[:, :, 1] *= C[1]
+    for t in 2:T
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α[:, :, t])
+        α[:, :, t] *= C[t]
+    end
+    return α, C
+    # end
+end
+
+function forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
+    αs = Vector{Matrix{Float64}}(undef, T)
+    C = Vector{Float64}(undef, T)
+    αs[1] = p0 .* b[:, :, 1]
+    C[1] = 1 / sum(αs[1])
+    αs[1] *= C[1]
+    for t in 2:T
+        α_new = zeros(Nstate, Ngrid)
+        for l in 1:Ngrid, k in 1:Nstate
+            for j in 1:Ngrid, i in 1:Nstate
+                α_new[i, j] += αs[t-1][k, l] * a[k, i] * a_grid[l, j] * b[i, j, t]
+            end
+        end
+        C[t] = 1 / sum(α_new)
+        αs[t] = α_new * C[t]
+    end
+    α = cat(αs..., dims=3)  # Stack along the 3rd dimension
+    return α, C
+end
+
+"""
+    forward_grid(a, a_grid, b, p0)
+
+TBW
+"""
+function forward_grid(a, a_grid, b, p0)
+    Nstate, Ngrid, T = size(b)
+    forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+end
 
 """
     forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
