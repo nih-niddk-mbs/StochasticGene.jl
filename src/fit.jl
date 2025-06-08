@@ -692,6 +692,37 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     return reporter, components
 end
 
+function make_reporter_components_d(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+    reporter = HMMReporter[]
+    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
+    if probfn[1] == 1
+        make_reporter_components_deterministic(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+    else
+        n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
+        for i in eachindex(G)
+            nnoise = length(noisepriors[i])
+            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
+            weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+            push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
+        end
+        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+        return reporter, components
+    end
+end
+
+function make_reporter_components_deterministic(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+    reporter = HMMReporter[]
+    components = []
+    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
+    push!(reporter, 1)
+    for i in 2:lastindex(G)
+        r, c = make_reporter_components(transitions[i],G[i], R[i], S[i], insertstep[i], splicetype, onstates, probfn, noisepriors, coupling)
+        push!(reporter, r)
+        push!(components, c)
+    end
+    
+    return reporter, components
+end
 """
     make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
 
@@ -1228,13 +1259,13 @@ end
 
 function prior_distribution_array(position::Vector, scale::Vector, transforms::Vector{Function}, k=10)
     d = []
-        for i in eachindex(transforms)
-            if transforms[i] == log || transforms[i] == log_shift1
-                push!(d, truncated_normal(position[i], scale[i], k))
-            else
-                push!(d, Normal(position[i], scale[i]))
-            end
+    for i in eachindex(transforms)
+        if transforms[i] == log || transforms[i] == log_shift1
+            push!(d, truncated_normal(position[i], scale[i], k))
+        else
+            push!(d, Normal(position[i], scale[i]))
         end
+    end
     return d
 end
 
@@ -1245,7 +1276,7 @@ end
 set rinit to prior if empty
 """
 function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
-    if isempty(r) 
+    if isempty(r)
         println("No rate file, set rate to prior")
         r = priormean
     elseif any(isnan.(r)) || any(isinf.(r))
@@ -1535,7 +1566,7 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
     print_ll(transform_rates(vec(stats.medparam), model), data, model, "median ll: ")
     println("Median fitted rates: ", stats.medparam[:, 1])
     println("ML rates: ", inverse_transform_params(fits.parml, model))
-    println("Acceptance: ", fits.accept, "/", fits.total, " (", fits.accept/fits.total*100, "% )    ")
+    println("Acceptance: ", fits.accept, "/", fits.total, " (", fits.accept / fits.total * 100, "% )    ")
     if is_histogram_compatible(data)
         println("Deviance: ", deviance(fits, data, model))
     end
@@ -1561,7 +1592,7 @@ function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles
             return abs(propcv)
         end
         cv = read_bottom_float_block(file)
-        cv = 2.38^2 * cv / size(cv,1)
+        cv = 2.38^2 * cv / size(cv, 1)
         if isposdef(cv)
             return (cv, abs(propcv))
         else

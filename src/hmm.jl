@@ -319,6 +319,11 @@ function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=T
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
+function make_ap(rates, couplingStrength, interval, components::TComponents, method=Tsit5())
+    Q = [make_mat_TC(components, rates[i], couplingStrength) for i in 1:2]
+    [kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr) for Qtr in Q]
+end
+
 """
     make_ap(r, interval, elementsT::Vector, N)
 
@@ -1413,6 +1418,15 @@ end
 
 # coupled
 function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
+    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
+    ll + lb, logpredictions
+end
+
+function ll_hmm_deterministic(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = set_d(noiseparams, reporter)
