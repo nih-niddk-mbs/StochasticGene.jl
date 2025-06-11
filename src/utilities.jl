@@ -1182,7 +1182,9 @@ function onstate_prob(r, components::TComponents, reporter_per_state)
     return sum(p0[reporter_per_state.>0]), p0
 end
 
-onstate_prob(param, model::AbstractGeneTransitionModel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
+onstate_prob(r, model::AbstractGeneTransitionModel) = onstate_prob(r, model.components, model.reporter.per_state)
+
+# onstate_prob(param, model::AbstractGeneTransitionModel) = onstate_prob(get_rates(param, model), model.components, model.reporter.per_state)
 
 onstate_prob(model::AbstractGeneTransitionModel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 

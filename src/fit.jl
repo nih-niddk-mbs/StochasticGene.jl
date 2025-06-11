@@ -291,7 +291,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `optimize=false`: use optimizer to compute maximum likelihood value
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
-- `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. ((prob_Gaussian, prob_Gaussian), (prob_Gaussian, prob_Gaussian)) for coupled models, use 1 for deterministic/degenerate distribution (e.g. for driven coupled models)
+- `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
 - `resultfolder::String=test`: folder for results of MCMC run
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
@@ -692,37 +692,37 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     return reporter, components
 end
 
-function make_reporter_components_d(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-    reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
-    if probfn[1] == 1
-        make_reporter_components_deterministic(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-    else
-        n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
-        for i in eachindex(G)
-            nnoise = length(noisepriors[i])
-            n = num_rates(transitions[i], R[i], S[i], insertstep[i])
-            weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-            push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
-        end
-        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-        return reporter, components
-    end
-end
+function make_reporter_components_forced(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
 
-function make_reporter_components_deterministic(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-    reporter = HMMReporter[]
-    components = []
-    n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
-    push!(reporter, 1)
-    for i in 2:lastindex(G)
-        r, c = make_reporter_components(transitions[i],G[i], R[i], S[i], insertstep[i], splicetype, onstates, probfn, noisepriors, coupling)
-        push!(reporter, r)
-        push!(components, c)
+    nnoise = length(noisepriors)
+    n = num_rates(transitions, R, S, insertstep)
+    weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
+    if isempty(coupling)
+        components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    else
+        components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     end
-    
     return reporter, components
 end
+
+# function make_reporter_components_tuple(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+#     if probfn[1] == 1
+#         make_reporter_components_forced(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+#     else
+#         make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+#     end
+# end
+
+# function make_reporter_components_forced(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+#     i = 2
+#     nnoise = length(noisepriors)
+#     n = num_rates(transitions, R, S, insertstep)
+#     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+#     reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
+#     components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+#     return (1, reporter), components
+# end
 """
     make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
 

@@ -319,9 +319,18 @@ function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=T
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
-function make_ap(rates, couplingStrength, interval, components::TComponents, method=Tsit5())
-    Q = [make_mat_TC(components, rates[i], couplingStrength) for i in 1:2]
+function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
+    r = set_rates(rates,couplingStrength,components)
+    Q = [make_mat_T(components, r[i]) for i in 1:2]
     [kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr) for Qtr in Q]
+end
+
+function set_rates(rates, couplingStrength, components::TForcedComponents)
+    r = Vector{Float64}(undef,2)
+    r[1] = rates
+    r[2] = rates
+    r[2][components.targets] .*= (1 + couplingStrength)
+    return r
 end
 
 """
@@ -405,14 +414,6 @@ function set_d_ad(noiseparams::Vector{T}, reporters_per_state::Vector{Vector{Int
     [probfn[i](noiseparams[i], reporters_per_state[i], N) for i in eachindex(noiseparams)]
 end
 
-# function set_d(noiseparams, reporters_per_state, probfn, Nstate::Int, Ngrid::Int)
-#     probfn(noiseparams, reporters_per_state, Nstate, Ngrid)
-# end
-
-# function set_d(noiseparams, reporters_per_state, probfn, Ngrid::Int)
-#     probfn(noiseparams, reporters_per_state, Ngrid)
-# end
-
 
 """
     set_d(noiseparams, reporter, N)
@@ -485,6 +486,10 @@ function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
         end
     end
     return b
+end
+
+function set_b(trace::Vector, d::Tuple{Int,Vector{T}}) where {T<:Distribution}
+    [1, set_b(trace, d[2])]
 end
 
 function set_b_ad(trace::Vector, d::Vector{T}) where {T<:Distribution}
@@ -732,28 +737,6 @@ Ct = Prod_t 1/∑_i α[i,t]
 
 # """
 function forward(a::Matrix, b, p0, N, T)
-    # if CUDA.functional() && (N * N * T > 1000)
-    #     return forward_gpu(a, b, p0, N, T)
-    # else
-    α = zeros(N, T)
-    C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
-    α[:, 1] *= C[1]
-    for t in 2:T
-        for j in 1:N
-            for i in 1:N
-                forward_inner_operation!(α, a, b, i, j, t)
-            end
-        end
-        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
-        α[:, t] *= C[t]
-    end
-    return α, C
-    # end
-end
-
-function forward_deterministic(a::Matrix, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
@@ -1426,10 +1409,10 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     ll + lb, logpredictions
 end
 
-function ll_hmm_deterministic(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
-    d = set_d(noiseparams, reporter)
+    d = (1, set_d(noiseparams, reporter))
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
     lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
     ll + lb, logpredictions

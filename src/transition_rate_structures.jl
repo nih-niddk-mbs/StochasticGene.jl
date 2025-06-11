@@ -190,6 +190,13 @@ struct TCoupledComponents{ModelType} <: AbstractComponents
     modelcomponents::ModelType
 end
 
+struct TForcedComponents <: AbstractComponents
+    nT::Int
+    elementsT::Vector{Element}
+    targets::Vector{Int}
+end
+
+
 
 
 """

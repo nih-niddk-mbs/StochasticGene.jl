@@ -220,6 +220,12 @@ end
 
 TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
+
+function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
+    indices = set_indices(length(transitions), R, S, insertstep)
+    elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
+    TForcedComponents(nT, elementsT, coupling[4])
+end
 """
     MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)
 

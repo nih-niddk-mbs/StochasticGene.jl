@@ -737,7 +737,7 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
-    write_info(joinpath(path, "info" * name), data, model, labels)
+    write_info(joinpath(path, "info" * name), fits, data, model, labels)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
     end
@@ -931,34 +931,31 @@ end
 
 TBW
 """
-function write_info(file::String, data, model, labels)
+function write_info(file::String, fits, data, model, labels)
     f = open(file, "w")
     if typeof(model) <: GRSMmodel && hasproperty(model.trait, :hierarchical)
         # writedlm(f, labels[1:1, 1:num_all_parameters(model)], ',')  # labels
         println(model.trait) 
-        writedlm(f, labels[1:1, model.trait[1].fittedpriors], ',')  # labels
-        writedlm(f, apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait[1].fittedpriors])', ',')
+        writedlm(f, [" " labels[1:1, model.trait.hierarchical.fittedpriors]], ',')  # labels
+        writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait.hierarchical.fittedpriors])'], ',')
     else
-        writedlm(f, labels[1:1, model.fittedparam], ',')  # labels
-        writedlm(f, apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])', ',')
+        writedlm(f, [" " labels[1:1, model.fittedparam]], ',')  # labels
+        writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])'], ',')
     end
     
-    writedlm(f, [mean.(model.rateprior)], ',')
-    writedlm(f, [std.(model.rateprior)], ',')
-    writedlm(f, [model.Gtransitions], ',')
-    writedlm(f, [data.label], ',')
-    writedlm(f, [data.gene], ',')
-    writedlm(f, [model.nalleles], ',')
+    writedlm(f, ["transformed prior mean" reshape(mean.(model.rateprior), 1, :)], ',')
+    writedlm(f, ["transformedprior std" reshape(std.(model.rateprior), 1, :)], ',')
+    writedlm(f, ["Gtransitions" model.Gtransitions], ',')
+    writedlm(f, ["label" data.label], ',')
+    writedlm(f, ["gene" data.gene], ',')
+    writedlm(f, ["nalleles" model.nalleles], ',')
     if typeof(data) <: AbstractTraceData
-        writedlm(f, [data.interval], ',')
+        writedlm(f, ["interval" data.interval], ',')
     end
+    # writedlm(f, ["G state probability" residenceprob_G(get_rates(fits.parml, model), model.G)], ',')
+    # writedlm(f, ["ON probability" onstate_prob(get_rates(fits.parml, model), model)], ',')
     close(f)
 end
-
-function write_info(file::String, data, model)
-    write_info(file, data, model, rlabels(model))
-end
-
 
 """
 write_MHsamples(file::String,samples::Matrix)
