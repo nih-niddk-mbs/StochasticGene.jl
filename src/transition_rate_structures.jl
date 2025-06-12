@@ -190,10 +190,10 @@ struct TCoupledComponents{ModelType} <: AbstractComponents
     modelcomponents::ModelType
 end
 
-struct TForcedComponents <: AbstractComponents
+struct TForcedComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
-    targets::Vector{Int}
+    targets::Tuple
 end
 
 

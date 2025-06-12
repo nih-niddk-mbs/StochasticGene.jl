@@ -320,16 +320,16 @@ function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=T
 end
 
 function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
-    r = set_rates(rates,couplingStrength,components)
+    r = set_rates_forced(rates,couplingStrength,components)
     Q = [make_mat_T(components, r[i]) for i in 1:2]
-    [kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr) for Qtr in Q]
+    a = [kolmogorov_forward(Qtr', interval, method) for Qtr in Q]
+    p0 = [normalized_nullspace(Qtr) for Qtr in Q]
+    return a, p0
 end
 
-function set_rates(rates, couplingStrength, components::TForcedComponents)
-    r = Vector{Float64}(undef,2)
-    r[1] = rates
-    r[2] = rates
-    r[2][components.targets] .*= (1 + couplingStrength)
+function set_rates_forced(rates, couplingStrength, components::TForcedComponents)
+    r = fill(rates, 2)
+    r[2][components.targets[2]] *= (1. + couplingStrength[1])
     return r
 end
 
@@ -488,8 +488,8 @@ function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
     return b
 end
 
-function set_b(trace::Vector, d::Tuple{Int,Vector{T}}) where {T<:Distribution}
-    [1, set_b(trace, d[2])]
+function set_b(trace::Matrix, d::Tuple)
+    [trace[:,1], set_b(trace[:,2], d[2])]
 end
 
 function set_b_ad(trace::Vector, d::Vector{T}) where {T<:Distribution}
@@ -719,11 +719,11 @@ function forward_inner_operation_ad(α, a::Matrix, b::Matrix, i, j, t)
     return α_new
 end
 
-function forward_inner_operation!(α, a::Vector{Matrix}, b::Vector{T}, i, j, t) where {T<:AbstractVector}
-    if b[1] == 0
-        α[j, t] += α[i, t-1] * a[1][i, j] * b[2][j]
+function forward_inner_operation!(α, a::Vector{T1}, b::Vector{T2}, i, j, t) where {T1 <: AbstractArray, T2 <: AbstractArray}
+    if iszero(b[1][j])
+        forward_inner_operation!(α, a[1], b[2], i, j, t)
     else
-        α[j, t] += α[i, t-1] * a[2][i, j] * b[2][j]
+        forward_inner_operation!(α, a[2], b[2], i, j, t)
     end
 end
 
@@ -736,7 +736,7 @@ returns forward variable α, and scaling parameter array C using scaled forward 
 Ct = Prod_t 1/∑_i α[i,t]
 
 # """
-function forward(a::Matrix, b, p0, N, T)
+function forward(a, b, p0, N, T)
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else
@@ -756,6 +756,37 @@ function forward(a::Matrix, b, p0, N, T)
     end
     return α, C
     # end
+end
+
+function forward(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1 <: AbstractArray, T2 <: AbstractArray}
+    # if CUDA.functional() && (N * N * T > 1000)
+    #     return forward_gpu(a, b, p0, N, T)
+    # else
+    α = zeros(N, T)
+    C = Vector{Float64}(undef, T)
+    if iszero(b[1][1])
+        α[:, 1] = p0[1] .* b[2][:, 1]
+    else
+        α[:, 1] = p0[2] .* b[2][:, 1]
+    end
+    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
+    α[:, 1] *= C[1]
+    for t in 2:T
+        for j in 1:N
+            for i in 1:N
+                forward_inner_operation!(α, a, b, i, j, t)
+            end
+        end
+        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
+        α[:, t] *= C[t]
+    end
+    return α, C
+    # end
+end
+
+function forward(a::Vector{T1}, b::Vector{T2}, p0) where {T1 <: AbstractArray, T2 <: AbstractArray}
+    N, T = size(b[2])
+    forward(a, b, p0, N, T)
 end
 
 function forward_ad(a::Matrix, b, p0, N, T)
@@ -796,7 +827,7 @@ end
 
 TBW
 """
-function forward(a::Matrix, b, p0)
+function forward(a::Matrix, b::Matrix, p0)
     N, T = size(b)
     forward(a, b, p0, N, T)
 end
@@ -966,10 +997,10 @@ Returns the forward variable α and scaling parameter array C.
 # Returns
 - Tuple of (α, C) where α is the forward variable and C is the scaling parameter array
 """
-function forward_grid_gpu(a, a_grid, b, p0)
-    Nstate, Ngrid, T = size(b)
-    forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
-end
+# function forward_grid_gpu(a, a_grid, b, p0)
+#     Nstate, Ngrid, T = size(b)
+#     forward_grid_gpu(a, a_grid, b, p0, Nstate, Ngrid, T)
+# end
 
 
 """
@@ -1226,7 +1257,7 @@ end
     ll_hmm(a::Matrix, p0::Vector, d, traces)
 
 """
-function _ll_hmm(a::Matrix, p0::Vector, d, traces)
+function _ll_hmm(a, p0, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         b = set_b(traces[i], d)
@@ -1235,6 +1266,16 @@ function _ll_hmm(a::Matrix, p0::Vector, d, traces)
     end
     sum(logpredictions), logpredictions
 end
+
+# function _ll_hmm(a::Vector{T1}, p0::Vector{T2}, d, traces) where {T1 <: Matrix, T2 <: Vector}
+#     logpredictions = Array{Float64}(undef, length(traces))
+#     for i in eachindex(traces)
+#         b = set_b(traces[i], d)
+#         _, C = forward(a, b, p0)
+#         @inbounds logpredictions[i] = -sum(log.(C))
+#     end
+#     sum(logpredictions), logpredictions
+# end
 
 function _ll_hmm_ad(a::Matrix, p0::Vector, d, traces)
     logpredictions = [
@@ -1306,7 +1347,7 @@ end
     ll_hmm(a, a_grid, p0::Vector, d, traces)
 
 """
-function _ll_hmm(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
+function _ll_hmm_grid(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         _, C = forward_grid(a, a_grid, set_b(traces[i], d), p0)
@@ -1319,7 +1360,7 @@ end
     ll_hmm(noiseparams, a, a_grid, p0::Vector, reporter, traces)
 
 """
-function _ll_hmm(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
+function _ll_hmm_grid(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter, Ngrid)
@@ -1334,7 +1375,7 @@ end
     ll_hmm(r::Vector, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
 
 """
-function _ll_hmm(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+function _ll_hmm_grid(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], interval, components, method)
@@ -1351,7 +1392,7 @@ end
     ll_hmm(r, couplingStrength, noiseparams, pgrid, Ngrid, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
 
 """
-function _ll_hmm(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
+function _ll_hmm_grid(r::Vector, couplingStrength::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int, interval::Float64, components::AbstractComponents, reporter, traces, method=Tsit5())
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         a, p0 = make_ap(r[i], couplingStrength[i], interval, components, method)
@@ -1409,12 +1450,13 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     ll + lb, logpredictions
 end
 
-function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+# forced
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
     d = (1, set_d(noiseparams, reporter))
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
-    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
+    lb = ll_off(trace, noiseparams, reporter, components, a[1], p0[1])
     ll + lb, logpredictions
 end
 
@@ -1457,7 +1499,7 @@ function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporte
     a, p0 = make_ap(r, interval, components, method)
     a_grid = make_a_grid(pgrid[1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
-    _ll_hmm(a, a_grid, p0, d, trace[1])
+    _ll_hmm_grid(a, a_grid, p0, d, trace[1])
 end
 
 # coupled, grid
@@ -1466,7 +1508,7 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponent
     a, p0 = make_ap(r, couplingStrength, interval, components, method)
     a_grid = make_a_grid(pgrid[1][1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
-    _ll_hmm(a, a_grid, p0, d, trace[1])
+    _ll_hmm_grid(a, a_grid, p0, d, trace[1])
 end
 
 # hierarchical, grid
@@ -1476,9 +1518,9 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComp
     a_grid = make_a_grid(pgridshared[1][1], Ngrid)
     d = set_d(noiseshared[1], reporter)
     if method[2]
-        ll, logpredictions = _ll_hmm(noiseindividual, a, a_grid, p0, d, trace[1])
+        ll, logpredictions = _ll_hmm_grid(noiseindividual, Ngrid, a, a_grid, p0, d, trace[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
+        ll, logpredictions = _ll_hmm_grid(rindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
     end
     ll, logpredictions
 end
@@ -1490,9 +1532,9 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components
     a_grid = make_a_grid(pgridshared[1][1], Ngrid)
     d = set_d(noiseshared[1], reporter)
     if method[2]
-        ll, logpredictions = _ll_hmm(noiseindividual, a, a_grid, p0, d, trace[1])
+        ll, logpredictions = _ll_hmm_grid(noiseindividual, Ngrid, a, a_grid, p0, d, trace[1])
     else
-        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
+        ll, logpredictions = _ll_hmm_grid(rindividual, couplingindividual, noiseindividual, pgridindividual, Ngrid, interval, components, reporter, trace[1])
     end
     ll, logpredictions
 end

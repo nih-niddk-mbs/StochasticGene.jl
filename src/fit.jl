@@ -491,7 +491,7 @@ function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
     trace = similar(tracer)
     medians = [median(t) for t in tracer]
     mads = [mad(t, normalize=false) for t in tracer]
-    scale = maximum(medians)
+    scale = max(1., maximum(medians))
     madscale = maximum(mads)
     if zeromedian
         for i in eachindex(tracer)
@@ -510,7 +510,7 @@ function zero_median(tracer::Vector{T}, zeromedian::Bool) where {T<:AbstractMatr
     medians = [median(t, dims=1) for t in tracer]
     # Calculate MAD for each column of each matrix
     mads = [reshape([mad(t[:, i], normalize=false) for i in 1:size(t, 2)], 1, :) for t in tracer]
-    scale = maximum(vcat(medians...), dims=1)
+    scale = max.(1., maximum(vcat(medians...), dims=1))
     madscale = median(vcat(mads...), dims=1)
     if zeromedian
         for i in eachindex(tracer)
@@ -669,12 +669,25 @@ function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, 
     return (sojourn, nonzeros), components
 end
 
-function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
+function make_reporter_components_original(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
     reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
     components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    return reporter, components
+end
+
+function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
+    nnoise = length(noisepriors)
+    n = num_rates(transitions, R, S, insertstep)
+    weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
+    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
+    if isempty(coupling)
+        components = TComponents(transitions, G, R, S, insertstep, splicetype)
+    else
+        components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    end
     return reporter, components
 end
 
@@ -692,19 +705,7 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     return reporter, components
 end
 
-function make_reporter_components_forced(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
 
-    nnoise = length(noisepriors)
-    n = num_rates(transitions, R, S, insertstep)
-    weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
-    if isempty(coupling)
-        components = TComponents(transitions, G, R, S, insertstep, splicetype)
-    else
-        components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-    end
-    return reporter, components
-end
 
 # function make_reporter_components_tuple(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
 #     if probfn[1] == 1
