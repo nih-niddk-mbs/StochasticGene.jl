@@ -912,6 +912,13 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     invtransforms = Function[]
     sigmatransforms = Function[]
 
+    if !isa(G, Tuple) && !isempty(coupling)
+        # for forced model, assume that forced data is zero median
+        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, true)
+    else
+        rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
+    end
+
     rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
 
     if !isempty(coupling)

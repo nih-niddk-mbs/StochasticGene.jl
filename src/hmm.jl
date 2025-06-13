@@ -392,6 +392,12 @@ function set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
     probfn(n, reporters_per_state, N)
 end
 
+function set_d_background(noiseparams, sigma2::Matrix, reporters_per_state, probfn, N)
+    n = copy(noiseparams)
+    n[2] = sqrt(n[2]^2 + sigma2[1,2]^2)
+    probfn(n, reporters_per_state, N)
+end
+
 """
     set_d(noiseparams, reporters_per_state, probfn, N)
 

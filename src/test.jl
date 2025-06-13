@@ -479,8 +479,8 @@ function test_fit_trace_forced(; datapath="data/forced", label="trace-HBEC-nstat
 
     data = load_data_trace(datapath, label, gene, datacond, traceinfo, :tracejoint, 1, zeromedian)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), coupling, nothing, zeromedian)
-    data2 = load_data_trace(datapath, label, gene, datacond[2], traceinfo, :trace, 1, zeromedian)
-    model2 = load_model(data2, rinit[1:10], priormean[1:10], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv[1:10], Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    # data2 = load_data_trace(datapath, label, gene, datacond[2], traceinfo, :trace, 1, zeromedian)
+    # model2 = load_model(data2, rinit[1:10], priormean[1:10], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv[1:10], Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
     
     # ll2 = loglikelihood(get_param(model2),data2,model2)
     # ll1 = loglikelihood(get_param(model),data,model)

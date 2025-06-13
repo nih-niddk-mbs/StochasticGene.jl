@@ -626,8 +626,12 @@ end
 function rlabels_GRSM(model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         labels = Array{String}(undef, 1, 0)
-        for i in eachindex(model.G)
-            labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
+        if length(model.G) > 1
+            for i in eachindex(model.G)
+                labels = hcat(labels, rlabels_GRSM(model.Gtransitions[i], model.R[i], model.S[i], model.reporter[i], i))
+            end
+        else
+            labels = hcat(labels, rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter))
         end
         for i in 1:model.trait.coupling.ncoupling
             labels = hcat(labels, ["Coupling_$i"])
@@ -1711,5 +1715,55 @@ function read_bottom_float_block(file::String)
     end
     # Return the bottom k rows and first k columns as a k x k square
     return block_float[end-k+1:end, 1:k]
+end
+
+"""
+    write_track_files(df::DataFrame, col_pattern::String, base_name::String, condition::Function, output_dir::String=".")
+
+Write data columns from a DataFrame into separate track files.
+
+# Arguments
+- `df`: DataFrame containing the data columns
+- `col_pattern`: Pattern to match column names (e.g., "data" will match data1, data2, etc.)
+- `base_name`: Base name for the output files (e.g., "track" will create "001_track.trk", "002_track.trk", etc.)
+- `condition`: Function to apply to data before writing to file, e.g. x -> x > 0
+- `output_dir`: Directory to write the files to (defaults to current directory)
+
+# Returns
+- Vector of created filenames
+
+# Example
+```julia
+df = DataFrame(...)  # Your DataFrame with data1, data2, etc. columns
+filenames = write_track_files(df, "data", "track", x -> x > 0, "output")
+```
+"""
+function write_track_files(df::DataFrame, col_pattern::String, base_name::String, condition::Function, output_dir::String=".")
+    # Create output directory if it doesn't exist
+    mkpath(output_dir)
+
+    # Find all columns matching the pattern
+    data_cols = filter(name -> startswith(String(name), col_pattern), names(df))
+
+    # Store created filenames
+    created_files = String[]
+
+    # Process each data column
+    for (i, col) in enumerate(data_cols)
+        # Get the data, filtering out missing values
+        data = filter(!ismissing, df[!, col])
+
+        # Skip if no valid data
+        isempty(data) && continue
+
+        # Create filename with padded number
+        filename = joinpath(output_dir, string(lpad(i, 3, "0"), "_", base_name, ".trk"))
+        push!(created_files, filename)
+
+        # Write data to file using writedlm, applying the condition function
+        writedlm(filename, Int.(condition.(data)))
+    end
+
+    return created_files
 end
 
