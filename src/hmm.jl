@@ -1299,10 +1299,21 @@ end
     ll_hmm(noiseparams, a::Matrix, p0::Vector, reporter, traces)
 
 """
-function _ll_hmm(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
+function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces)
     logpredictions = Array{Float64}(undef, length(traces))
     for i in eachindex(traces)
         d = set_d(noiseparams[i], reporter)
+        b = set_b(traces[i], d)
+        _, C = forward(a, b, p0)
+        @inbounds logpredictions[i] = -sum(log.(C))
+    end
+    sum(logpredictions), logpredictions
+end
+
+function _ll_hmm_forced(noiseparams::Vector, a, p0::Vector, reporter, traces)
+    logpredictions = Array{Float64}(undef, length(traces))
+    for i in eachindex(traces)
+        d = (1, set_d(noiseparams[i], reporter))
         b = set_b(traces[i], d)
         _, C = forward(a, b, p0)
         @inbounds logpredictions[i] = -sum(log.(C))
@@ -1490,6 +1501,20 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
     lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
+    lhp = ll_hierarchy(pindividual, rhyper)
+    ll + lb + sum(lhp), vcat(logpredictions, lhp)
+end
+
+# forced, hierarchical
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TForcedComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    if method[2]
+        ll, logpredictions = _ll_hmm_forced(noiseindividual, a, p0, reporter, trace[1])
+    else
+        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+    end
+    lb = ll_off(trace, noiseshared[1], reporter, components, a[1], p0[1])
     lhp = ll_hierarchy(pindividual, rhyper)
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end

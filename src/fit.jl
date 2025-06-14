@@ -705,25 +705,6 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     return reporter, components
 end
 
-
-
-# function make_reporter_components_tuple(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-#     if probfn[1] == 1
-#         make_reporter_components_forced(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-#     else
-#         make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-#     end
-# end
-
-# function make_reporter_components_forced(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
-#     i = 2
-#     nnoise = length(noisepriors)
-#     n = num_rates(transitions, R, S, insertstep)
-#     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-#     reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
-#     components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-#     return (1, reporter), components
-# end
 """
     make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
 
@@ -912,14 +893,14 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     invtransforms = Function[]
     sigmatransforms = Function[]
 
-    if !isa(G, Tuple) && !isempty(coupling)
+    if isa(G, Int) && !isempty(coupling)
         # for forced model, assume that forced data is zero median
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, true)
     else
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
     end
 
-    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
+    # rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)

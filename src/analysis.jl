@@ -1442,7 +1442,7 @@ function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1
     covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
 end
 
-function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
+function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
