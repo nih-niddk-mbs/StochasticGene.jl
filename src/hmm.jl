@@ -328,7 +328,7 @@ function make_ap(rates, couplingStrength, interval, components::TForcedComponent
 end
 
 function set_rates_forced(rates, couplingStrength, components::TForcedComponents)
-    r = fill(rates, 2)
+    r = [deepcopy(rates) for _ in 1:2]  # Create two independent copies
     r[2][components.targets[2]] *= (1. + couplingStrength[1])
     return r
 end
