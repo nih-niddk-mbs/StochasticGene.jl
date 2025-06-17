@@ -821,13 +821,12 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
     n_all_params = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    nparams = length(fittedindividual) # number of fitted params per individual
+    nindividualparams = length(fittedindividual) # number of fitted params per individual
     nindividuals = length(data.trace[1])
     ratestart = nhypersets * n_all_params + 1
-    paramstart = length(fittedshared) + nhypersets * nparams + 1
+    paramstart = length(fittedshared) + nhypersets * nindividualparams + 1
     fittedparam, fittedhyper, fittedpriors = make_fitted_hierarchical(fittedshared, hierarchical[1], hierarchical[2], n_all_params, nindividuals)
-    # hierarchy = Hierarchy(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared)
-    hierarchy = HierarchicalTrait(nhypersets, n_all_params, nparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared, fittedpriors)
+    hierarchy = HierarchicalTrait(nhypersets, n_all_params, nindividualparams, nindividuals, ratestart, paramstart, fittedhyper, fittedshared, fittedpriors)
     fixedeffects = make_fixed(fixedeffects, hierarchical[3], n_all_params, nindividuals)
     # rprior = rmean[1:nhypersets*n_all_params]
     # priord = prior_distribution(rprior, transitions, R, S, insertstep, fittedpriors, priorcv, noisepriors, couplingindices, factor, ratetransforms)

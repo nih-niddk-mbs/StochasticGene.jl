@@ -275,7 +275,7 @@ reporter keeps track of noise parameter indices
 
 nallparams it total number of parameters per individual of all types including transition rates, noise parameters, coupling parameters, and grid parameters
 nrates is number of transition rates per individual
-nparams is number of fitted parameters per individual
+nindividualparams is number of fitted parameters per individual
 
 """
 
@@ -289,7 +289,7 @@ Structure for hierarchical model traits.
 # Fields
 - `nhypersets::Int`: Number of hyperparameter sets
 - `nrates::Int`: Number of transition rates per individual
-- `nparams::Int`: Number of fitted parameters per individual
+- `nindividualparams::Int`: Number of fitted parameters per individual
 - `nindividuals::Int`: Number of individuals (traces)
 - `individualstart::Int`: Starting index for individual parameters
 - `paramstart::Int`: Starting index for hyperparameters
@@ -299,7 +299,7 @@ Structure for hierarchical model traits.
 struct HierarchicalTrait
     nhypersets::Int
     nrates::Int
-    nparams::Int
+    nindividualparams::Int
     nindividuals::Int
     individualstart::Int
     paramstart::Int

@@ -134,7 +134,7 @@ end
     prepare_hyper(r, param, hierarchy::HierarchicalTrait)
 """
 function prepare_hyper(r, param, hierarchy::HierarchicalTrait)
-    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nparams, hierarchy.nindividuals)))
+    pindividual = collect(eachcol(reshape(param[hierarchy.paramstart:end], hierarchy.nindividualparams, hierarchy.nindividuals)))
     rhyper = [r[i] for i in hierarchy.hyperindices]
     return pindividual, rhyper
 end
@@ -1262,25 +1262,6 @@ function num_rates(model::String)
     end
 end
 
-
-"""
-    num_parameters(model::AbstractGeneTransitionModel)
-
-total number of parameters
-
-# Arguments
-- `model`: The model, which can be of various types (e.g., `AbstractGRSMmodel`, `GRSMcoupledmodel`).
-
-# Description
-This function calculates the total number of parameters for the provided model. It includes the number of transition rates, R steps, S splicing indicator, insert step, and the number of reporters
-
-# Methods
-- `total_parameters(model::AbstractGeneTransitionModel)`: Returns the total number of parameters for the model.
-
-# Returns
-- `Int`: The total number of parameters.
-
-"""
 
 """
     num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
