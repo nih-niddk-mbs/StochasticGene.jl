@@ -91,7 +91,7 @@ fits = fit(
 
 ## Documentation
 
-For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
+For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/).
 
 ## License
 
