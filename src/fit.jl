@@ -358,7 +358,7 @@ fits = fit(
 )
 ```
 """
-function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime=60, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
+function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=String[], datapath="HCT116_testdata/", gene="MYC", cell="HCT116", datacond="MOCK", traceinfo=(1.0, 1, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="", fittedparam=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="nstate", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, maxtime=60, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     if isnothing(rinit)
         fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber)
@@ -368,10 +368,10 @@ function fit(; rinit=nothing, nchains::Int=2, datatype::String="rna", dttype=Str
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5())
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian::Bool=false, datacol=3, ejectnumber=1)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
     transitions = get_transitions(G, TransitionType)
     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling, grid)
     println("transitions: ", transitions)
@@ -382,7 +382,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::Str
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5())
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 
 """
@@ -394,7 +394,7 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cel
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), root=".", maxtime::Float64=60.0, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5())
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 """
 function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
@@ -487,38 +487,56 @@ function set_trace_weight(traceinfo)
     return weight
 end
 
-function zero_median(tracer::Vector{T}, zeromedian) where {T<:AbstractVector}
-    trace = similar(tracer)
+function zero_median(tracer::Vector{T}, zeromedian::Bool) where {T<:AbstractVector}
     medians = [median(t) for t in tracer]
     mads = [mad(t, normalize=false) for t in tracer]
     scale = max(1., maximum(medians))
     madscale = maximum(mads)
     if zeromedian
+        trace = similar(tracer)
         for i in eachindex(tracer)
             trace[i] = (tracer[i] .- medians[i]) ./ scale
         end
     else
-        for i in eachindex(tracer)
-            trace[i] = tracer[i] ./ scale
-        end
+        trace = deepcopy(tracer)
+        scale = 1.
     end
     return trace, madscale ./ scale
 end
 
 function zero_median(tracer::Vector{T}, zeromedian::Bool) where {T<:AbstractMatrix}
-    trace = similar(tracer)
     medians = [median(t, dims=1) for t in tracer]
     # Calculate MAD for each column of each matrix
     mads = [reshape([mad(t[:, i], normalize=false) for i in 1:size(t, 2)], 1, :) for t in tracer]
     scale = max.(1., maximum(vcat(medians...), dims=1))
     madscale = median(vcat(mads...), dims=1)
     if zeromedian
+        trace = similar(tracer)
         for i in eachindex(tracer)
             trace[i] = (tracer[i] .- medians[i]) ./ scale
         end
     else
-        for i in eachindex(tracer)
-            trace[i] = tracer[i] ./ scale
+        trace = deepcopy(tracer)
+        scale = 1.
+    end
+    return trace, madscale ./ scale
+end
+
+function zero_median(tracer::Vector{T}, zeromedian::Vector{Bool}) where {T<:AbstractMatrix}
+    medians = [median(t, dims=1) for t in tracer]
+    # Calculate MAD for each column of each matrix
+    mads = [reshape([mad(t[:, i], normalize=false) for i in 1:size(t, 2)], 1, :) for t in tracer]
+    scale = max.(1., maximum(vcat(medians...), dims=1))
+    madscale = median(vcat(mads...), dims=1)
+    trace = deepcopy(tracer)
+    println(zeromedian)
+    for z in eachindex(zeromedian)
+        if zeromedian[z]
+            for i in eachindex(tracer)
+                trace[i][:, z] = (tracer[i][:, z] .- medians[i][z]) ./ scale[z]
+            end
+        else
+            scale[z] = 1.
         end
     end
     return trace, madscale ./ scale
@@ -545,6 +563,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
         tracer = read_tracefiles(datapath[1], datacond, traceinfo, col)
     end
     (length(tracer) == 0) && throw("No traces")
+    println(typeof(tracer))
     trace, tracescale = zero_median(tracer, zeromedian)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)
@@ -856,7 +875,10 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::I
     end
     if typeof(reporter) <: HMMReporter
         for i in eachindex(reporter.noiseparams)
-            if isodd(i) && zeromedian
+            # Handle both Bool and Vector{Bool} for zeromedian
+            should_zero = zeromedian isa Bool ? zeromedian :
+                          (zeromedian isa Vector{Bool} && length(zeromedian) > 0 ? zeromedian[2] : false)
+            if isodd(i) && should_zero
                 push!(ftransforms, identity)
                 push!(invtransforms, identity)
                 push!(sigmatransforms, sigmanormal)

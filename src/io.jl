@@ -1761,7 +1761,7 @@ function write_track_files(df::DataFrame, col_pattern::String, base_name::String
         push!(created_files, filename)
 
         # Write data to file using writedlm, applying the condition function
-        writedlm(filename, Int.(condition.(data)))
+        writedlm(filename, condition.(data))
     end
 
     return created_files

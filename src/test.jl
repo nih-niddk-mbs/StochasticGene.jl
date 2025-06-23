@@ -468,7 +468,7 @@ end
 
 ### under development
 
-function test_fit_trace_forced(; datapath="data/forced", label="trace-HBEC-nstate", gene="MYC", datacond=["enhancer", "gene"], coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime=10.0, initprior=0.1)
+function test_fit_trace_forced(; datapath="data/forced/G2", label="trace-HBEC-nstate", gene="MYC", datacond=["enhancer", "gene"], coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime=10.0, initprior=0.1)
 
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), tuple(), nothing)
     elongationtime = mean_elongationtime(rtarget, transitions, R)
@@ -479,15 +479,17 @@ function test_fit_trace_forced(; datapath="data/forced", label="trace-HBEC-nstat
 
     data = load_data_trace(datapath, label, gene, datacond, traceinfo, :tracejoint, 1, zeromedian)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), coupling, nothing, zeromedian)
-    # data2 = load_data_trace(datapath, label, gene, datacond[2], traceinfo, :trace, 1, zeromedian)
-    # model2 = load_model(data2, rinit[1:10], priormean[1:10], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv[1:10], Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    data2 = load_data_trace(datapath, label, gene, datacond[2], traceinfo, :trace, 1, zeromedian[2])
+    model2 = load_model(data2, rinit[1:10], priormean[1:10], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv[1:10], Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
     
-    # ll2 = loglikelihood(get_param(model2),data2,model2)
-    # ll1 = loglikelihood(get_param(model),data,model)
+    ll2 = loglikelihood(get_param(model2),data2,model2)
+    ll1 = loglikelihood(get_param(model),data,model)
+    # return ll1, ll2
     fits, stats, measures = run_mh(data, model, options, nchains)
+    fits2, stats2, measures2 = run_mh(data2, model2, options, nchains)
     # nrates = num_rates(model)
     # stats.medparam[1:nrates-1], rtarget[1:nrates-1]
-    return fits, stats, measures, data, model, options
+    return fits, stats, measures, data, model, options, fits2, stats2, measures2, data2, model2
 end
 
 ### development test functions
