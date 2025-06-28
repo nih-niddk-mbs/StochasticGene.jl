@@ -221,10 +221,20 @@ end
 TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
 
-function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
+function TForcedComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    comp = Vector{TCoupledUnitComponents}(undef,2)
+    comp[1] = TCoupledUnitComponents(source_state[1], target_transition[1], ([1,2],[2,1]), 2, 0, 0, 1, splicetype)
+    comp[2] =TCoupledUnitComponents(source_state[2], target_transition[2], transitions, G, R, S, insertstep, splicetype)
+    TForcedComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+end
+
+TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TForcedComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+
+
+function TForcedComponents_original(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
-    TForcedComponents(nT, elementsT, coupling[4])
+    TForcedComponents_original(nT, elementsT, coupling[4])
 end
 """
     MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)
@@ -856,6 +866,20 @@ function make_matvec_C(components::TCoupledComponents{Vector{TCoupledUnitCompone
     return T, Source, Target, IT
 end
 
+function make_matvec_C(components::TForcedComponents{Vector{TCoupledUnitComponents}}, rates)
+    n = length(components.model)
+    T = Vector{SparseMatrixCSC}(undef, n)
+    Source = Vector{SparseMatrixCSC}(undef, n)
+    Target = Vector{SparseMatrixCSC}(undef, n)
+    IT = Vector{SparseMatrixCSC}(undef, n)
+    T[1] = make_mat_C(components.modelcomponents[1], [1.,1.])
+    T[2] = make_mat_C(components.modelcomponents[2], rates)
+    # for i in eachindex(components.model)
+    #     T[i], Source[i], Target[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
+    # end
+    return T, Source, Target, IT
+end
+
 function make_matvec_C(components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, rates)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
@@ -985,6 +1009,11 @@ function make_mat_TC(components::TCoupledComponents{Vector{TRGCoupledUnitCompone
 end
 
 function make_mat_TC(components::TCoupledComponents{Vector{TCoupledUnitComponents}}, rates, coupling_strength)
+    T, Source, Target, IT = make_matvec_C(components, rates)
+    make_mat_TC(coupling_strength, T, Source, Target, IT, components.sources, components.model)
+end
+
+function make_mat_TC(components::TForcedComponents{Vector{TCoupledUnitComponents}}, rates, coupling_strength)
     T, Source, Target, IT = make_matvec_C(components, rates)
     make_mat_TC(coupling_strength, T, Source, Target, IT, components.sources, components.model)
 end

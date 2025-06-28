@@ -398,8 +398,6 @@ function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{
     prepare_rates_coupled_grid(r, model.nrates, model.reporter, model.trait.coupling.couplingindices, model.trait.grid.gridindices)
 end
 
-
-
 """
     prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical, :grid,)}}
 """

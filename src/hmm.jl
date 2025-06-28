@@ -320,12 +320,17 @@ function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=T
 end
 
 function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
-    r = set_rates_forced(rates,couplingStrength,components)
-    Q = [make_mat_T(components, r[i]) for i in 1:2]
-    a = [kolmogorov_forward(Qtr', interval, method) for Qtr in Q]
-    p0 = [normalized_nullspace(Qtr) for Qtr in Q]
-    return a, p0
+    Qtr = make_mat_TCforced(components, rates, couplingStrength)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
+
+# function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
+#     r = set_rates_forced(rates,couplingStrength,components)
+#     Q = [make_mat_T(components, r[i]) for i in 1:2]
+#     a = [kolmogorov_forward(Qtr', interval, method) for Qtr in Q]
+#     p0 = [normalized_nullspace(Qtr) for Qtr in Q]
+#     return a, p0
+# end
 
 function set_rates_forced(rates, couplingStrength, components::TForcedComponents)
     r = [deepcopy(rates) for _ in 1:2]  # Create two independent copies
