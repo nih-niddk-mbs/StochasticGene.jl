@@ -563,7 +563,6 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
         tracer = read_tracefiles(datapath[1], datacond, traceinfo, col)
     end
     (length(tracer) == 0) && throw("No traces")
-    println(typeof(tracer))
     trace, tracescale = zero_median(tracer, zeromedian)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)
@@ -701,11 +700,14 @@ function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, in
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
-    reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
-    if isempty(coupling)
+      if isempty(coupling)
         components = TComponents(transitions, G, R, S, insertstep, splicetype)
+        reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
     else
         components = TForcedComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+        reporter = HMMReporter(nnoise, num_reporters_per_state(G, R, S, insertstep, onstates), probfn, weightind, off_states(G, R, S, insertstep, onstates), collect(n+1:n+nnoise))
+ 
+        reporter = [HMMReporter(0, [0,1], deterministic, 1., [1], []), repeat([reporter], outer=2)]
     end
     return reporter, components
 end

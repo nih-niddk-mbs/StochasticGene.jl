@@ -282,6 +282,14 @@ function prob_Gaussian_grid(par, reporters_per_state, Ngrid::Int, f::Function=kr
     prob_Gaussian_grid(par, reporters_per_state, Nstate, Ngrid, f)
 end
 
+function prob_deterministic(par, reporters_per_state::T) where {T<:Vector}
+    N = length(reporters_per_state)
+    d = Array{Distribution{Univariate,Continuous}}(undef, N)
+    for i in 1:N
+        d[i] = reporters_per_state[i]
+    end
+end
+
 """
     make_ap(r, interval, components, method)
 
@@ -320,7 +328,7 @@ function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=T
 end
 
 function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
-    Qtr = make_mat_TCforced(components, rates, couplingStrength)
+    Qtr = make_mat_TC(components, rates, couplingStrength)
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
@@ -769,7 +777,7 @@ function forward(a, b, p0, N, T)
     # end
 end
 
-function forward(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1 <: AbstractArray, T2 <: AbstractArray}
+function forward(a, b::Vector{T2}, p0, N, T) where {T1 <: AbstractArray, T2 <: AbstractArray}
     # if CUDA.functional() && (N * N * T > 1000)
     #     return forward_gpu(a, b, p0, N, T)
     # else

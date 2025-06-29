@@ -220,22 +220,21 @@ end
 
 TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
 
-
-function TForcedComponents(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+function TForcedComponents(unit_model, sources, source_state, target_transition, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype)
     comp = Vector{TCoupledUnitComponents}(undef,2)
     comp[1] = TCoupledUnitComponents(source_state[1], target_transition[1], ([1,2],[2,1]), 2, 0, 0, 1, splicetype)
     comp[2] =TCoupledUnitComponents(source_state[2], target_transition[2], transitions, G, R, S, insertstep, splicetype)
-    TForcedComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp)
+    TForcedComponents{typeof(comp)}(2*T_dimension(G, R, S), unit_model, sources, comp)
 end
 
 TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TForcedComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
-
 
 function TForcedComponents_original(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
     TForcedComponents_original(nT, elementsT, coupling[4])
 end
+
 """
     MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)
 
@@ -872,8 +871,8 @@ function make_matvec_C(components::TForcedComponents{Vector{TCoupledUnitComponen
     Source = Vector{SparseMatrixCSC}(undef, n)
     Target = Vector{SparseMatrixCSC}(undef, n)
     IT = Vector{SparseMatrixCSC}(undef, n)
-    T[1] = make_mat_C(components.modelcomponents[1], [1.,1.])
-    T[2] = make_mat_C(components.modelcomponents[2], rates)
+    T[1], Source[1], Target[1], IT[1] = make_mat_C(components.modelcomponents[1], [1.,1.])
+    T[2], Source[2], Target[2], IT[2] = make_mat_C(components.modelcomponents[2], rates)
     # for i in eachindex(components.model)
     #     T[i], Source[i], Target[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
     # end
