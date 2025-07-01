@@ -726,7 +726,7 @@ function forward_inner_operation_ad(α, a::Matrix, b::Matrix, i, j, t)
 end
 
 function forward_inner_operation!(α, a::Vector{T1}, b::Vector{T2}, i, j, t) where {T1 <: AbstractArray, T2 <: AbstractArray}
-    if iszero(b[1][j])
+    if ~b[1][j]
         forward_inner_operation!(α, a[1], b[2], i, j, t)
     else
         forward_inner_operation!(α, a[2], b[2], i, j, t)
@@ -770,7 +770,7 @@ function forward(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1 <: AbstractAr
     # else
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
-    if iszero(b[1][1])
+    if ~b[1][1]
         α[:, 1] = p0[1] .* b[2][:, 1]
     else
         α[:, 1] = p0[2] .* b[2][:, 1]

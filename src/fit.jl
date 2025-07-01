@@ -529,7 +529,7 @@ function zero_median(tracer::Vector{T}, zeromedian::Vector{Bool}) where {T<:Abst
     scale = max.(1., maximum(vcat(medians...), dims=1))
     madscale = median(vcat(mads...), dims=1)
     trace = deepcopy(tracer)
-    println(zeromedian)
+    println("zeromedian: ", zeromedian)
     for z in eachindex(zeromedian)
         if zeromedian[z]
             for i in eachindex(tracer)
@@ -563,7 +563,6 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
         tracer = read_tracefiles(datapath[1], datacond, traceinfo, col)
     end
     (length(tracer) == 0) && throw("No traces")
-    println(typeof(tracer))
     trace, tracescale = zero_median(tracer, zeromedian)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)

@@ -1070,6 +1070,49 @@ function residenceprob_G_dataframe(r::Vector, G::Int)
     return df
 end
 
+function write_joint_residence_prob(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    # r = readrates(file, get_row("median"))
+    p0 = make_p0_coupled(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    Gjoint, Rjoint = joint_residence_prob(p0, G, R, S, insertstep, coupling)
+    # df = oint_residence_prob_dataframe(Gjoint, Rjoint)
+    # CSV.write(outfile, df)
+end
+
+function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+    _, model = make_trace_datamodel(traces, interval, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    rates, noiseparams, couplingStrength = prepare_rates(get_param(model), model)
+    Qtr = make_mat_TC(model.components, rates, couplingStrength)
+    p0 = normalized_nullspace(Qtr)
+    return p0
+end
+
+# function p0_coupled(r::Vector, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype::String, onstates::Vector{Int}, probfn::Function, noisepriors::Vector{Float64}, coupling::Tuple, hierarchical::Bool)
+#     rates = hierarchical ? prepare_rates_coupled_hierarchical(r, param, nrates, couplingtrait, hierarchy, reporter) : prepare_rates_coupled(r, nrates, reporter, couplingindices)
+#     Qtr = make_mat(components.elementsT, rates, components.nT)
+#     p0 = normalized_nullspace(Qtr)
+#     return p0
+# end
+
+
+function joint_residence_prob(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple)
+     Gjoint = zeros(G...)
+     Rjoint = zeros(2,2)
+     states = []
+    for i in eachindex(p0)
+        # Decode the state for each unit
+        units = unit_state(i, G, R, S, coupling[1])
+        # states is a tuple of (g, z, zdigits, r) for each unit
+        states = inverse_state(units, G, R, S, insertstep, any)
+        g_indices = [s[1] for s in states]  # Extract G state for each unit
+        r_indices = [s[4] for s in states] .+ 1
+        Gjoint[g_indices...] += p0[i]
+        Rjoint[r_indices...] += p0[i]
+    end
+    # return states
+    return Gjoint ./ sum(Gjoint), Rjoint ./ sum(Rjoint)
+end
+
 """
     residenceprob_G_dataframe(r::Vector, G::Tuple, nrates::Vector{Int})
 
@@ -1189,6 +1232,8 @@ onstate_prob(r, model::AbstractGeneTransitionModel) = onstate_prob(r, model.comp
 onstate_prob(model::AbstractGeneTransitionModel) = onstate_prob(model.rates, model.components, model.reporter.per_state)
 
 """
+Obsolete function. needs to be updated.
+
     burstoccupancy(model::AbstractGRSMmodel)
     burstoccupancy(n::Int, nr::Int, r::Vector)
 
