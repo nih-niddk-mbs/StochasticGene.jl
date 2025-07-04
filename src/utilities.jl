@@ -1075,8 +1075,8 @@ function write_joint_residence_prob(outfile, datapath, datacond, interval::Float
     # r = readrates(file, get_row("median"))
     p0 = make_p0_coupled(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
     Gjoint, Rjoint = joint_residence_prob(p0, G, R, S, insertstep, coupling)
-    # df = oint_residence_prob_dataframe(Gjoint, Rjoint)
-    # CSV.write(outfile, df)
+    df = joint_residence_prob_dataframe(Gjoint, Rjoint)
+    CSV.write(outfile, df)
 end
 
 function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
@@ -1086,14 +1086,6 @@ function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep
     p0 = normalized_nullspace(Qtr)
     return p0
 end
-
-# function p0_coupled(r::Vector, transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype::String, onstates::Vector{Int}, probfn::Function, noisepriors::Vector{Float64}, coupling::Tuple, hierarchical::Bool)
-#     rates = hierarchical ? prepare_rates_coupled_hierarchical(r, param, nrates, couplingtrait, hierarchy, reporter) : prepare_rates_coupled(r, nrates, reporter, couplingindices)
-#     Qtr = make_mat(components.elementsT, rates, components.nT)
-#     p0 = normalized_nullspace(Qtr)
-#     return p0
-# end
-
 
 function joint_residence_prob(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple)
      Gjoint = zeros(G...)
@@ -1111,6 +1103,54 @@ function joint_residence_prob(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tupl
     end
     # return states
     return Gjoint ./ sum(Gjoint), Rjoint ./ sum(Rjoint)
+end
+
+"""
+    joint_residence_prob_dataframe(Gjoint, Rjoint)
+
+Creates a DataFrame with joint residence probabilities for G states and R states.
+
+# Arguments
+- `Gjoint`: N-dimensional array of joint G state probabilities
+- `Rjoint`: 2D array of joint R state probabilities
+
+# Returns
+- DataFrame with columns for each G state, R state, and their joint probabilities
+"""
+function joint_residence_prob_dataframe(Gjoint, Rjoint)
+    # Initialize DataFrame
+    df = DataFrame()
+    
+    # Add G state columns
+    G_dims = size(Gjoint)
+    n_genes = length(G_dims)
+    
+    # Create all possible combinations of G states
+    G_indices = CartesianIndices(Gjoint)
+    G_combinations = [Tuple(idx) for idx in G_indices]
+    
+    # Add G state columns
+    for i in 1:n_genes
+        df[!, "G$(i)"] = [comb[i] for comb in G_combinations]
+    end
+    
+    # Add G joint probability
+    df[!, :G_Probability] = [Gjoint[idx...] for idx in G_indices]
+    
+    # Add R state columns
+    R_dims = size(Rjoint)
+    R_indices = CartesianIndices(Rjoint)
+    R_combinations = [Tuple(idx) for idx in R_indices]
+    
+    # Add R state columns with OFF/ON labels
+    for i in 1:length(R_dims)
+        df[!, "Reporter$(i)"] = [comb[i] == 1 ? "OFF" : "ON" for comb in R_combinations]
+    end
+    
+    # Add R joint probability
+    df[!, :Reporter_Probability] = [Rjoint[idx...] for idx in R_indices]
+    
+    return df
 end
 
 """

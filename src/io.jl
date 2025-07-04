@@ -1218,6 +1218,61 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
     end
 end
 
+function read_tracefiles_unbalanced(path::String, label::Vector{String}, start::Int, stop::Int, col=3; backup_path::String="")
+    l = length(label)
+    traces = Matrix[]
+    if isempty(path)
+        return traces
+    else
+        for (root, dirs, files) in walkdir(path)
+            files = split_files_by_label(readdir(path), label)
+            nmin = minimum(length.(files))
+            nmax = maximum(length.(files))
+            imax = argmax(length.(files))
+            imin = argmin(length.(files))
+            # Pair up to the shortest list
+            for i in 1:nmin
+                tset = Vector{Vector}(undef, l)
+                for j in 1:l
+                    tset[j] = read_tracefile(joinpath(root, files[j][i]), start, stop, col)
+                end
+                push!(traces, hcat(tset...))
+            end
+            # Handle unpaired files in the longer list (only for l == 2)
+            if l == 2 && nmax > nmin && !isempty(backup_path)
+                for i in nmin+1:nmax
+                    tset = Vector{Vector}(undef, l)
+                    tset[imax] = read_tracefile(joinpath(root, files[imax][i]), start, stop, col)
+                    # Find a file in backup directory with same label and sufficient length
+                    backup_files = split_files_by_label(readdir(backup_path), [label[imin]])
+                    if !isempty(backup_files[1])
+                        # Find all backup files with length >= the unmatched file length
+                        target_length = length(tset[imax])
+                        suitable_backups = Vector{Vector{Float64}}()
+                        for backup_file in backup_files[1]
+                            backup_data = read_tracefile(joinpath(backup_path, backup_file), start, stop, col)
+                            if length(backup_data) >= target_length
+                                push!(suitable_backups, backup_data[1:target_length])  # Truncate if longer
+                            end
+                        end
+                        if !isempty(suitable_backups)
+                            # Randomly select one of the suitable backups
+                            tset[imin] = suitable_backups[rand(1:length(suitable_backups))]
+                        else
+                            # Fallback to random data if no suitable backup found
+                            tset[imin] = randn(target_length)
+                        end
+                    else
+                        # Fallback to random data if no backup files found
+                        tset[imin] = randn(length(tset[imax]))
+                    end
+                    push!(traces, hcat(tset...))
+                end
+            end
+            return traces
+        end
+    end
+end
 
 """
     read_tracefiles(path, label, traceinfo::Tuple, col=3)
@@ -1764,6 +1819,55 @@ function write_track_files(df::DataFrame, col_pattern::String, base_name::String
         writedlm(filename, condition.(data))
     end
 
+    return created_files
+end
+
+# Helper function to split files into groups by label
+function split_files_by_label(files::Vector{String}, labels::Vector{String})
+    [filter(f -> occursin(label, f), files) for label in labels]
+end
+
+"""
+    write_traces_to_files(traces::Vector{Matrix}, labels::Vector{String}, output_dir::String=".")
+
+Write trace data from matrices to individual .trk files.
+
+# Arguments
+- `traces::Vector{Matrix}`: Vector of matrices from read_tracefiles_unbalanced
+- `labels::Vector{String}`: Labels corresponding to each column
+- `output_dir::String`: Directory to write files to (defaults to current directory)
+
+# Returns
+- Vector of created filenames
+
+# Example
+```julia
+traces = read_tracefiles_unbalanced(path, labels, start, stop, col, backup_path=backup_path)
+filenames = write_traces_to_files(traces, labels, "output_folder")
+```
+"""
+function write_traces_to_files(traces::Vector{Matrix}, labels::Vector{String}, output_dir::String=".")
+    # Create output directory if it doesn't exist
+    mkpath(output_dir)
+    
+    # Store created filenames
+    created_files = String[]
+    
+    # Process each matrix in traces
+    for (trace_idx, trace_matrix) in enumerate(traces)
+        # Process each column (label) in the matrix
+        for (col_idx, label) in enumerate(labels)
+            if col_idx <= size(trace_matrix, 2)  # Ensure column exists
+                # Create filename with padded number and label
+                filename = joinpath(output_dir, string(lpad(trace_idx, 3, "0"), "_", label, ".trk"))
+                push!(created_files, filename)
+                
+                # Write the column data to file
+                writedlm(filename, trace_matrix[:, col_idx])
+            end
+        end
+    end
+    
     return created_files
 end
 
