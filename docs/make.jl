@@ -40,7 +40,21 @@ makedocs(
             ],
         ],
         "API" => [
-            "API Reference" => "api/index.md"
+            "API Reference" => "api/index.md",
+            "Core Functions" => [
+                "Model Fitting" => "api/fit.md",
+                "Model Simulation" => "api/simulator.md",
+                "Data Loading" => "api/load_data.md",
+            ],
+            "Function Libraries" => [
+                "Utility Functions" => "api/utilities.md",
+                "Analysis Functions" => "api/analysis.md",
+            ],
+            "Output Functions" => [
+                "Write Traces" => "api/write_traces.md",
+                "Write ON/OFF Histograms" => "api/write_ONOFFhistograms.md",
+                "Write G State Residency" => "api/write_residency_G_folder.md",
+            ],
         ],
         "Contributing" => "contributing.md",
     ],
