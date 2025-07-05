@@ -939,7 +939,7 @@ function write_info(file::String, fits, data, model, labels)
     f = open(file, "w")
     if typeof(model) <: GRSMmodel && hasproperty(model.trait, :hierarchical)
         # writedlm(f, labels[1:1, 1:num_all_parameters(model)], ',')  # labels
-        println(model.trait) 
+        # println(model.trait) 
         writedlm(f, [" " labels[1:1, model.trait.hierarchical.fittedpriors]], ',')  # labels
         writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait.hierarchical.fittedpriors])'], ',')
     else
@@ -1257,14 +1257,21 @@ function read_tracefiles_unbalanced(path::String, label::Vector{String}, start::
                         end
                         if !isempty(suitable_backups)
                             # Randomly select one of the suitable backups
-                            tset[imin] = suitable_backups[rand(1:length(suitable_backups))]
+                            selected_backup = suitable_backups[rand(1:length(suitable_backups))]
+                            # Add random noise with STD of 1% of the median
+                            median_val = median(selected_backup)
+                            noise_std = 0.01 * median_val
+                            tset[imin] = selected_backup .+ noise_std .* randn(length(selected_backup))
                         else
                             # Fallback to random data if no suitable backup found
                             tset[imin] = randn(target_length)
                         end
                     else
                         # Fallback to random data if no backup files found
-                        tset[imin] = randn(length(tset[imax]))
+                        # Add random noise with STD of 1% of the median of the real trace
+                        median_val = median(tset[imax])
+                        noise_std = 0.01 * median_val
+                        tset[imin] = randn(length(tset[imax])) .* noise_std
                     end
                     push!(traces, hcat(tset...))
                 end

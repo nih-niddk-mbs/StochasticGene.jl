@@ -366,16 +366,17 @@ Fit a simulated joint trace dataset for coupled models and compare to the target
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 1.0, 50, 30, 100, 20, 3.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]), maxtime=300.0, method=Tsit5())
+function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., .05, 1.0, .05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, 3.5], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]), maxtime=60.0, method=Tsit5())
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1))
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
-    rinit = [0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 1.0, 50, 30, 100, 20, 0.0]
+    rinit = [0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, 3.5]
     fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, coupling, nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     rfit = StochasticGene.get_rates(fits.parml, model)
+    return fits, stats, measures, model, data, options
     return rfit[1:length(rtarget)], rtarget
 end
 
@@ -398,7 +399,7 @@ Fit a simulated joint trace dataset for coupled models using a hierarchical mode
 # Returns
 - Tuple of (fitted rates, target rates, fits, stats, measures, model, data, options).
 """
-function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20, 0.03, 0.1, 0.5, 0.2, 0.1, 50, 30, 100, 20, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]), maxtime=300.0, decayrate=1.0)
+function test_fit_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),   rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 0., 0.05, 1., 0.05, 0.03, 0.1, 0.5, 0.2, 0.1, 0., 0.05, 1., 0.05, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., .1, 1., 0.05], [0., 0.1, 1., 0.1]), maxtime=300.0, decayrate=1.0)
     # trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     rh = 50.0 .+ 10 * randn(ntrials)
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials, hierarchical=(6, rh))
@@ -468,12 +469,12 @@ end
 
 ### under development
 
-function test_fit_trace_forced(; datapath="data/forced/2", label="trace-HBEC-nstate", gene="MYC", datacond=["enhancer", "gene"], coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=[false,true], maxtime=10.0, initprior=0.1)
+function test_fit_trace_forced(; datapath="data/forced/2", label="trace-HBEC-nstate", gene="MYC", datacond=["enhancer", "gene"], coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=[false, true], maxtime=10.0, initprior=0.1)
 
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), tuple(), nothing)
     elongationtime = mean_elongationtime(rtarget, transitions, R)
-    priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors;0.01]
-    priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1];1.]
+    priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors; 0.01]
+    priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]; 1.]
     rinit = isempty(tuple()) ? set_rinit([], priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
 
@@ -481,15 +482,81 @@ function test_fit_trace_forced(; datapath="data/forced/2", label="trace-HBEC-nst
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), coupling, nothing, zeromedian)
     data2 = load_data_trace(datapath, label, gene, datacond[2], traceinfo, :trace, 1, zeromedian[2])
     model2 = load_model(data2, rinit[1:10], priormean[1:10], fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv[1:10], Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
-    
-    ll2 = loglikelihood(get_param(model2),data2,model2)
-    ll1 = loglikelihood(get_param(model),data,model)
+
+    ll2 = loglikelihood(get_param(model2), data2, model2)
+    ll1 = loglikelihood(get_param(model), data, model)
     # return ll1, ll2
     fits, stats, measures = run_mh(data, model, options, nchains)
     fits2, stats2, measures2 = run_mh(data2, model2, options, nchains)
     # nrates = num_rates(model)
     # stats.medparam[1:nrates-1], rtarget[1:nrates-1]
     return fits, stats, measures, data, model, options, fits2, stats2, measures2, data2, model2
+end
+
+function sim_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., 0.05, 1.0, 0.05, 0.05, 0.023, 0.15, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, 0.], rinit=Float64[], nsamples=5000, onstates=Int[], totaltime=1000.0, ntrials=10, fittedparam=Int[21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., 0.1, 1., 0.1], [0., 0.1, 1., 0.1]), maxtime=60.0, method=Tsit5())
+    simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
+end
+
+function test_tracejoint(traces; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., 0.05, 1.0, 0.05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, 0.], fittedparam=Int[21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., 0.1, 1., 0.1], [0., 0.1, 1., 0.1]), method=Tsit5())
+
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (traces, [], [0.0, 0.0], 1))
+    fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, coupling, nothing)
+    model = load_model(data, rtarget, rtarget, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing, [true, true])
+    ll = loglikelihood(get_param(model), data, model)
+
+    n = num_rates(transitions, R, S, insertstep)
+
+    trace1 = [t[:,1] for t in traces]
+    data1 = StochasticGene.TraceData("trace", "test", interval, (trace1, [], 0., 1))
+    r1 = rtarget[1:n[1]+4]
+    model1 = load_model(data1, r1, r1, [1,2], tuple(), transitions[1], G[1], R[1], S[1], insertstep[1], "", 1, 10.0, Int[], 1., propcv, prob_Gaussian, noisepriors[1], Tsit5(), tuple(), tuple(), nothing, true)
+    ll1 = loglikelihood(get_param(model1), data1, model1)
+
+    trace2 = [t[:, 2] for t in traces]
+    data2 = StochasticGene.TraceData("trace", "test", interval, (trace2, [], 0., 1))
+    r2 = rtarget[n[1]+5:n[1]+n[2]+9]
+    model2 = load_model(data2, r2, r2, [1,2], tuple(), transitions[2], G[2], R[2], S[2], insertstep[2], "", 1, 10.0, Int[], 1., propcv, prob_Gaussian, noisepriors[2], Tsit5(), tuple(), tuple(), nothing, true)
+    ll2 = loglikelihood(get_param(model2), data2, model2)
+
+    return ll[1], ll1[1]+ll2[1], ll1[1], ll2[1]
+
+end
+
+function test_tracejoint_hierarchical(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0, 1), 1), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 0., 0.05, 1., 0.05, 0.03, 0.1, 0.5, 0.2, 0.1, 0., 0.05, 1., 0.05, 0.], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6], interval=1.0, noisepriors=([0., 0.1, 1., 0.05], [0., 0.1, 1., 0.1]), decayrate=1.0)
+    # trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
+    rh = 50.0 .+ 10 * randn(ntrials)
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials, hierarchical=(6, rh))
+
+    trace1 = [t[:,1] for t in trace]
+    trace2 = [t[:,2] for t in trace]
+
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [0.0, 0.0], 1))
+    data1 = StochasticGene.TraceData("trace","test",interval, (trace1,[],0., 1))
+    data2 = StochasticGene.TraceData("trace","test",interval, (trace2,[],0., 1))
+
+    hierarchical = tuple()
+    # rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing)
+    # fittedparam = set_fittedparam(fittedparam, "tracejoint", transitions, R, S, insertstep, noisepriors, coupling, nothing)
+    model = load_model(data, rtarget, rtarget, [1], tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1., .01, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
+
+    ll = loglikelihood(get_param(model), data, model)
+
+    return ll
+    n = num_rates(transitions, R, S, insertstep)
+    r1 = rinit[1:n[1]+4]
+    r2 = rinit[n[1] + 5: n[1] + n[2] + 9]
+    priormean1 = priormean[1:n[1]+4]
+    priormean2 = priormean[n[1] + 5: n[1] + n[2] + 9]
+    print(r1)
+    print(r2)
+
+    data1 = StochasticGene.TraceData("trace","test",interval, (trace,[],0., 1))
+    data2 = StochasticGene.TraceData("trace","test",interval, (trace,[],0., 1))
+    model1 = load_model(data1, r1, priormean1, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rinit[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
+    model2 = load_model(data2, r2, priormean2, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rinit[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
+    ll1 = loglikelihood(get_param(model1), data1, model1)
+    ll2 = loglikelihood(get_param(model2), data2, model2)
+    return ll, ll1, ll2
 end
 
 ### development test functions
@@ -1473,23 +1540,4 @@ end
 # Your `set_d` functions often return newly created arrays of Distributions.
 # e.g., `probfn(noiseparams, reporters_per_state, N)`
 # If `probfn` itself is allocating significantly or if creating Distribution objects is costly,
-# you might also need to make `set_d` in-place (`set_d!`) if the `Distribution` objects
-# can be updated rather than recreated. This is more complex as Distributions are often immutable.
-# A simpler approach for `d_buffer` is if `probfn` can take a pre-allocated
-# vector and fill it with *new* Distribution objects. This still allocates the Distribution
-# objects themselves but not the outer vector.
-
-# Example `set_d!` (conceptual, depends on how Distributions can be handled)
-# function set_d!(d_buffer::Vector{<:Distribution}, noiseparams, reporter::HMMReporter)
-#     # This is tricky if Distribution objects are immutable and can't be updated.
-#     # More likely, you'd fill d_buffer with newly created distributions.
-#     temp_d_vector = reporter.probfn(noiseparams, reporter.per_state) # Original call
-#     if length(d_buffer) == length(temp_d_vector)
-#         d_buffer .= temp_d_vector # Copies references if temp_d_vector holds objects
-#     else
-#         error("d_buffer size mismatch")
-#     end
-# end
-# This `set_d!` example might not save much if the main cost is creating the Distribution objects.
-# The primary win is usually from pre-allocating the large Float64 matrices like `b_buffer` and `alpha_buffer`.
-
+# you might also need to make `set_d`
