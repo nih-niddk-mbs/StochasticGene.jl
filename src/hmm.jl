@@ -1580,14 +1580,44 @@ end
     _predict_trace(a::Matrix, p0::Vector, d, traces)
 
 """
-function _predict_trace(a::Matrix, p0::Vector, d, traces)
+function _predict_trace(a, p0, d, traces)
     states = Vector{Int}[]
     for i in eachindex(traces)
         b = set_b(traces[i], d)
         push!(states, viterbi(a, b, p0))
     end
+    if d isa Tuple
+        return states, d[2]
+    else
+        return states, d
+    end
+end
+
+# function _predict_trace_forced(noiseparams::Vector, a, p0::Vector, reporter, traces)
+#     states = Vector{Int}[]
+#     for i in eachindex(traces)
+#         d = (1, set_d(noiseparams[i], reporter))
+#         b = set_b(traces[i], d)
+#         push!(states, viterbi(a, b, p0))
+#     end
+#     states, d
+# end
+"""
+    _predict_trace_forced(noiseparams, a, p0, reporter, traces)
+
+"""
+function _predict_trace_forced(noiseparams::Vector, a, p0::Vector, reporter, traces)
+    states = Vector{Int}[]
+    d = Vector[]
+    for i in eachindex(traces)
+        di = (1, set_d(noiseparams[i], reporter))
+        b = set_b(traces[i], di)
+        push!(states, viterbi(a, b, p0))
+        push!(d, di[2])
+    end
     states, d
 end
+
 
 """
     _predict_trace(noiseparams, a::Matrix, p0::Vector, reporter, traces)
@@ -1747,6 +1777,27 @@ function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledCo
     d = set_d(noiseshared[1], reporter)
     if method[2]
         states, observation_dist = _predict_trace(noiseindividual, a, p0, reporter, trace[1])
+    else
+        states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+    end
+    states, observation_dist
+end
+
+# forced
+function predict_trace(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    d = (1, set_d(noiseparams, reporter))
+    _predict_trace(a, p0, d, trace[1])
+end
+
+# forced, hierarchical
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TForcedComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    d = (1, set_d(noiseshared[1], reporter))
+    if method[2]
+        states, observation_dist = _predict_trace_forced(noiseindividual, a, p0, reporter, trace[1])
     else
         states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
@@ -1932,6 +1983,57 @@ function viterbi_log(loga, logb, logp0, N, T)
     end
     return q
 end
+
+function viterbi(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1<:AbstractArray,T2<:AbstractArray}
+    logb = log.(max.(b[2], 0.0))
+    ϕ = similar(logb)
+    ψ = similar(ϕ)
+    q = Vector{Int}(undef, T)
+    if ~b[1][1]
+        ϕ[:, 1] = log.(max.(p0[1], 0.0)) .+ logb[:, 1]
+    else
+        ϕ[:, 1] = log.(max.(p0[2], 0.0)) .+ logb[:, 1]
+    end
+    ψ[:, 1] .= 0
+    for t in 2:T
+        for j in 1:N
+            if !b[1][1]
+                m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[1][:, j], 0.0)))
+            else
+                m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[2][:, j], 0.0)))
+            end
+            ϕ[j, t] = m + logb[j, t]
+        end
+    end
+    q[T] = argmax(ϕ[:, T])
+    for t in T-1:-1:1
+        q[t] = ψ[q[t+1], t+1]
+    end
+    return q
+
+
+
+    # α = zeros(N, T)
+    # C = Vector{Float64}(undef, T)
+    # if ~b[1][1]
+    #     α[:, 1] = p0[1] .* b[2][:, 1]
+    # else
+    #     α[:, 1] = p0[2] .* b[2][:, 1]
+    # end
+    # C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
+    # α[:, 1] *= C[1]
+    # for t in 2:T
+    #     for j in 1:N
+    #         for i in 1:N
+    #             forward_inner_operation!(α, a, b, i, j, t)
+    #         end
+    #     end
+    #     C[t] = 1 / max(sum(α[:, t]), eps(Float64))
+    #     α[:, t] *= C[t]
+    # end
+    # return α, C
+    # end
+end
 """
     viterbi(a, b, p0, N, T)
 
@@ -1946,6 +2048,11 @@ end
 
 function viterbi(a, b, p0)
     N, T = size(b)
+    viterbi(a, b, p0, N, T)
+end
+
+function viterbi(a::Vector{T1}, b::Vector{T2}, p0) where {T1<:AbstractArray,T2<:AbstractArray}
+    N, T = size(b[2])
     viterbi(a, b, p0, N, T)
 end
 
@@ -2204,6 +2311,5 @@ function predicted_states_grid(r::Vector, Nstates, Ngrid, components::TComponent
     end
     states, observation_dist
 end
-
 
 

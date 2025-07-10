@@ -3,8 +3,39 @@
 # analysis.jl
 
 """
-    make_dataframes(resultfolder::String,datapath::String, assemble=true, multicond=false, datatype="rna")
+    make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
 
+Create and assemble dataframes from model fitting results.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing result files
+- `datapath::String`: Path to folder containing input data files
+- `assemble::Bool=true`: Whether to assemble results into summary files
+- `multicond::Bool=false`: Whether to handle multiple conditions
+- `datatype::String="rna"`: Type of data ("rna", "rnacount", etc.)
+
+# Returns
+- `Vector{Vector}`: Nested vector of tuples containing (filename, DataFrame) pairs
+
+# Notes
+- Automatically assembles results if assemble=true
+- Processes rate summary files from the result folder
+- Groups files by label and model type
+- Creates summary files for each label-model combination
+- Handles both single and multiple condition datasets
+- Supports different data types (RNA, RNA count, etc.)
+
+# Examples
+```julia
+# Basic usage
+dfs = make_dataframes("results/", "data/")
+
+# With multiple conditions
+dfs = make_dataframes("results/", "data/", assemble=true, multicond=true)
+
+# For RNA count data
+dfs = make_dataframes("results/", "data/", datatype="rnacount")
+```
 """
 function make_dataframes(resultfolder::String, datapath::String, assemble=true, multicond=false, datatype="rna")
     if assemble
@@ -38,14 +69,59 @@ end
 """
     statfile_from_ratefile(ratefile)
 
-TBW
+Convert a rate file path to its corresponding statistics file path.
+
+# Arguments
+- `ratefile::String`: Path to a rate file
+
+# Returns
+- `String`: Path to the corresponding statistics file
+
+# Notes
+- Replaces "rates_" with "stats_" in the filename
+- Assumes rate files and stat files follow the same naming convention
+- Used to find corresponding statistics files for rate files
+
+# Examples
+```julia
+ratefile = "rates_gene_condition_3401_2.txt"
+statfile = statfile_from_ratefile(ratefile)
+# Returns: "stats_gene_condition_3401_2.txt"
+```
 """
 statfile_from_ratefile(ratefile) = replace(ratefile, "rates_" => "stats_")
 
 """
-    make_dataframe(ratefile::String, datapath::String)
+    make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
 
-TBW
+Create a DataFrame from a rate file with additional data and statistics.
+
+# Arguments
+- `ratefile::String`: Path to the rate file
+- `datapath::String`: Path to the data directory
+- `multicond::Bool`: Whether to handle multiple conditions
+- `datatype::String`: Type of data ("rna", "rnacount", etc.)
+
+# Returns
+- `DataFrame`: DataFrame containing rate data, statistics, and moments
+
+# Notes
+- Reads rate data and corresponding statistics
+- Joins rate and statistics dataframes
+- Adds model information based on filename parsing
+- Handles multiple conditions if specified
+- Adds expression moments (mean, variance, third moment)
+- Only processes single-state models (G models)
+- Skips multi-state models with a warning message
+
+# Examples
+```julia
+# Basic usage
+df = make_dataframe("rates_gene_condition_3401_2.txt", "data/", false, "rna")
+
+# With multiple conditions
+df = make_dataframe("rates_gene_condition_3401_2.txt", "data/", true, "rnacount")
+```
 """
 function make_dataframe(ratefile::String, datapath::String, multicond::Bool, datatype::String)
     df = read_dataframe(ratefile)
@@ -67,7 +143,29 @@ end
 """
     parse_model(name::String)
 
-TBW
+Parse a model name string to extract model parameters.
+
+# Arguments
+- `name::String`: Model name string (e.g., "3401", "2121")
+
+# Returns
+- `Vector{Int}`: Vector of model parameters (G, R, S, insertstep)
+
+# Notes
+- Converts string to integer and extracts digits
+- For single-digit models: returns single integer
+- For multi-digit models: returns vector of digits
+- Assumes model parameters are encoded as consecutive digits
+- Used to extract G, R, S, and insertstep values from model names
+
+# Examples
+```julia
+# Single state model
+parse_model("3401")  # Returns: [3, 4, 0, 1]
+
+# Multi-state model
+parse_model("2121")  # Returns: [2, 1, 2, 1]
+```
 """
 function parse_model(name::String)
     d = parse(Int, name)
@@ -78,7 +176,34 @@ end
 """
     augment_dataframe(df, resultfolder)
 
-TBW
+Augment a DataFrame with additional model-specific information and statistics.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame containing model results
+- `resultfolder::String`: Path to folder containing result files
+
+# Returns
+- `DataFrame`: Augmented DataFrame with additional columns
+
+# Notes
+- Adds burst size information for models with G > 1
+- Adds model moments for G = 2 models
+- Adds fit measures (AIC, BIC, etc.) for the model
+- Adds residence probabilities for gene states
+- Creates a copy of the input DataFrame to avoid modifying original
+- Automatically determines which augmentations to apply based on model type
+
+# Examples
+```julia
+# Augment a DataFrame with all available information
+df_augmented = augment_dataframe(df, "results/")
+
+# The augmented DataFrame will contain additional columns like:
+# - BurstMean, BurstSD, BurstMedian, BurstMAD (for G > 1)
+# - Model_Expression, Model_Variance (for G = 2)
+# - AIC, BIC, WAIC, etc. (fit measures)
+# - ProbG0, ProbG1, etc. (residence probabilities)
+```
 """
 function augment_dataframe(df, resultfolder)
     dfc = copy(df)
@@ -97,7 +222,32 @@ end
 """
     make_measure_df(resultfolder::String, G::String)
 
-TBW
+Create a DataFrame from measure summary files for a specific model.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing result files
+- `G::String`: Model identifier (e.g., "2", "3")
+
+# Returns
+- `DataFrame`: Combined DataFrame from all measure files for the specified model
+
+# Notes
+- Searches for measure summary files in the result folder
+- Filters files by the specified model identifier
+- Adds condition information if available
+- Combines all matching files into a single DataFrame
+- Uses stack_dataframe to merge multiple files
+
+# Examples
+```julia
+# Create measure DataFrame for G=2 model
+df_measures = make_measure_df("results/", "2")
+
+# The resulting DataFrame contains fit measures like:
+# - AIC, BIC, WAIC
+# - Deviance, LogLikelihood
+# - Gene and Condition columns
+```
 """
 function make_measure_df(resultfolder::String, G::String)
     files = get_measuresummaryfiles(resultfolder)
@@ -118,7 +268,30 @@ end
 """
     join_cols(d)
 
-TBW
+Determine the columns to use for joining DataFrames based on condition availability.
+
+# Arguments
+- `d::DataFrame`: Input DataFrame
+
+# Returns
+- `Vector{Symbol}`: Vector of column symbols to use for joining
+
+# Notes
+- Returns [:Gene] if Condition column is missing or has missing values
+- Returns [:Gene, :Condition] if Condition column is available
+- Used to determine appropriate join keys for merging DataFrames
+- Ensures consistent joining behavior across different data structures
+
+# Examples
+```julia
+# DataFrame with conditions
+df_with_cond = DataFrame(Gene=["gene1", "gene2"], Condition=["ctrl", "ctrl"])
+join_cols(df_with_cond)  # Returns: [:Gene, :Condition]
+
+# DataFrame without conditions
+df_no_cond = DataFrame(Gene=["gene1", "gene2"])
+join_cols(df_no_cond)    # Returns: [:Gene]
+```
 """
 function join_cols(d)
     if ismissing(d.Condition[1])
@@ -131,7 +304,33 @@ end
 """
     add_measures(df, resultfolder::String, G)
 
-TBW
+Add fit measures to a DataFrame by joining with measure summary files.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame containing model results
+- `resultfolder::String`: Path to folder containing result files
+- `G`: Model identifier (can be String or other type)
+
+# Returns
+- `DataFrame`: DataFrame with added measure columns
+
+# Notes
+- Creates measure DataFrame for the specified model
+- Joins measure data with input DataFrame using appropriate columns
+- Automatically determines join columns based on condition availability
+- Adds fit measures like AIC, BIC, WAIC, Deviance, LogLikelihood
+- Preserves all original columns from input DataFrame
+
+# Examples
+```julia
+# Add fit measures to a DataFrame
+df_with_measures = add_measures(df, "results/", "2")
+
+# The resulting DataFrame will have additional columns:
+# - AIC, BIC, WAIC
+# - Deviance, LogLikelihood
+# - Other model fit statistics
+```
 """
 function add_measures(df, resultfolder::String, G)
     dm = make_measure_df(resultfolder, G)
@@ -141,7 +340,30 @@ end
 """
     add_mean!(df::DataFrame, datapath)
 
-TBW
+Add mean expression values to a DataFrame by calculating from RNA histograms.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame (modified in place)
+- `datapath::String`: Path to data directory containing RNA histograms
+
+# Returns
+- `Nothing`: Modifies the DataFrame in place
+
+# Notes
+- Calculates mean expression for each gene-condition combination
+- Uses RNA histogram data from the specified data path
+- Adds an :Expression column to the DataFrame
+- Assumes gene names are in :Gene column and conditions in :Condition column
+- Uses mean_histogram function to calculate means from histograms
+
+# Examples
+```julia
+# Add mean expression values
+add_mean!(df, "data/")
+
+# The DataFrame now contains an :Expression column with mean values
+# calculated from RNA histogram data
+```
 """
 function add_mean!(df::DataFrame, datapath)
     # root = string(split(abspath(datapath),"data")[1])
@@ -155,9 +377,39 @@ function add_mean!(df::DataFrame, datapath)
 end
 
 """
-    add_moments!(df::DataFrame, datapath)
+    add_moments!(df::DataFrame, datapath, datatype::String)
 
-TBW
+Add expression moments (mean, variance, third moment) to a DataFrame.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame (modified in place)
+- `datapath::String`: Path to data directory
+- `datatype::String`: Type of data ("rna" or "rnacount")
+
+# Returns
+- `Nothing`: Modifies the DataFrame in place
+
+# Notes
+- Adds :Expression, :Variance, and :ThirdMoment columns
+- For "rna" datatype: uses RNA histogram data
+- For "rnacount" datatype: uses RNA count data
+- Calculates moments for each gene-condition combination
+- Uses appropriate moment calculation functions based on data type
+- Assumes gene names are in :Gene column and conditions in :Condition column
+
+# Examples
+```julia
+# Add moments for RNA histogram data
+add_moments!(df, "data/", "rna")
+
+# Add moments for RNA count data
+add_moments!(df, "data/", "rnacount")
+
+# The DataFrame now contains:
+# - :Expression (mean)
+# - :Variance (variance)
+# - :ThirdMoment (third moment)
+```
 """
 function add_moments!(df::DataFrame, datapath, datatype::String)
     m = Vector{Float64}(undef, length(df.Gene))
@@ -188,7 +440,33 @@ end
 """
     add_modelmoments!(df::DataFrame)
 
-TBW
+Add model-predicted moments (mean and variance) to a DataFrame for G=2 models.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame (modified in place)
+
+# Returns
+- `Nothing`: Modifies the DataFrame in place
+
+# Notes
+- Adds :Model_Expression and :Model_Variance columns
+- Only applies to G=2 models (two-state gene models)
+- Uses model2_mean and model2_variance functions
+- Requires columns: Rate12, Rate21, Eject, Decay, Nalleles
+- Calculates theoretical moments based on fitted model parameters
+- Useful for comparing data moments with model predictions
+
+# Examples
+```julia
+# Add model moments for G=2 model results
+add_modelmoments!(df)
+
+# The DataFrame now contains:
+# - :Model_Expression (theoretical mean)
+# - :Model_Variance (theoretical variance)
+
+# These can be compared with :Expression and :Variance from data
+```
 """
 function add_modelmoments!(df::DataFrame)
     m = Vector{Float64}(undef, length(df.Gene))
@@ -237,7 +515,31 @@ add_burstsize(df, resultfolder::String, cols::Vector{Symbol}=join_cols(df)) = ad
 """
     add_burstsize(df, db, cols)
 
-TBW
+Add burst size information to a DataFrame by joining with burst data.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame to augment
+- `db::DataFrame`: DataFrame containing burst size data
+- `cols::Vector{Symbol}`: Column names to use for joining
+
+# Returns
+- `DataFrame`: DataFrame with added burst size columns
+
+# Notes
+- Joins burst data based on specified columns
+- Adds columns: BurstMean, BurstSD, BurstMedian, BurstMAD
+- Handles both single and multi-condition datasets
+- Uses left join to preserve all rows from input DataFrame
+- Automatically includes Gene and Condition columns if available
+
+# Examples
+```julia
+# Add burst size data
+df_with_burst = add_burstsize(df, burst_data, [:Gene, :Condition])
+
+# The resulting DataFrame will have additional columns:
+# - BurstMean, BurstSD, BurstMedian, BurstMAD
+```
 """
 function add_burstsize(df, db, cols)
     if ismissing(df[1, :Condition])
@@ -250,7 +552,30 @@ end
 """
     make_burst_df(resultfolder::String)
 
-TBW
+Create a DataFrame from burst summary files in a result folder.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing result files
+
+# Returns
+- `DataFrame`: Combined DataFrame from all burst summary files
+
+# Notes
+- Searches for burst summary files in the result folder
+- Parses filename components to extract condition information
+- Adds condition information if available in filename
+- Combines all burst files into a single DataFrame
+- Uses stack_dataframe to merge multiple files
+
+# Examples
+```julia
+# Create burst DataFrame from result folder
+burst_df = make_burst_df("results/")
+
+# The resulting DataFrame contains:
+# - Gene, Condition columns
+# - BurstMean, BurstSD, BurstMedian, BurstMAD columns
+```
 """
 function make_burst_df(resultfolder::String)
     files = get_burstsummaryfiles(resultfolder)
@@ -272,7 +597,32 @@ end
 """
     add_time!(df::DataFrame, timestamp)
 
-TBW
+Add a timestamp column to a DataFrame.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame (modified in place)
+- `timestamp`: Timestamp value to add (can be any type)
+
+# Returns
+- `Nothing`: Modifies the DataFrame in place
+
+# Notes
+- Adds a :Time column to the DataFrame
+- Fills all rows with the specified timestamp value
+- Useful for tracking when data was processed or analyzed
+- Modifies the DataFrame in place for efficiency
+
+# Examples
+```julia
+# Add current timestamp
+add_time!(df, now())
+
+# Add custom timestamp
+add_time!(df, "2024-01-15")
+
+# Add numeric timestamp
+add_time!(df, 1234567890)
+```
 """
 add_time!(df::DataFrame, timestamp) = insertcols!(df, :Time => timestamp)
 
@@ -292,9 +642,34 @@ function stack_dataframe(df2::Vector{DataFrame})
 end
 
 """
-    separate_dataframe(df, G, cond)
+    separate_dataframe(df, G, cond, multicond)
 
-TBW
+Separate a DataFrame into multiple DataFrames based on conditions.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame
+- `G::Int`: Number of gene states
+- `cond::String`: Condition string
+- `multicond::Bool`: Whether to handle multiple conditions
+
+# Returns
+- `Vector{DataFrame}`: Vector of separated DataFrames
+
+# Notes
+- Splits condition string if multicond=true
+- Creates separate DataFrame for each condition
+- Extracts appropriate columns for each condition based on G
+- Adds Condition column to each DataFrame
+- Renames columns if multicond=true by removing suffixes
+- Assumes column structure follows standard format
+
+# Examples
+```julia
+# Separate DataFrame with multiple conditions
+dfs = separate_dataframe(df, 2, "control-treatment", true)
+
+# Returns vector of DataFrames, one for each condition
+```
 """
 function separate_dataframe(df, G, cond, multicond)
     println("cond: ", cond)
@@ -363,6 +738,39 @@ function add_Zscore!(df)
     insertcols!(df, :ZEject => Difference_Zscore.(df.Eject_1, df.Eject, df.EjectSD, df.EjectSD_1))
 end
 
+"""
+    add_Zscore_class!(df, threshold=2.0)
+
+Add Z-score classification columns to a DataFrame based on a threshold.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame (modified in place)
+- `threshold::Float64=2.0`: Threshold for classifying Z-scores
+
+# Returns
+- `Nothing`: Modifies the DataFrame in place
+
+# Notes
+- Adds classification columns: :On, :Off, :Eject, :OnOffEject
+- Classifies Z-scores as "Up", "Down", or "Null" based on threshold
+- Requires existing Z-score columns: :ZRate01, :ZRate10, :ZEject
+- :OnOffEject combines all three classifications
+- Uses classify_Zscore function for individual classifications
+- Modifies the DataFrame in place for efficiency
+
+# Examples
+```julia
+# Add Z-score classifications with default threshold
+add_Zscore_class!(df)
+
+# Add Z-score classifications with custom threshold
+add_Zscore_class!(df, 1.5)
+
+# The DataFrame now contains:
+# - :On, :Off, :Eject (individual classifications)
+# - :OnOffEject (combined classification)
+```
+"""
 function add_Zscore_class!(df, threshold=2.0)
     insertcols!(df, :On => classify_Zscore.(df.ZRate01, threshold))
     insertcols!(df, :Off => classify_Zscore.(df.ZRate10, threshold))
@@ -370,6 +778,33 @@ function add_Zscore_class!(df, threshold=2.0)
     insertcols!(df, :OnOffEject => df.On .* df.Off .* df.Eject)
 end
 
+"""
+    classify_Zscore(Z, threshold)
+
+Classify a Z-score value based on a threshold.
+
+# Arguments
+- `Z::Float64`: Z-score value to classify
+- `threshold::Float64`: Threshold for classification
+
+# Returns
+- `String`: Classification ("Up", "Down", or "Null")
+
+# Notes
+- Returns "Up" if Z > threshold
+- Returns "Down" if Z < -threshold
+- Returns "Null" if -threshold ≤ Z ≤ threshold
+- Used for categorizing changes in gene expression parameters
+- Typically used with Z-scores of rate parameters or expression changes
+
+# Examples
+```julia
+# Classify Z-scores
+classify_Zscore(2.5, 2.0)   # Returns: "Up"
+classify_Zscore(-1.5, 2.0)  # Returns: "Null"
+classify_Zscore(-3.0, 2.0)  # Returns: "Down"
+```
+"""
 function classify_Zscore(Z, threshold)
     if Z .> threshold
         return "Up"
@@ -523,6 +958,41 @@ function make_combinedpca(files::Vector, npcs::Int)
 end
 
 
+"""
+    make_dataframe_transient(folder::String, winners::String="")
+
+Create a DataFrame from transient rate files in a folder.
+
+# Arguments
+- `folder::String`: Path to folder containing transient rate files
+- `winners::String=""`: Optional path to winners file
+
+# Returns
+- `DataFrame`: DataFrame containing transient rate data
+
+# Notes
+- Searches for files containing "rate" in the filename
+- Parses time information from filename (format: T{time}_...)
+- Extracts rate parameters: on, off, eject, decay, yield
+- Combines data from multiple time points
+- Adds condition and time columns
+- Optionally adds winner information if winners file is provided
+- Converts time from minutes to hours (divides by 60)
+
+# Examples
+```julia
+# Create transient DataFrame without winners
+df = make_dataframe_transient("transient_results/")
+
+# Create transient DataFrame with winners
+df = make_dataframe_transient("transient_results/", "winners.txt")
+
+# The resulting DataFrame contains:
+# - Gene, on, off, eject, decay, yield, cond, time
+# - winner (if winners file provided)
+```
+"""
+
 function make_dataframe_transient(folder::String, winners::String="")
     rs = Array{Any,2}(undef, 0, 8)
     files = readdir(folder)
@@ -544,6 +1014,35 @@ function make_dataframe_transient(folder::String, winners::String="")
     end
 end
 
+"""
+    filter_gene(measurefile, measure, threshold)
+
+Filter genes based on a measure value and threshold.
+
+# Arguments
+- `measurefile::String`: Path to measure file
+- `measure::String`: Name of the measure column
+- `threshold::Float64`: Threshold value for filtering
+
+# Returns
+- `Vector{String}`: Vector of gene names that meet the criteria
+
+# Notes
+- Reads measure file and finds the specified measure column
+- Returns genes where measure value > threshold OR is NaN
+- Assumes first column contains gene names
+- Prints the number of genes found for debugging
+- Useful for identifying problematic genes in model fitting
+
+# Examples
+```julia
+# Filter genes with high deviance
+high_deviance_genes = filter_gene("measures.csv", "Deviance", 100.0)
+
+# Filter genes with high Rhat values
+high_rhat_genes = filter_gene("measures.csv", "Rhat", 1.1)
+```
+"""
 function filter_gene(measurefile, measure, threshold)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
@@ -558,6 +1057,34 @@ function filter_gene(measurefile, measure, threshold)
     return genes
 end
 
+"""
+    filter_gene_nan(measurefile, measure)
+
+Filter genes that have NaN values for a specific measure.
+
+# Arguments
+- `measurefile::String`: Path to measure file
+- `measure::String`: Name of the measure column
+
+# Returns
+- `Vector{String}`: Vector of gene names with NaN values
+
+# Notes
+- Reads measure file and finds the specified measure column
+- Returns genes where the measure value is NaN
+- Assumes first column contains gene names
+- Prints the number of genes found for debugging
+- Useful for identifying genes with missing or failed model fits
+
+# Examples
+```julia
+# Find genes with NaN deviance values
+nan_deviance_genes = filter_gene_nan("measures.csv", "Deviance")
+
+# Find genes with NaN AIC values
+nan_aic_genes = filter_gene_nan("measures.csv", "AIC")
+```
+"""
 function filter_gene_nan(measurefile, measure)
     genes = Vector{String}(undef, 0)
     measures, header = readdlm(measurefile, ',', header=true)
@@ -689,6 +1216,36 @@ function burstsize(reject::Float64, roff, covee, covoo, coveo::Float64)
     return reject / roff, sqrt(v)
 end
 
+"""
+    ratestats(gene, G, folder, cond)
+
+Get rate parameters and covariance matrix for a specific gene.
+
+# Arguments
+- `gene::String`: Gene name
+- `G`: Model identifier
+- `folder::String`: Path to folder containing result files
+- `cond::String`: Condition identifier
+
+# Returns
+- `Tuple{Vector, Matrix}`: Tuple containing (rates, covariance_matrix)
+
+# Notes
+- Reads rate parameters from rate file
+- Reads covariance matrix from parameter statistics file
+- Assumes files follow standard naming conventions
+- Uses getfile and getratefile functions to locate files
+- Returns both rate parameters and their uncertainties
+
+# Examples
+```julia
+# Get rate statistics for a gene
+rates, cov = ratestats("MYC", "2", "results/", "control")
+
+# rates contains the fitted parameters
+# cov contains the covariance matrix for uncertainty analysis
+```
+"""
 function ratestats(gene, G, folder, cond)
     filestats = joinpath(folder, getfile("param-stats", gene, G, folder, cond)[1])
     filerates = joinpath(folder, getratefile(gene, G, folder, cond)[1])
@@ -699,8 +1256,35 @@ function ratestats(gene, G, folder, cond)
     return rates, cov
 end
 
-meanofftime(gene::String, infile, n, method, root) = sum(1 .- offtime(gene, infile, n, method, root))
+"""
+    meanofftime(r::Vector, n::Int, method)
 
+Calculate mean off time for a gene expression model.
+
+# Arguments
+- `r::Vector`: Rate parameters vector
+- `n::Int`: Number of states
+- `method`: Method for calculating off time
+
+# Returns
+- `Float64`: Mean off time
+
+# Notes
+- For single-state models (n=1): returns 1/r[1]
+- For multi-state models: calculates sum of (1 - off time probabilities)
+- Uses offtime function to get off time probabilities
+- Mean off time represents average time spent in off states
+- Important metric for understanding gene expression dynamics
+
+# Examples
+```julia
+# Calculate mean off time for a two-state model
+r = [0.1, 0.2, 0.5, 0.3]  # rate parameters
+mean_off = meanofftime(r, 2, "method")
+
+# Returns the average time the gene spends in off states
+```
+"""
 function meanofftime(r::Vector, n::Int, method)
     if n == 1
         return 1 / r[1]
@@ -709,6 +1293,36 @@ function meanofftime(r::Vector, n::Int, method)
     end
 end
 
+"""
+    offtime(r::Vector, n::Int, method)
+
+Calculate off time probabilities for a gene expression model.
+
+# Arguments
+- `r::Vector`: Rate parameters vector
+- `n::Int`: Number of states
+- `method`: Method for calculating off time
+
+# Returns
+- `Vector{Float64}`: Off time probabilities
+
+# Notes
+- Constructs gene state transition matrix using mat_G_DT
+- Performs eigendecomposition to find eigenvalues
+- Uses minimum eigenvalue to determine time range for CDF calculation
+- Calculates off time cumulative distribution function
+- Returns probabilities of being in off states at different times
+- Important for understanding gene switching dynamics
+
+# Examples
+```julia
+# Calculate off time probabilities for a two-state model
+r = [0.1, 0.2, 0.5, 0.3]  # rate parameters
+off_probs = offtime(r, 2, "method")
+
+# Returns vector of off time probabilities
+```
+"""
 function offtime(r::Vector, n::Int, method)
     _, _, TI = mat_G_DT(r, n)
     vals, _ = eig_decompose(TI)
@@ -716,12 +1330,73 @@ function offtime(r::Vector, n::Int, method)
     offtimeCDF(collect(1.0:5/minval), r, n, TI, method)
 end
 
+"""
+    offtime(gene::String, infile, n, method, root)
+
+Calculate off time probabilities for a specific gene from a rate file.
+
+# Arguments
+- `gene::String`: Gene name
+- `infile::String`: Path to rate file
+- `n::Int`: Number of states
+- `method`: Method for calculating off time
+- `root::String`: Root path for data
+
+# Returns
+- `Vector{Float64}`: Off time probabilities
+
+# Notes
+- Reads rate parameters for the specified gene from the rate file
+- Extracts rate parameters (excluding first and last columns)
+- Delegates to offtime(r::Vector, n::Int, method) for calculation
+- Assumes rate file has gene names in first column
+- Assumes rate parameters are in columns 2 to end-1
+
+# Examples
+```julia
+# Calculate off time for a gene from rate file
+off_probs = offtime("MYC", "rates.txt", 2, "method", "data/")
+
+# Returns off time probabilities for the MYC gene
+```
+"""
 function offtime(gene::String, infile, n, method, root)
     contents, head = readdlm(infile, ',', header=true)
     r = float.(contents[gene.==contents[:, 1], 2:end-1])[1, :]
     offtime(r, n, method)
-
 end
+
+"""
+    join_files(file1::String, file2::String, outfile::String, addlabel::Bool=true)
+
+Join two rate files into a single output file.
+
+# Arguments
+- `file1::String`: Path to first rate file (G=2 model)
+- `file2::String`: Path to second rate file (G=3 model)
+- `outfile::String`: Path to output file
+- `addlabel::Bool=true`: Whether to add model labels to column names
+
+# Returns
+- `Nothing`: Writes joined data to outfile
+
+# Notes
+- Joins files based on matching gene names in first column
+- Adds "_G2" and "_G3" suffixes to column names if addlabel=true
+- Preserves gene names in first column
+- Only includes rows where gene names match between files
+- Assumes both files have the same gene names in same order
+- Useful for comparing results from different model types
+
+# Examples
+```julia
+# Join G=2 and G=3 model results
+join_files("rates_G2.txt", "rates_G3.txt", "combined_rates.txt")
+
+# Join without model labels
+join_files("rates_G2.txt", "rates_G3.txt", "combined_rates.txt", false)
+```
+"""
 
 function join_files(file1::String, file2::String, outfile::String, addlabel::Bool=true)
     contents1, head1 = readdlm(file1, ',', header=true)   # model G=2
@@ -794,6 +1469,34 @@ function sample_non1_genes(infile, n)
     a = StatsBase.sample(list, n, replace=false)
 end
 
+"""
+    add_best_burst(filein, fileout, filemodel2, filemodel3)
+
+Add burst size information to a file based on best model selection.
+
+# Arguments
+- `filein::String`: Path to input file containing model results
+- `fileout::String`: Path to output file
+- `filemodel2::String`: Path to G=2 model burst file
+- `filemodel3::String`: Path to G=3 model burst file
+
+# Returns
+- `Nothing`: Writes augmented data to outfile
+
+# Notes
+- Reads model results and determines best model for each gene
+- Adds burst size information based on the best model (G=2 or G=3)
+- Assumes last column contains model identifier
+- Adds "mean off period" and "burst size" columns
+- Matches genes between input file and burst files
+- Useful for adding burst statistics to model comparison results
+
+# Examples
+```julia
+# Add burst information to model comparison results
+add_best_burst("model_comparison.txt", "with_bursts.txt", "burst_G2.txt", "burst_G3.txt")
+```
+"""
 function add_best_burst(filein, fileout, filemodel2, filemodel3)
     contents, head = readdlm(filein, ',', header=true)
     burst2, head2 = readdlm(filemodel2, ',', header=true)
@@ -811,6 +1514,35 @@ function add_best_burst(filein, fileout, filemodel2, filemodel3)
     close(f)
 end
 
+"""
+    add_best_occupancy(filein, fileout, filemodel2, filemodel3)
+
+Add occupancy information to a file based on best model selection.
+
+# Arguments
+- `filein::String`: Path to input file containing model results
+- `fileout::String`: Path to output file
+- `filemodel2::String`: Path to G=2 model occupancy file
+- `filemodel3::String`: Path to G=3 model occupancy file
+
+# Returns
+- `Nothing`: Writes augmented data to outfile
+
+# Notes
+- Reads model results and determines best model for each gene
+- Adds occupancy information based on the best model (G=2 or G=3)
+- Assumes third-to-last column contains model identifier
+- Adds "Off -2", "Off -1", "On State" columns
+- For G=2 models: adds "NA" for "Off -2" since G=2 only has one off state
+- For G=3 models: adds all three occupancy values
+- Matches genes between input file and occupancy files
+
+# Examples
+```julia
+# Add occupancy information to model comparison results
+add_best_occupancy("model_comparison.txt", "with_occupancy.txt", "occupancy_G2.txt", "occupancy_G3.txt")
+```
+"""
 function add_best_occupancy(filein, fileout, filemodel2, filemodel3)
     contents, head = readdlm(filein, ',', header=true)
     occupancy2, head2 = readdlm(filemodel2, ',', header=true)
@@ -839,6 +1571,36 @@ function prune_file(list, file, outfile, header=true)
     close(f)
 end
 
+"""
+    replace_yield(G, folder1, folder2, cond1, cond2, outfolder)
+
+Replace yield parameters from one condition with those from another condition.
+
+# Arguments
+- `G`: Model identifier (converted to string if numeric)
+- `folder1::String`: Path to source folder
+- `folder2::String`: Path to target folder
+- `cond1::String`: Source condition identifier
+- `cond2::String`: Target condition identifier
+- `outfolder::String`: Path to output folder
+
+# Returns
+- `Nothing`: Creates output files in outfolder
+
+# Notes
+- Reads rate files from both conditions
+- Replaces the last parameter (yield) in target files with yield from source files
+- Creates output folder if it doesn't exist
+- Matches files by gene names between conditions
+- Preserves all other parameters from target condition
+- Useful for transferring yield estimates between experimental conditions
+
+# Examples
+```julia
+# Replace yield from control condition into treatment condition
+replace_yield("2", "control_results/", "treatment_results/", "control", "treatment", "modified_results/")
+```
+"""
 function replace_yield(G, folder1, folder2, cond1, cond2, outfolder)
     if typeof(G) <: Number
         G = string(G)
@@ -935,6 +1697,37 @@ end
 
 getratefile(gene, G, folder, cond) = getfile("rate", gene, G, folder, cond)
 
+"""
+    getfile(type, gene::String, G::String, folder, cond)
+
+Find files of a specific type for a gene, model, and condition.
+
+# Arguments
+- `type::String`: File type prefix (e.g., "rate", "param-stats")
+- `gene::String`: Gene name
+- `G::String`: Model identifier
+- `folder::String`: Path to folder to search
+- `cond::String`: Condition identifier
+
+# Returns
+- `Vector{String}`: Vector of matching file names
+
+# Notes
+- Searches for files containing type prefix, gene name, model, and condition
+- Filters files by multiple criteria in sequence
+- Returns all files that match all criteria
+- Assumes files follow standard naming conventions
+- Useful for finding specific file types for a gene-model-condition combination
+
+# Examples
+```julia
+# Find rate files for MYC gene, G=2 model, control condition
+files = getfile("rate", "MYC", "2", "results/", "control")
+
+# Find parameter statistics files
+files = getfile("param-stats", "MYC", "2", "results/", "control")
+```
+"""
 function getfile(type, gene::String, G::String, folder, cond)
     files = readdir(folder)
     files = files[occursin.(type, files)]
@@ -952,6 +1745,36 @@ function change_name(folder, oldname, newname)
     end
 end
 
+"""
+    make_halflife(infile, outfile, col=4)
+
+Create a halflife file from input data with two halflife columns.
+
+# Arguments
+- `infile::String`: Path to input file
+- `outfile::String`: Path to output file
+- `col::Int=4`: Column index for first halflife value
+
+# Returns
+- `Nothing`: Writes halflife data to outfile
+
+# Notes
+- Reads input file and extracts halflife values from columns col and col+1
+- Removes asterisks (*) from gene names
+- Calculates average halflife when both values are available
+- Only includes genes where at least one halflife value > 0
+- Creates output file with "Gene" and "Halflife" columns
+- Useful for processing halflife data from experimental measurements
+
+# Examples
+```julia
+# Create halflife file from input data
+make_halflife("input_data.txt", "halflife_output.txt")
+
+# Use different column for first halflife value
+make_halflife("input_data.txt", "halflife_output.txt", 6)
+```
+"""
 function make_halflife(infile, outfile, col=4)
     f = open(outfile, "w")
     writedlm(f, ["Gene" "Halflife"], ',')
@@ -969,6 +1792,36 @@ function make_halflife(infile, outfile, col=4)
     nothing
 end
 
+"""
+    make_datafiles(infolder, outfolder, label)
+
+Copy files from input folder to output folder, removing a label from filenames.
+
+# Arguments
+- `infolder::String`: Path to input folder
+- `outfolder::String`: Path to output folder
+- `label::String`: Label to remove from filenames
+
+# Returns
+- `Nothing`: Copies files to outfolder
+
+# Notes
+- Creates output folder if it doesn't exist
+- Copies all files from input folder to output folder
+- Removes the specified label from each filename
+- Preserves file content, only modifies filename
+- Useful for cleaning up filenames by removing prefixes or suffixes
+
+# Examples
+```julia
+# Copy files and remove "temp_" prefix
+make_datafiles("input/", "output/", "temp_")
+
+# This would copy and rename:
+# - "temp_data1.txt" → "data1.txt"
+# - "temp_data2.txt" → "data2.txt"
+```
+"""
 function make_datafiles(infolder, outfolder, label)
     histograms = readdir(infolder)
     if ~isdir(outfolder)
@@ -1092,9 +1945,32 @@ end
 # New functions
 #########
 
+"""
+    make_observation_dist(d, states, G, R, S, coupling=tuple)
+
+Create observation distributions for trace analysis based on model type and coupling.
+
+# Arguments
+- `d`: Observation distribution data
+- `states`: State information for the model
+- `G`: Gene states (Int or Tuple)
+- `R`: RNA states (Int or Tuple)
+- `S`: Splice states (Int or Tuple)
+- `coupling`: Coupling structure (default: tuple())
+
+# Returns
+- `states`: Processed state information
+- `observations`: Vector of observation distributions
+
+# Notes
+- Handles both uncoupled (G isa Int) and coupled (G isa Tuple) models
+- For uncoupled models: processes single observation distributions
+- For coupled models: processes multiple observation distributions with unit state mapping
+- Automatically detects distribution types and handles accordingly
+"""
 function make_observation_dist(d, states, G, R, S, coupling=tuple)
     observations = Vector[]
-    if isempty(coupling)
+    if G isa Int
         if eltype(d) <: Distribution
             for s in states
                 push!(observations, [d[s] for s in s])
@@ -1124,14 +2000,70 @@ function make_observation_dist(d, states, G, R, S, coupling=tuple)
             return units, observations
         end
     end
-
 end
 
+"""
+    make_trace_datamodel(traces::Vector, interval::Float64, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+
+Create trace data model from raw traces and model parameters.
+
+# Arguments
+- `traces::Vector`: Vector of trace data
+- `interval::Float64`: Time interval between measurements
+- `rin`: Rate parameters
+- `transitions`: Model transition structure
+- `G, R, S, insertstep`: Model parameters
+- `probfn`: Probability function (default: prob_Gaussian)
+- `noiseparams`: Number of noise parameters (default: 4)
+- `splicetype`: Splice type (default: "")
+- `state`: Include state information (default: true)
+- `hierarchical`: Hierarchical model flag (default: false)
+- `coupling`: Coupling structure (default: tuple())
+- `grid`: Grid parameters (default: nothing)
+- `zeromedian`: Zero median flag (default: false)
+
+# Returns
+- `data`: TraceData object
+- `model`: Loaded model object
+
+# Notes
+- Creates TraceData object from raw traces
+- Handles both hierarchical and non-hierarchical models
+- Supports coupled and uncoupled model types
+"""
 function make_trace_datamodel(traces::Vector, interval::Float64, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     make_trace_datamodel(data, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
 end
 
+"""
+    make_trace_datamodel(data::TraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+
+Create trace data model from existing TraceData object and model parameters.
+
+# Arguments
+- `data::TraceData`: Existing trace data object
+- `rin`: Rate parameters
+- `transitions`: Model transition structure
+- `G, R, S, insertstep`: Model parameters
+- `probfn`: Probability function (default: prob_Gaussian)
+- `noiseparams`: Number of noise parameters (default: 4)
+- `splicetype`: Splice type (default: "")
+- `state`: Include state information (default: true)
+- `hierarchical`: Hierarchical model flag (default: false)
+- `coupling`: Coupling structure (default: tuple())
+- `grid`: Grid parameters (default: nothing)
+- `zeromedian`: Zero median flag (default: false)
+
+# Returns
+- `data`: Updated TraceData object
+- `model`: Loaded model object
+
+# Notes
+- Uses existing TraceData object instead of creating new one
+- Handles both hierarchical and non-hierarchical models
+- Supports coupled and uncoupled model types
+"""
 function make_trace_datamodel(data::TraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     if hierarchical
         h = (2, [8], ())
@@ -1149,26 +2081,77 @@ function make_trace_datamodel(data::TraceData, rin, transitions, G, R, S, insert
 end
 
 
+"""
+    make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool, coupling)
+
+Create DataFrame from trace data for uncoupled models (Int parameters).
+
+# Arguments
+- `ts`: State trajectories
+- `td`: Trace data
+- `traces`: Original trace data
+- `G::Int`: Number of gene states
+- `R::Int`: Number of RNA states
+- `S::Int`: Number of splice states
+- `insertstep::Int`: Insertion step
+- `state::Bool`: Include state information
+- `coupling`: Coupling structure
+
+# Returns
+- `DataFrame`: DataFrame containing trace data, model predictions, and optional state information
+
+# Notes
+- Handles uncoupled models with integer parameters
+- Creates columns for data, model means, and standard deviations
+- Optionally includes gene states, RNA states, and reporter information
+- Handles missing values by padding with missing
+"""
 function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertstep::Int, state::Bool, coupling)
     l = maximum(length.(traces))
-    data = ["data_$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+    if !isempty(coupling)
+        data = ["data_$i" => [traces[i][:, 2]; fill(missing, l - length(traces[i][:, 2]))] for i in eachindex(traces)]
+    else
+        data = ["data_$i" => [traces[i]; fill(missing, l - length(traces[i]))] for i in eachindex(traces)]
+    end
     pred = ["model_mean_$i" => [mean.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
     predstd = ["model_std_$i" => [std.(td[i]); fill(missing, l - length(td[i]))] for i in eachindex(td)]
     cols = [data pred predstd]
     if state
         g, z, zdigits, r = inverse_state(ts, G, R, S, insertstep)
         gs = ["Gstate_$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         s = ["Rstate_$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-        # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         zs = ["Reporters_$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
         cols = hcat(cols, [gs s zs])
     end
-    # v = state ? [data pred ["state$i" => [mod.(ts[i] .- 1, G) .+ 1; fill(missing, l - length(ts[i]))] for i in eachindex(ts)]] : [data pred]
-    # df = DataFrame(["trace$i" => [tp[i]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)])
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
+"""
+    make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
+
+Create DataFrame from trace data for coupled models (Tuple parameters).
+
+# Arguments
+- `ts`: State trajectories
+- `tp`: Trace predictions
+- `traces`: Original trace data
+- `G::Tuple`: Gene states for each unit
+- `R::Tuple`: RNA states for each unit
+- `S::Tuple`: Splice states for each unit
+- `insertstep::Tuple`: Insertion steps for each unit
+- `state::Bool`: Include state information
+- `coupling`: Coupling structure
+
+# Returns
+- `DataFrame`: DataFrame containing trace data, model predictions, and optional state information
+
+# Notes
+- Handles coupled models with tuple parameters
+- Creates separate columns for each coupled unit
+- Processes each unit in the coupling structure
+- Optionally includes state information for each unit
+- Handles missing values by padding with missing
+"""
 function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
     l = maximum(size.(traces, 1))
     cols = Matrix(undef, length(traces), 0)
@@ -1181,9 +2164,7 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
             index = [[s[k] for s in t] for t in ts]
             g, z, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
             gs = ["Gstate$k" * "_$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            # tss = ["State$i" => [ts[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             s = ["Rstate$k" * "_$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
-            # ss = ["Z$i" => [z[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             zs = ["Reporters$k" * "_$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             cols = hcat(cols, [gs s zs])
         end
@@ -1191,8 +2172,70 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
     DataFrame(permutedims(cols, (2, 1))[:])
 end
 
+"""
+    make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+
+Create DataFrame from raw traces and model parameters.
+
+# Arguments
+- `traces`: Vector of trace data
+- `interval`: Time interval between measurements
+- `rin`: Rate parameters
+- `transitions`: Model transition structure
+- `G, R, S, insertstep`: Model parameters
+- `probfn`: Probability function (default: prob_Gaussian)
+- `noiseparams`: Number of noise parameters (default: 4)
+- `splicetype`: Splice type (default: "")
+- `state`: Include state information (default: true)
+- `hierarchical`: Hierarchical model flag (default: false)
+- `coupling`: Coupling structure (default: tuple())
+- `grid`: Grid parameters (default: nothing)
+- `zeromedian`: Zero median flag (default: false)
+
+# Returns
+- `DataFrame`: DataFrame containing trace data and model predictions
+
+# Notes
+- Creates TraceData object from raw traces
+- Delegates to the TraceData version of make_traces_dataframe
+- Handles both coupled and uncoupled models automatically
+"""
 function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    make_traces_dataframe(data, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+end
+
+"""
+    make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+
+Create DataFrame from TraceData object and model parameters.
+
+# Arguments
+- `data::AbstractTraceData`: Trace data object
+- `rin`: Rate parameters
+- `transitions`: Model transition structure
+- `G, R, S, insertstep`: Model parameters
+- `probfn`: Probability function (default: prob_Gaussian)
+- `noiseparams`: Number of noise parameters (default: 4)
+- `splicetype`: Splice type (default: "")
+- `state`: Include state information (default: true)
+- `hierarchical`: Hierarchical model flag (default: false)
+- `coupling`: Coupling structure (default: tuple())
+- `grid`: Grid parameters (default: nothing)
+- `zeromedian`: Zero median flag (default: false)
+
+# Returns
+- `DataFrame`: DataFrame containing trace data and model predictions
+
+# Notes
+- Loads model and generates predictions
+- Handles both hierarchical and non-hierarchical models
+- Distinguishes between coupled (G isa Tuple) and uncoupled models
+- Creates observation distributions and state information
+- Delegates to appropriate make_traces_dataframe method based on parameter types
+"""
+function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+    # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     if hierarchical
         h = (2, [8], ())
         method = (Tsit5(), true)
@@ -1200,83 +2243,110 @@ function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, inse
         h = ()
         method = Tsit5()
     end
-    if !isempty(coupling)
+    if !isempty(coupling) && G isa Tuple
         model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, grid, zeromedian)
     else
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, (), grid, zeromedian)
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, grid, zeromedian)
     end
     ts, d = predict_trace(get_param(model), data, model)
     states, observations = make_observation_dist(d, ts, G, R, S, coupling)
-    make_traces_dataframe(states, observations, traces, G, R, S, insertstep, state, coupling)
+    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling)
 end
 
-"""
-    write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start::Int=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple())
-
-
-"""
-function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    traces, maxmedians = zero_median(traces, zeromedian)
-    df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
+    traceinfo = (interval, start, stop, 1.0, 0.0)
+    data = load_data_trace(datapath, "", "", datacond, traceinfo, :trace, datacol, zeromedian)
+    df = make_traces_dataframe(data, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
     CSV.write(outfile, df)
 end
+
+
+function write_trace_dataframe(file::String, datapath::String, interval::Float64, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
+    println(file)
+    datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field = parse_filename(file, hlabel=hlabel)
+    coupling = make_coupling(coupling_field, G, R)
+    if G isa Int && !isempty(coupling)
+        datapath = joinpath(datapath, string(coupling_field[1]))
+    end
+    println(datapath)
+    r = readrates(file, get_row(ratetype))
+    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
+    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian, datacol=datacol)
+end
+
+function write_traces(folder::String, datapath::String, interval::Float64, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f) 
+                write_trace_dataframe(joinpath(root, f), datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
+            end
+        end
+    end
+end
+
+
 
 """
     write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
 
 TBW
 """
-function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple(), grid=nothing, zeromedian=false)
-    println(file)
-    filename = basename(file)
-    occursin(hlabel, filename) ? hierarchical = true : hierarchical = false
-    parts = fields(filename)
-    G, R, S, insertstep = decompose_model(parts.model)
-    transitions = get_transitions(G, parts.label)
-    r = readrates(file, get_row(ratetype))
-    out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
-    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian)
-end
+# function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+#     traces = read_tracefiles(datapath, datacond, start, stop)
+#     traces, maxmedians = zero_median(traces, zeromedian)
+#     df = make_traces_dataframe(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+#     CSV.write(outfile, df)
+# end
+# function write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
+#     println(file)
+#     filename = basename(file)
+#     occursin(hlabel, filename) ? hierarchical = true : hierarchical = false
+#     parts = fields(filename)
+#     G, R, S, insertstep = decompose_model(parts.model)
+#     transitions = get_transitions(G, parts.label)
+#     r = readrates(file, get_row(ratetype))
+#     out = replace(file, "rates" => "predictedtraces", ".txt" => ".csv")
+#     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian, datacol=datacol)
+# end
+# """
+#     write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+
+# """
+# function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
+#     for (root, dirs, files) in walkdir(folder)
+#         for f in files
+#             # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+#             if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
+#                 write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling, grid=grid, zeromedian=zeromedian)
+#             end
+#         end
+#     end
+# end
+# """
+#     write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, coupling=tuple())
+
+# TBW
+# """
+# function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), sources=1:3, targets=1:5, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, pattern="gene", zeromedian=true, datacol=3)
+#     for (root, dirs, files) in walkdir(folder)
+#         for f in files
+#             for target in targets
+#                 for source in sources
+#                     # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
+#                     if occursin("rates", f) && occursin("$pattern$source$target", f)
+#                         write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1), zeromedian=zeromedian, datacol=datacol)
+#                     end
+#                 end
+#                 if occursin("rates", f) && occursin("R$target", f)
+#                     coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                     write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling, zeromedian=zeromedian, datacol=datacol)
+#                 end
+#             end
+#         end
+#     end
+# end
 
 
-"""
-    write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
-
-"""
-function write_traces(folder, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple(), grid=nothing, zeromedian=false)
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-            if occursin("rates", f) && (occursin("tracejoint", f) || (isempty(coupling) && occursin(datacond, f)))
-                write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling, grid=grid, zeromedian=zeromedian)
-            end
-        end
-    end
-end
-"""
-    write_traces_folder(folder, datafolder::Vector, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, coupling=tuple())
-
-TBW
-"""
-function write_traces_coupling(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3), sources=1:3, targets=1:5, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, pattern="gene", zeromedian=true)
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            for target in targets
-                for source in sources
-                    # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
-                    if occursin("rates", f) && occursin("$pattern$source$target", f)
-                        write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1), zeromedian=zeromedian)
-                    end
-                end
-                if occursin("rates", f) && occursin("R$target", f)
-                    coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
-                    write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling, zeromedian=zeromedian)
-                end
-            end
-        end
-    end
-end
 
 ########### Parallelized functions ###########
 # """
@@ -1519,7 +2589,32 @@ end
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
 
-TBW
+Create histogram from trace data for a specific condition.
+
+# Arguments
+- `datapath::String`: Path to data directory
+- `datacond::String`: Data condition identifier
+- `start::Int=1`: Starting index for trace data
+- `stop::Int=-1`: Ending index for trace data (-1 for all)
+
+# Returns
+- `Tuple{Vector, Any}`: (trace_data, histogram)
+
+# Notes
+- Reads trace files for the specified condition
+- Combines all trace data into a single vector
+- Creates normalized histogram from combined data
+- Uses read_tracefiles to load data
+- Uses histogram function with normalize=true
+- Useful for analyzing overall distribution of trace values
+
+# Examples
+```julia
+# Create histogram from trace data
+trace_data, hist = make_trace_histogram("data/", "control")
+
+# hist contains normalized histogram of all trace values
+```
 """
 function make_trace_histogram(datapath, datacond, start=1, stop=-1)
     traces = read_tracefiles(datapath, datacond, start, stop)
@@ -1607,6 +2702,38 @@ function data_covariance(traces, lags)
     ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
 end
 
+"""
+    reset_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
+
+Reset noise parameters in a rate vector to default values.
+
+# Arguments
+- `r::Vector`: Rate parameter vector (modified in place)
+- `transitions`: Model transition structure
+- `G::Tuple`: Gene states for each unit
+- `R`: RNA states for each unit
+- `S`: Splice states for each unit
+- `insertstep`: Insertion steps for each unit
+- `num_noiseparams::Int`: Number of noise parameters per unit
+
+# Returns
+- `Nothing`: Modifies rate vector in place
+
+# Notes
+- Resets noise parameters to default values: [20, 0.1, 80, 0.1]
+- Processes each unit in the coupled model
+- Calculates position of noise parameters based on model structure
+- Assumes noise parameters follow rate parameters for each unit
+- Useful for reinitializing noise parameters during model fitting
+
+# Examples
+```julia
+# Reset noise parameters in coupled model
+reset_noise!(r, transitions, (3, 3), (3, 3), (1, 0), (1, 1), 4)
+
+# Noise parameters are reset to default values
+```
+"""
 function reset_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
     n = 0
     for i in eachindex(G)
@@ -1616,6 +2743,38 @@ function reset_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparam
     end
 end
 
+"""
+    delete_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
+
+Remove noise parameters from a rate vector.
+
+# Arguments
+- `r::Vector`: Rate parameter vector (modified in place)
+- `transitions`: Model transition structure
+- `G::Tuple`: Gene states for each unit
+- `R`: RNA states for each unit
+- `S`: Splice states for each unit
+- `insertstep`: Insertion steps for each unit
+- `num_noiseparams::Int`: Number of noise parameters per unit
+
+# Returns
+- `Nothing`: Modifies rate vector in place
+
+# Notes
+- Removes noise parameters from the rate vector
+- Processes each unit in the coupled model
+- Calculates position of noise parameters based on model structure
+- Assumes noise parameters follow rate parameters for each unit
+- Useful for creating rate vectors without noise parameters
+
+# Examples
+```julia
+# Remove noise parameters from coupled model
+delete_noise!(r, transitions, (3, 3), (3, 3), (1, 0), (1, 1), 4)
+
+# Rate vector now contains only rate parameters
+```
+"""
 function delete_noise!(r, transitions, G::Tuple, R, S, insertstep, num_noiseparams)
     n = 0
     for i in eachindex(G)
@@ -1816,4 +2975,359 @@ end
 
 # Utility function for splitting conditions
 split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond, "-") : [cond]
+
+"""
+    sample_non1_genes(infile, n)
+
+Sample genes that have non-unity values in column 5.
+
+# Arguments
+- `infile::String`: Path to input file
+- `n::Int`: Number of genes to sample
+
+# Returns
+- `Vector{String}`: Vector of sampled gene names
+
+# Notes
+- Reads the input file and filters genes where column 5 != 1
+- Assumes gene names are in the first column
+- Uses StatsBase.sample for random sampling without replacement
+- Useful for selecting a subset of genes for analysis
+- Returns empty vector if no genes meet criteria
+
+# Examples
+```julia
+# Sample 10 genes with non-unity values in column 5
+genes = sample_non1_genes("data.txt", 10)
+
+# Returns a random sample of gene names
+```
+"""
+function sample_non1_genes(infile, n)
+    contents, head = readdlm(infile, ',', header=true)
+    list = Array{String,1}(undef, 0)
+    for c in eachrow(contents)
+        if c[5] != 1
+            push!(list, c[1])
+        end
+    end
+    a = StatsBase.sample(list, n, replace=false)
+end
+
+"""
+    prune_file(list, file, outfile, header=true)
+
+Create a new file containing only genes from a specified list.
+
+# Arguments
+- `list::Vector{String}`: List of gene names to keep
+- `file::String`: Path to input file
+- `outfile::String`: Path to output file
+- `header::Bool=true`: Whether the input file has a header
+
+# Returns
+- `Nothing`: Writes filtered data to outfile
+
+# Notes
+- Reads the input file and filters rows based on gene names
+- Assumes gene names are in the first column
+- Only keeps rows where the gene name is in the provided list
+- Preserves header if header=true
+- Useful for creating subset files for specific gene sets
+- Writes results to the specified output file
+
+# Examples
+```julia
+# Keep only specific genes
+genes_to_keep = ["MYC", "FOS", "JUN"]
+prune_file(genes_to_keep, "all_genes.txt", "subset_genes.txt")
+
+# Process file without header
+prune_file(genes_to_keep, "data.txt", "subset.txt", header=false)
+```
+"""
+function prune_file(list, file, outfile, header=true)
+    contents, head = readdlm(file, ',', header=header)
+    f = open(outfile, "w")
+    for c in eachrow(contents)
+        if c[1] in list
+            writedlm(f, [c], ',')
+        end
+    end
+    close(f)
+end
+
+"""
+    getratefile(files, gene)
+
+Find a rate file for a specific gene from a list of files.
+
+# Arguments
+- `files::Vector{String}`: List of file names to search
+- `gene::String`: Gene name to search for
+
+# Returns
+- `String` or `Int`: File name if found, 0 if not found
+
+# Notes
+- Searches for files containing "_gene_" pattern
+- Returns the first matching file
+- Returns 0 if no matching file is found
+- Assumes gene names are embedded in filenames with underscores
+- Useful for finding rate files for specific genes
+
+# Examples
+```julia
+# Find rate file for MYC gene
+files = ["rates_MYC_control.txt", "rates_FOS_treatment.txt"]
+rate_file = getratefile(files, "MYC")  # Returns: "rates_MYC_control.txt"
+
+# Gene not found
+rate_file = getratefile(files, "UNKNOWN")  # Returns: 0
+```
+"""
+
+
+"""
+    getratefile(folder, G, cond)
+
+Find rate files in a folder for a specific model and condition.
+
+# Arguments
+- `folder::String`: Path to folder to search
+- `G`: Model identifier
+- `cond::String`: Condition identifier
+
+# Returns
+- `Vector{String}`: Vector of matching file names
+
+# Notes
+- Searches for files containing "rates_", condition, and model identifiers
+- Filters files by multiple criteria: rates prefix, condition, and model
+- Returns all files that match all criteria
+- Assumes files follow standard naming conventions
+- Useful for finding all rate files for a specific model-condition combination
+
+# Examples
+```julia
+# Find rate files for G=2 model in control condition
+files = getratefile("results/", "2", "control")
+
+# Returns vector of files like: ["rates_gene1_control_2.txt", "rates_gene2_control_2.txt"]
+```
+"""
+
+"""
+    change_name(folder, oldname, newname)
+
+Rename all files in a folder that contain a specific pattern.
+
+# Arguments
+- `folder::String`: Path to folder containing files
+- `oldname::String`: Old name pattern to replace
+- `newname::String`: New name pattern to use
+
+# Returns
+- `Nothing`: Renames files in place
+
+# Notes
+- Searches for files containing the oldname pattern
+- Replaces oldname with newname in all matching filenames
+- Uses force=true to overwrite existing files if necessary
+- Renames files in the same folder
+- Useful for batch renaming files with consistent patterns
+
+# Examples
+```julia
+# Rename all files containing "old_condition" to "new_condition"
+change_name("results/", "old_condition", "new_condition")
+
+# This would rename:
+# - "rates_gene1_old_condition_2.txt" → "rates_gene1_new_condition_2.txt"
+# - "stats_gene2_old_condition_2.txt" → "stats_gene2_new_condition_2.txt"
+```
+"""
+
+"""
+    get_histogram_rna(gene, datacond, datapath)
+
+Get normalized RNA histogram for a specific gene and condition.
+
+# Arguments
+- `gene::String`: Gene name
+- `datacond::String`: Data condition identifier
+- `datapath::String`: Path to data directory
+
+# Returns
+- `Vector{Float64}`: Normalized RNA histogram
+
+# Notes
+- Reads RNA data for the specified gene and condition
+- Normalizes the histogram to sum to 1
+- Uses read_rna function to load data
+- Uses normalize_histogram function for normalization
+- Returns probability distribution over RNA counts
+
+# Examples
+```julia
+# Get normalized RNA histogram for MYC gene in control condition
+hist = get_histogram_rna("MYC", "control", "data/")
+
+# hist contains normalized probabilities for each RNA count
+```
+"""
+
+"""
+    make_vector(x, n)
+
+Create a vector of length n, either by repeating a scalar or using an existing vector.
+
+# Arguments
+- `x`: Input value (scalar or vector)
+- `n::Int`: Desired length of output vector
+
+# Returns
+- `Vector`: Vector of length n
+
+# Notes
+- If x is a scalar: creates a vector of length n filled with x
+- If x is already a vector: returns x as-is
+- Useful for ensuring consistent vector lengths in function calls
+- Handles both numeric and non-numeric types
+
+# Examples
+```julia
+# Create vector from scalar
+make_vector(5, 3)  # Returns: [5, 5, 5]
+
+# Pass through existing vector
+make_vector([1, 2, 3], 3)  # Returns: [1, 2, 3]
+
+# Create vector of strings
+make_vector("default", 2)  # Returns: ["default", "default"]
+```
+"""
+
+"""
+    separate_dataframe(df, G)
+
+Separate a DataFrame into multiple DataFrames based on gene states.
+
+# Arguments
+- `df::DataFrame`: Input DataFrame
+- `G::Int`: Number of gene states
+
+# Returns
+- `Vector{DataFrame}`: Vector of separated DataFrames
+
+# Notes
+- Creates separate DataFrame for each gene state
+- Extracts appropriate columns for each state based on G
+- Assumes column structure follows standard format
+- Uses nsets variable (should be defined in scope)
+- Simplified version without condition handling
+
+# Examples
+```julia
+# Separate DataFrame by gene states
+dfs = separate_dataframe(df, 3)
+
+# Returns vector of DataFrames, one for each gene state
+```
+"""
+
+"""
+    compute_deviance(outfile, ratefile::String, cond, n, datapath, root)
+
+Compute deviance for all genes in a rate file and write results to output file.
+
+# Arguments
+- `outfile::String`: Path to output file
+- `ratefile::String`: Path to rate file
+- `cond::String`: Condition identifier
+- `n::Int`: Number of states
+- `datapath::String`: Path to data directory
+- `root::String`: Root path for data
+
+# Returns
+- `Nothing`: Writes deviance results to outfile
+
+# Notes
+- Reads rate file and computes deviance for each gene
+- Uses deviance function for individual gene calculations
+- Writes results in format: gene_name, deviance_value
+- Assumes rate file has gene names in first column
+- Useful for batch deviance computation across multiple genes
+
+# Examples
+```julia
+# Compute deviance for all genes in rate file
+compute_deviance("deviance_results.txt", "rates.txt", "control", 2, "data/", ".")
+
+# Creates output file with deviance values for each gene
+```
+"""
+
+"""
+    data_covariance(traces, lags)
+
+Compute autocovariance and cross-covariance from trace data.
+
+# Arguments
+- `traces::Vector`: Vector of trace data
+- `lags::Vector{Int}`: Vector of time lags
+
+# Returns
+- `Tuple{Vector, Vector, Vector, Vector}`: (ac1, ac2, cov, lags)
+
+# Notes
+- Computes autocovariance for first and second traces
+- Computes cross-covariance between traces
+- Averages results across all traces
+- Uses StatsBase.crosscov for covariance calculations
+- Returns normalized covariance functions
+- Useful for analyzing temporal correlations in gene expression data
+
+# Examples
+```julia
+# Compute covariance functions from trace data
+lags = collect(0:10:100)
+ac1, ac2, cov, lags = data_covariance(traces, lags)
+
+# ac1, ac2: autocovariance functions
+# cov: cross-covariance function
+```
+"""
+
+"""
+    extract_source_target(pattern::String, filepath::String)
+
+Extract source and target information from a filepath based on a pattern.
+
+# Arguments
+- `pattern::String`: Pattern to search for in filename
+- `filepath::String`: Path to file
+
+# Returns
+- `Union{Tuple{Union{String,Int},Int}, Nothing}`: (source, target) or nothing if not found
+
+# Notes
+- Searches for pattern followed by digits in filename
+- Handles both numeric sources and "R" (RNA) sources
+- Returns source as integer or "R" string, target as integer
+- Uses regex matching to find pattern## format
+- Returns nothing if pattern is not found
+- Useful for parsing coupling information from filenames
+
+# Examples
+```julia
+# Extract source and target from filename
+source, target = extract_source_target("gene", "rates_gene12_condition.txt")
+# Returns: (1, 2)
+
+# Extract RNA target
+source, target = extract_source_target("gene", "rates_geneR3_condition.txt")
+# Returns: ("R", 3)
+```
+"""
 

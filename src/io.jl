@@ -101,6 +101,132 @@ function decompose_model(model::String)
     end
 end
 
+"""
+    decompose_cond(cond::String)
+
+Decompose a condition string by checking for hyphens and returning appropriate format.
+
+# Arguments
+- `cond::String`: Condition string to decompose
+
+# Returns
+- If string contains hyphen: `Tuple{String, String}` - split on first hyphen
+- If no hyphen: `String` - original string unchanged
+
+# Examples
+```julia
+decompose_cond("enhancer-gene21")  # returns ("enhancer", "gene21")
+decompose_cond("simple21")         # returns "simple21"
+decompose_cond("no-digits")        # returns "no-digits"
+decompose_cond("part1-part2-part3") # returns ("part1", "part2-part3")
+```
+
+# Notes
+- Splits only on the first hyphen if multiple hyphens are present
+- Preserves the original string if no hyphen is found
+"""
+function decompose_cond(cond::String)
+    # Check if there's a hyphen in the base string
+    if occursin("-", cond)
+        # Split by hyphen and return as tuple
+        return String.(split(cond, "-"))
+    else
+        # No hyphen, return the string as is
+        return cond
+    end
+end
+
+"""
+    parse_filename(filename::String)
+
+Parse a rate filename to extract all relevant model information and parameters.
+
+# Arguments
+- `filename::String`: Rate filename to parse
+
+# Returns
+- `datacond`: Data condition (string or tuple from decompose_cond)
+- `transitions`: Model transitions structure
+- `G`: Gene states (Int or Tuple)
+- `R`: RNA states (Int or Tuple) 
+- `S`: Splice states (Int or Tuple)
+- `insertstep`: Insertion step (Int or Tuple)
+- `hierarchical`: Bool indicating if hierarchical model
+- `coupling_field`: String coupling field (empty for uncoupled models)
+
+# Examples
+```julia
+# For uncoupled model
+datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field = 
+    parse_filename("rates_gene_condition_3401_2.txt")
+
+# For coupled/forced model with tracejoint
+datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field = 
+    parse_filename("rates_gene_tracejoint_condition31_3401_2.txt")
+```
+
+# Notes
+- Automatically detects hierarchical models from "-h" in label
+- Extracts coupling field from last 2 characters of condition for tracejoint models
+- Uses decompose_cond to process the condition field
+- Handles both uncoupled and coupled/forced model types
+"""
+function parse_filename(filename::String; hlabel="-h")
+    parts = fields(filename)
+    hierarchical = occursin(hlabel, parts.label)
+    G, R, S, insertstep = decompose_model(parts.model)
+    transitions = get_transitions(G, parts.label)
+    if occursin("tracejoint", parts.label)
+        coupling_field = parts.cond[end-1:end]
+        datacond = decompose_cond(parts.cond[1:end-2])
+    else
+        coupling_field = ""
+        datacond = decompose_cond(parts.cond)
+    end
+    return datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field
+end
+
+"""
+    make_coupling(coupling_field::String, G, R)
+
+Construct coupling structure from coupling field and model parameters.
+
+# Arguments
+- `coupling_field::String`: Coupling field (e.g., "31", "R5")
+- `G`: Number of gene states (Int)
+- `R`: Number of RNA states (Int)
+
+# Returns
+- `Tuple`: Coupling structure in format ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+
+# Examples
+```julia
+# State 3 → State 1 coupling
+make_coupling("31", 3, 4)  # returns coupling from state 3 to state 1
+
+# All R states → State 5 coupling  
+make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
+```
+
+# Notes
+- If coupling_field starts with "R": all RNA states (G+1 to G+R) → target state
+- Otherwise: single source state → target state
+- Target state is always the last character of coupling_field
+- Source state is first character for non-R couplings
+"""
+function make_coupling(coupling_field::String, G, R)
+    if isempty(coupling_field)
+        return tuple()
+    else
+        if startswith(coupling_field, "R")
+            source = collect(G+1:G+R)  # All R states
+        else
+            source = parse(Int, coupling_field[1])
+        end
+        target = parse(Int, coupling_field[2:end])
+        return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+    end
+end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
 # statrow_dict() = Dict([("mean", 1), ("SD", 2), ("median", 3), ("MAD", 4)])
@@ -134,6 +260,25 @@ function write_dataframes(resultfolder::String, datapath::String; measure::Symbo
     write_winners(resultfolder, measure)
 end
 
+"""
+    write_dataframes_only(resultfolder::String, datapath::String; kwargs...)
+
+Write dataframes to CSV files without selecting winners.
+
+# Arguments
+- `resultfolder::String`: Path to folder containing result files
+- `datapath::String`: Path to folder containing input data
+- `assemble::Bool=true`: Whether to assemble results into summary files
+- `multicond::Bool=false`: Whether to handle multiple conditions
+- `datatype::String="rna"`: Type of data ("rna", "trace", etc.)
+
+# Returns
+- Nothing, but writes individual result files and summary files
+
+# Notes
+- This function only writes the dataframes, unlike write_dataframes which also selects winners
+- Creates CSV files for each dataframe in the results
+"""
 function write_dataframes_only(resultfolder::String, datapath::String; assemble::Bool=true, multicond::Bool=false, datatype::String="rna")
     dfs = make_dataframes(resultfolder, datapath, assemble, multicond, datatype)
     for df in dfs
@@ -180,11 +325,20 @@ end
 """
     write_augmented(summaryfile::String, resultfolder::String)
 
-write_augmented(summaryfile::String,resultfolder,datapath)
+Augment summary file with G=2 burst size, model predicted moments, and fit measures.
 
-Augment summary file with G=2 burst size, model predicted moments, and fit measures
+# Arguments
+- `summaryfile::String`: Path to summary file to augment
+- `resultfolder::String`: Path to folder containing result files
 
+# Returns
+- Nothing, but writes augmented summary file
 
+# Notes
+- Adds burst size statistics for G=2 models
+- Includes model predicted moments
+- Appends fit quality measures
+- Automatically handles relative paths by prepending resultfolder if needed
 """
 function write_augmented(summaryfile::String, resultfolder::String)
     if ~ispath(summaryfile)
@@ -194,17 +348,62 @@ function write_augmented(summaryfile::String, resultfolder::String)
 end
 
 """
-read_dataframe(csvfile::String)
+    read_dataframe(csvfile::String)
+
+Read a CSV file into a DataFrame.
+
+# Arguments
+- `csvfile::String`: Path to CSV file to read
+
+# Returns
+- `DataFrame`: DataFrame containing the CSV data
+
+# Notes
+- Uses CSV.File for robust CSV parsing
+- Handles various CSV formats automatically
 """
 read_dataframe(csvfile::String) = DataFrame(CSV.File(csvfile))
 
 """
-get_suffix(file::String)
+    get_suffix(file::String)
 
+Extract the base name and file extension from a filename.
+
+# Arguments
+- `file::String`: Filename to process
+
+# Returns
+- `Tuple{String, String}`: (base_name, extension)
+
+# Examples
+```julia
+get_suffix("rates_gene_condition_3401_2.txt")  # returns ("rates_gene_condition_3401_2", "txt")
+get_suffix("summary.csv")                      # returns ("summary", "csv")
+```
+
+# Notes
+- Removes the last 4 characters (including the dot) to get the base name
+- Returns the last 3 characters as the extension
 """
 get_suffix(file::String) = chop(file, tail=4), last(file, 3)
 
-# does not account for csv files with less than 4 fields
+"""
+    fields(file::String)
+
+Parse a filename to extract structured field information.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `Result_Fields` or `Summary_Fields`: Structured field information
+
+# Notes
+- For CSV files: expects 4 fields (name, label, cond, model)
+- For TXT files: expects 6 fields (name, label, cond, gene, model, nalleles) or 5 fields (name, label, "", gene, model, nalleles)
+- Throws ArgumentError for incorrect file name formats
+- Does not account for CSV files with less than 4 fields
+"""
 function fields(file::String)
     file, suffix = get_suffix(file)
     v = split(file, "_")
@@ -228,20 +427,98 @@ function fields(file::String)
     return s
 end
 
+"""
+    isratefile(folder::String)
+
+Check if a folder contains rate files.
+
+# Arguments
+- `folder::String`: Path to folder to check
+
+# Returns
+- `Bool`: True if folder contains CSV files with "rates" in the name
+
+# Notes
+- Looks for files that contain both ".csv" and "rates" in their names
+- Uses logical AND operation to ensure both conditions are met
+"""
 function isratefile(folder::String)
     files = readdir(folder)
     any(occursin.(".csv", files) .& occursin.("rates", files))
 end
 
+"""
+    isfish(string::String)
+
+Check if a string contains "FISH".
+
+# Arguments
+- `string::String`: String to check
+
+# Returns
+- `Bool`: True if string contains "FISH"
+
+# Notes
+- Case-sensitive search for "FISH" substring
+"""
 isfish(string::String) = occursin("FISH", string)
 
+"""
+    get_genes(file::String)
+
+Extract gene names from a CSV file.
+
+# Arguments
+- `file::String`: Path to CSV file containing gene data
+
+# Returns
+- `Vector{String}`: Array of gene names from the first column
+
+# Notes
+- Assumes CSV format with header
+- Returns the first column as gene names
+"""
 function get_genes(file::String)
     r, header = readdlm(file, ',', header=true)
     return r[:, 1]
 end
 
+"""
+    get_genes(root, cond, datapath)
+
+Get gene names from a data path with condition filtering.
+
+# Arguments
+- `root`: Root directory path
+- `cond`: Condition string to filter files
+- `datapath`: Path to data directory
+
+# Returns
+- `Vector{String}`: Array of gene names matching the condition
+
+# Notes
+- Combines root and datapath to form full path
+- Delegates to get_genes(cond, datapath)
+"""
 get_genes(root, cond, datapath) = get_genes(cond, joinpath(root, datapath))
 
+"""
+    get_genes(cond, datapath)
+
+Extract gene names from files in a directory that match a condition.
+
+# Arguments
+- `cond`: Condition string to match in filenames
+- `datapath`: Path to directory containing gene files
+
+# Returns
+- `Vector{String}`: Array of gene names from matching files
+
+# Notes
+- Searches for files containing the condition string
+- Extracts gene name from the first part of filename (before first underscore)
+- Returns empty vector if no matching files found
+"""
 function get_genes(cond, datapath)
     genes = Vector{String}(undef, 0)
     files = readdir(datapath)
@@ -252,9 +529,26 @@ function get_genes(cond, datapath)
     end
     return genes
 end
-"""
-    get_genes(folder,type,label,cond,model)
 
+"""
+    get_genes(folder, type, label, cond, model)
+
+Get gene names from files matching specific criteria.
+
+# Arguments
+- `folder`: Directory containing result files
+- `type`: Type of result file (e.g., "rates", "measures")
+- `label`: Label to match in filenames
+- `cond`: Condition to match in filenames
+- `model`: Model identifier to match in filenames
+
+# Returns
+- `Vector{String}`: Array of gene names from matching files
+
+# Notes
+- Uses get_files to find matching files
+- Extracts gene name from each matching file
+- Returns empty array if no matching files found
 """
 function get_genes(folder, type, label, cond, model)
     genes = Array{String,1}(undef, 0)
@@ -265,45 +559,351 @@ function get_genes(folder, type, label, cond, model)
     return genes
 end
 
+"""
+    get_files(folder, resultname)
+
+Get files matching a result name from a folder.
+
+# Arguments
+- `folder`: Directory to search
+- `resultname`: Name of result type to match
+
+# Returns
+- `Vector{String}`: Array of matching filenames
+
+# Notes
+- Delegates to get_files with additional parameters
+- Requires label, cond, and model parameters to be defined in scope
+"""
 get_files(folder, resultname) =
     get_files(folder::String, resultname, label, cond, model) = get_files(get_resultfiles(folder), resultname, label, cond, model)
 
+"""
+    file_indices(parts, resultname, label, cond, model)
+
+Find indices of files matching specific criteria.
+
+# Arguments
+- `parts`: Vector of field structures from parsed filenames
+- `resultname`: Name of result type to match
+- `label`: Label to match
+- `cond`: Condition to match
+- `model`: Model identifier to match
+
+# Returns
+- `BitArray`: Boolean array indicating which files match all criteria
+
+# Notes
+- Uses logical AND to combine all matching conditions
+- Checks for exact matches on name, label, and condition
+- Uses occursin for model matching to allow partial matches
+"""
 file_indices(parts, resultname, label, cond, model) = (getfield.(parts, :name) .== resultname) .& (getfield.(parts, :label) .== label) .& (getfield.(parts, :cond) .== cond) .& occursin.(model, getfield.(parts, :model))
 
+"""
+    get_files(files::Vector, resultname, label, cond, model)
+
+Filter files based on specific criteria.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+- `resultname`: Name of result type to match
+- `label`: Label to match in filenames
+- `cond`: Condition to match in filenames
+- `model`: Model identifier to match in filenames
+
+# Returns
+- `Vector{String}`: Array of filenames matching all criteria
+
+# Notes
+- Parses each filename to extract fields
+- Uses file_indices to find matching files
+- Returns subset of input files that match all criteria
+"""
 function get_files(files::Vector, resultname, label, cond, model)
     parts = fields.(files)
     files[file_indices(parts, resultname, label, cond, model)]
     # files[(getfield.(parts, :name).==resultname).&(getfield.(parts, :label).==label).&(getfield.(parts, :cond).==cond).&(getfield.(parts, :model).==model)]
 end
 
+"""
+    get_gene(file::String)
+
+Extract gene name from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Gene name extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the gene field from the parsed structure
+"""
 get_gene(file::String) = fields(file).gene
+
+"""
+    get_model(file::String)
+
+Extract model identifier from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Model identifier extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the model field from the parsed structure
+"""
 get_model(file::String) = fields(file).model
+
+"""
+    get_label(file::String)
+
+Extract label from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Label extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the label field from the parsed structure
+"""
 get_label(file::String) = fields(file).label
+
+"""
+    get_cond(file::String)
+
+Extract condition from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Condition extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the cond field from the parsed structure
+"""
 get_cond(file::String) = fields(file).cond
+
+"""
+    get_nalleles(file::String)
+
+Extract number of alleles from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Number of alleles extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the nalleles field from the parsed structure
+"""
 get_nalleles(file::String) = fields(file).nalleles
 
+"""
+    get_fields(parts::Vector{T}, field::Symbol) where {T<:Fields}
+
+Extract unique values for a specific field from a vector of field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+- `field::Symbol`: Field symbol to extract (e.g., :gene, :model, :label)
+
+# Returns
+- `Vector{String}`: Array of unique values for the specified field
+
+# Notes
+- Uses getfield to extract the specified field from each structure
+- Returns unique values only
+- Works with any field type that inherits from Fields
+"""
 get_fields(parts::Vector{T}, field::Symbol) where {T<:Fields} = unique(getfield.(parts, field))
 
+"""
+    get_models(parts::Vector{T}) where {T<:Fields}
+
+Extract unique model identifiers from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique model identifiers
+
+# Notes
+- Delegates to get_fields with :model symbol
+"""
 get_models(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :model)
 
+"""
+    get_genes(parts::Vector{T}) where {T<:Fields}
+
+Extract unique gene names from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique gene names
+
+# Notes
+- Delegates to get_fields with :gene symbol
+"""
 get_genes(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :gene)
 
+"""
+    get_conds(parts::Vector{T}) where {T<:Fields}
+
+Extract unique conditions from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique conditions
+
+# Notes
+- Delegates to get_fields with :cond symbol
+"""
 get_conds(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :cond)
 
+"""
+    get_labels(parts::Vector{T}) where {T<:Fields}
+
+Extract unique labels from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique labels
+
+# Notes
+- Delegates to get_fields with :label symbol
+"""
 get_labels(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :label)
 
+"""
+    get_names(parts::Vector{T}) where {T<:Fields}
+
+Extract unique names from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique names
+
+# Notes
+- Delegates to get_fields with :name symbol
+"""
 get_names(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :name)
 
+"""
+    get_nalleles(parts::Vector{T}) where {T<:Fields}
+
+Extract unique allele counts from field structures.
+
+# Arguments
+- `parts::Vector{T}`: Vector of field structures
+
+# Returns
+- `Vector{String}`: Array of unique allele counts
+
+# Notes
+- Delegates to get_fields with :nalleles symbol
+"""
 get_nalleles(parts::Vector{T}) where {T<:Fields} = get_fields(parts, :nalleles)
 
+"""
+    get_resultfiles(folder::String)
+
+Get all result files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of result filenames
+
+# Notes
+- Delegates to get_resultfiles with readdir(folder)
+- Looks for files with both ".txt" extension and "_" in name
+"""
 get_resultfiles(folder::String) = get_resultfiles(readdir(folder))
+
+"""
+    get_resultfiles(files::Vector)
+
+Filter files to find result files.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+
+# Returns
+- `Vector{String}`: Array of result filenames
+
+# Notes
+- Looks for files with both ".txt" extension and "_" in name
+- Uses logical AND to ensure both conditions are met
+"""
 get_resultfiles(files::Vector) = files[occursin.(".txt", files).&occursin.("_", files)]
 
+"""
+    get_resultfiles(folder::String, name)
+
+Get result files matching a specific name pattern.
+
+# Arguments
+- `folder::String`: Directory to search
+- `name`: Name pattern to match in filenames
+
+# Returns
+- `Vector{String}`: Array of matching result filenames
+
+# Notes
+- First gets all result files from the folder
+- Then filters by the specified name pattern
+"""
 function get_resultfiles(folder::String, name)
     files = get_resultfiles(readdir(folder))
     files[occursin.(name, files)]
 end
 
+"""
+    get_resultfile(type::String, infolder, label, gene, G, R, S, insertstep, nalleles)
+
+Generate the full path for a result file.
+
+# Arguments
+- `type::String`: Type of result file (e.g., "rates", "measures")
+- `infolder`: Directory containing the file
+- `label`: Label for the file
+- `gene`: Gene name
+- `G`: Number of gene states
+- `R`: Number of RNA steps (0 for simple models)
+- `S`: Number of splice states
+- `insertstep`: Insertion step
+- `nalleles`: Number of alleles
+
+# Returns
+- `String`: Full path to the result file
+
+# Notes
+- Uses different filename generation for R=0 (simple models) vs R>0 (complex models)
+- Joins the type prefix with the generated filename
+"""
 function get_resultfile(type::String, infolder, label, gene, G, R, S, insertstep, nalleles)
     if R == 0
         name = filename(label, gene, G, nalleles)
@@ -313,24 +913,188 @@ function get_resultfile(type::String, infolder, label, gene, G, R, S, insertstep
     joinpath(infolder, type * name)
 end
 
+"""
+    get_measurefiles(folder::String)
+
+Get all measure files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of measure filenames
+
+# Notes
+- Delegates to get_resultfiles with "measures" pattern
+"""
 get_measurefiles(folder::String) = get_resultfiles(folder, "measures")
 
+"""
+    get_summaryfiles(folder::String)
+
+Get all summary files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of summary filenames
+
+# Notes
+- Delegates to get_summaryfiles with readdir(folder)
+- Looks for files with both ".csv" extension and "_" in name
+"""
 get_summaryfiles(folder::String) = get_summaryfiles(readdir(folder))
+
+"""
+    get_summaryfiles(files::Vector)
+
+Filter files to find summary files.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+
+# Returns
+- `Vector{String}`: Array of summary filenames
+
+# Notes
+- Looks for files with both ".csv" extension and "_" in name
+- Uses logical AND to ensure both conditions are met
+"""
 get_summaryfiles(files::Vector) = files[occursin.(".csv", files).&occursin.("_", files)]
+
+"""
+    get_summaryfiles(files::Vector, name)
+
+Get summary files matching a specific name pattern.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+- `name`: Name pattern to match in filenames
+
+# Returns
+- `Vector{String}`: Array of matching summary filenames
+
+# Notes
+- First filters for summary files, then filters by name pattern
+"""
 get_summaryfiles(files::Vector, name) = files[occursin.(".csv", files).&occursin.(name, files)]
 
+"""
+    get_ratesummaryfiles(files::Vector)
+
+Get rate summary files from a list of files.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+
+# Returns
+- `Vector{String}`: Array of rate summary filenames
+
+# Notes
+- Delegates to get_summaryfiles with "rates" pattern
+"""
 get_ratesummaryfiles(files::Vector) = get_summaryfiles(files, "rates")
+
+"""
+    get_ratesummaryfiles(folder::String)
+
+Get rate summary files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of rate summary filenames
+
+# Notes
+- Delegates to get_ratesummaryfiles with summary files from the folder
+"""
 get_ratesummaryfiles(folder::String) = get_ratesummaryfiles(get_summaryfiles(folder))
 
+"""
+    get_measuresummaryfiles(files::Vector)
+
+Get measure summary files from a list of files.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+
+# Returns
+- `Vector{String}`: Array of measure summary filenames
+
+# Notes
+- Delegates to get_summaryfiles with "measures" pattern
+"""
 get_measuresummaryfiles(files::Vector) = get_summaryfiles(files, "measures")
+
+"""
+    get_measuresummaryfiles(folder::String)
+
+Get measure summary files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of measure summary filenames
+
+# Notes
+- Delegates to get_measuresummaryfiles with summary files from the folder
+"""
 get_measuresummaryfiles(folder::String) = get_measuresummaryfiles(get_summaryfiles(folder))
 
+"""
+    get_burstsummaryfiles(files::Vector)
+
+Get burst summary files from a list of files.
+
+# Arguments
+- `files::Vector`: Array of filenames to filter
+
+# Returns
+- `Vector{String}`: Array of burst summary filenames
+
+# Notes
+- Delegates to get_summaryfiles with "burst" pattern
+"""
 get_burstsummaryfiles(files::Vector) = get_summaryfiles(files, "burst")
+
+"""
+    get_burstsummaryfiles(folder::String)
+
+Get burst summary files from a folder.
+
+# Arguments
+- `folder::String`: Directory to search
+
+# Returns
+- `Vector{String}`: Array of burst summary filenames
+
+# Notes
+- Delegates to get_burstsummaryfiles with summary files from the folder
+"""
 get_burstsummaryfiles(folder::String) = get_burstsummaryfiles(get_summaryfiles(folder))
 
 """
-write_moments(outfile,genelist,cond,datapath,root)
+    write_moments(outfile, genelist, cond, datapath, root)
 
+Write gene expression moments (mean and variance) to a CSV file.
+
+# Arguments
+- `outfile`: Output file path for the moments data
+- `genelist`: List of gene names to process
+- `cond`: Condition identifier for the data
+- `datapath`: Path to the data directory
+- `root`: Root directory path
+
+# Returns
+- Nothing, but writes CSV file with columns: Gene, Expression Mean, Expression Variance
+
+# Notes
+- Creates a CSV file with header row
+- For each gene, calculates mean and variance from RNA histogram data
+- Uses get_histogram_rna, mean_histogram, and var_histogram functions
 """
 function write_moments(outfile, genelist, cond, datapath, root)
     f = open(outfile, "w")
@@ -343,8 +1107,29 @@ function write_moments(outfile, genelist, cond, datapath, root)
 end
 
 """
-    write_histograms(resultfolder,ratefile,cell,datacond,G::Int,datapath::String,root,outfolder = "histograms")
+    write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapath::String, root, outfolder="histograms")
 
+Write model-predicted histograms to files for each rate parameter.
+
+# Arguments
+- `resultfolder`: Directory containing result files
+- `ratefile`: Name of rate file to process
+- `cell`: Cell type identifier
+- `datacond`: Data condition string (can contain hyphens for multiple conditions)
+- `G::Int`: Number of gene states
+- `datapath::String`: Path to input data directory
+- `root`: Root directory path
+- `outfolder`: Output folder name (default: "histograms")
+
+# Returns
+- Nothing, but writes histogram files for each rate parameter and condition
+
+# Notes
+- Reads rate parameters from CSV file with header
+- Creates output folder if it doesn't exist
+- Splits datacond on hyphens to handle multiple conditions
+- For each rate parameter, generates histograms and writes to separate files
+- File naming: "{gene}_{condition}.txt"
 """
 function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapath::String, root, outfolder="histograms")
     ratefile = joinpath(resultfolder, ratefile)
@@ -365,8 +1150,22 @@ function write_histograms(resultfolder, ratefile, cell, datacond, G::Int, datapa
 end
 
 """
-    assemble_all(folder;fittedparams)
+    assemble_all(folder::String, multicond::Bool=false)
 
+Assemble all result files in a folder into summary files.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `multicond::Bool=false`: Whether to handle multiple conditions
+
+# Returns
+- Nothing, but creates summary files for rates, measures, stats, and burst sizes
+
+# Notes
+- Main entry point for assembling results
+- Extracts all unique labels, conditions, and models from result files
+- Calls assemble_all for each combination of label, condition, and model
+- Only processes combinations that have rate files available
 """
 function assemble_all(folder::String, multicond::Bool=false)
     files = get_resultfiles(folder)
@@ -381,6 +1180,28 @@ function assemble_all(folder::String, multicond::Bool=false)
     assemble_all(folder, files, labels, conds, models, names, multicond)
 end
 
+"""
+    assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names, multicond::Bool=false)
+
+Assemble results for all combinations of labels, conditions, and models.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files::Vector`: Array of result filenames
+- `labels::Vector`: Array of unique labels
+- `conds::Vector`: Array of unique conditions
+- `models::Vector`: Array of unique models
+- `names`: Array of result file types
+- `multicond::Bool=false`: Whether to handle multiple conditions
+
+# Returns
+- Nothing, but creates summary files for each valid combination
+
+# Notes
+- Iterates through all combinations of labels, conditions, and models
+- Only processes combinations that have rate files available
+- Calls assemble_all for each valid combination
+"""
 function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vector, models::Vector, names, multicond::Bool=false)
     parts = fields.(files)
     for l in labels, c in conds, g in models
@@ -388,6 +1209,29 @@ function assemble_all(folder::String, files::Vector, labels::Vector, conds::Vect
     end
 end
 
+"""
+    assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, names, multicond::Bool=false)
+
+Assemble all result types for a specific label, condition, and model combination.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files::Vector`: Array of result filenames
+- `label::String`: Specific label to process
+- `cond::String`: Specific condition to process
+- `model::String`: Specific model to process
+- `names`: Array of result file types
+- `multicond::Bool=false`: Whether to handle multiple conditions
+
+# Returns
+- Nothing, but creates summary files for the specified combination
+
+# Notes
+- Assembles rates, measures, and stats for the combination
+- Conditionally assembles burst sizes for non-simple models (model != "1")
+- Conditionally assembles optimized results if available
+- Uses the rate labels returned from assemble_rates for optimized results
+"""
 function assemble_all(folder::String, files::Vector, label::String, cond::String, model::String, names, multicond::Bool=false)
     labels = assemble_rates(folder, files, label, cond, model, multicond)
     assemble_measures(folder, files, label, cond, model)
@@ -400,6 +1244,27 @@ function assemble_all(folder::String, files::Vector, label::String, cond::String
     end
 end
 
+"""
+    assemble_files(folder::String, files::Vector, outfile::String, header, readfunction)
+
+Assemble data from multiple files into a single output file.
+
+# Arguments
+- `folder::String`: Directory containing the input files
+- `files::Vector`: Array of filenames to process
+- `outfile::String`: Output file path
+- `header`: Header row for the output file
+- `readfunction`: Function to read data from each file
+
+# Returns
+- Nothing, but writes assembled data to outfile
+
+# Notes
+- Creates output file with specified header
+- For each file, extracts gene name and reads data using readfunction
+- Writes gene name and data as a row in the output file
+- Skips processing if files array is empty
+"""
 function assemble_files(folder::String, files::Vector, outfile::String, header, readfunction)
     if ~isempty(files)
         f = open(outfile, "w")
@@ -414,11 +1279,30 @@ function assemble_files(folder::String, files::Vector, outfile::String, header, 
 end
 
 """
-    assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String)
+    assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction=readml)
 
-TBW
+Assemble rate parameters from multiple files into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files::Vector`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+- `multicond::Bool=false`: Whether to handle multiple conditions
+- `readfunction=readml`: Function to read rate data (default: readml for maximum likelihood)
+
+# Returns
+- `Matrix`: Rate labels extracted from the first rate file
+
+# Notes
+- Creates output file named "rates_{label}_{cond}_{model}.csv"
+- Filters files to get only rate files matching the criteria
+- Extracts labels from the first rate file
+- Uses split_conditions to handle multiple conditions if multicond=true
+- Calls assemble_files to combine all rate data
 """
-function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction = readml)
+function assemble_rates(folder::String, files::Vector, label::String, cond::String, model::String, multicond::Bool=false, readfunction=readml)
     outfile = joinpath(folder, "rates_" * label * "_" * cond * "_" * model * ".csv")
     ratefiles = get_files(files, "rates", label, cond, model)
     labels = readdlm(joinpath(folder, ratefiles[1]), ',', header=true)[2]
@@ -431,7 +1315,25 @@ end
 """
     assemble_measures(folder::String, files, label::String, cond::String, model::String)
 
-write all measures into a single file
+Assemble fit measures from multiple files into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+
+# Returns
+- Nothing, but writes measures file named "measures_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with comprehensive header including all fit statistics
+- Filters files to get only measure files matching the criteria
+- For each file, extracts gene name, number of alleles, and fit measures
+- Includes error handling to skip missing or empty files
+- Writes warning messages for problematic files
+- Header includes: Gene, Nalleles, LogMaxLikelihood, normalized_LL, n_obs, n_params, Deviance, WAIC, WAIC SE, AIC, Acceptance, Samples, Temperature, Rhat, ESS, Geweke, MCSE
 """
 function assemble_measures(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * model * ".csv")
@@ -459,19 +1361,25 @@ function assemble_measures(folder::String, files, label::String, cond::String, m
 end
 
 
-function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
-    outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
-    files = get_files(get_resultfiles(folder), "measures", label, cond, "")
-    assemble_measures_model(folder, files, outfile)
-end
+"""
+    assemble_measures_model(folder::String, files::Vector, outfile::String)
 
-remove_string(str, st1) = replace(str, st1 => "")
-remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
+Assemble measure files into a single summary file with model comparison.
 
-function assemble_measures_model(folder::String)
-        assemble_measures_model(folder, get_measurefiles(folder), joinpath(folder, "measures.csv"))
-end
+# Arguments
+- `folder::String`: Directory containing measure files
+- `files::Vector`: Array of measure filenames to process
+- `outfile::String`: Output file path
 
+# Returns
+- Nothing, but writes assembled measures to outfile
+
+# Notes
+- Creates output file with header for model comparison
+- For each file, extracts model name and fit measures
+- Removes common prefixes and suffixes from filenames to get model names
+- Header includes: Model, LogMaxLikelihood, normalized_LL, n_obs, n_params, Deviance, WAIC, WAIC_SE, AIC, Acceptance, Samples, Temperature, Rhat, ESS, Geweke, MCSE
+"""
 function assemble_measures_model(folder::String, files::Vector, outfile::String)
     header = ["Model" "LogMaxLikelihood" "normalized_LL" "n_obs" "n_params" "Deviance" "WAIC" "WAIC_SE" "AIC" "Acceptance" "Samples" "Temperature" "Rhat" "ESS" "Geweke" "MCSE"]
     f = open(outfile, "w")
@@ -487,7 +1395,24 @@ end
 """
     assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
 
-TBW
+Assemble optimized parameter results into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+- `labels`: Rate labels to use as header
+
+# Returns
+- Nothing, but writes optimized file named "optimized_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with rate labels as header
+- Filters files to get only optimized files matching the criteria
+- Uses read_optimized function to read data from each file
+- Calls assemble_files to combine all optimized data
 """
 function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
     outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
@@ -497,7 +1422,24 @@ end
 """
     assemble_stats(folder::String, files, label::String, cond::String, model::String)
 
-TBW
+Assemble parameter statistics into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+
+# Returns
+- Nothing, but writes stats file named "stats_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with statistical labels as header
+- Filters files to get only param-stats files matching the criteria
+- Extracts labels from the first stats file
+- Uses statlabels to format the header with statistical measures
+- Calls assemble_files to combine all statistical data
 """
 function assemble_stats(folder::String, files, label::String, cond::String, model::String)
     outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
@@ -509,13 +1451,52 @@ end
 """
     assemble_burst_sizes(folder, files, label, cond, model)
 
-TBW
+Assemble burst size statistics into a single CSV file.
+
+# Arguments
+- `folder`: Directory containing result files
+- `files`: Array of result filenames
+- `label`: Label to match
+- `cond`: Condition to match
+- `model`: Model to match
+
+# Returns
+- Nothing, but writes burst file named "burst_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with burst statistics header
+- Filters files to get only burst files matching the criteria
+- Header includes: Gene, BurstMean, BurstSD, BurstMedian, BurstMAD
+- Uses read_burst function to read burst size data
+- Calls assemble_files to combine all burst data
 """
 function assemble_burst_sizes(folder, files, label, cond, model)
     outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
 end
 
+"""
+    assemble_info(folder, files, label, cond, model)
+
+Assemble model information into a single CSV file.
+
+# Arguments
+- `folder`: Directory containing result files
+- `files`: Array of result filenames
+- `label`: Label to match
+- `cond`: Condition to match
+- `model`: Model to match
+
+# Returns
+- Nothing, but writes info file named "info_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with information header
+- Filters files to get only info files matching the criteria
+- Header includes: Gene, Nalleles, Interval
+- Uses read_info function to read model information
+- Calls assemble_files to combine all info data
+"""
 function assemble_info(folder, files, label, cond, model)
     outfile = joinpath(folder, "info_" * label * "_" * cond * "_" * model * ".csv")
     assemble_files(folder, get_files(files, "info", label, cond, model), outfile, ["Gene" "Nalleles" "Interval"], read_info)
@@ -524,7 +1505,20 @@ end
 """
     rlabels(model::String)
 
-TBW
+Generate rate labels for a simple gene model.
+
+# Arguments
+- `model::String`: Model identifier (number of gene states)
+
+# Returns
+- `Matrix{String}`: 1×n matrix of rate labels
+
+# Notes
+- Parses model string to get number of gene states (G)
+- Creates labels for gene state transitions: Rate01, Rate10, Rate12, Rate21, etc.
+- Adds "Eject" and "Decay" labels at the end
+- For G states, creates 2*(G-1) transition labels plus 2 additional labels
+- Example: model="3" creates ["Rate01" "Rate10" "Rate12" "Rate21" "Eject" "Decay"]
 """
 function rlabels(model::String)
     G = parse(Int, model)
@@ -540,7 +1534,20 @@ end
 """
     rlabels(model::String, conds::Vector)
 
-TBW
+Generate rate labels for a model with multiple conditions.
+
+# Arguments
+- `model::String`: Model identifier (number of gene states)
+- `conds::Vector`: Vector of condition identifiers
+
+# Returns
+- `Matrix{String}`: Matrix of rate labels with condition suffixes
+
+# Notes
+- Uses rlabels(model) to get base rate labels
+- For single condition, returns base labels unchanged
+- For multiple conditions, appends condition suffix to each label
+- Example: model="2", conds=["A", "B"] creates ["Rate01_A" "Rate10_A" "Eject_A" "Decay_A" "Rate01_B" "Rate10_B" "Eject_B" "Decay_B"]
 """
 function rlabels(model::String, conds::Vector)
     nsets = length(conds)
@@ -556,6 +1563,24 @@ function rlabels(model::String, conds::Vector)
     end
 end
 
+"""
+    rlabels(labels::Matrix, conds::Vector)
+
+Generate rate labels from existing labels with condition suffixes.
+
+# Arguments
+- `labels::Matrix`: Matrix of existing rate labels
+- `conds::Vector`: Vector of condition identifiers
+
+# Returns
+- `Matrix{String}`: Matrix of rate labels with condition suffixes
+
+# Notes
+- Similar to rlabels(model::String, conds::Vector) but uses existing labels
+- For single condition, returns labels unchanged
+- For multiple conditions, appends condition suffix to each label
+- Reshapes condition suffixes to match label dimensions
+"""
 function rlabels(labels::Matrix, conds::Vector)
     nsets = length(conds)
     r = labels
@@ -570,16 +1595,94 @@ function rlabels(labels::Matrix, conds::Vector)
     end
 end
 
+"""
+    rlabels(model::String, conds, fittedparams)
+
+Generate rate labels for fitted parameters only.
+
+# Arguments
+- `model::String`: Model identifier
+- `conds`: Condition identifiers
+- `fittedparams`: Indices of fitted parameters
+
+# Returns
+- `Matrix{String}`: Rate labels for fitted parameters only
+
+# Notes
+- Delegates to rlabels(model::String, conds::Vector)
+- Returns only the columns specified by fittedparams
+"""
 rlabels(model::String, conds, fittedparams) = rlabels(model, conds)[1:1, fittedparams]
 
+"""
+    rlabels(labels::Matrix, conds, fittedparams)
+
+Generate rate labels for fitted parameters from existing labels.
+
+# Arguments
+- `labels::Matrix`: Matrix of existing rate labels
+- `conds`: Condition identifiers
+- `fittedparams`: Indices of fitted parameters
+
+# Returns
+- `Matrix{String}`: Rate labels for fitted parameters only
+
+# Notes
+- Delegates to rlabels(labels::Matrix, conds::Vector)
+- Returns only the columns specified by fittedparams
+"""
 rlabels(labels::Matrix, conds, fittedparams) = rlabels(labels, conds)[1:1, fittedparams]
 
+"""
+    ratelabels(labels::Matrix, conds)
+
+Generate rate labels with "Gene" column header.
+
+# Arguments
+- `labels::Matrix`: Matrix of rate labels
+- `conds`: Condition identifiers
+
+# Returns
+- `Matrix{String}`: Rate labels with "Gene" as first column
+
+# Notes
+- Delegates to rlabels(labels::Matrix, conds::Vector)
+- Prepends "Gene" column to the result
+"""
 ratelabels(labels::Matrix, conds) = ["Gene" rlabels(labels, conds)]
 
+"""
+    ratelabels(labels::Matrix)
+
+Generate rate labels with "Gene" column header.
+
+# Arguments
+- `labels::Matrix`: Matrix of rate labels
+
+# Returns
+- `Matrix{String}`: Rate labels with "Gene" as first column
+
+# Notes
+- Prepends "Gene" column to the input labels
+"""
 ratelabels(labels::Matrix) = ["Gene" labels]
 
 """
     rlabels(model::AbstractGMmodel)
+
+Generate rate labels for an abstract gene model.
+
+# Arguments
+- `model::AbstractGMmodel`: Abstract gene model instance
+
+# Returns
+- `Matrix{String}`: Matrix of rate labels
+
+# Notes
+- Creates labels for each gene transition in model.Gtransitions
+- Adds "Eject" and "Decay" labels
+- For HMMReporter models, adds noise parameter labels
+- Reshapes result to 1×n matrix
 """
 function rlabels(model::AbstractGMmodel)
     labels = String[]
@@ -599,7 +1702,27 @@ end
 """
     rlabels_GRSM(transitions, R, S, reporter, unit=:"")
 
-TBW
+Generate rate labels for GRSM (Gene-RNA-Splice-Model) components.
+
+# Arguments
+- `transitions`: Gene transition structure
+- `R`: Number of RNA steps
+- `S`: Number of splice states
+- `reporter`: Reporter type
+- `unit`: Unit identifier for multi-unit models (default: "")
+
+# Returns
+- `Matrix{String}`: Matrix of GRSM rate labels
+
+# Notes
+- Creates labels for gene transitions with unit suffix
+- Adds "Initiate" label for transcription initiation
+- Adds "Rshift" labels for RNA processing steps (R-1 labels)
+- Adds "Eject" label for RNA release
+- Adds "Splice" labels for splicing steps (S labels)
+- Adds "Decay" label for RNA degradation
+- For HMMReporter, adds noise parameter labels
+- Reshapes result to 1×n matrix
 """
 function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     labels = String[]
@@ -623,6 +1746,24 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     reshape(labels, 1, :)
 end
 
+"""
+    rlabels_GRSM(model::AbstractGRSMmodel)
+
+Generate rate labels for an abstract GRSM model.
+
+# Arguments
+- `model::AbstractGRSMmodel`: Abstract GRSM model instance
+
+# Returns
+- `Matrix{String}`: Matrix of GRSM rate labels
+
+# Notes
+- Handles coupled models with multiple units
+- For multi-unit models, generates labels for each unit separately
+- Adds coupling labels for coupled models
+- For single-unit models, uses standard GRSM label generation
+- Delegates to rlabels_GRSM for individual unit labels
+"""
 function rlabels_GRSM(model::AbstractGRSMmodel)
     if hastrait(model, :coupling)
         labels = Array{String}(undef, 1, 0)
@@ -642,10 +1783,43 @@ function rlabels_GRSM(model::AbstractGRSMmodel)
     labels
 end
 
+"""
+    rlabels_GRSM_grid(labels)
+
+Add grid probability label to GRSM rate labels.
+
+# Arguments
+- `labels`: Matrix of existing GRSM rate labels
+
+# Returns
+- `Matrix{String}`: Rate labels with "GridProb" column added
+
+# Notes
+- Horizontally concatenates input labels with "GridProb" column
+- Used for grid-based GRSM models
+"""
 function rlabels_GRSM_grid(labels)
     hcat(labels, "GridProb")
 end
 
+"""
+    rlabels_GRSM_hierarchical(labelsin, model)
+
+Generate hierarchical rate labels for GRSM models.
+
+# Arguments
+- `labelsin`: Matrix of base rate labels
+- `model`: GRSM model with hierarchical trait
+
+# Returns
+- `Matrix{String}`: Hierarchical rate labels
+
+# Notes
+- Creates hyperparameter labels by prefixing "hyper_" to base labels
+- Repeats hyperparameter labels for each hyperset (nhypersets times)
+- Adds individual parameter labels for each individual (nindividuals times)
+- Used for hierarchical GRSM models with shared and individual parameters
+"""
 function rlabels_GRSM_hierarchical(labelsin, model)
     labels = "hyper_" .* labelsin
     for i in 2:model.trait.hierarchical.nhypersets
@@ -657,6 +1831,23 @@ function rlabels_GRSM_hierarchical(labelsin, model)
     labels
 end
 
+"""
+    rlabels(model::GRSMmodel)
+
+Generate rate labels for a GRSM model with optional traits.
+
+# Arguments
+- `model::GRSMmodel`: GRSM model instance
+
+# Returns
+- `Matrix{String}`: Complete rate labels for the model
+
+# Notes
+- Starts with base GRSM labels from rlabels_GRSM
+- Adds grid probability label if model has :grid trait
+- Adds hierarchical labels if model has :hierarchical trait
+- Handles multiple traits by chaining label modifications
+"""
 function rlabels(model::GRSMmodel)
     labels = rlabels_GRSM(model)
     if hastrait(model, :grid)
@@ -672,7 +1863,22 @@ end
 """
     statlabels(model::String, conds, fittedparams)
 
-TBW
+Generate statistical labels for parameter statistics.
+
+# Arguments
+- `model::String`: Model identifier
+- `conds`: Condition identifiers
+- `fittedparams`: Indices of fitted parameters
+
+# Returns
+- `Matrix{String}`: Statistical labels with "Gene" column
+
+# Notes
+- Creates labels for statistical measures: _Mean, _SD, _Median, _MAD, _CI2.5, _CI97.5
+- Uses rlabels to get base rate labels for fitted parameters
+- Appends statistical suffixes to each rate label
+- Prepends "Gene" column to the result
+- Example: Rate01 becomes Rate01_Mean, Rate01_SD, Rate01_Median, etc.
 """
 function statlabels(model::String, conds, fittedparams)
     label = ["_Mean", "_SD", "_Median", "_MAD", "_CI2.5", "_CI97.5"]
@@ -684,6 +1890,23 @@ function statlabels(model::String, conds, fittedparams)
     return ["Gene" rates]
 end
 
+"""
+    statlabels(labels::Matrix)
+
+Generate statistical labels from existing rate labels.
+
+# Arguments
+- `labels::Matrix`: Matrix of existing rate labels
+
+# Returns
+- `Matrix{String}`: Statistical labels with "Gene" column
+
+# Notes
+- Creates labels for statistical measures: _Mean, _SD, _Median, _MAD, _CI2.5, _CI97.5
+- Appends statistical suffixes to each input label
+- Prepends "Gene" column to the result
+- Similar to statlabels(model::String, conds, fittedparams) but uses existing labels
+"""
 function statlabels(labels::Matrix)
     label = ["_Mean", "_SD", "_Median", "_MAD", "_CI2.5", "_CI97.5"]
     rates = Matrix{String}(undef, 1, 0)
@@ -696,18 +1919,153 @@ end
 """
     optlabels(model::String, conds, fittedparams)
 
-TBW
+Generate labels for optimized parameter results.
+
+# Arguments
+- `model::String`: Model identifier
+- `conds`: Condition identifiers
+- `fittedparams`: Indices of fitted parameters
+
+# Returns
+- `Matrix{String}`: Optimized labels with "Gene", rate labels, "LL", and "Convergence"
+
+# Notes
+- Uses rlabels to get rate labels for fitted parameters
+- Adds "LL" (log-likelihood) and "Convergence" columns
+- Prepends "Gene" column to the result
+- Used for optimized parameter output files
 """
 optlabels(model::String, conds, fittedparams) = ["Gene" rlabels(model, conds, fittedparams) "LL" "Convergence"]
 
+"""
+    optlabels(labels::Matrix, conds, fittedparams)
+
+Generate labels for optimized parameter results from existing labels.
+
+# Arguments
+- `labels::Matrix`: Matrix of existing rate labels
+- `conds`: Condition identifiers
+- `fittedparams`: Indices of fitted parameters
+
+# Returns
+- `Matrix{String}`: Optimized labels with "Gene", rate labels, "LL", and "Convergence"
+
+# Notes
+- Uses rlabels with existing labels to get rate labels for fitted parameters
+- Adds "LL" (log-likelihood) and "Convergence" columns
+- Prepends "Gene" column to the result
+- Used for optimized parameter output files
+"""
 optlabels(labels::Matrix, conds, fittedparams) = ["Gene" rlabels(labels, conds) "LL" "Convergence"]
 
+"""
+    filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int)
+
+Generate filename for complex gene models.
+
+# Arguments
+- `label::String`: Label for the file
+- `gene::String`: Gene name
+- `G::Int`: Number of gene states
+- `R::Int`: Number of RNA steps
+- `S::Int`: Number of splice states
+- `insertstep::Int`: Insertion step
+- `nalleles::Int`: Number of alleles
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Creates model string by concatenating G, R, S, and insertstep
+- Delegates to filename(label, gene, model, nalleles)
+- Used for complex models with RNA and splicing steps
+"""
 filename(label::String, gene::String, G::Int, R::Int, S::Int, insertstep::Int, nalleles::Int) = filename(label, gene, "$G" * "$R" * "$S" * "$insertstep", "$(nalleles)")
+
+"""
+    filename(label::String, gene, G::Int, nalleles::Int)
+
+Generate filename for simple gene models.
+
+# Arguments
+- `label::String`: Label for the file
+- `gene`: Gene name
+- `G::Int`: Number of gene states
+- `nalleles::Int`: Number of alleles
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Creates model string from G only
+- Delegates to filename(label, gene, model, nalleles)
+- Used for simple models without RNA or splicing steps
+"""
 filename(label::String, gene, G::Int, nalleles::Int) = filename(label, gene, "$G", "$nalleles")
+
+"""
+    filename(label::String, gene::String, model::String, nalleles::String)
+
+Generate filename with string allele count.
+
+# Arguments
+- `label::String`: Label for the file
+- `gene::String`: Gene name
+- `model::String`: Model identifier
+- `nalleles::String`: Number of alleles as string
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Creates filename in format: "_label_gene_model_nalleles.txt"
+- Used when allele count is already a string
+"""
 filename(label::String, gene::String, model::String, nalleles::String) = "_" * label * "_" * gene * "_" * model * "_" * nalleles * ".txt"
+
+"""
+    filename(label::String, gene::String, model::String, nalleles::Int)
+
+Generate filename with integer allele count.
+
+# Arguments
+- `label::String`: Label for the file
+- `gene::String`: Gene name
+- `model::String`: Model identifier
+- `nalleles::Int`: Number of alleles as integer
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Converts allele count to string
+- Delegates to filename(label, gene, model, nalleles::String)
+- Used when allele count is an integer
+"""
 filename(label::String, gene::String, model::String, nalleles::Int) = "_" * label * "_" * gene * "_" * model * "_" * "$nalleles" * ".txt"
 
+"""
+    filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
 
+Generate filename for multi-unit models.
+
+# Arguments
+- `label`: Label for the file
+- `gene`: Gene name
+- `G::Tuple`: Tuple of gene states for each unit
+- `R`: RNA steps (can be tuple for multi-unit)
+- `S`: Splice states (can be tuple for multi-unit)
+- `insertstep`: Insertion steps (can be tuple for multi-unit)
+- `nalleles`: Number of alleles
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Uses create_modelstring to generate model string from tuples
+- Delegates to filename(label, gene, model, nalleles)
+- Used for multi-unit models with different parameters per unit
+"""
 function filename(label, gene, G::Tuple, R, S, insertstep, nalleles)
     # m = ""
     # for i in eachindex(G)
@@ -723,14 +2081,52 @@ end
     filename(data, model::AbstractGMmodel)
     filename(data, model::GRSMmodel)
 
-return output file names
+Generate output filenames for different model types.
+
+# Arguments
+- `data`: Data structure containing label and gene information
+- `model`: Model instance (AbstractGRSMmodel, AbstractGMmodel, or GRSMmodel)
+
+# Returns
+- `String`: Generated filename
+
+# Notes
+- Extracts label and gene from data structure
+- Extracts model parameters from model instance
+- Delegates to appropriate filename function based on model type
+- Used for generating consistent filenames across different model types
 """
 filename(data, model::AbstractGRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G, model.nalleles)
 filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 """
-writeall(path::String,fit,stats,measures,data,temp,model::AbstractGeneTransitionModel;optimized=0,burst=0)
+    writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
+
+Write all model fitting results to files.
+
+# Arguments
+- `path::String`: Directory path for output files
+- `fits::Fit`: Fit results structure
+- `stats::Stats`: Statistical results structure
+- `measures::Measures`: Fit measures structure
+- `data`: Data structure used for fitting
+- `temp`: Temperature parameter
+- `model::AbstractGeneTransitionModel`: Model instance
+- `optimized=0`: Optimized parameters (optional)
+- `burst=0`: Burst size statistics (optional)
+- `writesamples=false`: Whether to write sample data (optional)
+
+# Returns
+- Nothing, but writes multiple output files
+
+# Notes
+- Creates output directory if it doesn't exist
+- Writes rates, measures, parameter stats, and info files
+- For hierarchical GRSM models, writes shared parameters
+- Conditionally writes optimized and burst files if provided
+- Conditionally writes sample data if writesamples=true
+- Uses consistent filename generation for all output files
 """
 function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
     if !isdir(path)
@@ -757,37 +2153,32 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     end
 end
 
-# function writeall(path::String, fits, stats, measures, data, temp, model::AbstractGRSMhierarchicalmodel; optimized=0, burst=0, writesamples=false)
-#     name = filename(data, model)
-#     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-#     if ~isdir(path)
-#         mkpath(path)
-#     end
-#     name = filename(data, model)
-#     write_rates(joinpath(path, "rates" * name), fits, stats, model)
-#     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp)
-#     write_hierarchy(joinpath(path, "shared" * name), fits, stats, model)
-#     write_info(joinpath(path, "info" * name), model)
-#     if optimized != 0
-#         write_optimized(joinpath(path, "optimized" * name), optimized)
-#     end
-#     if burst != 0
-#         write_burstsize(joinpath(path, "burst" * name), burst)
-#     end
-#     if writesamples
-#         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
-#         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
-#     end
-# end
-
 """
-write_rates(file::String,fits)
+    write_rates(file::String, fits::Fit, stats, model, labels)
 
-Write rate parameters, rows in order are
-maximum likelihood
-mean
-median
-last accepted
+Write rate parameters to a file.
+
+# Arguments
+- `file::String`: Output file path
+- `fits::Fit`: Fit results structure
+- `stats`: Statistical results structure
+- `model`: Model instance
+- `labels`: Rate labels for the file header
+
+# Returns
+- Nothing, but writes rate file with 4 rows:
+  1. Maximum likelihood parameters
+  2. Mean posterior parameters
+  3. Median posterior parameters
+  4. Last accepted sample parameters
+
+# Notes
+- Writes labels as header row
+- Writes maximum likelihood parameters from fits.parml
+- Writes mean posterior parameters from stats.meanparam
+- Writes median posterior parameters from stats.medparam
+- Writes last sample parameters from fits.param[:, end]
+- Uses get_rates to extract rate parameters from parameter vectors
 """
 function write_rates(file::String, fits::Fit, stats, model, labels)
     f = open(file, "w")
@@ -814,10 +2205,51 @@ function write_rates(file::String, fits::Fit, stats, model, labels)
     close(f)
 end
 
+"""
+    write_rates(file::String, fits::Fit, stats, model)
+
+Write rate parameters to a file using default labels.
+
+# Arguments
+- `file::String`: Output file path
+- `fits::Fit`: Fit results structure
+- `stats`: Statistical results structure
+- `model`: Model instance
+
+# Returns
+- Nothing, but writes rate file
+
+# Notes
+- Delegates to write_rates with labels generated from rlabels(model)
+- Uses model to generate appropriate rate labels
+"""
 function write_rates(file::String, fits::Fit, stats, model)
     write_rates(file, fits, stats, model, rlabels(model))
 end
 
+"""
+    remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
+
+Remove rate parameters for a specific parameter set.
+
+# Arguments
+- `r`: Rate parameter matrix
+- `transitions`: Gene transition structure
+- `R`: Number of RNA steps
+- `S`: Number of splice states
+- `insertstep`: Insertion step
+- `nreporters`: Number of reporter parameters
+- `setnumber`: Set number to remove
+
+# Returns
+- `Vector{Int}`: Indices of parameters to keep
+
+# Notes
+- Calculates total number of parameters per set
+- Identifies the range of parameters to remove for the specified set
+- Returns indices of all parameters except those in the specified set
+- Used for multi-set models where some parameter sets should be excluded
+"""
 function remove_rates(r, transitions, R, S, insertstep, nreporters, setnumber)
     n = num_rates(transitions, R, S, insertstep) + nreporters
     removeset = n*(setnumber-1)+1:n*setnumber
@@ -826,9 +2258,25 @@ end
 
 
 """
-    write_hierarchy(file::String, fits::Fit, stats, model)
+    write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
 
-write hierarchy parameters into a file for hierarchical models
+Write hierarchy parameters into a file for hierarchical models.
+
+# Arguments
+- `file::String`: Output file path
+- `fits::Fit`: Fit results structure
+- `stats`: Statistical results structure
+- `model::GRSMmodel`: GRSM model with hierarchical trait
+- `labels`: Rate labels for the file header
+
+# Returns
+- Nothing, but writes hierarchy file with shared parameters
+
+# Notes
+- Writes only the shared (hyper) parameters for hierarchical models
+- Uses first nrates columns from labels where nrates is the number of shared parameters
+- Writes 4 rows: max likelihood, mean, median, and last sample
+- Used for hierarchical models to separate shared from individual parameters
 """
 function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, labels)
     f = open(file, "w")
@@ -840,6 +2288,24 @@ function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel, label
     close(f)
 end
 
+"""
+    write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
+
+Write hierarchy parameters using default labels.
+
+# Arguments
+- `file::String`: Output file path
+- `fits::Fit`: Fit results structure
+- `stats`: Statistical results structure
+- `model::GRSMmodel`: GRSM model with hierarchical trait
+
+# Returns
+- Nothing, but writes hierarchy file
+
+# Notes
+- Delegates to write_hierarchy with labels generated from rlabels(model)
+- Uses model to generate appropriate rate labels
+"""
 function write_hierarchy(file::String, fits::Fit, stats, model::GRSMmodel)
     write_hierarchy(file, fits, stats, model, rlabels(model))
 end
@@ -847,7 +2313,37 @@ end
 """
     write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
 
-write_measures into a file
+Write fit measures into a file.
+
+# Arguments
+- `file::String`: Output file path
+- `fits::Fit`: Fit results structure
+- `measures::Measures`: Fit measures structure
+- `dev`: Deviance value
+- `temp`: Temperature parameter
+- `data`: Data structure used for fitting
+- `model`: Model instance
+
+# Returns
+- Nothing, but writes measures file with comprehensive fit statistics
+
+# Notes
+- Calculates n_obs based on data type (histogram, RNA count, or trace data)
+- Calculates n_params from model.fittedparam
+- Calculates normalized log-likelihood
+- Writes multiple rows with different statistics:
+  - Row 1: LogMaxLikelihood, normalized_LL, n_obs, n_params, mean_ll, std_ll, quantiles, WAIC, AIC
+  - Row 2: Deviance
+  - Row 3: Acceptance rate and total samples
+  - Row 4: Temperature
+  - Row 5: Rhat values
+  - Row 6: ESS values
+  - Row 7: Geweke values
+  - Row 8: MCSE values
+  - Row 9: Maximum Rhat
+  - Row 10: Minimum ESS
+  - Row 11: Maximum Geweke
+  - Row 12: Maximum MCSE
 """
 function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
     f = open(file, "w")
@@ -884,9 +2380,30 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
 end
 
 """
-    write_param_stats(file, stats::Stats, model)
+    write_param_stats(file, stats::Stats, model, labels)
 
-write parameter statistics into a file
+Write parameter statistics into a file.
+
+# Arguments
+- `file`: Output file path
+- `stats::Stats`: Statistical results structure
+- `model`: Model instance
+- `labels`: Parameter labels for the file header
+
+# Returns
+- Nothing, but writes parameter statistics file
+
+# Notes
+- Writes labels for fitted parameters only
+- Writes multiple rows with different statistics:
+  - Row 1: Mean parameters
+  - Row 2: Standard deviation parameters
+  - Row 3: Median parameters
+  - Row 4: Median absolute deviation parameters
+  - Row 5: Quantile parameters
+  - Row 6: Correlation parameters
+  - Row 7: Covariance parameters
+  - Row 8: Log covariance parameters
 """
 function write_param_stats(file, stats::Stats, model, labels)
     f = open(file, "w")
@@ -902,12 +2419,47 @@ function write_param_stats(file, stats::Stats, model, labels)
     close(f)
 end
 
+"""
+    write_param_stats(file, stats::Stats, model)
+
+Write parameter statistics using default labels.
+
+# Arguments
+- `file`: Output file path
+- `stats::Stats`: Statistical results structure
+- `model`: Model instance
+
+# Returns
+- Nothing, but writes parameter statistics file
+
+# Notes
+- Delegates to write_param_stats with labels generated from rlabels(model)
+- Uses model to generate appropriate parameter labels
+"""
 function write_param_stats(file, stats::Stats, model)
     write_param_stats(file, stats, model, rlabels(model))
 end
 
 """
-write_optimized(file,optimized)
+    write_optimized(file::String, optimized)
+
+Write optimized parameter results to a file.
+
+# Arguments
+- `file::String`: Output file path
+- `optimized`: Optimized results structure
+
+# Returns
+- Nothing, but writes optimized file with 3 rows:
+  1. Optimized parameters (exponentiated)
+  2. Minimum objective value
+  3. Convergence status
+
+# Notes
+- Exponentiates the optimized parameters using exp()
+- Writes the minimum objective value from optimization
+- Writes the convergence status (true/false)
+- Used for storing results from optimization algorithms
 """
 function write_optimized(file::String, optimized)
     f = open(file, "w")
@@ -918,7 +2470,26 @@ function write_optimized(file::String, optimized)
 end
 
 """
-write_burstsize(file,burstsize)
+    write_burstsize(file::String, b::BurstMeasures)
+
+Write burst size statistics to a file.
+
+# Arguments
+- `file::String`: Output file path
+- `b::BurstMeasures`: Burst size statistics structure
+
+# Returns
+- Nothing, but writes burst file with 5 rows:
+  1. Mean burst size
+  2. Standard deviation of burst size
+  3. Median burst size
+  4. Median absolute deviation
+  5. Burst size quantiles
+
+# Notes
+- Writes comprehensive burst size statistics
+- Used for analyzing transcriptional bursting behavior
+- Quantiles provide distribution information beyond mean/median
 """
 function write_burstsize(file::String, b::BurstMeasures)
     f = open(file, "w")
@@ -931,9 +2502,28 @@ function write_burstsize(file::String, b::BurstMeasures)
 end
 
 """
-    write_info(file::String, info)
+    write_info(file::String, fits, data, model, labels)
 
-TBW
+Write model information and metadata to a file.
+
+# Arguments
+- `file::String`: Output file path
+- `fits`: Fit results structure
+- `data`: Data structure used for fitting
+- `model`: Model instance
+- `labels`: Parameter labels
+
+# Returns
+- Nothing, but writes info file with model metadata
+
+# Notes
+- Writes prior information for fitted parameters
+- Handles hierarchical models differently (uses fittedpriors)
+- Writes transformed prior means and standard deviations
+- Writes model structure information (Gtransitions)
+- Writes data metadata (label, gene, nalleles)
+- For trace data, writes interval information
+- Used for documenting model setup and priors
 """
 function write_info(file::String, fits, data, model, labels)
     f = open(file, "w")
@@ -946,7 +2536,7 @@ function write_info(file::String, fits, data, model, labels)
         writedlm(f, [" " labels[1:1, model.fittedparam]], ',')  # labels
         writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])'], ',')
     end
-    
+
     writedlm(f, ["transformed prior mean" reshape(mean.(model.rateprior), 1, :)], ',')
     writedlm(f, ["transformedprior std" reshape(std.(model.rateprior), 1, :)], ',')
     writedlm(f, ["Gtransitions" model.Gtransitions], ',')
@@ -962,29 +2552,80 @@ function write_info(file::String, fits, data, model, labels)
 end
 
 """
-write_MHsamples(file::String,samples::Matrix)
+    write_array(file::String, d::Array)
 
+Write array data to a file.
+
+# Arguments
+- `file::String`: Output file path
+- `d::Array`: Array data to write
+
+# Returns
+- Nothing, but writes array data to file
+
+# Notes
+- Uses writedlm to write array data
+- Sets header=false to avoid automatic header generation
+- Used for writing sample data, likelihood arrays, etc.
 """
 write_array(file::String, d::Array) = writedlm(file, d, header=false)
 
 """
     get_row()
 
+Get mapping from rate type names to row indices.
 
+# Returns
+- `Dict{String, Int}`: Mapping of rate types to row numbers
+
+# Notes
+- "ml" → row 1 (maximum likelihood)
+- "mean" → row 2 (mean posterior)
+- "median" → row 3 (median posterior)
+- "last" → row 4 (last accepted sample)
+- Used for selecting which row to read from rate files
 """
 get_row() = Dict([("ml", 1); ("mean", 2); ("median", 3); ("last", 4)])
 
 """
     get_ratetype()
 
+Get inverse mapping from row indices to rate type names.
 
+# Returns
+- `Dict{Int, String}`: Mapping of row numbers to rate types
+
+# Notes
+- Inverse of get_row() function
+- Row 1 → "ml" (maximum likelihood)
+- Row 2 → "mean" (mean posterior)
+- Row 3 → "median" (median posterior)
+- Row 4 → "last" (last accepted sample)
+- Used for identifying rate types from row numbers
 """
 get_ratetype() = invert_dict(get_row())
 
 """
-    occursin_file(a, b, file)
+    occursin_file(a, b, file::String)
 
-determine if string a or string b occurs in file (case insensitive)
+Determine if string a or string b occurs in file (case insensitive).
+
+# Arguments
+- `a`: First string to search for
+- `b`: Second string to search for
+- `file::String`: Filename to search in
+
+# Returns
+- `Bool`: True if both strings are found in filename
+
+# Notes
+- Case-insensitive search using regex
+- Excludes .DS_Store files automatically
+- Uses word boundaries to avoid partial matches
+- If a is empty, only searches for b
+- If b is empty, only searches for a
+- If both are empty, returns false
+- Used for filtering files by gene and condition names
 """
 function occursin_file(a, b, file::String)
     occursin(Regex("DS_Store", "i"), file) && return false
@@ -1010,7 +2651,23 @@ end
 """
     read_rna(gene, cond, datapath)
 
-read in rna histograms 
+Read RNA histogram data from a file.
+
+# Arguments
+- `gene`: Gene name
+- `cond`: Condition identifier
+- `datapath`: Path to data directory
+
+# Returns
+- `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
+
+# Notes
+- Constructs filename as "{gene}_{cond}.txt"
+- Reads first column of data file
+- Truncates histogram if longer than 300 elements (keeps 99th percentile, max 1000)
+- Pads with zeros if histogram has fewer than 4 elements
+- Prints total histogram count for debugging
+- Used for reading RNA count histogram data
 """
 function read_rna(gene, cond, datapath)
     t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
@@ -1029,6 +2686,26 @@ function read_rna(gene, cond, datapath)
     return nhist, h
 end
 
+"""
+    read_rnacount(gene, cond, datapath)
+
+Read RNA count data from a file.
+
+# Arguments
+- `gene`: Gene name
+- `cond`: Condition identifier
+- `datapath`: Path to data directory
+
+# Returns
+- `Tuple{Vector{Int}, Vector{Float64}, Int}`: (RNA counts, yield factors, histogram length)
+
+# Notes
+- Constructs filename as "{gene}_{cond}.txt"
+- Reads first column as RNA counts (rounded to integers)
+- Reads second column as yield factors
+- Calculates histogram length as 99th percentile + 1 (minimum 1)
+- Used for reading individual RNA count measurements
+"""
 function read_rnacount(gene, cond, datapath)
     t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
     # println(t)
@@ -1039,10 +2716,25 @@ function read_rnacount(gene, cond, datapath)
     nhist = round(Int, max(quantile(countsRNA, 0.99), 1) + 1)
     return countsRNA, yieldfactor, nhist
 end
+
 """
     readfiles(gene::String, cond::String, datapath::Vector)
 
-read in a set of files
+Read data from multiple files.
+
+# Arguments
+- `gene::String`: Gene name
+- `cond::String`: Condition identifier
+- `datapath::Vector`: Vector of data directory paths
+
+# Returns
+- `Vector{Vector}`: Array of data from each file
+
+# Notes
+- Reads data from each directory in datapath
+- Uses readfile(gene, cond, path) for each path
+- Returns vector of data arrays
+- Used for reading data from multiple sources or replicates
 """
 function readfiles(gene::String, cond::String, datapath::Vector)
     c = Vector{Vector}(undef, 0)
@@ -1053,9 +2745,24 @@ function readfiles(gene::String, cond::String, datapath::Vector)
 end
 
 """
-    readfile(gene::String, cond::String, path::String)
+    readfile(gene::AbstractString, cond::AbstractString, path::AbstractString)
 
-read file if name includes gene and cond
+Read file if name includes gene and condition.
+
+# Arguments
+- `gene::AbstractString`: Gene name to search for
+- `cond::AbstractString`: Condition to search for
+- `path::AbstractString`: Path to search in
+
+# Returns
+- `Matrix{Float64}`: Data from matching file
+
+# Notes
+- If path is a file, reads it directly
+- Otherwise searches recursively through directory tree
+- Uses occursin_file to find files containing both gene and condition
+- Returns data from first matching file found
+- Used for flexible file discovery in data directories
 """
 function readfile(gene::AbstractString, cond::AbstractString, path::AbstractString)
     if isfile(path)
@@ -1071,10 +2778,25 @@ function readfile(gene::AbstractString, cond::AbstractString, path::AbstractStri
         end
     end
 end
+
 """
     readfile(file::String)
 
-read file with floats accounting for delimiter and headers
+Read file with floats accounting for delimiter and headers.
+
+# Arguments
+- `file::String`: File path to read
+
+# Returns
+- `Matrix{Float64}`: Numeric data from file
+
+# Notes
+- Automatically detects CSV files and uses appropriate delimiter
+- Handles files with or without headers
+- Converts string data to float64
+- Skips header row if first row contains strings
+- Falls back to comma delimiter if first row contains commas
+- Throws ArgumentError if file doesn't exist
 """
 function readfile(file::String)
     if isfile(file)
@@ -1095,6 +2817,23 @@ function readfile(file::String)
     end
 end
 
+"""
+    readfile_csv(file::String)
+
+Read CSV file with proper handling of headers.
+
+# Arguments
+- `file::String`: CSV file path to read
+
+# Returns
+- `Matrix{Float64}`: Numeric data from CSV file
+
+# Notes
+- Uses comma delimiter for CSV files
+- Converts string data to float64
+- Skips header row if first row contains strings
+- Used by readfile for CSV-specific handling
+"""
 function readfile_csv(file::String)
     c = readdlm(file, ',')
     if typeof(c[1, :]) <: AbstractString
@@ -1102,6 +2841,7 @@ function readfile_csv(file::String)
     end
     return c
 end
+
 """
     readfile(file::String, col::Int)
 
@@ -1856,10 +3596,10 @@ filenames = write_traces_to_files(traces, labels, "output_folder")
 function write_traces_to_files(traces::Vector{Matrix}, labels::Vector{String}, output_dir::String=".")
     # Create output directory if it doesn't exist
     mkpath(output_dir)
-    
+
     # Store created filenames
     created_files = String[]
-    
+
     # Process each matrix in traces
     for (trace_idx, trace_matrix) in enumerate(traces)
         # Process each column (label) in the matrix
@@ -1868,13 +3608,178 @@ function write_traces_to_files(traces::Vector{Matrix}, labels::Vector{String}, o
                 # Create filename with padded number and label
                 filename = joinpath(output_dir, string(lpad(trace_idx, 3, "0"), "_", label, ".trk"))
                 push!(created_files, filename)
-                
+
                 # Write the column data to file
                 writedlm(filename, trace_matrix[:, col_idx])
             end
         end
     end
-    
+
     return created_files
+end
+
+"""
+    assemble_measures_model(folder::String, label::String, cond::String, gene::String)
+
+Assemble measures for a specific gene across different models.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `gene::String`: Gene name to match
+
+# Returns
+- Nothing, but writes measures file named "measures_{label}_{cond}_{gene}.csv"
+
+# Notes
+- Creates output file for comparing measures across models for a specific gene
+- Filters files to get measure files matching label and condition
+- Uses empty string for model to match all models
+- Delegates to assemble_measures_model with files and output path
+"""
+function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
+    outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
+    files = get_files(get_resultfiles(folder), "measures", label, cond, "")
+    assemble_measures_model(folder, files, outfile)
+end
+
+"""
+    remove_string(str, st1)
+
+Remove a substring from a string.
+
+# Arguments
+- `str`: Original string
+- `st1`: Substring to remove
+
+# Returns
+- `String`: String with st1 removed
+
+# Notes
+- Uses replace function to remove all occurrences of st1
+"""
+remove_string(str, st1) = replace(str, st1 => "")
+
+"""
+    remove_string(str, str1, str2)
+
+Remove two substrings from a string.
+
+# Arguments
+- `str`: Original string
+- `str1`: First substring to remove
+- `str2`: Second substring to remove
+
+# Returns
+- `String`: String with both str1 and str2 removed
+
+# Notes
+- Removes str1 first, then str2 from the result
+- Uses chained replace operations
+"""
+remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
+
+"""
+    assemble_measures_model(folder::String)
+
+Assemble all measure files in a folder into a single summary file.
+
+# Arguments
+- `folder::String`: Directory containing measure files
+
+# Returns
+- Nothing, but writes "measures.csv" file
+
+# Notes
+- Gets all measure files from the folder
+- Creates output file named "measures.csv"
+- Delegates to assemble_measures_model with files and output path
+"""
+function assemble_measures_model(folder::String)
+    assemble_measures_model(folder, get_measurefiles(folder), joinpath(folder, "measures.csv"))
+end
+
+"""
+    assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
+
+Assemble optimized parameter results into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+- `labels`: Rate labels to use as header
+
+# Returns
+- Nothing, but writes optimized file named "optimized_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with rate labels as header
+- Filters files to get only optimized files matching the criteria
+- Uses read_optimized function to read data from each file
+- Calls assemble_files to combine all optimized data
+"""
+function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
+    outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
+    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, labels, read_optimized)
+end
+
+"""
+    assemble_stats(folder::String, files, label::String, cond::String, model::String)
+
+Assemble parameter statistics into a single CSV file.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `files`: Array of result filenames
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `model::String`: Model to match
+
+# Returns
+- Nothing, but writes stats file named "stats_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with statistical labels as header
+- Filters files to get only param-stats files matching the criteria
+- Extracts labels from the first stats file
+- Uses statlabels to format the header with statistical measures
+- Calls assemble_files to combine all statistical data
+"""
+function assemble_stats(folder::String, files, label::String, cond::String, model::String)
+    outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
+    statfiles = get_files(files, "param-stats", label, cond, model)
+    labels = readdlm(joinpath(folder, statfiles[1]), ',', header=true)[2]
+    assemble_files(folder, statfiles, outfile, statlabels(labels), readstats)
+end
+
+"""
+    assemble_burst_sizes(folder, files, label, cond, model)
+
+Assemble burst size statistics into a single CSV file.
+
+# Arguments
+- `folder`: Directory containing result files
+- `files`: Array of result filenames
+- `label`: Label to match
+- `cond`: Condition to match
+- `model`: Model to match
+
+# Returns
+- Nothing, but writes burst file named "burst_{label}_{cond}_{model}.csv"
+
+# Notes
+- Creates output file with burst statistics header
+- Filters files to get only burst files matching the criteria
+- Header includes: Gene, BurstMean, BurstSD, BurstMedian, BurstMAD
+- Uses read_burst function to read burst size data
+- Calls assemble_files to combine all burst data
+"""
+function assemble_burst_sizes(folder, files, label, cond, model)
+    outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
+    assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
 end
 
