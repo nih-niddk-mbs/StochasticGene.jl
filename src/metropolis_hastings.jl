@@ -280,17 +280,18 @@ function run_chains(data, model, options, nchains)
 end
 
 """
-metropolis_hastings(param,data,model,options)
+    metropolis_hastings(data, model, options)
 
-returns fit structure and waic tuple
+Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 
-Metropolis-Hastings MCMC algorithm
-param = array of parameters to be fit
-model, data, and options are structures
+# Arguments
+- `data`: Experimental data structure
+- `model`: Model structure
+- `options`: MHOptions structure
 
-stochastic kinetic transcription models
-Data can include ON and OFF MS2/PP7 reporter time distributions from live cell recordings,
-scRNA or FISH mRNA data, and burst correlations between alleles
+# Returns
+- `Fit`: Structure containing MCMC samples and statistics
+- `waic`: Watanabe-Akaike Information Criterion tuple
 """
 function metropolis_hastings(data, model, options)
     param, d = initial_proposal(model)
@@ -315,12 +316,28 @@ function metropolis_hastings(data, model, options)
 end
 
 """
-function anneal(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, tempanneal, t1, maxtime)
 
-returns variables necessary to continue MCMC (param,parml,ll,llml,logpredictions,temp)
+Run an annealing phase for the Metropolis-Hastings MCMC algorithm, gradually lowering the temperature.
 
-runs MCMC with temperature dropping from tempanneal towards temp
+# Arguments
+- `logpredictions`: Initial log-likelihood predictions
+- `param`: Initial parameter vector
+- `parml`: Initial maximum likelihood parameter vector
+- `ll`: Initial negative log-likelihood
+- `llml`: Initial maximum likelihood value
+- `d`: Initial proposal distribution
+- `proposalcv`: Initial proposal covariance or scale
+- `data`: Experimental data structure
+- `model`: Model structure
+- `samplesteps`: Number of annealing steps
+- `temp`: Final temperature
+- `tempanneal`: Initial temperature
+- `t1`: Start time
+- `maxtime`: Maximum allowed time for annealing
 
+# Returns
+- Tuple of updated (param, parml, ll, llml, logpredictions, temp)
 """
 function anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, tempanneal, t1, maxtime)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
@@ -406,12 +423,28 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
 end
 
 """
-sample(logpredictions,param,parml,ll,llml,d,proposalcv,data,model,samplesteps,temp,t1,maxtime)
+    sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, SLAB=10000)
 
-returns Fit structure
+Run the main MCMC sampling phase, collecting samples and statistics.
 
-ll is negative loglikelihood
+# Arguments
+- `logpredictions`: Initial log-likelihood predictions
+- `param`: Initial parameter vector
+- `parml`: Initial maximum likelihood parameter vector
+- `ll`: Initial negative log-likelihood
+- `llml`: Initial maximum likelihood value
+- `d`: Initial proposal distribution
+- `proposalcv`: Initial proposal covariance or scale
+- `data`: Experimental data structure
+- `model`: Model structure
+- `samplesteps`: Number of MCMC samples to collect
+- `temp`: Temperature for MCMC
+- `t1`: Start time
+- `maxtime`: Maximum allowed time for sampling
+- `SLAB`: Slab size for dynamic array allocation (default: 10000)
 
+# Returns
+- `Fit`: Structure containing MCMC samples and statistics
 """
 function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, SLAB=10000)
     llout = Array{Float64,1}(undef, SLAB)
@@ -520,6 +553,27 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
     mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
 end
 
+"""
+    mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
+
+Metropolis-Hastings acceptance/rejection step for a proposed parameter update.
+
+# Arguments
+- `logpredictions`: Current log-likelihood predictions
+- `logpredictionst`: Proposed log-likelihood predictions
+- `ll`: Current log-likelihood
+- `llt`: Proposed log-likelihood
+- `param`: Current parameter vector
+- `paramt`: Proposed parameter vector
+- `prior`: Current log-prior
+- `priort`: Proposed log-prior
+- `d`: Current proposal distribution
+- `dt`: Proposed proposal distribution
+- `temp`: Temperature for MCMC
+
+# Returns
+- Tuple: (accept, logpredictions, param, ll, prior, d) if rejected, or updated values if accepted
+"""
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
     # mhfactor not needed for symmetric proposal distribution
     # if rand() < exp((llt + priort - ll - prior + mhfactor(param,d,paramt,dt))/temp)

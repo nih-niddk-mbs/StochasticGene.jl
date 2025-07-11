@@ -2,7 +2,24 @@
 #
 # transition_rate_make.jl
 #
-
+# This file contains constructors and matrix building functions for creating the
+# various types of transition rate matrices used in stochastic gene expression modeling.
+# It serves as the main interface for constructing the different component structures
+# and assembling them into complete transition matrices.
+#
+# Key functionality includes:
+# - Component constructors for different types of transition matrices
+# - Matrix construction functions that assemble elements into sparse matrices
+# - Specialized matrix builders for coupled systems
+# - mRNA distribution matrix constructors (M matrices)
+# - Combined MT matrix constructors
+# - Coupled system matrix constructors
+# - Dwell time analysis matrix constructors
+#
+# This file ties together the structures from transition_rate_structures.jl,
+# the element generators from transition_rate_elements.jl, and the utility functions
+# from transition_rate_functions.jl to create the complete transition matrices
+# needed for stochastic gene expression analysis.
 
 ### Component constructors
 
@@ -132,23 +149,25 @@ TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, so
 """
     make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
 
-Return TRGCoupledComponents structure for coupled models.
+Create TRGCoupledUnitComponents structure for coupled models.
 
 # Description
-This function returns a TRGCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+This function creates a TRGCoupledUnitComponents structure for coupled models, which includes
+matrix components for fitting traces, mRNA histograms, and reporter gene data. It handles
+the gene-RNA coupling in a single unit of a larger coupled system.
 
 # Arguments
-- `source_state`: Source state.
-- `target_transition`: Target transition.
-- `transitions`: Transition rates.
-- `G`: Total number of gene states.
-- `R`: Number of reporter steps.
-- `S`: Number of splice sites.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type (default is an empty string).
+- `source_state`: Source state specification for coupling
+- `target_transition`: Target transition specification
+- `transitions`: Transition rates tuple
+- `G::Int`: Total number of gene states
+- `R`: Number of reporter steps
+- `S`: Number of splice sites
+- `insertstep`: Insert step for RNA processing
+- `splicetype`: Splice type (default is an empty string)
 
 # Returns
-- `TRGCoupledComponents`: The created TRGCoupledComponents structure.
+- `TRGCoupledUnitComponents`: The created TRGCoupledUnitComponents structure
 """
 function make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
     indices = set_indices(length(transitions), R, S, insertstep)
@@ -166,30 +185,32 @@ end
     make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
     make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
 
-Return TCoupledComponents structure for coupled models.
+Create TCoupledComponents structure for coupled models.
 
 # Description
-This function returns a TCoupledComponents structure for coupled models, which includes matrix components for fitting traces, mRNA histograms, and reporter gene data.
+This function creates a TCoupledComponents structure for coupled models, which includes
+matrix components for fitting traces, mRNA histograms, and reporter gene data. It handles
+the construction of coupled systems with multiple interacting units.
 
 # Arguments
-- `coupling::Tuple`: Tuple of coupling parameters.
-- `transitions::Tuple`: Tuple of transition rates.
-- `G`: Total number of gene states.
-- `R`: Number of reporter steps.
-- `S`: Number of splice sites.
-- `insertstep`: Insert step.
-- `splicetype`: Splice type (default is an empty string).
-- `unit_model`: Unit model.
-- `sources`: Source units for each unit.
-- `source_state`: Source state.
-- `target_transition`: Target transition.
+- `coupling::Tuple`: Tuple of coupling parameters
+- `transitions::Tuple`: Tuple of transition rates
+- `G`: Total number of gene states
+- `R`: Number of reporter steps
+- `S`: Number of splice sites
+- `insertstep`: Insert step for RNA processing
+- `splicetype`: Splice type (default is an empty string)
+- `unit_model`: Unit model specification
+- `sources`: Source units for each unit
+- `source_state`: Source state specification
+- `target_transition`: Target transition specification
 
 # Methods
 - `make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TCoupledComponents structure from coupling parameters and transition rates.
 - `make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TCoupledComponents structure from unit model and other parameters.
 
 # Returns
-- `TCoupledComponents`: The created TCoupledComponents structure.
+- `TCoupledComponents`: The created TCoupledComponents structure
 """
 
 function make_components_TRGCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
@@ -551,17 +572,19 @@ end
 """
     make_mat_B2(components, rates)
 
-Return boundary matrix B2 for GRS models.
+Create boundary matrix B2 for GRS models.
 
 # Description
-This function returns the boundary matrix B2 for GRS models, using the provided components and rates.
+This function creates the boundary matrix B2 for GRS models, which represents
+the boundary conditions for RNA processing. It constructs the matrix using
+the provided components and rates.
 
 # Arguments
-- `components`: Components structure containing elements and matrices for GRS models.
-- `rates::Vector`: Vector of rates corresponding to the elements.
+- `components`: Components structure containing elements and matrices for GRS models
+- `rates::Vector`: Vector of rates corresponding to the elements
 
 # Returns
-- `SparseMatrixCSC`: The created boundary matrix B2.
+- `SparseMatrixCSC`: The created boundary matrix B2
 """
 function make_mat_B2(components, rates)
     RB = make_mat(components.elementsB, rates, components.nR)
@@ -719,17 +742,18 @@ end
 """
     make_mat_S(elements, nG)
 
-Return Gs matrix used to compute steady state RNA distribution.
+Create source matrix Gs for coupled systems.
 
 # Description
-This function returns the Gs matrix used to compute the steady state RNA distribution. It accepts transition elements directly and constructs the matrix.
+This function creates the Gs matrix used in coupled systems to represent
+source states. It constructs a sparse matrix from the provided elements.
 
 # Arguments
-- `elements`: Transition elements for Gs.
-- `nG::Int`: Number of gene elements.
+- `elements`: Transition elements for Gs
+- `nG::Int`: Number of gene states
 
 # Returns
-- `SparseMatrixCSC`: The created Gs matrix.
+- `SparseMatrixCSC`: The created Gs matrix
 """
 function make_mat_S(elements, nG)
     G = spzeros(nG, nG)
@@ -742,17 +766,21 @@ end
 """
     make_mat_C(components, rates)
 
-Return matrices used to compute steady state RNA distribution for coupled models.
+Create matrices for coupled system analysis.
 
 # Description
-This function returns the matrices used to compute the steady state RNA distribution for coupled models. It uses the provided components and rates to create the matrices.
+This function creates the matrices needed for coupled system analysis, including
+transition matrices, gene matrices, target matrices, source matrices, and identity
+matrices. The specific matrices returned depend on the component type.
 
 # Arguments
-- `components`: Components structure containing elements and matrices for coupled models.
-- `rates::Vector`: Vector of rates corresponding to the elements.
+- `components`: Components structure containing elements and matrices for coupled models
+- `rates::Vector`: Vector of rates corresponding to the elements
 
 # Returns
-- `Tuple{SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC, SparseMatrixCSC}`: The created matrices (T, G, Gt, Gs, I_G, I_R, I_T).
+- `Tuple`: Various matrices depending on component type (T, G, Gt, Gs, I_G, I_R, I_T for TRGCoupledUnitComponents)
+- `Tuple`: (T, Source, Target, IT) for TCoupledUnitComponents
+- `Tuple`: (T, TD, G, Gt, Gs, IG, IR, IT) for TDCoupledUnitComponents
 """
 function make_mat_C(components::TRGCoupledUnitComponents, rates)
     nT = components.nT
@@ -817,17 +845,19 @@ end
 """
     make_matvec_C(components, rates)
 
-Return matrix-vector product used to compute steady state RNA distribution for coupled models.
+Create matrix vectors for coupled system analysis.
 
 # Description
-This function returns the matrix-vector product used to compute the steady state RNA distribution for coupled models. It uses the provided components and rates to create the product.
+This function creates vectors of matrices for coupled system analysis. It processes
+each unit in the coupled system and creates the appropriate matrices for that unit.
+The specific matrices returned depend on the component type.
 
 # Arguments
-- `components`: Components structure containing elements and matrices for coupled models.
-- `rates::Vector`: Vector of rates corresponding to the elements.
+- `components`: Components structure containing elements and matrices for coupled models
+- `rates::Vector`: Vector of rates corresponding to the elements
 
 # Returns
-- `SparseVector`: The created matrix-vector product.
+- `Tuple`: Vectors of matrices depending on component type
 """
 function make_matvec_C(components::TCoupledComponents{Vector{TRGCoupledUnitComponents}}, rates)
     n = length(components.model)
@@ -876,28 +906,30 @@ end
     make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     make_mat_TC(components, rates, coupling_strength)
 
-Return TC matrix used to compute steady state RNA distribution for coupled models.
+Create coupled transition matrix TC.
 
 # Description
-This function returns the TC matrix used to compute the steady state RNA distribution for coupled models. It can either use the provided coupling strength, matrices, identity matrices, sources, and unit model indices directly, or use components and rates to create the matrix.
+This function creates the coupled transition matrix TC used for coupled system analysis.
+It combines individual unit transition matrices with coupling terms to represent
+the full coupled system dynamics.
 
 # Arguments
-- `coupling_strength`: Strength of the coupling.
-- `T`: Initial matrix.
-- `U`: Source matrix U.
-- `V`: Target matrix V.
-- `IT`: Identity matrix for T.
-- `sources`: Vector of source indices.
-- `unit_model`: Vector of unit model indices.
-- `components`: Components structure containing elements and matrices for coupled models.
-- `rates::Vector`: Vector of rates corresponding to the elements.
+- `coupling_strength`: Strength of the coupling between units
+- `T`: Vector of individual unit transition matrices
+- `U`: Vector of source matrices
+- `V`: Vector of target matrices
+- `IT`: Vector of identity matrices
+- `sources`: Vector of source indices for each unit
+- `unit_model`: Vector specifying the order of units
+- `components`: Components structure containing elements and matrices for coupled models
+- `rates::Vector`: Vector of rates corresponding to the elements
 
 # Methods
-- `make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)`: Uses the provided matrices and indices directly.
-- `make_mat_TC(components, rates, coupling_strength)`: Uses components and rates to create the matrix.
+- `make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)`: Uses the provided matrices and indices directly
+- `make_mat_TC(components, rates, coupling_strength)`: Uses components and rates to create the matrix
 
 # Returns
-- `SparseMatrixCSC`: The created TC matrix.
+- `SparseMatrixCSC`: The created coupled transition matrix TC
 """
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
@@ -1008,6 +1040,23 @@ function make_mat_TC(unit::Int, Tin::SparseMatrixCSC, Gm, Gs, Gt, IT, IG, IR, co
     make_mat_TC(coupling_strength, T, U, V, ITC, sources, model)
 end
 
+"""
+    make_mat_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
+
+Remove transitions to non-sojourn states from TCD matrix in-place.
+
+# Description
+This function modifies the TCD matrix in-place by setting to zero all transitions
+that lead to states not in the sojourn set. This is used for dwell time analysis
+to focus only on transitions within the sojourn states.
+
+# Arguments
+- `TCD::SparseMatrixCSC`: Transition matrix to modify (modified in-place)
+- `sojourn::Vector{Int}`: Vector of sojourn state indices
+
+# Returns
+- `Nothing`: Modifies the TCD matrix in-place
+"""
 function make_mat_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
     rows, cols, vals = findnz(TCD)
     for i in eachindex(cols)
@@ -1019,12 +1068,56 @@ function make_mat_TCD!(TCD::SparseMatrixCSC, sojourn::Vector{Int})
     end
 end
 
+"""
+    make_mat_TCD(TC::SparseMatrixCSC, sojourn::Vector{Int})
+
+Create dwell time transition matrix TCD.
+
+# Description
+This function creates a dwell time transition matrix TCD by copying the input
+transition matrix and removing transitions to non-sojourn states. The resulting
+matrix is used for dwell time analysis.
+
+# Arguments
+- `TC::SparseMatrixCSC`: Input transition matrix
+- `sojourn::Vector{Int}`: Vector of sojourn state indices
+
+# Returns
+- `SparseMatrixCSC`: Dwell time transition matrix with zeros removed
+"""
 function make_mat_TCD(TC::SparseMatrixCSC, sojourn::Vector{Int})
     TCD = copy(TC)
     make_mat_TCD!(TCD, sojourn)
     return dropzeros(TCD)
 end
 
+"""
+    make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
+
+Create dwell time transition matrices for coupled system.
+
+# Description
+This function creates dwell time transition matrices for a coupled system by
+applying the coupled transition matrix construction and then filtering for
+sojourn states. It handles multiple dwell time matrices for different units.
+
+# Arguments
+- `unit::Int`: Unit index in the coupled system
+- `TD::Vector`: Vector of dwell time matrices
+- `Gm`: Vector of gene matrices
+- `Gs`: Vector of source matrices
+- `Gt`: Vector of target matrices
+- `IT`: Vector of identity matrices
+- `IG`: Vector of gene identity matrices
+- `IR`: Vector of RNA identity matrices
+- `coupling_strength`: Coupling strength parameters
+- `sources`: Source specifications
+- `model`: Model specification
+- `sojourn::Vector{Vector{Int}}`: Vector of sojourn state vectors for each unit
+
+# Returns
+- `Vector{SparseMatrixCSC}`: Vector of dwell time transition matrices with zeros removed
+"""
 function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
     TCD = Vector{SparseMatrixCSC}(undef, length(TD))
     for i in eachindex(TD)

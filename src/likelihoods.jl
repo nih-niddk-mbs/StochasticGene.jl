@@ -1264,14 +1264,28 @@ end
 
 
 """
-    num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
-    n = typeof(model.reporter) <: HMMReporterReporter ? model.reporter.n : 0
-    num_rates(transitions, R, S, insertstep) + n
+    num_all_parameters(transitions, R, S, insertstep, reporter, coupling=tuple(), grid=nothing)
 
-    `reporter` can either be a vector of noisepriors or of type HMMReporter
-    
+Compute the total number of parameters including rates, noise parameters, coupling parameters, and grid parameters.
 
-TBW
+# Arguments
+- `transitions`: Model transitions
+- `R`: Number of RNA steps (Int or Tuple)
+- `S`: Number of splice states (Int or Tuple) 
+- `insertstep`: Insertion step (Int or Tuple)
+- `reporter`: Reporter structure (HMMReporter, Vector, or Int)
+- `coupling`: Coupling structure (default: empty tuple)
+- `grid`: Grid parameter (default: nothing)
+
+# Returns
+- `Int`: Total number of parameters
+
+# Notes
+- Calculates base rates using num_rates()
+- Adds noise parameters based on reporter type
+- Adds coupling parameters if coupling is not empty
+- Adds grid parameter if grid is not nothing
+- Used for parameter counting in model setup
 """
 function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupling=tuple(), grid=nothing)
     if typeof(reporter) <: HMMReporter
@@ -1285,8 +1299,6 @@ function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupli
     end
     c = isempty(coupling) ? 0 : coupling[5]
     g = isnothing(grid) ? 0 : 1
-    # n = typeof(reporter) <: HMMReporter ? reporter.n : 0
-    # num_rates(transitions, R, S, insertstep) + n
     num_rates(transitions, R, S, insertstep) + n + c + g
 end
 

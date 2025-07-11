@@ -2,6 +2,25 @@
 #
 # transition_rate_set_elements.jl
 #
+# This file contains functions for creating and manipulating the individual elements
+# that make up transition rate matrices in stochastic gene expression modeling.
+# These functions are responsible for generating the specific matrix elements needed
+# for different types of transition matrices used throughout the StochasticGene.jl package.
+#
+# Key functionality includes:
+# - Gene state transition elements (G elements)
+# - RNA/reporter state transition elements (R elements)
+# - Splicing transition elements (S elements)
+# - Combined GRS transition elements
+# - On/off state filtering elements (TA/TI elements)
+# - Dwell time analysis elements (TD elements)
+# - Boundary condition elements (B elements)
+# - Coupled system elements
+# - Source and target state elements
+#
+# These functions work with the Element structure defined in transition_rate_structures.jl
+# and are used by the matrix construction functions in transition_rate_make.jl to build
+# the complete transition matrices needed for various types of stochastic gene expression analyses.
 
 """
 	set_elements_G!(elements,transitions,G,R,base,gamma)
@@ -28,7 +47,18 @@ end
 """
     set_elements_G(transitions, gamma::Vector)
 
-TBW
+Create gene state transition elements.
+
+# Description
+This function creates Element structures for gene state transitions based on the provided
+transition tuples and gamma indices. Each transition tuple should contain [from_state, to_state].
+
+# Arguments
+- `transitions`: Tuple of gene state transitions, each containing [from_state, to_state]
+- `gamma::Vector`: Vector of rate indices corresponding to each transition
+
+# Returns
+- `Vector{Element}`: Vector of Element structures representing gene state transitions
 """
 function set_elements_G(transitions, gamma::Vector)
     elementsT = Vector{Element}(undef, 0)
@@ -118,7 +148,25 @@ end
 """
     set_elements_GRS(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
 
-TBW
+Create combined gene-RNA-splicing transition elements.
+
+# Description
+This function creates Element structures for the combined GRS (Gene-RNA-Splicing) model,
+which includes gene state transitions, RNA/reporter state transitions, and splicing transitions.
+The function handles both cases where R > 0 (with RNA states) and R == 0 (gene-only model).
+
+# Arguments
+- `transitions`: Tuple of gene state transitions
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `indices::Indices`: Index structure containing rate indices
+- `splicetype::String`: Type of splicing model ("", "offeject", etc.)
+
+# Returns
+- `Tuple`: (elementsG, elementsRGbar, elementsRG, nR, nT) for R > 0
+- `Tuple`: (elementsG, G) for R == 0
 """
 function set_elements_GRS(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
@@ -366,9 +414,23 @@ set off state elements
 set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TI!)
 
 """
-    set_elements_TDvec(elementsT, onstates, dttype)
+    set_elements_TDvec(elementsT, elementsG, onstates, dttype)
 
-TBW
+Create dwell time analysis elements for different data types.
+
+# Description
+This function creates Element structures for dwell time analysis based on the specified
+data type. It filters transition elements according to whether they involve on states,
+off states, or gene-specific states.
+
+# Arguments
+- `elementsT`: Vector of transition elements
+- `elementsG`: Vector of gene state elements
+- `onstates`: Vector of on state indices
+- `dttype`: Data type string ("ON", "OFF", "ONG", "OFFG")
+
+# Returns
+- `Vector{Vector{Element}}`: Vector of filtered elements for each data type
 """
 function set_elements_TDvec(elementsT, elementsG, onstates::Vector{Vector{Int}}, dttype::Vector)
     c = Vector{Element}[]
@@ -434,7 +496,20 @@ end
 """
     set_elements_BRG(G, R, ejectindex, base=2)
 
+Create boundary elements for gene-RNA systems.
 
+# Description
+This function creates Element structures for boundary conditions in gene-RNA systems.
+These elements represent the ejection of RNA molecules from the system.
+
+# Arguments
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `ejectindex`: Index for the ejection rate
+- `base`: Base for RNA state representation (default: 2)
+
+# Returns
+- `Vector{Element}`: Vector of boundary elements for RNA ejection
 """
 function set_elements_BRG(G, R, ejectindex, base=2)
     if R > 0
@@ -459,9 +534,24 @@ function set_elements_BRG(G, R, ejectindex, base=2)
 end
 
 """
-    set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
+    set_elements_Gt!(elements, transitions, target_transition, gamma, j)
 
+Create target gene transition elements in-place.
 
+# Description
+This function creates Element structures for a specific target gene transition and adds
+them to the provided elements vector in-place. Only the specified target transition
+is processed.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `transitions`: Tuple of gene state transitions
+- `target_transition`: Index of the specific transition to process
+- `gamma::Vector`: Vector of rate indices
+- `j`: Offset for state indices (default: 0)
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
 """
 function set_elements_Gt!(elements, transitions, target_transition=length(transitions), gamma::Vector=collect(1:length(transitions)), j=0)
     i = 1
@@ -476,7 +566,19 @@ end
 """
     set_elements_Gt(transitions, target_transition, gamma)
 
+Create target gene transition elements.
 
+# Description
+This function creates Element structures for a specific target gene transition.
+It returns a new vector containing only the elements for the specified transition.
+
+# Arguments
+- `transitions`: Tuple of gene state transitions
+- `target_transition`: Index of the specific transition to process
+- `gamma`: Vector of rate indices
+
+# Returns
+- `Vector{Element}`: Vector of elements for the target transition
 """
 function set_elements_Gt(transitions, target_transition, gamma)
     elementsGt = Vector{Element}(undef, 0)
@@ -487,7 +589,17 @@ end
 """
     set_elements_Gs(nS)
 
+Create source gene state elements.
 
+# Description
+This function creates Element structures for source gene states. These elements
+represent the states from which coupling can occur in coupled gene systems.
+
+# Arguments
+- `nS`: Source state index or vector of source state indices
+
+# Returns
+- `Vector{Element}`: Vector of source state elements
 """
 function set_elements_Gs(nS::Int)
     [Element(nS, nS, 0, 1)]
@@ -629,9 +741,28 @@ function set_elements_Source(sources, G::Int, R, S, splicetype="")
 end
 
 """
-    set_elements_Target(transitions, target_transition, gamma)
+    set_elements_Target(target, Gtransitions, G, R, S, insertstep, indices, nT, splicetype)
 
-target elements
+Create target transition elements for coupled systems.
+
+# Description
+This function creates Element structures for target transitions in coupled gene systems.
+It handles gene transitions, RNA initiation, and RNA processing transitions based on
+the target specification.
+
+# Arguments
+- `target`: Target transition specification
+- `Gtransitions`: Gene state transitions
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `indices`: Index structure containing rate indices
+- `nT`: Total number of states
+- `splicetype`: Type of splicing model
+
+# Returns
+- `Vector{Element}`: Vector of target transition elements
 """
 function set_elements_Target(target, Gtransitions, G, R, S, insertstep, indices, nT, splicetype)
     elementsTarget = Vector{Element}(undef, 0)
@@ -652,9 +783,27 @@ function set_elements_Target(target, Gtransitions, G, R, S, insertstep, indices,
 end
 
 """
-    set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
+    set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
 
+Create coupled gene-RNA transition elements.
 
+# Description
+This function creates Element structures for coupled gene-RNA systems, including
+gene state transitions, target transitions, source states, and RNA processing transitions.
+
+# Arguments
+- `source_state`: Source state specification for coupling
+- `target_transition`: Target transition specification
+- `transitions`: Gene state transitions
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `indices`: Index structure containing rate indices
+- `splicetype`: Type of splicing model
+
+# Returns
+- `Tuple`: (elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT)
 """
 function set_elements_TRGCoupled(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsG, elementsRGbar, elementsRG, nR, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
@@ -675,14 +824,49 @@ end
 
 #### Experimental
 
-"""Helper to add transition elements when condition is met."""
+"""
+    add_transition_element!(elements, state_a, state_b, rate, sign)
+
+Helper function to add transition elements when condition is met.
+
+# Description
+This helper function adds a transition element to the elements vector if the sign
+has magnitude 1. This is used to filter out zero-valued transitions.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `state_a`: Source state index
+- `state_b`: Target state index
+- `rate`: Rate index
+- `sign`: Sign of the transition (should be ±1 for valid transitions)
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
+"""
 function add_transition_element!(elements, state_a, state_b, rate, sign)
     if abs(sign) == 1
         push!(elements, Element(state_a, state_b, rate, sign))
     end
 end
 
-"""Calculate state indices for RNA transitions."""
+"""
+    calculate_state_indices(zdigits, wdigits, R)
+
+Calculate state indices for RNA transitions.
+
+# Description
+This helper function extracts various state indices from digit vectors for RNA
+transitions. It provides convenient access to different parts of the state
+representation needed for transition calculations.
+
+# Arguments
+- `zdigits`: Digit vector for source state
+- `wdigits`: Digit vector for target state
+- `R`: Number of RNA/reporter steps
+
+# Returns
+- `Tuple`: (zbar1, wbar1, zbarr, wbarr, z1, w1, zr, wr) - various state indices
+"""
 function calculate_state_indices(zdigits, wdigits, R)
     zbar1 = zdigits[2:R]
     wbar1 = wdigits[2:R]
@@ -695,7 +879,29 @@ function calculate_state_indices(zdigits, wdigits, R)
     return zbar1, wbar1, zbarr, wbarr, z1, w1, zr, wr
 end
 
-"""Process RNA transitions for both T and RS matrices."""
+"""
+    process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, R, base, nu)
+
+Process RNA transitions for both T and RS matrices.
+
+# Description
+This helper function processes RNA transitions by calculating transition elements
+for both end transitions and internal transitions. It adds the appropriate
+elements to the elements vector for RNA processing steps.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `zdigits`: Digit vector for source state
+- `wdigits`: Digit vector for target state
+- `state_a`: Source state index
+- `state_b`: Target state index
+- `R`: Number of RNA/reporter steps
+- `base`: Base for RNA state representation
+- `nu`: Vector of RNA transition rate indices
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
+"""
 function process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, R, base, nu)
     # End transitions
     zbarr = zdigits[1:R-1]
@@ -726,7 +932,31 @@ function process_rna_transitions!(elements, zdigits, wdigits, state_a, state_b, 
     end
 end
 
-"""Process splicing transitions with fixed S==R bug."""
+"""
+    process_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, insertstep, eta, splicetype)
+
+Process splicing transitions with fixed S==R bug.
+
+# Description
+This helper function processes splicing transitions by calculating transition elements
+for both end splicing and internal splicing. It handles different splicing types
+including "offeject" and standard splicing models.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `zdigits`: Digit vector for source state
+- `wdigits`: Digit vector for target state
+- `state_a`: Source state index
+- `state_b`: Target state index
+- `S`: Number of splicing sites
+- `R`: Number of RNA/reporter steps
+- `insertstep`: Insert step for RNA processing
+- `eta`: Vector of splicing transition rate indices
+- `splicetype`: Type of splicing model
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
+"""
 function process_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, insertstep, eta, splicetype)
     zbarr = zdigits[1:R-1]
     wbarr = wdigits[1:R-1]
@@ -744,7 +974,31 @@ function process_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, i
     process_internal_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, insertstep, eta, splicetype)
 end
 
-"""Process internal splicing transitions."""
+"""
+    process_internal_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, insertstep, eta, splicetype)
+
+Process internal splicing transitions.
+
+# Description
+This helper function processes internal splicing transitions by calculating
+transition elements for splicing at internal positions in the RNA chain.
+It handles both standard splicing and "offeject" splicing models.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `zdigits`: Digit vector for source state
+- `wdigits`: Digit vector for target state
+- `state_a`: Source state index
+- `state_b`: Target state index
+- `S`: Number of splicing sites
+- `R`: Number of RNA/reporter steps
+- `insertstep`: Insert step for RNA processing
+- `eta`: Vector of splicing transition rate indices
+- `splicetype`: Type of splicing model
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
+"""
 function process_internal_splicing!(elements, zdigits, wdigits, state_a, state_b, S, R, insertstep, eta, splicetype)
     for j = 1:R-1
         zbark = zdigits[[1:j-1; j+1:R]]
@@ -764,7 +1018,29 @@ function process_internal_splicing!(elements, zdigits, wdigits, state_a, state_b
     end
 end
 
-"""Shared state transition processing for T and RS matrices."""
+"""
+    process_states!(elements, G, R, S, insertstep, nu, eta, splicetype)
+
+Shared state transition processing for T and RS matrices.
+
+# Description
+This helper function processes all state transitions by iterating through all
+possible RNA states and gene states. It calls the RNA transition and splicing
+processing functions to build the complete transition matrix elements.
+
+# Arguments
+- `elements`: Vector to append elements to (modified in-place)
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `nu`: Vector of RNA transition rate indices
+- `eta`: Vector of splicing transition rate indices
+- `splicetype`: Type of splicing model
+
+# Returns
+- `Nothing`: Modifies the elements vector in-place
+"""
 function process_states!(elements, G, R, S, insertstep, nu, eta, splicetype)
     base = (splicetype == "offeject") ? 2 : 3
     for w = 1:base^R, z = 1:base^R
@@ -781,12 +1057,54 @@ function process_states!(elements, G, R, S, insertstep, nu, eta, splicetype)
     end
 end
 
-"""Entry point for T matrix element creation."""
+"""
+    set_elements_T!(elementsT, G, R, S, insertstep, nu, eta, splicetype="")
+
+Entry point for T matrix element creation.
+
+# Description
+This function serves as the entry point for creating T matrix elements. It calls
+the shared state processing function to build all transition elements for the T matrix.
+
+# Arguments
+- `elementsT`: Vector to append elements to (modified in-place)
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `nu`: Vector of RNA transition rate indices
+- `eta`: Vector of splicing transition rate indices
+- `splicetype`: Type of splicing model (default: "")
+
+# Returns
+- `Nothing`: Modifies the elementsT vector in-place
+"""
 function set_elements_T!(elementsT, G, R, S, insertstep, nu, eta, splicetype="")
     R > 0 && process_states!(elementsT, G, R, S, insertstep, nu, eta, splicetype)
 end
 
-"""Entry point for RS matrix element creation."""
+"""
+    set_elements_RS!(elementsRS, G, R, S, insertstep, nu, eta, splicetype="")
+
+Entry point for RS matrix element creation.
+
+# Description
+This function serves as the entry point for creating RS matrix elements. It calls
+the shared state processing function to build all transition elements for the RS matrix.
+
+# Arguments
+- `elementsRS`: Vector to append elements to (modified in-place)
+- `G`: Number of gene states
+- `R`: Number of RNA/reporter steps
+- `S`: Number of splicing sites
+- `insertstep`: Insert step for RNA processing
+- `nu`: Vector of RNA transition rate indices
+- `eta`: Vector of splicing transition rate indices
+- `splicetype`: Type of splicing model (default: "")
+
+# Returns
+- `Nothing`: Modifies the elementsRS vector in-place
+"""
 function set_elements_RS!(elementsRS, G, R, S, insertstep, nu, eta, splicetype="")
     R > 0 && process_states!(elementsRS, G, R, S, insertstep, nu, eta, splicetype)
 end

@@ -5,16 +5,17 @@
 # Uses hybrid first and next reaction method
 
 """
-	Reaction
+    Reaction
 
-structure for reaction type
+Structure representing a reaction in the GRSM model.
 
-action: type of reaction
-index: rate index for reaction
-disabled: reactions that are disabled by current reaction
-enabled: reactions that are enabled by current reaction
-initial: initial GR state
-final: final GR state
+# Fields
+- `action::Int`: Type of reaction (1=activateG!, 2=deactivateG!, 3=transitionG!, 4=initiate!, 5=transitionR!, 6=eject!, 7=splice!, 8=decay!)
+- `index::Int`: Rate index for the reaction
+- `disabled::Vector{Int64}`: Indices of reactions that are disabled by this reaction
+- `enabled::Vector{Int64}`: Indices of reactions that are enabled by this reaction
+- `initial::Int`: Initial gene/RNA state
+- `final::Int`: Final gene/RNA state
 """
 struct Reaction
     action::Int
@@ -25,9 +26,17 @@ struct Reaction
     final::Int
 end
 """
-	ReactionIndices
+    ReactionIndices
 
-structure for rate indices of reaction types
+Structure containing rate indices for different types of reactions.
+
+# Fields
+- `grange::UnitRange{Int64}`: Range of indices for gene state transitions
+- `irange::UnitRange{Int64}`: Range of indices for initiation reactions
+- `rrange::UnitRange{Int64}`: Range of indices for RNA elongation reactions
+- `erange::UnitRange{Int64}`: Range of indices for ejection reactions
+- `srange::UnitRange{Int64}`: Range of indices for splicing reactions
+- `decay::Int`: Index for mRNA decay reaction
 """
 struct ReactionIndices
     grange::UnitRange{Int64}
@@ -38,9 +47,20 @@ struct ReactionIndices
     decay::Int
 end
 """
-	set_actions()
+    set_actions()
 
-create dictionary for all the possible transitions
+Create dictionary mapping reaction names to their action codes.
+
+# Returns
+- `Dict{String, Int}`: Dictionary with keys as reaction names and values as action codes:
+  - "activateG!" => 1: Gene activation
+  - "deactivateG!" => 2: Gene deactivation  
+  - "transitionG!" => 3: Gene state transition
+  - "initiate!" => 4: Transcription initiation
+  - "transitionR!" => 5: RNA elongation
+  - "eject!" => 6: RNA ejection
+  - "splice!" => 7: RNA splicing
+  - "decay!" => 8: mRNA decay
 """
 set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3, "initiate!" => 4, "transitionR!" => 5, "eject!" => 6, "splice!" => 7, "decay!" => 8)
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
@@ -286,7 +306,19 @@ end
 """
     initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
 
-TBW
+Initialize simulation state and reaction times for a single gene model.
+
+# Arguments
+- `r::Vector{Float64}`: Vector of reaction rates
+- `G::Int`: Number of gene states
+- `R`: Number of pre-RNA steps
+- `reactions::Vector{Reaction}`: Vector of reaction definitions
+- `nalleles::Int`: Number of alleles to simulate
+- `initstate::Int=1`: Initial gene state
+- `initreaction::Int=1`: Initial reaction to schedule
+
+# Returns
+- `Tuple{Matrix{Float64}, Matrix{Int}}`: (tau, states) where tau contains next reaction times and states contains current system state
 """
 function initialize(r, G::Int, R, reactions, nalleles, initstate=1, initreaction=1)
     nreactions = length(reactions)
@@ -301,7 +333,19 @@ end
 """
     initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
 
-return initial proposed next reaction times and states
+Initialize simulation state and reaction times for coupled gene models.
+
+# Arguments
+- `r::Vector{Vector{Float64}}`: Vector of rate vectors for each gene
+- `G::Tuple`: Tuple of gene state counts for each gene
+- `R::Tuple`: Tuple of pre-RNA step counts for each gene
+- `reactions::Vector{Vector{Reaction}}`: Vector of reaction definitions for each gene
+- `nalleles::Int`: Number of alleles to simulate
+- `initstate::Int=1`: Initial gene state
+- `initreaction::Int=1`: Initial reaction to schedule
+
+# Returns
+- `Tuple{Vector{Matrix{Float64}}, Vector{Matrix{Int}}}`: (tau, states) where tau contains next reaction times and states contains current system state for each gene
 """
 function initialize(r, G::Tuple, R, reactions, nalleles, initstate=1, initreaction=1)
     tau = Matrix[]
@@ -318,6 +362,17 @@ end
 """
     initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
 
+Initialize simulation parameters for coupled models.
+
+# Arguments
+- `r::Vector{Vector{Float64}}`: Vector of rate vectors for each gene
+- `nhist`: Histogram size(s) for mRNA counting
+- `tol::Float64`: Convergence tolerance
+- `samplefactor::Float64=20.0`: Factor for sampling interval calculation
+- `errfactor::Float64=10.0`: Factor for error tolerance calculation
+
+# Returns
+- `Tuple`: (nhist, mhist, mhist0, m, steps, t, ts, t0, tsample, err) containing simulation state variables
 """
 function initialize_sim(r::Vector{Vector}, nhist, tol, samplefactor=20.0, errfactor=10.0)
     if nhist isa Number && nhist > 0
@@ -337,7 +392,17 @@ end
 """
     initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0)
 
-TBW
+Initialize simulation parameters for single gene models.
+
+# Arguments
+- `r::Vector{Float64}`: Vector of reaction rates
+- `nhist::Int`: Histogram size for mRNA counting
+- `tol::Float64`: Convergence tolerance
+- `samplefactor::Float64=20.0`: Factor for sampling interval calculation
+- `errfactor::Float64=10.0`: Factor for error tolerance calculation
+
+# Returns
+- `Tuple`: (nhist, mhist, mhist0, m, steps, t, ts, t0, tsample, err) containing simulation state variables
 """
 initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0) = nhist, zeros(nhist + 1), ones(nhist + 1), 0, 0, 0.0, 0.0, 0.0, samplefactor / minimum(r), errfactor * tol
 
@@ -345,7 +410,21 @@ initialize_sim(r::Vector{Float64}, nhist, tol, samplefactor=20.0, errfactor=10.0
     set_par(r, noiseparams::Int)
     set_par(r, noiseparams::Vector)
 
-TBW
+Extract noise parameters from rate vector.
+
+# Arguments
+- `r::Vector{Float64}`: Vector of rates including noise parameters
+- `noiseparams::Int`: Number of noise parameters at the end of the rate vector
+
+# Returns
+- `Vector{Float64}`: Vector containing only the noise parameters
+
+# Arguments (Vector version)
+- `r::Vector{Vector{Float64}}`: Vector of rate vectors
+- `noiseparams::Vector{Int}`: Number of noise parameters for each rate vector
+
+# Returns (Vector version)
+- `Vector{Vector{Float64}}`: Vector of noise parameter vectors
 """
 set_par(r, noiseparams::Int) = r[end-noiseparams+1:end]
 
@@ -361,7 +440,13 @@ end
 """
     targets(coupling)
 
-Find coupled targets for each unit
+Find coupled targets for each unit in a coupled model.
+
+# Arguments
+- `coupling::Tuple`: Coupling tuple containing (models, sources, source_states, target_transitions, n_coupling_params)
+
+# Returns
+- `Vector{Vector{Int}}`: Vector where targets[i] contains indices of units that are influenced by unit i
 """
 function targets(coupling)
     targets = Vector{Int}[]
@@ -382,7 +467,21 @@ end
 """
     prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
 
-TBW
+Prepare parameters for coupled model simulation.
+
+# Arguments
+- `r::Vector{Float64}`: Vector of rates including coupling parameters
+- `coupling::Tuple`: Coupling configuration tuple
+- `transitions::Tuple`: Transition definitions for each gene
+- `G::Tuple`: Number of gene states for each gene
+- `R::Tuple`: Number of pre-RNA steps for each gene
+- `S::Tuple`: Number of splice sites for each gene
+- `insertstep::Tuple`: Reporter insertion steps for each gene
+- `nalleles::Int`: Number of alleles
+- `noiseparams::Union{Int, Vector{Int}}`: Number of noise parameters
+
+# Returns
+- `Tuple`: (coupling, nalleles, noiseparams, r_prepared) where r_prepared contains separated rate vectors for each gene
 """
 function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
     if r[end] < -1.0
@@ -397,22 +496,23 @@ end
 
 
 """
-    prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
 
-TBW
+    prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noise)
+
+Prepare rate vectors for coupled model simulation by separating rates for each gene.
+
+# Arguments
+- `rates::Vector{Float64}`: Combined vector of rates for all genes
+- `coupling::Tuple`: Coupling configuration tuple
+- `transitions::Tuple`: Transition definitions for each gene
+- `R::Tuple`: Number of pre-RNA steps for each gene
+- `S::Tuple`: Number of splice sites for each gene
+- `insertstep::Tuple`: Reporter insertion steps for each gene
+- `n_noise::Vector{Int}`: Number of noise parameters for each gene
+
+# Returns
+- `Vector{Vector{Float64}}`: Vector of rate vectors, one for each gene, plus coupling parameters
 """
-# function prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
-#     rv = Vector[]
-#     n = 0
-#     for i in eachindex(R)
-#         num = num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
-#         push!(rv, r[n+1:n+num])
-#         n += num
-#     end
-#     push!(rv, r[end-coupling[5]+1:end])
-#     rv
-# end
-
 function prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noise)
     r = Vector[]
     couplingStrength = Float64[]
@@ -438,14 +538,47 @@ end
 """
     simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum)
 
-simulate a trace
+Simulate a single intensity trace for a GRSM model.
+
+# Arguments
+- `r::Vector{Float64}`: Vector of reaction rates
+- `transitions`: Transition definitions
+- `G`: Number of gene states
+- `R`: Number of pre-RNA steps
+- `S`: Number of splice sites
+- `insertstep`: Reporter insertion step
+- `interval::Float64`: Time interval between frames
+- `onstates::Vector{Int}`: Vector of ON states
+- `totaltime::Float64=1000.0`: Total simulation time
+- `reporterfn::Function=sum`: Function to combine reporter signals
+
+# Returns
+- `Matrix{Float64}`: Trace matrix with columns [time, intensity, reporters, state]
 """
 simulate_trace(r, transitions, G, R, S, insertstep, interval, onstates; totaltime=1000.0, reporterfn=sum) = simulator(r, transitions, G, R, S, insertstep, nalleles=1, nhist=0, onstates=onstates, traceinterval=interval, reporterfn=reporterfn, totaltime=totaltime, warmupsteps=100)[1][1:end-1, :]
 
 """
     simulate_trace_data(datafolder::String; ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 30, 20, 200, 100, 0.8], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0)
 
-create simulated trace files in datafolder
+Create simulated trace files in the specified data folder.
+
+# Arguments
+- `datafolder::String`: Path to folder where trace files will be saved
+- `ntrials::Int=10`: Number of simulation trials
+- `r::Vector{Float64}`: Vector of reaction rates
+- `transitions`: Transition definitions
+- `G::Int=3`: Number of gene states
+- `R::Int=2`: Number of pre-RNA steps
+- `S::Int=2`: Number of splice sites
+- `insertstep::Int=1`: Reporter insertion step
+- `onstates::Vector{Int}=Int[]`: Vector of ON states
+- `interval::Float64=1.0`: Time interval between frames
+- `totaltime::Float64=1000.0`: Total simulation time
+- `reporterfn::Function=sum`: Function to combine reporter signals
+- `a_grid`: Optional grid transition matrix
+
+# Returns
+- Creates `.trk` files in the specified folder containing simulated trace data
 """
 function simulate_trace_data(datafolder::String; a_grid=nothing, ntrials::Int=10, r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231, 40, 20, 200, 10], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=Int[], interval=1.0, totaltime=1000.0, reporterfn=sum)
     isdir(datafolder) || mkdir(datafolder)

@@ -118,6 +118,19 @@ function kolmogorov_backward(Q, interval, method=Tsit5(), save=false)
 end
 
 
+"""
+    prob_Gaussian(par, reporters::Int)
+
+Create a Gaussian distribution for a single reporter count.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters::Int`: Number of reporters
+
+# Returns
+- `Normal`: Gaussian distribution with mean = background_mean + reporters * reporter_mean and 
+  variance = background_std² + reporters * reporter_std²
+"""
 function prob_Gaussian(par, reporters::Int)
     Normal(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2))
 end
@@ -140,10 +153,35 @@ function prob_Gaussian(par, reporters_per_state::T, N) where {T<:Vector}
     d
 end
 
+"""
+    prob_Gaussian_ad(par, reporters_per_state::T, N) where {T<:Vector}
+
+Create an array of Gaussian distributions using automatic differentiation-friendly approach.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `N`: Number of HMM states
+
+# Returns
+- `Vector{Normal}`: Array of Gaussian distributions, one for each state
+"""
 function prob_Gaussian_ad(par, reporters_per_state::T, N) where {T<:Vector}
     [prob_Gaussian(par, reporters_per_state[i]) for i in 1:N]
 end
 
+"""
+    prob_Gaussian(par, reporters_per_state::T) where {T<:Vector}
+
+Create an array of Gaussian distributions for multiple states.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+
+# Returns
+- `Vector{Normal}`: Array of Gaussian distributions, one for each state
+"""
 function prob_Gaussian(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
     prob_Gaussian(par, reporters_per_state, N)
@@ -165,10 +203,39 @@ end
 return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight parameter
 
 """
+"""
+    prob_GaussianMixture(par, reporters::Int)
+
+Create a Gaussian mixture distribution for a single reporter count.
+
+# Arguments
+- `par`: 5-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, weight]
+- `reporters::Int`: Number of reporters
+
+# Returns
+- `MixtureModel`: Gaussian mixture with two components:
+  1. Background + reporters: mean = background_mean + reporters * reporter_mean, 
+     std = sqrt(background_std² + reporters * reporter_std²)
+  2. Background only: mean = background_mean, std = background_std
+  Weight of first component = par[5], weight of second component = 1 - par[5]
+"""
 function prob_GaussianMixture(par, reporters::Int)
     MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[1], par[2])], [par[5], 1 - par[5]])
 end
 
+"""
+    prob_GaussianMixture(par, reporters_per_state::T, N) where {T<:Vector}
+
+Create an array of Gaussian mixture distributions for multiple states.
+
+# Arguments
+- `par`: 5-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, weight]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `N`: Number of HMM states
+
+# Returns
+- `Vector{MixtureModel}`: Array of Gaussian mixture distributions, one for each state
+"""
 function prob_GaussianMixture(par, reporters_per_state::T, N) where {T<:Vector}
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
@@ -177,6 +244,18 @@ function prob_GaussianMixture(par, reporters_per_state::T, N) where {T<:Vector}
     d
 end
 
+"""
+    prob_GaussianMixture(par, reporters_per_state::T) where {T<:Vector}
+
+Create an array of Gaussian mixture distributions for multiple states.
+
+# Arguments
+- `par`: 5-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, weight]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+
+# Returns
+- `Vector{MixtureModel}`: Array of Gaussian mixture distributions, one for each state
+"""
 function prob_GaussianMixture(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -192,10 +271,41 @@ end
 
 Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
 """
+"""
+    prob_GaussianMixture_6(par, reporters)
+
+Create a Gaussian mixture distribution with 6 parameters for a single reporter count.
+
+# Arguments
+- `par`: 7-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, 
+         second_mean, second_std, weight]
+- `reporters::Int`: Number of reporters
+
+# Returns
+- `MixtureModel`: Gaussian mixture with two components:
+  1. Background + reporters: mean = background_mean + reporters * reporter_mean, 
+     std = sqrt(background_std² + reporters * reporter_std²)
+  2. Second component: mean = par[5], std = par[6]
+  Weight of first component = par[7], weight of second component = 1 - par[7]
+"""
 function prob_GaussianMixture_6(par, reporters)
     MixtureModel(Normal, [(par[1] + reporters * par[3], sqrt(par[2]^2 + reporters * par[4]^2)), (par[5], par[6])], [par[7], 1 - par[7]])
 end
 
+"""
+    prob_GaussianMixture_6(par, reporters_per_state, N)
+
+Create an array of Gaussian mixture distributions with 6 parameters for multiple states.
+
+# Arguments
+- `par`: 7-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, 
+         second_mean, second_std, weight]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `N`: Number of HMM states
+
+# Returns
+- `Vector{MixtureModel}`: Array of Gaussian mixture distributions, one for each state
+"""
 function prob_GaussianMixture_6(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
@@ -204,6 +314,19 @@ function prob_GaussianMixture_6(par, reporters_per_state, N)
     d
 end
 
+"""
+    prob_GaussianMixture_6(par, reporters_per_state::T) where {T<:Vector}
+
+Create an array of Gaussian mixture distributions with 6 parameters for multiple states.
+
+# Arguments
+- `par`: 7-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std, 
+         second_mean, second_std, weight]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+
+# Returns
+- `Vector{MixtureModel}`: Array of Gaussian mixture distributions, one for each state
+"""
 function prob_GaussianMixture_6(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -215,9 +338,18 @@ end
 
 
 """
-    prob_Gaussian_ind(par, reporters_per_state, N)
+    prob_Gaussian_ind(par, reporters::Int)
 
-TBW
+Create an independent Gaussian distribution for a single reporter count.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters::Int`: Number of reporters
+
+# Returns
+- `Normal`: Gaussian distribution
+  If reporters > 0: mean = reporters * reporter_mean, std = sqrt(reporters) * reporter_std
+  If reporters = 0: mean = background_mean, std = background_std
 """
 function prob_Gaussian_ind(par, reporters::Int)
     if reporters > 0
@@ -227,6 +359,21 @@ function prob_Gaussian_ind(par, reporters::Int)
     end
 end
 
+"""
+    prob_Gaussian_ind(par, reporters_per_state, N)
+
+Create an array of independent Gaussian distributions for multiple states.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `N`: Number of HMM states
+
+# Returns
+- `Vector{Normal}`: Array of Gaussian distributions, one for each state
+  If reporters > 0: mean = reporters * reporter_mean, std = sqrt(reporters) * reporter_std
+  If reporters = 0: mean = background_mean, std = background_std
+"""
 function prob_Gaussian_ind(par, reporters_per_state, N)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
     for i in 1:N
@@ -235,6 +382,20 @@ function prob_Gaussian_ind(par, reporters_per_state, N)
     d
 end
 
+"""
+    prob_Gaussian_ind(par, reporters_per_state::T) where {T<:Vector}
+
+Create an array of independent Gaussian distributions for multiple states.
+
+# Arguments
+- `par`: 4-dimensional vector of parameters [background_mean, background_std, reporter_mean, reporter_std]
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+
+# Returns
+- `Vector{Normal}`: Array of Gaussian distributions, one for each state
+  If reporters > 0: mean = reporters * reporter_mean, std = sqrt(reporters) * reporter_std
+  If reporters = 0: mean = background_mean, std = background_std
+"""
 function prob_Gaussian_ind(par, reporters_per_state::T) where {T<:Vector}
     N = length(reporters_per_state)
     d = Array{Distribution{Univariate,Continuous}}(undef, N)
@@ -360,7 +521,15 @@ end
 """
     make_a_grid(param, Ngrid)
 
-TBW
+Create a grid transition probability matrix using Gaussian kernel.
+
+# Arguments
+- `param`: Standard deviation parameter for the Gaussian kernel
+- `Ngrid`: Number of grid points
+
+# Returns
+- `Matrix{Float64}`: Normalized transition probability matrix where each row sums to 1
+  The transition probability from position i to j is proportional to exp(-distance(i,j)²/(2*param²))
 """
 function make_a_grid(param, Ngrid)
     as = zeros(Ngrid, Ngrid)
@@ -383,9 +552,19 @@ end
 """
     set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
 
-TBW
-"""
+Create emission distributions with additional background noise variance.
 
+# Arguments
+- `noiseparams`: Vector of noise parameters [background_mean, background_std, reporter_mean, reporter_std, ...]
+- `sigma2`: Additional variance to add to background noise
+- `reporters_per_state`: Number of reporters per HMM state
+- `probfn`: Function to create probability distributions
+- `N`: Number of HMM states
+
+# Returns
+- `Vector{Distribution}`: Array of emission distributions with modified background variance
+  The background standard deviation is modified as sqrt(background_std² + sigma2²)
+"""
 function set_d_background(noiseparams, sigma2, reporters_per_state, probfn, N)
     n = copy(noiseparams)
     n[2] = sqrt(n[2]^2 + sigma2^2)
@@ -401,9 +580,17 @@ end
 """
     set_d(noiseparams, reporters_per_state, probfn, N)
 
-TBW
-"""
+Create emission distributions for HMM states.
 
+# Arguments
+- `noiseparams`: Vector of noise parameters
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `probfn::Function`: Function to create probability distributions
+- `N::Int`: Number of HMM states
+
+# Returns
+- `Vector{Distribution}`: Array of emission distributions, one for each state
+"""
 function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T, N::Int) where {T<:Function}
     probfn(noiseparams, reporters_per_state, N)
 end
@@ -424,8 +611,15 @@ end
 """
     set_d(noiseparams, reporter, N)
 
+Create emission distributions using HMMReporter structure.
 
-TBW
+# Arguments
+- `noiseparams`: Vector of noise parameters
+- `reporter::HMMReporter`: Reporter structure containing per_state and probfn
+- `N::Int`: Number of HMM states
+
+# Returns
+- `Vector{Distribution}`: Array of emission distributions, one for each state
 """
 function set_d(noiseparams, reporter::HMMReporter, N::Int)
     set_d(noiseparams, reporter.per_state, reporter.probfn, N)
@@ -442,9 +636,16 @@ end
 """
     set_d(noiseparams, reporters_per_state, probfn)
 
-TBW
-"""
+Create emission distributions for HMM states (auto-determine N).
 
+# Arguments
+- `noiseparams`: Vector of noise parameters
+- `reporters_per_state::Vector{Int}`: Number of reporters per HMM state
+- `probfn::Function`: Function to create probability distributions
+
+# Returns
+- `Vector{Distribution}`: Array of emission distributions, one for each state
+"""
 function set_d(noiseparams, reporters_per_state::Vector{Int}, probfn::T) where {T<:Function}
     probfn(noiseparams, reporters_per_state)
 end
@@ -464,8 +665,14 @@ end
 """
     set_d(noiseparams, reporter)
 
+Create emission distributions using HMMReporter structure (auto-determine N).
 
-TBW
+# Arguments
+- `noiseparams`: Vector of noise parameters
+- `reporter::HMMReporter`: Reporter structure containing per_state and probfn
+
+# Returns
+- `Vector{Distribution}`: Array of emission distributions, one for each state
 """
 function set_d(noiseparams, reporter::HMMReporter)
     set_d(noiseparams, reporter.per_state, reporter.probfn)
@@ -481,7 +688,14 @@ end
 """
     set_b(trace, d)
 
-TBW
+Create emission probability matrix from observations and distributions.
+
+# Arguments
+- `trace::Vector`: Vector of observations
+- `d::Vector{Distribution}`: Array of emission distributions, one for each state
+
+# Returns
+- `Matrix{Float64}`: Emission probability matrix b[j,t] = P(observation_t | state_j)
 """
 function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
     N = length(d)
@@ -703,7 +917,18 @@ end
 """
     forward_inner_operation!(α, a, b::Vector, i, j, t)
 
-TBW
+Update forward variable α[j,t] using the forward algorithm recursion.
+
+# Arguments
+- `α`: Forward variable matrix
+- `a::Matrix`: Transition probability matrix
+- `b::Vector`: Emission probabilities for current observation
+- `i, j`: State indices
+- `t`: Time index
+
+# Details
+Performs the update: α[j,t] += α[i,t-1] * a[i,j] * b[j]
+This is the core operation in the forward algorithm recursion.
 """
 function forward_inner_operation!(α, a::Matrix, b::Vector, i, j, t)
     α[j, t] += α[i, t-1] * a[i, j] * b[j]
@@ -831,7 +1056,15 @@ end
 """
     forward(a, b, p0)
 
-TBW
+Compute forward variables using scaled forward algorithm (auto-determine dimensions).
+
+# Arguments
+- `a::Matrix`: Transition probability matrix
+- `b::Matrix`: Emission probability matrix
+- `p0`: Initial state distribution
+
+# Returns
+- `Tuple{Matrix{Float64}, Vector{Float64}}`: (α, C) where α is the forward variable matrix and C is the scaling parameter array
 """
 function forward(a::Matrix, b::Matrix, p0)
     N, T = size(b)
@@ -884,7 +1117,19 @@ Returns the forward variable α and scaling parameter array C.
 """
     forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
 
-TBW
+Compute forward variables for grid-based HMM using scaled forward algorithm.
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix of size (Nstate, Ngrid, T)
+- `p0`: Initial state distribution
+- `Nstate`: Number of states
+- `Ngrid`: Number of grid points
+- `T`: Number of time steps
+
+# Returns
+- `Tuple{Array{Float64,3}, Vector{Float64}}`: (α, C) where α is the forward variable array of size (Nstate, Ngrid, T) and C is the scaling parameter array
 """
 function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     # if CUDA.functional() && (Nstate * Nstate * Ngrid * Ngrid * T > 1000)
@@ -908,6 +1153,23 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     # end
 end
 
+"""
+    forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
+
+Compute forward variables for grid-based HMM using automatic differentiation-friendly approach.
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix of size (Nstate, Ngrid, T)
+- `p0`: Initial state distribution
+- `Nstate`: Number of states
+- `Ngrid`: Number of grid points
+- `T`: Number of time steps
+
+# Returns
+- `Tuple{Array{Float64,3}, Vector{Float64}}`: (α, C) where α is the forward variable array and C is the scaling parameter array
+"""
 function forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
     αs = Vector{Matrix{Float64}}(undef, T)
     C = Vector{Float64}(undef, T)
@@ -931,7 +1193,16 @@ end
 """
     forward_grid(a, a_grid, b, p0)
 
-TBW
+Compute forward variables for grid-based HMM (auto-determine dimensions).
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix of size (Nstate, Ngrid, T)
+- `p0`: Initial state distribution
+
+# Returns
+- `Tuple{Array{Float64,3}, Vector{Float64}}`: (α, C) where α is the forward variable array and C is the scaling parameter array
 """
 function forward_grid(a, a_grid, b, p0)
     Nstate, Ngrid, T = size(b)
@@ -1010,9 +1281,19 @@ Returns the forward variable α and scaling parameter array C.
 
 
 """
-    forward_matrixmult(a, b, p0, N, T)
+    forward_matrixmult_inplace(a, b, p0, N, T)
 
-TBW
+Compute forward variables using matrix multiplication (in-place version).
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Tuple{Matrix{Float64}, Vector{Float64}}`: (α, C) where α is the forward variable matrix and C is the scaling parameter array
 """
 function forward_matrixmult_inplace(a, b, p0, N, T)
     α = zeros(N, T)
@@ -1028,6 +1309,21 @@ function forward_matrixmult_inplace(a, b, p0, N, T)
     return α, C
 end
 
+"""
+    forward_matrixmult(a, b, p0, N, T)
+
+Compute forward variables using matrix multiplication (functional version).
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Tuple{Matrix{Float64}, Vector{Float64}}`: (α, C) where α is the forward variable matrix and C is the scaling parameter array
+"""
 function forward_matrixmult(a, b, p0, N, T)
     αs = Vector{Vector{Float64}}(undef, T)
     C = Vector{Float64}(undef, T)
@@ -1044,13 +1340,19 @@ function forward_matrixmult(a, b, p0, N, T)
 end
 
 """
-forward_log(a, b, p0, N, T)
-forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
+    forward_log(loga, logb, logp0, N, T)
 
-returns log α
+Compute log forward variables using numerically stable log-space algorithm.
 
-(computations are numerically stable)
+# Arguments
+- `loga`: Log transition probability matrix
+- `logb`: Log emission probability matrix
+- `logp0`: Log initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
 
+# Returns
+- `Matrix{Float64}`: Log forward variable matrix log(α) where α[i,t] = P(O_1,...,O_t, q_t = S_i | λ)
 """
 function forward_log(loga, logb, logp0, N, T)
     ψ = zeros(N)
@@ -1058,6 +1360,23 @@ function forward_log(loga, logb, logp0, N, T)
     forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     return ϕ
 end
+"""
+    forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
+
+Compute log forward variables using numerically stable log-space algorithm (in-place).
+
+# Arguments
+- `ϕ`: Output log forward variable matrix (modified in-place)
+- `ψ`: Temporary workspace vector
+- `loga`: Log transition probability matrix
+- `logb`: Log emission probability matrix
+- `logp0`: Log initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Details
+Computes log(α) where α[i,t] = P(O_1,...,O_t, q_t = S_i | λ) using logsumexp for numerical stability.
+"""
 function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
     for t in 2:T
@@ -1070,6 +1389,21 @@ function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     end
 end
 
+"""
+    forward_log_ad(loga, logb, logp0, N, T)
+
+Compute log forward variables using automatic differentiation-friendly approach.
+
+# Arguments
+- `loga`: Log transition probability matrix
+- `logb`: Log emission probability matrix
+- `logp0`: Log initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Matrix{Float64}`: Log forward variable matrix log(α) where α[i,t] = P(O_1,...,O_t, q_t = S_i | λ)
+"""
 function forward_log_ad(loga, logb, logp0, N, T)
     ϕs = Vector{Vector{Float64}}(undef, T)
     ψ = zeros(N)
@@ -1089,12 +1423,19 @@ function forward_log_ad(loga, logb, logp0, N, T)
 end
 
 """
-backward_scaled(a,b)
+    backward_scaled(a, b, C, N, T)
 
-return backward variable β using scaled backward algorithm
+Compute backward variable β using scaled backward algorithm.
 
-β[i,T] = P(O[t+1]...O[t] | qT = Si,λ)
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `C`: Scaling parameter array from forward algorithm
+- `N`: Number of states
+- `T`: Number of time steps
 
+# Returns
+- `Matrix{Float64}`: Backward variable matrix β where β[i,t] = P(O_{t+1},...,O_T | q_t = S_i, λ)
 """
 function backward_scaled(a, b, C, N, T)
     β = ones(N, T)
@@ -1110,6 +1451,21 @@ function backward_scaled(a, b, C, N, T)
     return β
 end
 
+"""
+    backward_scaled_ad(a, b, C, N, T)
+
+Compute backward variable β using scaled backward algorithm (automatic differentiation-friendly).
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `C`: Scaling parameter array from forward algorithm
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Matrix{Float64}`: Backward variable matrix β where β[i,t] = P(O_{t+1},...,O_T | q_t = S_i, λ)
+"""
 function backward_scaled_ad(a, b, C, N, T)
     βs = Vector{Vector{Float64}}(undef, T)
     βs[T] = ones(N) / C[T]
@@ -1127,10 +1483,18 @@ function backward_scaled_ad(a, b, C, N, T)
 end
 
 """
-backward_log(a, b, N, T)
+    backward_log(a, b, N, T)
 
-return log β
+Compute log backward variable using numerically stable log-space algorithm.
 
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Matrix{Float64}`: Log backward variable matrix log(β) where β[i,t] = P(O_{t+1},...,O_T | q_t = S_i, λ)
 """
 function backward_log(a, b, N, T)
     loga = log.(a)
@@ -1148,6 +1512,20 @@ function backward_log(a, b, N, T)
     return ϕ
 end
 
+"""
+    backward_log_ad(a, b, N, T)
+
+Compute log backward variables using automatic differentiation-friendly approach.
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Matrix{Float64}`: Log backward variable matrix log(β) where β[i,t] = P(O_{t+1},...,O_T | q_t = S_i, λ)
+"""
 function backward_log_ad(a, b, N, T)
     loga = log.(a)
     ψ = zeros(N)
@@ -1214,9 +1592,20 @@ function ll_B(a, p0, offstates::Vector, weight::Vector, trace)
 end
 
 """
-    ll_off(obs, d, a, p0, weight)
+    ll_off(trace, noiseparams, reporter, components, a, p0)
 
-TBW
+Compute log-likelihood contribution from off-state observations.
+
+# Arguments
+- `trace::Tuple`: Trace data containing off-state information
+- `noiseparams`: Noise parameters for emission distributions
+- `reporter`: Reporter structure
+- `components`: Model components
+- `a::Matrix`: Transition probability matrix
+- `p0`: Initial state distribution
+
+# Returns
+- `Float64`: Log-likelihood contribution from off-state observations
 """
 
 # function ll_off(trace::Tuple, d::Vector{Distribution{Univariate,Continuous}}, a::Matrix, p0)
@@ -1577,8 +1966,18 @@ end
 #### Return states and d (not observation_dist)
 
 """
-    _predict_trace(a::Matrix, p0::Vector, d, traces)
+    _predict_trace(a, p0, d, traces)
 
+Predict most likely state sequences for multiple traces using Viterbi algorithm.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `d`: Emission distributions
+- `traces`: Vector of observation traces
+
+# Returns
+- `Tuple{Vector{Vector{Int}}, Any}`: (states, d) where states contains the most likely state sequence for each trace
 """
 function _predict_trace(a, p0, d, traces)
     states = Vector{Int}[]
@@ -1605,6 +2004,17 @@ end
 """
     _predict_trace_forced(noiseparams, a, p0, reporter, traces)
 
+Predict most likely state sequences for forced model with multiple traces.
+
+# Arguments
+- `noiseparams::Vector`: Vector of noise parameters for each trace
+- `a`: Transition probability matrix
+- `p0::Vector`: Initial state distribution
+- `reporter`: Reporter structure
+- `traces`: Vector of observation traces
+
+# Returns
+- `Tuple{Vector{Vector{Int}}, Vector}`: (states, d) where states contains the most likely state sequence for each trace and d contains emission distributions
 """
 function _predict_trace_forced(noiseparams::Vector, a, p0::Vector, reporter, traces)
     states = Vector{Int}[]
@@ -1620,8 +2030,19 @@ end
 
 
 """
-    _predict_trace(noiseparams, a::Matrix, p0::Vector, reporter, traces)
+    _predict_trace(noiseparams, a, p0, reporter, traces)
 
+Predict most likely state sequences using noise parameters and reporter.
+
+# Arguments
+- `noiseparams::Vector`: Vector of noise parameters for each trace
+- `a::Matrix`: Transition probability matrix
+- `p0::Vector`: Initial state distribution
+- `reporter`: Reporter structure
+- `traces`: Vector of observation traces
+
+# Returns
+- `Tuple{Vector{Vector{Int}}, Vector}`: (states, d) where states contains the most likely state sequence for each trace and d contains emission distributions
 """
 function _predict_trace(noiseparams::Vector, a::Matrix, p0::Vector, reporter, traces)
     states = Vector{Int}[]
@@ -1672,8 +2093,19 @@ end
 ### grid trait likelihoods
 
 """
-    _predict_trace(a, a_grid, p0::Vector, d, traces)
+    _predict_trace(a, a_grid, p0, d, traces)
 
+Predict most likely state sequences for grid-based HMM.
+
+# Arguments
+- `a::Matrix`: State transition probability matrix
+- `a_grid::Matrix`: Grid transition probability matrix
+- `p0::Vector`: Initial state distribution
+- `d`: Emission distributions
+- `traces`: Vector of observation traces
+
+# Returns
+- `Tuple{Vector{Vector{Int}}, Any}`: (states, d) where states contains the most likely state sequence for each trace
 """
 function _predict_trace(a::Matrix, a_grid::Matrix, p0::Vector, d, traces)
     states = Vector{Int}[]
@@ -1890,7 +2322,18 @@ end
 """
     expected_transitions_log(logα, a, b, logβ, N, T)
 
-TBW
+Compute expected transition counts using log-space forward and backward variables.
+
+# Arguments
+- `logα`: Log forward variable matrix
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `logβ`: Log backward variable matrix
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Tuple{Array{Float64,3}, Array{Float64,2}}`: (ξ, γ) where ξ[i,j,t] = P(q_t = S_i, q_{t+1} = S_j | O, λ) and γ[i,t] = ∑_j ξ[i,j,t]
 """
 function expected_transitions_log(logα, a, b, logβ, N, T)
     ξ = Array{Float64}(undef, N, N, T - 1)
@@ -1910,10 +2353,19 @@ function expected_transitions_log(logα, a, b, logβ, N, T)
     return ξ, γ
 end
 """
-expected_a(a, b, p0, N, T)
-expected_a(ξ, γ, N)
+    expected_a(a, b, p0, N, T)
 
-returns the expected probability matrix a
+Compute expected transition probability matrix from observations.
+
+# Arguments
+- `a`: Current transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Matrix{Float64}`: Expected transition probability matrix computed from forward-backward algorithm
 """
 function expected_a(a, b, p0, N, T)
     α, C = forward(a, b, p0, N, T)
@@ -1921,6 +2373,19 @@ function expected_a(a, b, p0, N, T)
     ξ, γ = expected_transitions(α, a, b, β, N, T)
     expected_a(ξ, γ, N)
 end
+"""
+    expected_a(ξ, γ, N)
+
+Compute expected transition probability matrix from expected transition counts.
+
+# Arguments
+- `ξ`: Expected transition counts array of size (N, N, T-1)
+- `γ`: Expected state counts array of size (N, T-1)
+- `N::Int`: Number of states
+
+# Returns
+- `Matrix{Float64}`: Expected transition probability matrix where a[i,j] = ∑_t ξ[i,j,t] / ∑_t γ[i,t]
+"""
 function expected_a(ξ, γ, N::Int)
     a = zeros(N, N)
     ξS = sum(ξ, dims=3)
@@ -2037,7 +2502,17 @@ end
 """
     viterbi(a, b, p0, N, T)
 
-returns maximum likelihood state path using Viterbi algorithm
+Find maximum likelihood state sequence using Viterbi algorithm.
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+- `N`: Number of states
+- `T`: Number of time steps
+
+# Returns
+- `Vector{Int}`: Most likely state sequence q* = argmax P(q | O, λ)
 """
 function viterbi(a, b, p0, N, T)
     loga = log.(max.(a, 0.0))
@@ -2046,6 +2521,19 @@ function viterbi(a, b, p0, N, T)
     viterbi_log(loga, logb, logp0, N, T)
 end
 
+"""
+    viterbi(a, b, p0)
+
+Find maximum likelihood state sequence using Viterbi algorithm (auto-determine dimensions).
+
+# Arguments
+- `a`: Transition probability matrix
+- `b`: Emission probability matrix
+- `p0`: Initial state distribution
+
+# Returns
+- `Vector{Int}`: Most likely state sequence q* = argmax P(q | O, λ)
+"""
 function viterbi(a, b, p0)
     N, T = size(b)
     viterbi(a, b, p0, N, T)
@@ -2056,6 +2544,23 @@ function viterbi(a::Vector{T1}, b::Vector{T2}, p0) where {T1<:AbstractArray,T2<:
     viterbi(a, b, p0, N, T)
 end
 
+"""
+    viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
+
+Find maximum likelihood state sequence for grid-based HMM using Viterbi algorithm in log-space.
+
+# Arguments
+- `loga`: Log state transition probability matrix
+- `loga_grid`: Log grid transition probability matrix
+- `logb`: Log emission probability matrix
+- `logp0`: Log initial state distribution
+- `Nstate`: Number of states
+- `Ngrid`: Number of grid points
+- `T`: Number of time steps
+
+# Returns
+- `Vector{Int}`: Most likely state sequence q* = argmax P(q | O, λ)
+"""
 function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
     ϕ = similar(logb)
     ψ = similar(ϕ)
@@ -2074,6 +2579,23 @@ function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
     end
     return q
 end
+"""
+    viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
+
+Find maximum likelihood state sequence for grid-based HMM using Viterbi algorithm.
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix of size (Nstate, Ngrid, T)
+- `p0`: Initial state distribution
+- `Nstate`: Number of states
+- `Ngrid`: Number of grid points
+- `T`: Number of time steps
+
+# Returns
+- `Vector{Int}`: Most likely state sequence q* = argmax P(q | O, λ)
+"""
 function viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     loga = log.(max.(a, 0.0))
     loga_grid = log.(max.(a_grid, 0.0))
@@ -2082,6 +2604,20 @@ function viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
 end
 
+"""
+    viterbi_grid(a, a_grid, b, p0)
+
+Find maximum likelihood state sequence for grid-based HMM using Viterbi algorithm (auto-determine dimensions).
+
+# Arguments
+- `a`: State transition probability matrix
+- `a_grid`: Grid transition probability matrix
+- `b`: Emission probability matrix of size (Nstate, Ngrid, T)
+- `p0`: Initial state distribution
+
+# Returns
+- `Vector{Int}`: Most likely state sequence q* = argmax P(q | O, λ)
+"""
 function viterbi_grid(a, a_grid, b, p0)
     Nstate, Ngrid, T = size(b)
     viterbi_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
@@ -2090,7 +2626,28 @@ end
 """
     covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
 
-TBW
+Compute covariance functions for coupled HMM model.
+
+# Arguments
+- `rin`: Input rates
+- `transitions`: Transition definitions
+- `G::Tuple`: Gene definitions
+- `R`: Rate definitions
+- `S`: State definitions
+- `insertstep`: Insert step definitions
+- `interval`: Time interval
+- `probfn`: Probability function
+- `coupling`: Coupling parameters
+- `lags::Vector`: Time lags for covariance calculation
+
+# Returns
+- `Tuple`: (ac1, ac2, cc, ac1_norm, ac2_norm, cc_norm, lags_full, m1, m2, v1, v2) containing:
+  - ac1, ac2: Autocovariance functions for each channel
+  - cc: Cross-covariance function
+  - ac1_norm, ac2_norm, cc_norm: Normalized covariance functions
+  - lags_full: Full lag vector including negative lags
+  - m1, m2: Mean intensities
+  - v1, v2: Variances
 """
 function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
@@ -2123,6 +2680,25 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
 end
 
+"""
+    autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+
+Compute autocovariance function for HMM model.
+
+# Arguments
+- `r`: Rate parameters
+- `transitions`: Transition definitions
+- `G`: Gene definitions
+- `R`: Rate definitions
+- `S`: State definitions
+- `insertstep`: Insert step definitions
+- `interval`: Time interval
+- `probfn`: Probability function
+- `lags::Vector`: Time lags for covariance calculation
+
+# Returns
+- `Vector{Float64}`: Autocovariance function at specified lags
+"""
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
     components = TComponents(transitions, G, R, S, insertstep, "")
     mean_intensity = mean.(probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT))
@@ -2130,14 +2706,61 @@ function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags
     crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity) .^ 2
 end
 
+"""
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
+
+Compute cross-covariance function between two intensity signals.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+- `m1`: Mean of first signal
+- `m2`: Mean of second signal
+
+# Returns
+- `Vector{Float64}`: Cross-covariance function at specified lags
+"""
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
     crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
 end
 
+"""
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+Compute cross-covariance function between two intensity signals (auto-compute means).
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Cross-covariance function at specified lags
+"""
 function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
     crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
 end
 
+"""
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+Compute cross-correlation function between two intensity signals.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Cross-correlation function at specified lags
+"""
 function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
     cc = zeros(length(lags))
     m1 = meanintensity1 .* p0
@@ -2155,10 +2778,34 @@ function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
 end
 
 
+"""
+    variance_hmm(p0, meanintensity)
+
+Compute variance of intensity signal under HMM model.
+
+# Arguments
+- `p0`: Initial state distribution
+- `meanintensity`: Mean intensity per state
+
+# Returns
+- `Float64`: Variance of the intensity signal
+"""
 function variance_hmm(p0, meanintensity)
     sum(p0 .* (meanintensity .^ 2)) - mean_hmm(p0, meanintensity) .^ 2
 end
 
+"""
+    mean_hmm(p0, meanintensity)
+
+Compute mean of intensity signal under HMM model.
+
+# Arguments
+- `p0`: Initial state distribution
+- `meanintensity`: Mean intensity per state
+
+# Returns
+- `Float64`: Mean of the intensity signal
+"""
 function mean_hmm(p0, meanintensity)
     sum(p0 .* meanintensity)
 end

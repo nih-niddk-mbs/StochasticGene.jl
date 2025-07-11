@@ -2,7 +2,23 @@
 #
 # transition_rate_functions.jl
 #
-
+# This file contains utility functions for working with transition rate matrices and
+# state space calculations in stochastic gene expression modeling. These functions
+# provide the mathematical foundation for converting between different representations
+# of the state space and for computing various properties of the transition matrices.
+#
+# Key functionality includes:
+# - State indexing and inverse state calculations
+# - On/off state identification and manipulation
+# - Dimension calculations for transition matrices
+# - Coupled state expansion and manipulation
+# - Kronecker product operations for coupled systems
+# - Reporter state calculations and manipulations
+# - Index management for different rate types
+#
+# These functions are used extensively by the other transition rate files to build
+# the correct transition matrices and perform state space transformations needed
+# for various types of stochastic gene expression analyses.
 
 """
     state_index(G::Int, g, z)
@@ -350,16 +366,40 @@ end
 """
     get_TDdims(components)
 
-TBW
+Extract dwell time dimensions from component structures.
+
+# Description
+This function extracts the dwell time dimensions from a collection of component structures.
+It's used to determine the appropriate dimensions for dwell time analysis matrices.
+
+# Arguments
+- `components`: Collection of component structures with TDdims field
+
+# Returns
+- `Vector`: Vector of dwell time dimensions for each component
 """
 get_TDdims(components) = [comp.TDdims for comp in components.modelcomponents]
 
 
 """
     coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
-                         nT::Union{Vector,Tuple}, dttype::String, G::Int, R::Int, S::Int)
 
 Expand sojourn states for a single unit to the full coupled system dimensions.
+
+# Description
+This function expands the sojourn states for a single unit to account for the full
+dimensions of a coupled system. It uses Kronecker product operations to properly
+map the unit's states to the full system state space.
+
+# Arguments
+- `sojourn::Vector`: Vector of sojourn state indices for the unit
+- `unit_index::Int`: Index of the unit in the coupled system
+- `unit_model::Vector`: Vector specifying the order of units
+- `TDdim::Int`: Dimension of the transition matrix for this unit
+- `G`: Vector of gene counts for each unit
+
+# Returns
+- `Vector{Int}`: Expanded sojourn states for the full coupled system
 """
 function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
 
@@ -369,12 +409,23 @@ function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TD
     sort(indices_kron_left(expanded, TDdim * right_dim, left_dim))
 end
 """
-    expand_coupled_sojourn_states(base_sojourns::Vector{Vector{Vector{Int}}}, 
-                                coupling::Tuple, nT::Union{Vector,Tuple}, 
-                                dttype::Vector{Vector{String}}, 
-                                G::Tuple, R::Tuple, S::Tuple)
+    coupled_states(sojourn, coupling, components, G)
 
 Expand sojourn states for all units in a coupled system.
+
+# Description
+This function expands sojourn states for all units in a coupled system by applying
+the coupled_states function to each unit's sojourn states. It handles the full
+coupled system state space expansion.
+
+# Arguments
+- `sojourn`: Vector of sojourn state vectors for each unit
+- `coupling`: Coupling specification tuple
+- `components`: Component structures containing dwell time dimensions
+- `G`: Vector of gene counts for each unit
+
+# Returns
+- `Vector`: Expanded sojourn states for all units in the coupled system
 """
 function coupled_states(sojourn, coupling, components, G)
     TDdims = get_TDdims(components)
@@ -390,7 +441,17 @@ end
 """
     nonzero_rows(elements::Vector{Element})
 
-TBW
+Find rows with nonzero elements in a vector of Element structures.
+
+# Description
+This function extracts the row indices from a vector of Element structures and
+returns the unique, sorted list of rows that contain nonzero elements.
+
+# Arguments
+- `elements::Vector{Element}`: Vector of Element structures
+
+# Returns
+- `Vector{Int}`: Sorted vector of unique row indices with nonzero elements
 """
 nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
 
@@ -647,7 +708,7 @@ end
 
 """
     kron_left(T, M::Vector, sources, unit_model, first, last)
-    kron_left(T, M::Vectort unit_model, first, last)
+    kron_left(T, M::Vector, unit_model, first, last)
 
 Perform Kronecker left product operations.
 
@@ -754,4 +815,3 @@ function classify_transitions(target, indices)
     end
     unique(Gts), unique(Init), unique(Rts)
 end
-

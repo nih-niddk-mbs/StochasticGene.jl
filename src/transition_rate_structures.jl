@@ -2,7 +2,24 @@
 #
 # transition_rate_structures.jl
 #
-
+# This file defines the core data structures used throughout the StochasticGene.jl package
+# for representing transition rate matrices and their components. These structures form
+# the foundation for building and manipulating the various types of transition matrices
+# needed for stochastic gene expression modeling.
+#
+# Key structures include:
+# - Element: Basic building block for matrix elements with row, column, rate index, and sign
+# - Indices: Index ranges for different types of transition rates (gamma, nu, eta, decay)
+# - AbstractComponents: Abstract types for different component categories
+# - TComponents: Basic transition matrix components
+# - TAIComponents: Transition matrix components with on/off state separation
+# - TDComponents: Transition matrix components for dwell time analysis
+# - Coupled components: Various structures for coupled gene systems
+# - MComponents: Matrix components for mRNA distribution calculations
+# - MTComponents: Combined M and T matrix components
+#
+# These structures are used by the other transition rate files to construct the actual
+# transition matrices and perform various analyses in the StochasticGene.jl framework.
 
 """
 	struct Element
