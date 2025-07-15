@@ -1161,11 +1161,7 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
     return reporter, components
 end
 
-"""
-    make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, ejectnumber=1)
 
-TBW
-"""
 """
     make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
 
@@ -1449,20 +1445,7 @@ function coupling_indices(transitions, R, S, insertstep, reporter, coupling, gri
 end
 
 
-"""
-    make_fitted_hierarchical(fittedparams,N)
 
-make fittedparams vector for hierarchical model
-
-returns 
--`f`: all fitted parameters
--`fhyper`: fitted hyper parameters (needed for hyper distribution)
--`fpriors`: fitted shared and hyper parameters (needed for specifying prior distributions)
-
-Hierarchical models have shared, individual, and hyper parameters.  shared parameters pertain to all individuals, individual parameters are fitted to each individual, and
-hyper parameters specify the hyper distribution for the individual parameters. Currently, all hyper parameters are fitted as determined by the fitted individual parameters
-shared and hyper parameters have priors, whereas individual parameters are drawn from the hyper distribution
-"""
 """
     make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, nallparams, nindividuals)
 
@@ -1501,22 +1484,7 @@ function make_fitted_hierarchical(fittedshared, nhypersets, fittedindividual, na
     f, fhyper, fpriors
 end
 
-"""
-    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
 
-Construct hierarchical model traits and priors.
-
-# Arguments
-- `data`: Data structure.
-- `rmean`: Prior means.
-- `fittedparam`: Fitted parameter indices.
-- `fixedeffects`: Fixed effects tuple.
-- `transitions`, `R`, `S`, `insertstep`: Model structure.
-- `priorcv`, `noisepriors`, `hierarchical`, `reporter`, `coupling`, `couplingindices`, `grid`, `factor`, `ratetransforms`, `zeromedian`: Model options.
-
-# Returns
-- Tuple of (hierarchical trait, fittedparam, fixedeffects, priord, ratetransforms).
-"""
 """
     make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
 
@@ -1566,20 +1534,7 @@ function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, 
     return hierarchy, fittedparam, fixedeffects, priord, ratetransforms
 end
 
-"""
-    rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
 
-Populate transformation functions for rates and noise parameters.
-
-# Arguments
-- `ftransforms`, `invtransforms`, `sigmatransforms`: Arrays to populate.
-- `nrates`: Number of rates.
-- `reporter`: Reporter structure.
-- `zeromedian`: Whether to zero-center traces.
-
-# Returns
-- None (modifies arrays in place).
-"""
 """
     rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::Int, reporter, zeromedian)
 
@@ -1653,18 +1608,7 @@ function rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates::V
     end
 end
 
-"""
-    make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
 
-Create transformation functions for all model parameters.
-
-# Arguments
-- `data`: Data structure.
-- `nrates`, `transitions`, `G`, `R`, `S`, `insertstep`, `reporter`, `coupling`, `grid`, `hierarchical`, `zeromedian`: Model structure and options.
-
-# Returns
-- `Transformation` struct with forward/inverse/sigma transforms.
-"""
 """
     make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
 
@@ -1735,18 +1679,7 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
     Transformation(ftransforms, invtransforms, sigmatransforms)
 end
 
-"""
-    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, factor)
 
-Construct and return the appropriate model struct for the given data and options.
-
-# Arguments
-- `data`: Data structure.
-- `r`, `rmean`, `fittedparam`, `fixedeffects`, `transitions`, `G`, `R`, `S`, `insertstep`, `splicetype`, `nalleles`, `priorcv`, `onstates`, `decayrate`, `propcv`, `probfn`, `noisepriors`, `method`, `hierarchical`, `coupling`, `grid`, `zeromedian`, `ejectnumber`, `factor`: Model options.
-
-# Returns
-- Model struct (e.g., `GMmodel`, `GRSMmodel`).
-"""
 """
     load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
 
@@ -1852,13 +1785,6 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
 end
 
-
-
-"""
-    checklength(r, transitions, R, S, insertstep, reporter)
-
-TBW
-"""
 """
     checklength(r, transitions, R, S, insertstep, reporter)
 
@@ -1889,11 +1815,6 @@ function checklength(r, transitions, R, S, insertstep, reporter)
     nothing
 end
 
-"""
-    prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
-
-TBW
-"""
 """
     prior_hypercv(transitions, R::Int, S, insertstep, noisepriors)
 
@@ -1980,11 +1901,6 @@ function prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, gri
     pcv
 end
 
-"""
-    prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
-
-default priors for hierarchical models, arranged into a single vector, shared and hyper parameters come first followed by individual parameters
-"""
 # function prior_ratemean_hierarchical(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, nhypersets, coupling=tuple(), cv::Float64=1.0)
 #     r = isempty(coupling) ? prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime) : prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
 #     hypercv = prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling)
@@ -2025,11 +1941,7 @@ function prior_ratemean_hierarchical(priormean, hypercv, nhypersets, cv::Float64
     r
 end
 
-"""
-    prior_ratemean_grid(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
 
-TBW
-"""
 # function prior_ratemean_grid(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
 #     [prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime); 0.5]
 #     # [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors; 0.5]
@@ -2055,11 +1967,6 @@ function prior_ratemean_grid(priormean)
     [priormean; 0.5]
 end
 
-"""
-    prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64)
-
-default priors for rates (includes all parameters, fitted or not)
-"""
 """
     prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
 
@@ -2089,11 +1996,7 @@ function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, nois
     [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 
-"""
-    prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
 
-TBW
-"""
 """
     prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
 
@@ -2126,11 +2029,6 @@ function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, deca
     [rm; fill(0.0, coupling[5])]
 end
 
-"""
-    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-
-set priormean if empty
-"""
 """
     set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
 
@@ -2174,11 +2072,6 @@ function set_priormean(priormean, transitions, R, S, insertstep, decayrate, nois
     priormean
 end
 
-"""
-    prior_distribution_coupling(rm, transitions, R::Tuple, S::Tuple, insertstep::Tuple, fittedparam::Vector, priorcv, noisepriors, couplingindices, factor=10)
-
-TBW
-"""
 """
     prior_distribution(rprior, priorcv, ratetransforms, fittedparam)
 
@@ -2365,11 +2258,7 @@ function prior_distribution_array(position::Vector, scale::Vector, transforms::V
 end
 
 # function set_rinit(infolder, inlabel,  gene, priormean, transitions,G, R, S, insertstep, nalleles, ratetype, hierarchical)
-"""
-    set_rinit(r, priormean)
 
-set rinit to prior if empty
-"""
 """
     set_rinit(r, priormean, minval=1e-10, maxval=1e10)
 
@@ -2402,12 +2291,6 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     r
 end
 
-
-"""
-    set_rinit(rm, transitions, R::Int, S::Int, insertstep, noisepriors, nindividuals)
-
-set rinit for hierarchical models
-"""
 """
     set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
 
@@ -2450,13 +2333,6 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
     r
 end
 
-
-
-"""
-    num_noiseparams(datatype, noisepriors)
-
-TBW
-"""
 """
     num_noiseparams(datatype, noisepriors)
 
@@ -2486,13 +2362,6 @@ function num_noiseparams(datatype, noisepriors)
     end
 end
 
-
-
-"""
-    default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling)
-
-create vector of fittedparams that includes all rates except the decay time
-"""
 """
     default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, insertstep::Tuple, noiseparams::Tuple, coupling, grid)
 
@@ -2527,11 +2396,6 @@ function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, inser
     [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
 end
 
-"""
-    default_fitted(datatype::String, transitions, R::Int, S, insertstep, noiseparams, coupling)
-
-TBW
-"""
 """
     default_fitted(datatype::String, transitions, R::Int, S::Int, insertstep::Int, noiseparams, coupling, grid)
 
@@ -2572,11 +2436,6 @@ function default_fitted(datatype::String, transitions, R::Int, S::Int, insertste
 end
 
 """
-    set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noiseparams, coupling)
-
-TBW
-"""
-"""
     set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
 
 Set fitted parameter indices if empty, using default values.
@@ -2606,11 +2465,7 @@ function set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, n
     end
 end
 
-"""
-    make_fixed(fixedpop, fixedindividual, nallparams, nindividuals)
 
-make fixed effects tuple for hierarchical model
-"""
 """
     make_fixed(fixedshared, fixedindividual, nallparams, nindividuals)
 
@@ -2643,11 +2498,6 @@ function make_fixed(fixedshared, fixedindividual, nallparams, nindividuals)
     tuple(fixed...)
 end
 
-"""
-    make_fixedfitted(fixedeffects::String,transitions,R,S,insertstep)
-
-make default fixedeffects tuple and fittedparams vector from fixedeffects String
-"""
 """
     make_fixedfitted(datatype, fixedeffects::String, transitions, R, S, insertstep, noiseparams, coupling, grid)
 
@@ -2691,12 +2541,6 @@ Compute loss function
 """
 lossfn(x, data, model) = -loglikelihood(x, data, model)[1]
 
-"""
-burstsize(fits,model::AbstractGMmodel)
-
-Compute burstsize and stats using MCMC chain
-
-"""
 """
     burstsize(fits, model::AbstractGMmodel)
 
@@ -2798,16 +2642,6 @@ function burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumb
     mean_histogram(s[2, collect(1:nT:L)])
 end
 
-
-
-"""
-check_genename(gene,p1)
-
-Check genename for p1
-if p1 = "[" change to "("
-(since swarm cannot parse "(")
-
-"""
 """
     check_genename(gene::String, p1)
 
@@ -2838,11 +2672,6 @@ function check_genename(gene::String, p1)
     return gene
 end
 
-"""
-    check_genename(gene::Vector, p1)
-
-
-"""
 """
     check_genename(gene::Vector, p1)
 

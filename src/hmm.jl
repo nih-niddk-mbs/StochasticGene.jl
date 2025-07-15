@@ -198,12 +198,6 @@ function prob_Gaussian_ad(par, reporters_per_state::T) where {T<:Vector}
 end
 
 """
-    prob_GaussianMixture(par,reporters_per_state,N)
-
-return Gaussian Mixture distribution with 4 Gaussian parameters and 1 weight parameter
-
-"""
-"""
     prob_GaussianMixture(par, reporters::Int)
 
 Create a Gaussian mixture distribution for a single reporter count.
@@ -265,12 +259,6 @@ function prob_GaussianMixture(par, reporters_per_state::T) where {T<:Vector}
     d
 end
 
-
-"""
-    prob_GaussianMixture_6(par, reporters_per_state, N)
-
-Gaussian Mixture distribution with 6 Gaussian parameters and 1 weight parameter
-"""
 """
     prob_GaussianMixture_6(par, reporters)
 

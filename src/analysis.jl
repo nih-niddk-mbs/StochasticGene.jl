@@ -1458,16 +1458,16 @@ function join_files(models::Array, files::Array, outfile::String, addlabel::Bool
     close(f)
 end
 
-function sample_non1_genes(infile, n)
-    contents, head = readdlm(infile, ',', header=true)
-    list = Array{String,1}(undef, 0)
-    for c in eachrow(contents)
-        if c[5] != 1
-            push!(list, c[1])
-        end
-    end
-    a = StatsBase.sample(list, n, replace=false)
-end
+# function sample_non1_genes(infile, n)
+#     contents, head = readdlm(infile, ',', header=true)
+#     list = Array{String,1}(undef, 0)
+#     for c in eachrow(contents)
+#         if c[5] != 1
+#             push!(list, c[1])
+#         end
+#     end
+#     a = StatsBase.sample(list, n, replace=false)
+# end
 
 """
     add_best_burst(filein, fileout, filemodel2, filemodel3)
@@ -1560,16 +1560,16 @@ function add_best_occupancy(filein, fileout, filemodel2, filemodel3)
     close(f)
 end
 
-function prune_file(list, file, outfile, header=true)
-    contents, head = readdlm(file, ',', header=header)
-    f = open(outfile, "w")
-    for c in eachrow(contents)
-        if c[1] in list
-            writedlm(f, [c], ',')
-        end
-    end
-    close(f)
-end
+# function prune_file(list, file, outfile, header=true)
+#     contents, head = readdlm(file, ',', header=header)
+#     f = open(outfile, "w")
+#     for c in eachrow(contents)
+#         if c[1] in list
+#             writedlm(f, [c], ',')
+#         end
+#     end
+#     close(f)
+# end
 
 """
     replace_yield(G, folder1, folder2, cond1, cond2, outfolder)

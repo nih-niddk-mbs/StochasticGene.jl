@@ -376,7 +376,6 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     rfit = StochasticGene.get_rates(fits.parml, model)
-    return fits, stats, measures, model, data, options
     return rfit[1:length(rtarget)], rtarget
 end
 

@@ -219,7 +219,7 @@ function make_coupling(coupling_field::String, G, R)
         return tuple()
     else
         if startswith(coupling_field, "R")
-            source = collect(G+1:G+R)  # All R states
+            source = collect(G[1]+1:G[1]+R[1])  # All R states
         else
             source = parse(Int, coupling_field[1])
         end
@@ -1391,7 +1391,50 @@ function assemble_measures_model(folder::String, files::Vector, outfile::String)
     end
     close(f)
 end
+"""
+    assemble_measures_model(folder::String, label::String, cond::String, gene::String)
 
+Assemble measures for a specific gene across different models.
+
+# Arguments
+- `folder::String`: Directory containing result files
+- `label::String`: Label to match
+- `cond::String`: Condition to match
+- `gene::String`: Gene name to match
+
+# Returns
+- Nothing, but writes measures file named "measures_{label}_{cond}_{gene}.csv"
+
+# Notes
+- Creates output file for comparing measures across models for a specific gene
+- Filters files to get measure files matching label and condition
+- Uses empty string for model to match all models
+- Delegates to assemble_measures_model with files and output path
+"""
+function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
+    outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
+    files = get_files(get_resultfiles(folder), "measures", label, cond, "")
+    assemble_measures_model(folder, files, outfile)
+end
+"""
+    assemble_measures_model(folder::String)
+
+Assemble all measure files in a folder into a single summary file.
+
+# Arguments
+- `folder::String`: Directory containing measure files
+
+# Returns
+- Nothing, but writes "measures.csv" file
+
+# Notes
+- Gets all measure files from the folder
+- Creates output file named "measures.csv"
+- Delegates to assemble_measures_model with files and output path
+"""
+function assemble_measures_model(folder::String)
+    assemble_measures_model(folder, get_measurefiles(folder), joinpath(folder, "measures.csv"))
+end
 """
     assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
 
@@ -3619,32 +3662,6 @@ function write_traces_to_files(traces::Vector{Matrix}, labels::Vector{String}, o
 end
 
 """
-    assemble_measures_model(folder::String, label::String, cond::String, gene::String)
-
-Assemble measures for a specific gene across different models.
-
-# Arguments
-- `folder::String`: Directory containing result files
-- `label::String`: Label to match
-- `cond::String`: Condition to match
-- `gene::String`: Gene name to match
-
-# Returns
-- Nothing, but writes measures file named "measures_{label}_{cond}_{gene}.csv"
-
-# Notes
-- Creates output file for comparing measures across models for a specific gene
-- Filters files to get measure files matching label and condition
-- Uses empty string for model to match all models
-- Delegates to assemble_measures_model with files and output path
-"""
-function assemble_measures_model(folder::String, label::String, cond::String, gene::String)
-    outfile = joinpath(folder, "measures_" * label * "_" * cond * "_" * gene * ".csv")
-    files = get_files(get_resultfiles(folder), "measures", label, cond, "")
-    assemble_measures_model(folder, files, outfile)
-end
-
-"""
     remove_string(str, st1)
 
 Remove a substring from a string.
@@ -3680,106 +3697,4 @@ Remove two substrings from a string.
 """
 remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
-"""
-    assemble_measures_model(folder::String)
-
-Assemble all measure files in a folder into a single summary file.
-
-# Arguments
-- `folder::String`: Directory containing measure files
-
-# Returns
-- Nothing, but writes "measures.csv" file
-
-# Notes
-- Gets all measure files from the folder
-- Creates output file named "measures.csv"
-- Delegates to assemble_measures_model with files and output path
-"""
-function assemble_measures_model(folder::String)
-    assemble_measures_model(folder, get_measurefiles(folder), joinpath(folder, "measures.csv"))
-end
-
-"""
-    assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
-
-Assemble optimized parameter results into a single CSV file.
-
-# Arguments
-- `folder::String`: Directory containing result files
-- `files`: Array of result filenames
-- `label::String`: Label to match
-- `cond::String`: Condition to match
-- `model::String`: Model to match
-- `labels`: Rate labels to use as header
-
-# Returns
-- Nothing, but writes optimized file named "optimized_{label}_{cond}_{model}.csv"
-
-# Notes
-- Creates output file with rate labels as header
-- Filters files to get only optimized files matching the criteria
-- Uses read_optimized function to read data from each file
-- Calls assemble_files to combine all optimized data
-"""
-function assemble_optimized(folder::String, files, label::String, cond::String, model::String, labels)
-    outfile = joinpath(folder, "optimized_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "optimized", label, cond, model), outfile, labels, read_optimized)
-end
-
-"""
-    assemble_stats(folder::String, files, label::String, cond::String, model::String)
-
-Assemble parameter statistics into a single CSV file.
-
-# Arguments
-- `folder::String`: Directory containing result files
-- `files`: Array of result filenames
-- `label::String`: Label to match
-- `cond::String`: Condition to match
-- `model::String`: Model to match
-
-# Returns
-- Nothing, but writes stats file named "stats_{label}_{cond}_{model}.csv"
-
-# Notes
-- Creates output file with statistical labels as header
-- Filters files to get only param-stats files matching the criteria
-- Extracts labels from the first stats file
-- Uses statlabels to format the header with statistical measures
-- Calls assemble_files to combine all statistical data
-"""
-function assemble_stats(folder::String, files, label::String, cond::String, model::String)
-    outfile = joinpath(folder, "stats_" * label * "_" * cond * "_" * model * ".csv")
-    statfiles = get_files(files, "param-stats", label, cond, model)
-    labels = readdlm(joinpath(folder, statfiles[1]), ',', header=true)[2]
-    assemble_files(folder, statfiles, outfile, statlabels(labels), readstats)
-end
-
-"""
-    assemble_burst_sizes(folder, files, label, cond, model)
-
-Assemble burst size statistics into a single CSV file.
-
-# Arguments
-- `folder`: Directory containing result files
-- `files`: Array of result filenames
-- `label`: Label to match
-- `cond`: Condition to match
-- `model`: Model to match
-
-# Returns
-- Nothing, but writes burst file named "burst_{label}_{cond}_{model}.csv"
-
-# Notes
-- Creates output file with burst statistics header
-- Filters files to get only burst files matching the criteria
-- Header includes: Gene, BurstMean, BurstSD, BurstMedian, BurstMAD
-- Uses read_burst function to read burst size data
-- Calls assemble_files to combine all burst data
-"""
-function assemble_burst_sizes(folder, files, label, cond, model)
-    outfile = joinpath(folder, "burst_" * label * "_" * cond * "_" * model * ".csv")
-    assemble_files(folder, get_files(files, "burst", label, cond, model), outfile, ["Gene" "BurstMean" "BurstSD" "BurstMedian" "BurstMAD"], read_burst)
-end
 
