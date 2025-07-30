@@ -652,10 +652,10 @@ function set_trace_weight(traceinfo)
     if traceinfo[4] isa Vector
         weight = Float64[]
         for f in traceinfo[4]
-            push!(weight, (1 - f) / f)
+            push!(weight, max((1 - f) / f, 0.0))
         end
     else
-        weight = (1 - traceinfo[4]) / traceinfo[4]
+        weight = max((1 - traceinfo[4]) / traceinfo[4], 0.0)
     end
     return weight
 end
@@ -821,7 +821,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
     println("datacond: ", datacond)
     println("traceinfo: ", traceinfo)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
-    if length(traceinfo) > 3 && traceinfo[4] != 1.0
+    if length(traceinfo) > 3 && traceinfo[4] < 1.0
         weight = set_trace_weight(traceinfo)
         background = set_trace_background(traceinfo)
     else
