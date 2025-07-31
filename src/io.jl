@@ -2932,8 +2932,12 @@ Arguments:
 
 """
 function read_tracefile(path::String, start::Int, stop::Int, col=3)
-    t = readfile(path, col)
-    if stop < 0
+    t = readfile(path)
+    if size(t, 2) > 1 && col == 1
+        println("Warning: trace file has multiple columns, but col=1.")
+    end
+    t = t[:, col]
+    if stop < 0 || stop > length(t)
         (start <= length(t)) && return t[start:end]
     else
         (stop <= length(t)) && return t[start:stop]
