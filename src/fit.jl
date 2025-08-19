@@ -821,7 +821,7 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
     println("datacond: ", datacond)
     println("traceinfo: ", traceinfo)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
-    if length(traceinfo) > 3 && traceinfo[4] < 1.0
+    if length(traceinfo) > 3 && traceinfo[4] isa Number && traceinfo[4] < 1.0
         weight = set_trace_weight(traceinfo)
         background = set_trace_background(traceinfo)
     else
