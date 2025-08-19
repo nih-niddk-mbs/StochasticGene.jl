@@ -2953,7 +2953,7 @@ end
 
 read in a set of trace files 
 """
-function read_tracefiles(path::String, label::String, start::Int, stop::Int, col=3)
+function read_tracefiles(path::String, label::String, start::Int, stop::Int, col=3, uniquetrace::Bool=false)
     traces = Vector[]
     if isempty(path)
         return traces
@@ -2966,8 +2966,12 @@ function read_tracefiles(path::String, label::String, start::Int, stop::Int, col
                 end
             end
         end
-        set = sum.(traces)
-        return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+        if uniquetrace
+            set = sum.(traces)
+            return traces[unique(i -> set[i], eachindex(set))]  # only return unique traces
+        else
+            return traces
+        end
     end
 end
 """
