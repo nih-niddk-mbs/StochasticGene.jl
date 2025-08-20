@@ -825,15 +825,15 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
     println("datacond: ", datacond)
     println("traceinfo: ", traceinfo)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
-    weight = set_trace_weight(traceinfo)
-    background = set_trace_background(traceinfo)
-    # if length(traceinfo) > 3 && traceinfo[4] isa Number && traceinfo[4] < 1.0
-    #     weight = set_trace_weight(traceinfo)
-    #     background = set_trace_background(traceinfo)
-    # else
-    #     weight = 0.0
-    #     background = 0.0
-    # end
+    # weight = set_trace_weight(traceinfo)
+    # background = set_trace_background(traceinfo)
+    if length(traceinfo) < 4
+        weight = 0.0
+        background = 0.0
+    else
+        weight = set_trace_weight(traceinfo)
+        background = set_trace_background(traceinfo)
+    end
     if datatype == :trace || datatype == :tracejoint
         return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale))
     elseif datatype == :tracerna
