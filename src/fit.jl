@@ -649,15 +649,19 @@ Calculate trace weights from active fraction information.
 - Used for trace data weighting in likelihood calculations
 """
 function set_trace_weight(traceinfo)
-    if traceinfo[4] isa Vector
-        weight = Float64[]
-        for f in traceinfo[4]
-            push!(weight, max((1. - f) / f, 0.0))
-        end
+    if length(traceinfo) < 4
+        return 0.0
     else
-        weight = max((1. - traceinfo[4]) / traceinfo[4], 0.0)
+        if traceinfo[4] isa Vector
+            weight = Float64[]
+            for f in traceinfo[4]
+                push!(weight, max((1. - f) / f, 0.0))
+            end
+        else
+            weight = max((1. - traceinfo[4]) / traceinfo[4], 0.0)
+        end
+        return weight
     end
-    return weight
 end
 
 """
