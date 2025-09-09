@@ -80,7 +80,7 @@ end
 
 
 """
-    makeswarm_genes(genes::Vector{String}; <keyword arguments> )
+    makeswarm(genes::Vector{String}; <keyword arguments> )
 
 write a swarmfile and fit files to run all each gene in vector genes
 
@@ -583,6 +583,8 @@ end
 function checkgenes(root, cond::String, datapath::String, cell::String, thresholdlow::Float64, thresholdhigh::Float64)
     if cell == "HBEC"
         return genes_hbec()
+    elseif cell == ""
+        return get_genes(cond, datapath)
     else
         datapath = folder_path(datapath, root, "data")
         genes = intersect(get_halflives(root, cell, thresholdlow, thresholdhigh), get_genes(cond, datapath))
