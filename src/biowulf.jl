@@ -664,7 +664,11 @@ Retrieves the genes with halflives within the specified thresholds for a given c
 """
 function get_halflives(root, cell, thresholdlow::Float64, thresholdhigh::Float64)
     path = get_file(root, "data/halflives", cell, "csv")
-    get_halflives(path, thresholdlow, thresholdhigh)
+    if isnothing(path)
+        return nothing
+    else
+        get_halflives(path, thresholdlow, thresholdhigh)
+    end
 end
 
 """
