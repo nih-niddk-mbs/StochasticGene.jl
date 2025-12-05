@@ -2690,6 +2690,43 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, t
     return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
 end
 
+"""
+    data_covariance(traces, lags)
+
+Compute autocovariance and cross-covariance from trace data.
+
+# Arguments
+- `traces::Vector`: Vector of trace data, where each trace is a matrix with columns [enhancer, gene]
+- `lags::Vector{Int}`: Vector of time lags
+
+# Returns
+- `Tuple{Vector, Vector, Vector, Vector}`: (ac1, ac2, cov, lags)
+  - `ac1`: Autocovariance function for first trace (enhancer)
+  - `ac2`: Autocovariance function for second trace (gene)
+  - `cov`: Cross-covariance function between traces
+  - `lags`: Time lags (same as input)
+
+# Notes
+- Computes autocovariance for first and second traces
+- Computes cross-covariance between traces
+- Averages results across all traces
+- Uses `StatsBase.crosscov` with `demean=true` which:
+  - Removes mean (handles trends/drift)
+  - Only uses valid pairs (handles edge effects automatically)
+  - For lag τ, only uses pairs (t, t+τ) where both indices are valid
+- Edge effects are automatically handled by only computing covariances
+  for valid time pairs within each trace
+
+# Examples
+```julia
+# Compute covariance functions from trace data
+lags = collect(-60:1:60)
+ac1, ac2, cov, lags = data_covariance(traces, lags)
+
+# ac1, ac2: autocovariance functions
+# cov: cross-covariance function
+```
+"""
 function data_covariance(traces, lags)
     ac1 = zeros(length(lags))
     ac2 = zeros(length(lags))
@@ -2700,6 +2737,135 @@ function data_covariance(traces, lags)
         ac2 += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
     end
     ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
+end
+
+"""
+    crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
+
+Simulation-based goodness-of-fit test comparing empirical cross-covariance to model predictions.
+
+This function performs a comprehensive test by:
+1. Computing empirical cross-covariance from data traces
+2. Computing predicted cross-covariance from model parameters
+3. Simulating many traces from the model and computing their cross-covariances
+4. Comparing where the empirical cross-covariance falls in the simulation distribution
+
+# Arguments
+- `data_traces::Vector`: Vector of empirical trace data (matrices with columns [enhancer, gene])
+- `r::Vector`: Fitted rate parameters from the model
+- `transitions::Tuple`: Model transition structure
+- `G, R, S, insertstep`: Model structure parameters
+- `coupling::Tuple`: Coupling structure for coupled models
+- `interval::Float64`: Time interval between trace points
+- `probfn::Function`: Probability function for noise (e.g., `prob_Gaussian`)
+- `lags::Vector{Int}`: Time lags for cross-covariance calculation
+- `ntrials::Int=1000`: Number of simulation trials (default: 1000)
+- `trial_time::Float64=720.0`: Length of each simulated trace (default: 720.0 minutes)
+
+# Returns
+- `NamedTuple` with fields:
+  - `empirical_cc::Vector`: Empirical cross-covariance from data
+  - `predicted_cc::Vector`: Predicted cross-covariance from model
+  - `simulation_cc_mean::Vector`: Mean cross-covariance across simulations
+  - `simulation_cc_std::Vector`: Standard deviation of cross-covariance across simulations
+  - `simulation_cc_samples::Matrix`: All simulation cross-covariances (ntrials × length(lags))
+  - `lags::Vector`: Time lags
+  - `l2_norm::Float64`: L² norm of difference between empirical and predicted
+  - `linf_norm::Float64`: L∞ norm (max absolute difference)
+  - `pearson_corr::Float64`: Pearson correlation between empirical and predicted
+  - `percentile_rank::Float64`: Percentile rank of empirical L² norm in simulation distribution
+  - `p_value::Float64`: Two-tailed p-value (proportion of simulations with larger L² norm)
+
+# Notes
+- Uses `data_covariance` to compute empirical cross-covariance (handles edge effects and trends)
+- Uses `covariance_functions` to compute predicted cross-covariance
+- Simulates traces using `simulate_trace_vector` and computes cross-covariances
+- Accounts for finite-sample effects by comparing to simulation distribution
+- Edge effects and trends are automatically handled by `StatsBase.crosscov` with `demean=true`
+
+# Examples
+```julia
+# Perform goodness-of-fit test
+lags = collect(-60:1:60)
+results = crosscovariance_gof_test(
+    data_traces, fitted_rates, transitions, G, R, S, insertstep,
+    coupling, interval, prob_Gaussian, lags;
+    ntrials=1000, trial_time=720.0
+)
+
+# Check p-value
+println("P-value: ", results.p_value)
+println("Percentile rank: ", results.percentile_rank)
+
+# Visualize: empirical vs predicted vs simulation distribution
+using Plots
+plot(results.lags, results.empirical_cc, label="Empirical")
+plot!(results.lags, results.predicted_cc, label="Predicted")
+plot!(results.lags, results.simulation_cc_mean, ribbon=results.simulation_cc_std, 
+      label="Simulation mean ± std", alpha=0.3)
+```
+"""
+function crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
+    # 1. Compute empirical cross-covariance from data
+    _, _, empirical_cc, _ = data_covariance(data_traces, lags)
+    
+    # 2. Compute predicted cross-covariance from model
+    _, _, predicted_cc, _, _, _, _, _, _, _ = covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags[lags.>=0])
+    # Extend to negative lags (symmetric)
+    if any(lags.<0)
+        lags_positive = lags[lags.>=0]
+        predicted_cc_full = vcat(reverse(predicted_cc[2:end]), predicted_cc)
+    else
+        predicted_cc_full = predicted_cc
+    end
+    
+    # 3. Simulate many traces and compute their cross-covariances
+    simulation_cc_samples = zeros(ntrials, length(lags))
+    l2_norms = zeros(ntrials)
+    
+    for i in 1:ntrials
+        # Simulate a trace from the model
+        sim_trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, interval, trial_time, 1, col=2)
+        
+        # Compute cross-covariance from this simulation
+        _, _, sim_cc, _ = data_covariance(sim_trace, lags)
+        simulation_cc_samples[i, :] = sim_cc
+        
+        # Compute L² norm for this simulation
+        l2_norms[i] = sqrt(sum((sim_cc .- predicted_cc_full).^2))
+    end
+    
+    # 4. Compute statistics
+    simulation_cc_mean = vec(Statistics.mean(simulation_cc_samples, dims=1))
+    simulation_cc_std = vec(Statistics.std(simulation_cc_samples, dims=1))
+    
+    # Compare empirical to predicted
+    l2_norm = sqrt(sum((empirical_cc .- predicted_cc_full).^2))
+    linf_norm = maximum(abs.(empirical_cc .- predicted_cc_full))
+    
+    # Pearson correlation
+    pearson_corr = StatsBase.cor(empirical_cc, predicted_cc_full)
+    
+    # Percentile rank: where does empirical L² norm fall in simulation distribution?
+    percentile_rank = sum(l2_norms .<= l2_norm) / ntrials
+    
+    # Two-tailed p-value: proportion of simulations with larger or equal L² norm
+    # (more extreme than observed)
+    p_value = 2 * min(percentile_rank, 1.0 - percentile_rank)
+    
+    return (
+        empirical_cc=empirical_cc,
+        predicted_cc=predicted_cc_full,
+        simulation_cc_mean=simulation_cc_mean,
+        simulation_cc_std=simulation_cc_std,
+        simulation_cc_samples=simulation_cc_samples,
+        lags=lags,
+        l2_norm=l2_norm,
+        linf_norm=linf_norm,
+        pearson_corr=pearson_corr,
+        percentile_rank=percentile_rank,
+        p_value=p_value
+    )
 end
 
 """
@@ -3274,24 +3440,31 @@ compute_deviance("deviance_results.txt", "rates.txt", "control", 2, "data/", "."
 Compute autocovariance and cross-covariance from trace data.
 
 # Arguments
-- `traces::Vector`: Vector of trace data
+- `traces::Vector`: Vector of trace data, where each trace is a matrix with columns [enhancer, gene]
 - `lags::Vector{Int}`: Vector of time lags
 
 # Returns
 - `Tuple{Vector, Vector, Vector, Vector}`: (ac1, ac2, cov, lags)
+  - `ac1`: Autocovariance function for first trace (enhancer)
+  - `ac2`: Autocovariance function for second trace (gene)
+  - `cov`: Cross-covariance function between traces
+  - `lags`: Time lags (same as input)
 
 # Notes
 - Computes autocovariance for first and second traces
 - Computes cross-covariance between traces
 - Averages results across all traces
-- Uses StatsBase.crosscov for covariance calculations
-- Returns normalized covariance functions
-- Useful for analyzing temporal correlations in gene expression data
+- Uses `StatsBase.crosscov` with `demean=true` which:
+  - Removes mean (handles trends/drift)
+  - Only uses valid pairs (handles edge effects automatically)
+  - For lag τ, only uses pairs (t, t+τ) where both indices are valid
+- Edge effects are automatically handled by only computing covariances
+  for valid time pairs within each trace
 
 # Examples
 ```julia
 # Compute covariance functions from trace data
-lags = collect(0:10:100)
+lags = collect(-60:1:60)
 ac1, ac2, cov, lags = data_covariance(traces, lags)
 
 # ac1, ac2: autocovariance functions
