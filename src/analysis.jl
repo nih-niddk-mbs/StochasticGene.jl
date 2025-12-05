@@ -2538,9 +2538,9 @@ function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                ac1, ac2, cc, ac1f, ac2f, ccf, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                ac1, ac2, cc, ac1f, ac2f, ccf, ccON, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
-                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc, autocovariance1=ac1, autocovariance2=ac2, cc_normalized=ccf, ac1_normalized=ac1f, ac2_normalized=ac2f))
+                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc, autocovariance1=ac1, autocovariance2=ac2, cc_normalized=ccf, ac1_normalized=ac1f, ac2_normalized=ac2f, cc_ON=ccON))
             end
         end
     end

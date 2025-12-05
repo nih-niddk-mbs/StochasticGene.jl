@@ -2645,18 +2645,23 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
     max_intensity = Float64[]
+    ON = Vector[]
     for i in eachindex(noiseparams)
         mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
         mmax = max(maximum(mi), 1.0)
         push!(max_intensity, mmax)
         push!(mean_intensity, mi / mmax)
+        push!(ON, float(num_per_state[i] .> 0.0))
     end
     a, p0 = make_ap(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
+    mON1 = mean_hmm(p0, ON[1])
+    mON2 = mean_hmm(p0, ON[2])
 
     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+    ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
     v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
@@ -2664,8 +2669,8 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ac1 = vcat(reverse(ac1), ac1[2:end])
     ac2 = vcat(reverse(ac2), ac2[2:end])
     cc = vcat(reverse(cc21), cc12[2:end])
-
-    ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    ccON = vcat(reverse(ccON), ccON[2:end])
+    ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
 end
 
 """
