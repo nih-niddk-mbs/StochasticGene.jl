@@ -2626,7 +2626,7 @@ Compute covariance functions for coupled HMM model.
 - `interval`: Time interval
 - `probfn`: Probability function
 - `coupling`: Coupling parameters
-- `lags::Vector`: Time lags for covariance calculation
+- `lags::Vector`: Time lags for covariance calculation, positive direction, must start at 0
 
 # Returns
 - `Tuple`: (ac1, ac2, cc, ac1_norm, ac2_norm, cc_norm, lags_full, m1, m2, v1, v2) containing:
@@ -2637,40 +2637,160 @@ Compute covariance functions for coupled HMM model.
   - m1, m2: Mean intensities
   - v1, v2: Variances
 """
+# function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+#     # Ensure lags starts from 0 (required by crosscorfn_hmm)
+#     if !isempty(lags) && lags[1] != 0
+#         @warn "lags must start from 0, but got lags[1]=$(lags[1]). Prepending 0."
+#         lags = vcat([0], lags)
+#     end
+#     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+#     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+#     sourceStates = [c.sourceState for c in components.modelcomponents]
+#     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
+#     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+#     mean_intensity = Vector[]
+#     max_intensity = Float64[]
+#     ON = Vector[]
+#     for i in eachindex(noiseparams)
+#         mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
+#         mmax = max(maximum(mi), 1.0)
+#         push!(max_intensity, mmax)
+#         push!(mean_intensity, mi / mmax)
+#         push!(ON, float(num_per_state[i] .> 0.0))
+#     end
+#     a, p0 = make_ap(r, couplingStrength, interval, components)
+#     m1 = mean_hmm(p0, mean_intensity[1])
+#     m2 = mean_hmm(p0, mean_intensity[2])
+#     mON1 = mean_hmm(p0, ON[1])
+#     mON2 = mean_hmm(p0, ON[2])
+
+#     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+#     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+#     ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
+#     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
+#     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
+#     v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
+#     v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
+#     ac1 = vcat(reverse(ac1), ac1[2:end])
+#     ac2 = vcat(reverse(ac2), ac2[2:end])
+#     cc = vcat(reverse(cc21), cc12[2:end])
+#     ccON = vcat(reverse(ccON), ccON[2:end])
+#     ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+# end
+
+"""
+    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+
+Compute covariance functions for coupled HMM model.
+Matches Gillespie simulation by explicitly adding emission noise at tau=0.
+"""
 function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+    # 1. Sanity check: Lags must start at 0 and be sorted
+    if !issorted(lags)
+        sort!(lags)
+    end
+    if !isempty(lags) && lags[1] != 0
+        @warn "Lags must start from 0. Prepending 0."
+        lags = vcat([0], lags)
+    end
+
+    # 2. Setup Model Components
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+
+    # 3. Compute Moments for each State
     mean_intensity = Vector[]
+    var_intensity = Vector[]
     max_intensity = Float64[]
     ON = Vector[]
+
     for i in eachindex(noiseparams)
-        mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
+        # Get distribution objects (e.g., Normal, Poisson)
+        dists = probfn(noiseparams[i], num_per_state[i], components.N)
+        
+        mi = mean.(dists)       # Mean of emission in each state
+        vi = var.(dists)        # Variance of emission in each state (The Noise)
+        
         mmax = max(maximum(mi), 1.0)
         push!(max_intensity, mmax)
+        
         push!(mean_intensity, mi / mmax)
+        push!(var_intensity, vi / (mmax^2)) # Normalize variance
         push!(ON, float(num_per_state[i] .> 0.0))
     end
+
+    # 4. Solve for Steady State (p0) and Transition Matrix (a)
     a, p0 = make_ap(r, couplingStrength, interval, components)
+    
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
     mON1 = mean_hmm(p0, ON[1])
     mON2 = mean_hmm(p0, ON[2])
 
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
-    ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
-    v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
-    v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
-    ac1 = vcat(reverse(ac1), ac1[2:end])
-    ac2 = vcat(reverse(ac2), ac2[2:end])
-    cc = vcat(reverse(cc21), cc12[2:end])
-    ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    # 5. Compute "Switching" Covariances (Signal only)
+    #    This captures fluctuations due to states changing (Gene OFF <-> ON)
+    ac1 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags) .* (max_intensity[1]^2)
+    ac2 = crosscorfn_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags) .* (max_intensity[2]^2)
+    cc12 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) .* (max_intensity[1] * max_intensity[2])
+    cc21 = crosscorfn_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags) .* (max_intensity[1] * max_intensity[2])
+    ccON = crosscorfn_hmm(a, p0, ON[1], ON[2], lags)
+
+    # Center the covariances (Cov = E[XY] - E[X]E[Y])
+    ac1 .-= (m1 * max_intensity[1])^2
+    ac2 .-= (m2 * max_intensity[2])^2
+    cc12 .-= (m1 * m2 * max_intensity[1] * max_intensity[2])
+    cc21 .-= (m1 * m2 * max_intensity[1] * max_intensity[2])
+    ccON .-= (mON1 * mON2)
+
+    # 6. ADD THE SPIKE (Measurement/Shot Noise)
+    #    This is the "Law of Total Variance": Var(Total) = Var(Signal) + Mean(Noise)
+    #    We add this ONLY to the zero-lag bin (lags[1] == 0)
+    noise1 = sum(p0 .* var_intensity[1]) * max_intensity[1]^2
+    noise2 = sum(p0 .* var_intensity[2]) * max_intensity[2]^2
+    
+    ac1[1] += noise1
+    ac2[1] += noise2
+
+    # Total Variances (for normalization)
+    v1 = ac1[1]
+    v2 = ac2[1]
+
+    # 7. Format Outputs (Full symmetric vectors)
+    #    Note: We do NOT add noise to cross-covariance (cc) because noise is independent between channels
+    ac1_full = vcat(reverse(ac1), ac1[2:end])
+    ac2_full = vcat(reverse(ac2), ac2[2:end])
+    cc_full = vcat(reverse(cc21), cc12[2:end]) 
+    ccON_full = vcat(reverse(ccON), ccON[2:end])
+    lags_full = vcat(-reverse(lags), lags[2:end])
+
+    return ac1_full, ac2_full, cc_full, ac1_full ./ v1, ac2_full ./ v2, cc_full ./ sqrt(v1 * v2), ccON_full, lags_full, m1, m2, v1, v2
+end
+
+"""
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+Optimized computation of E[O(t) O'(t+tau)].
+Handles non-uniform lags correctly.
+"""
+function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    cc = zeros(Float64, length(lags))
+    m1 = meanintensity1 .* p0 
+    al = a^lags[1] 
+
+    for l in eachindex(lags)
+        # Compute E[O(0) O(tau)]
+        cc[l] = dot(m1, al * meanintensity2)
+
+        if l < length(lags)
+            dt = lags[l+1] - lags[l]
+            if dt > 0
+                al = al * (a^dt)
+            end
+        end
+    end
+    cc
 end
 
 """
@@ -2754,21 +2874,81 @@ Compute cross-correlation function between two intensity signals.
 # Returns
 - `Vector{Float64}`: Cross-correlation function at specified lags
 """
-function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
-    cc = zeros(length(lags))
-    m1 = meanintensity1 .* p0
-    al = a^lags[1]
-    as = a^(lags[2] - lags[1])
-    for l in eachindex(lags)
-        for i in eachindex(meanintensity1)
-            for j in eachindex(meanintensity2)
-                cc[l] += m1[i] * al[i, j] * meanintensity2[j]
-            end
-        end
-        al *= as
-    end
-    cc
-end
+# function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+#     cc = zeros(length(lags))
+#     m1 = meanintensity1 .* p0
+#     al = a^lags[1]
+#     as = a^(lags[2] - lags[1])
+#     for l in eachindex(lags)
+#         for i in eachindex(meanintensity1)
+#             for j in eachindex(meanintensity2)
+#                 # cc[l] += m1[i] * al[i, j] * meanintensity2[j]
+#                 cc[l] = dot(m1, al * meanintensity2)
+#             end
+#         end
+#         al *= as
+#     end
+#     cc
+# end
+
+
+# using LinearAlgebra
+
+# """
+#     crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+# Compute cross-correlation function between two intensity signals.
+# Optimized for performance and handles non-uniform lags correctly.
+
+# # Arguments
+# - `a`: Transition probability matrix (discrete step)
+# - `p0`: Initial state distribution
+# - `meanintensity1`: Mean intensity vector for first signal
+# - `meanintensity2`: Mean intensity vector for second signal
+# - `lags`: Vector of integer time lags (must be sorted ascending)
+
+# # Returns
+# - `Vector{Float64}`: Cross-correlation function at specified lags
+# """
+# function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+#     # Ensure lags are sorted to allow incremental matrix propagation
+#     if !issorted(lags)
+#         error("Lags must be sorted in ascending order for this implementation.")
+#     end
+
+#     cc = zeros(Float64, length(lags))
+    
+#     # Pre-calculate the probability mass weighted by intensity 1
+#     # equivalent to (g1 .* pi) in derivation
+#     m1 = meanintensity1 .* p0 
+    
+#     # Initialize propagator to the first lag
+#     # If lags[1] == 0, a^0 is Identity, which is handled correctly by Julia
+#     al = a^lags[1] 
+
+#     for l in eachindex(lags)
+#         # 1. Compute Correlation: m1' * Propagator * m2
+#         # optimized via dot product: sum(m1 .* (al * meanintensity2))
+#         cc[l] = dot(m1, al * meanintensity2)
+
+#         # 2. Advance propagator to the NEXT lag
+#         # Only do this if there is a next lag to process
+#         if l < length(lags)
+#             dt = lags[l+1] - lags[l]
+#             if dt < 0 
+#                 error("Negative time step detected.")
+#             elseif dt == 0
+#                 # If duplicate lags exist, we just continue without multiplying
+#                 continue
+#             else
+#                 # Multiply current propagator by the step difference
+#                 al = al * (a^dt)
+#             end
+#         end
+#     end
+    
+#     return cc
+# end
 
 
 """
