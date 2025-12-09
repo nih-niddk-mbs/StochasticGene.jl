@@ -744,7 +744,8 @@ For R > 0, intensity is the number of reporters in the nascent mRNA
 """
 function intensity(state, G, R, S, d)
     stateindex = state_index(state, G, R, S)
-    max(rand(d[stateindex]), 0)
+    # max(rand(d[stateindex]), 0)
+    rand(d[stateindex])
 end
 
 """
