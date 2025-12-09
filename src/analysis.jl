@@ -2643,158 +2643,52 @@ Simulate multiple trials of a gene expression system and compare with theoretica
 - `trial_time`: Total simulation time (default: 720.0)
 
 # Returns
-- NamedTuple containing:
-    - `linf_norm::Vector`: L-infinity norms between theory and simulation for each trial
-    - `l2_norm::Vector`: L2 norms between theory and simulation for each trial
-    - `cc_theory::Vector`: Theoretical cross-covariance (target that mean should converge to)
-    - `cc_mean::Vector`: Mean cross-covariance across trials (estimate of true mean)
-    - `cc_median::Vector`: Median of bootstrap means (≈ cc_mean, converges to theory as ntrials → ∞)
-    - `cc_lower::Vector`: 2.5th percentile of bootstrap means (lower 95% CI on mean estimate)
-    - `cc_upper::Vector`: 97.5th percentile of bootstrap means (upper 95% CI on mean estimate)
-    - `cc_std::Vector`: Standard deviation of individual trial cross-covariances
-    - `cc_se::Vector`: Standard error of the mean (cc_std / sqrt(ntrials), shrinks as 1/sqrt(n))
-    - `lags::Vector`: Time lags for cross-covariance
-    - `ac1_mean::Vector`, `ac1_median::Vector`, `ac1_lower::Vector`, `ac1_upper::Vector`: Autocovariance 1 statistics (same structure)
-    - `ac1_theory::Vector`: Theoretical autocovariance 1
-    - `ac2_mean::Vector`, `ac2_median::Vector`, `ac2_lower::Vector`, `ac2_upper::Vector`: Autocovariance 2 statistics (same structure)
-    - `ac2_theory::Vector`: Theoretical autocovariance 2
-
-# Notes
-- Uses bootstrap resampling to compute confidence intervals on the mean estimate
-- As `ntrials` increases, `cc_se` (standard error) shrinks as 1/sqrt(ntrials)
-- The mean (`cc_mean`) should converge to the theoretical value (`cc_theory`) as ntrials → ∞
-- Confidence intervals (`cc_lower`, `cc_upper`) represent uncertainty in the mean estimate, not the distribution of individual trials
+- Tuple containing:
+    1. `(linf_norm, l2_norm)`: L-infinity and L2 norms between theory and simulation
+    2. `cc_theory`: Theoretical steady-state value
+    3. `cc_simulated`: Array of maximum values from each trial
+    4. `running_means`: Running mean of simulated values
+    5. `running_errors`: Running standard errors of the mean
 
 # Example
 ```julia
 ntrials = 100
-results = simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time=720.0)
-
-# Access results
-plot(results.lags, results.cc_median, ribbon=(results.cc_median .- results.cc_lower, results.cc_upper .- results.cc_median),
-     label="Simulation (median ± 95% CI)", linewidth=2)
-plot!(results.lags, results.cc_theory, label="Theoretical", linewidth=2, linestyle=:dash)
-```
+(norms, theory, sims, means, errors) = simulate_trials(r, trans, G, R, S, 0.1, ntrials)
+plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
 """
 
-
-
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian, interval=1.0)
-    # 1. Get Theory AND Theoretical Means (m1, m2)
-    # We unpack the means m1, m2 which were previously ignored
-    ac1, ac2, cc, _, _, cc_norm, _, lags_theory, m1, m2, _, _ = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, collect(0:stride:lag))
-    
-    lags_sim = collect(-lag:stride:lag)
-    lags_ac = collect(0:stride:lag)
-    
-    # Match lags
-    if length(lags_theory) != length(lags_sim) || !all(lags_theory .== lags_sim)
-        ac1_matched = [ac1[argmin(abs.(lags_theory .- lag))] for lag in lags_sim]
-        ac2_matched = [ac2[argmin(abs.(lags_theory .- lag))] for lag in lags_sim]
-        cc_matched = [cc[argmin(abs.(lags_theory .- lag))] for lag in lags_sim]
-    else
-        ac1_matched = ac1
-        ac2_matched = ac2
-        cc_matched = cc
-    end
-    
-    ac1_theory_pos = [ac1_matched[findfirst(==(l), lags_sim)] for l in lags_ac]
-    ac2_theory_pos = [ac2_matched[findfirst(==(l), lags_sim)] for l in lags_ac]
-    
-    # Pass m1, m2 to the inner function
-    simulate_trials(ac1_theory_pos, ac2_theory_pos, cc_matched, r, transitions, G, R, S, insertstep, coupling, ntrials, m1, m2, trial_time, lag, stride, 2, interval)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
+    _, _, _, _, ac1, ac2, cc_theory, _ = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:stride:lag))
+    simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag, stride)
 end
 
-function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, m1::Float64, m2::Float64, trial_time::Float64=720.0, lag=60, stride=1, col=2, interval=1.0)
+function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time::Float64=720.0, lag=60, stride=1, col=2)
     lags = collect(-lag:stride:lag)
+    cc_mean = zeros(length(lags))
+    cc_var = zeros(length(lags))
     lags_ac = collect(0:stride:lag)
-    
-    cc_samples = zeros(ntrials, length(lags))
-    ac1_samples = zeros(ntrials, length(lags_ac))
-    ac2_samples = zeros(ntrials, length(lags_ac))
-    
+    ac1_mean = zeros(length(lags_ac))
+    ac1_var = zeros(length(lags_ac))
+    ac2_mean = zeros(length(lags_ac))
+    ac2_var = zeros(length(lags_ac))
     linf_norm = Float64[]
     l2_norm = Float64[]
-    
+    ac1tuple = (0, ac1_mean, ac1_var)
+    ac2tuple = (0, ac2_mean, ac2_var)
+    vartuple = (0, cc_mean, cc_var)
     for n in 1:ntrials
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, interval, trial_time, 1, col=col)
-        
-        # --- THE FIX ---
-        # 1. Use demean=false to get the raw correlation E[XY]
-        # 2. Subtract the THEORETICAL mean product (m1 * m2)
-        # This aligns the simulation estimator with the theoretical definition
-        
-        # Cross-covariance
-        raw_cc = StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=false)
-        cc_trial = raw_cc .- (m1 * m2)
-
-        # Autocovariances (centered by theoretical mean m1^2 or m2^2)
-        raw_ac1 = StatsBase.autocov(t[1][:, 1], collect(0:stride:lag), demean=false)
-        ac1_trial = raw_ac1 .- m1^2
-        
-        raw_ac2 = StatsBase.autocov(t[1][:, 2], collect(0:stride:lag), demean=false)
-        ac2_trial = raw_ac2 .- m2^2
-        # ---------------
-        
-        cc_samples[n, :] = cc_trial
-        ac1_samples[n, :] = ac1_trial
-        ac2_samples[n, :] = ac2_trial
-        
-        push!(linf_norm, maximum(abs.(cc_theory .- cc_trial)))
-        push!(l2_norm, sqrt(sum((cc_theory .- cc_trial) .^ 2)))
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=col)
+        vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
+        ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:stride:lag), demean=true))
+        ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:stride:lag), demean=true))
+        push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
+        push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
     end
-    
-    # ... (rest of the bootstrap and statistics logic remains the same) ...
-    
-    cc_mean = vec(mean(cc_samples, dims=1))
-    ac1_mean = vec(mean(ac1_samples, dims=1))
-    ac2_mean = vec(mean(ac2_samples, dims=1))
-
-    # Bootstrap Logic ...
-    n_bootstrap = min(1000, ntrials * 10)
-    cc_bootstrap_means = zeros(n_bootstrap, length(lags))
-    ac1_bootstrap_means = zeros(n_bootstrap, length(lags_ac))
-    ac2_bootstrap_means = zeros(n_bootstrap, length(lags_ac))
-    
-    for b in 1:n_bootstrap
-        bootstrap_indices = rand(1:ntrials, ntrials)
-        cc_bootstrap_means[b, :] = vec(mean(cc_samples[bootstrap_indices, :], dims=1))
-        ac1_bootstrap_means[b, :] = vec(mean(ac1_samples[bootstrap_indices, :], dims=1))
-        ac2_bootstrap_means[b, :] = vec(mean(ac2_samples[bootstrap_indices, :], dims=1))
-    end
-
-    cc_std = vec(std(cc_samples, dims=1))
-    cc_se = cc_std ./ sqrt(ntrials)
-    cc_median = cc_mean
-    
-    cc_lower = zeros(length(lags))
-    cc_upper = zeros(length(lags))
-    for i in 1:length(lags)
-        cc_lower[i] = quantile(cc_bootstrap_means[:, i], 0.025)
-        cc_upper[i] = quantile(cc_bootstrap_means[:, i], 0.975)
-    end
-
-    cc_lower_se = cc_mean .- 1.96 .* cc_se
-    cc_upper_se = cc_mean .+ 1.96 .* cc_se
-    
-    ac1_median = ac1_mean
-    ac1_lower = [quantile(ac1_bootstrap_means[:, i], 0.025) for i in 1:length(lags_ac)]
-    ac1_upper = [quantile(ac1_bootstrap_means[:, i], 0.975) for i in 1:length(lags_ac)]
-    
-    ac2_median = ac2_mean
-    ac2_lower = [quantile(ac2_bootstrap_means[:, i], 0.025) for i in 1:length(lags_ac)]
-    ac2_upper = [quantile(ac2_bootstrap_means[:, i], 0.975) for i in 1:length(lags_ac)]
-    
-    return (linf_norm=linf_norm, l2_norm=l2_norm, cc_theory=cc_theory, 
-            cc_mean=cc_mean, cc_median=cc_median, 
-            cc_lower=cc_lower, cc_upper=cc_upper, 
-            cc_lower_se=cc_lower_se, cc_upper_se=cc_upper_se,
-            cc_std=cc_std, cc_se=cc_se,
-            lags=lags, 
-            ac1_mean=ac1_mean, ac1_median=ac1_median, ac1_lower=ac1_lower, ac1_upper=ac1_upper, ac1_theory=ac1_theory,
-            ac2_mean=ac2_mean, ac2_median=ac2_median, ac2_lower=ac2_lower, ac2_upper=ac2_upper, ac2_theory=ac2_theory)
+    counts, cc_mean, cc_var = vartuple
+    counts1, ac1_mean, ac1_var = ac1tuple
+    counts2, ac2_mean, ac2_var = ac2tuple
+    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
 end
-
 
 """
     data_covariance(traces, lags)
@@ -2846,149 +2740,132 @@ function data_covariance(traces, lags)
 end
 
 """
-    compare_coupling_models(resultfolder::String, data_traces::Vector, lags::Vector{Int}, interval::Float64=1.0, zeromedian::Bool=true; metric::Symbol=:l2_norm)
+    crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
 
-Compare coupling models by reading pre-computed theoretical cross-correlations and comparing them to empirical cross-correlations.
+Simulation-based goodness-of-fit test comparing empirical cross-covariance to model predictions.
+
+This function performs a comprehensive test by:
+1. Computing empirical cross-covariance from data traces
+2. Computing predicted cross-covariance from model parameters
+3. Simulating many traces from the model and computing their cross-covariances
+4. Comparing where the empirical cross-covariance falls in the simulation distribution
 
 # Arguments
-- `resultfolder::String`: Path to results folder containing crosscovariance CSV files
-- `data_traces::Vector{Matrix{Float64}}`: Vector of trace matrices (each matrix has columns for different channels)
-- `lags::Vector{Int}`: Time lags for cross-correlation comparison
-- `interval::Float64=1.0`: Time interval between frames
-- `zeromedian::Bool=true`: Whether to zero-median and scale traces (same as fitting)
-- `metric::Symbol=:l2_norm`: Comparison metric (`:l2_norm`, `:linf_norm`, `:pearson_corr`, `:aic_like`)
+- `data_traces::Vector`: Vector of empirical trace data (matrices with columns [enhancer, gene])
+- `r::Vector`: Fitted rate parameters from the model
+- `transitions::Tuple`: Model transition structure
+- `G, R, S, insertstep`: Model structure parameters
+- `coupling::Tuple`: Coupling structure for coupled models
+- `interval::Float64`: Time interval between trace points
+- `probfn::Function`: Probability function for noise (e.g., `prob_Gaussian`)
+- `lags::Vector{Int}`: Time lags for cross-covariance calculation
+- `ntrials::Int=1000`: Number of simulation trials (default: 1000)
+- `trial_time::Float64=720.0`: Length of each simulated trace (default: 720.0 minutes)
 
 # Returns
-- `DataFrame`: DataFrame with columns: filename, l2_norm, linf_norm, pearson_corr, aic_like, ranked by metric
+- `NamedTuple` with fields:
+  - `empirical_cc::Vector`: Empirical cross-covariance from data
+  - `predicted_cc::Vector`: Predicted cross-covariance from model
+  - `simulation_cc_mean::Vector`: Mean cross-covariance across simulations
+  - `simulation_cc_std::Vector`: Standard deviation of cross-covariance across simulations
+  - `simulation_cc_samples::Matrix`: All simulation cross-covariances (ntrials × length(lags))
+  - `lags::Vector`: Time lags
+  - `l2_norm::Float64`: L² norm of difference between empirical and predicted
+  - `linf_norm::Float64`: L∞ norm (max absolute difference)
+  - `pearson_corr::Float64`: Pearson correlation between empirical and predicted
+  - `percentile_rank::Float64`: Percentile rank of empirical L² norm in simulation distribution
+  - `p_value::Float64`: Two-tailed p-value (proportion of simulations with larger L² norm)
 
 # Notes
-- Scans for `crosscovariance_*.csv` files in the results folder
-- Reads pre-computed theoretical cross-correlations (cc_normalized column)
-- Computes empirical cross-correlations from provided data traces
-- Compares them using specified metric
-- Returns results sorted by best fit (lowest L2/L∞ or highest Pearson correlation)
+- Uses `data_covariance` to compute empirical cross-covariance (handles edge effects and trends)
+- Uses `covariance_functions` to compute predicted cross-covariance
+- Simulates traces using `simulate_trace_vector` and computes cross-covariances
+- Accounts for finite-sample effects by comparing to simulation distribution
+- Edge effects and trends are automatically handled by `StatsBase.crosscov` with `demean=true`
 
 # Examples
 ```julia
-# Compare models using L2 norm
-results = compare_coupling_models("results/", traces, collect(-10:10), interval=5/3)
+# Perform goodness-of-fit test
+lags = collect(-60:1:60)
+results = crosscovariance_gof_test(
+    data_traces, fitted_rates, transitions, G, R, S, insertstep,
+    coupling, interval, prob_Gaussian, lags;
+    ntrials=1000, trial_time=720.0
+)
 
-# Compare using Pearson correlation
-results = compare_coupling_models("results/", traces, collect(-10:10), metric=:pearson_corr)
+# Check p-value
+println("P-value: ", results.p_value)
+println("Percentile rank: ", results.percentile_rank)
+
+# Visualize: empirical vs predicted vs simulation distribution
+using Plots
+plot(results.lags, results.empirical_cc, label="Empirical")
+plot!(results.lags, results.predicted_cc, label="Predicted")
+plot!(results.lags, results.simulation_cc_mean, ribbon=results.simulation_cc_std, 
+      label="Simulation mean ± std", alpha=0.3)
 ```
 """
-function compare_coupling_models(resultfolder::String, data_traces::Vector, lags::Vector{Int}, interval::Float64=1.0, zeromedian::Bool=true; metric::Symbol=:l2_norm)
-    # Find all crosscovariance CSV files
-    cov_files = String[]
-    for (root, dirs, files) in walkdir(resultfolder)
-        for f in files
-            if occursin("crosscovariance", f) && endswith(f, ".csv")
-                push!(cov_files, joinpath(root, f))
-            end
-        end
-    end
+function crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
+    # 1. Compute empirical cross-covariance from data
+    _, _, empirical_cc, _ = data_covariance(data_traces, lags)
     
-    if isempty(cov_files)
-        @warn "No crosscovariance CSV files found in $resultfolder"
-        return DataFrame()
-    end
-    
-    println("Found $(length(cov_files)) crosscovariance files")
-    
-    # Preprocess empirical traces
-    if zeromedian
-        medians = [median(t, dims=1) for t in data_traces]
-        scale = max.(1., maximum(vcat(medians...), dims=1))
-        processed_traces = similar(data_traces)
-        for i in eachindex(data_traces)
-            processed_traces[i] = (data_traces[i] .- medians[i]) ./ scale
-        end
+    # 2. Compute predicted cross-covariance from model
+    _, _, predicted_cc, _, _, _, _, _, _, _ = covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags[lags.>=0])
+    # Extend to negative lags (symmetric)
+    if any(lags.<0)
+        lags_positive = lags[lags.>=0]
+        predicted_cc_full = vcat(reverse(predicted_cc[2:end]), predicted_cc)
     else
-        processed_traces = data_traces
+        predicted_cc_full = predicted_cc
     end
     
-    # Compute empirical cross-correlation once
-    ac1_emp, ac2_emp, empirical_cc, _ = data_covariance(processed_traces, lags)
-    lag0_idx = findfirst(==(0), lags)
-    if lag0_idx !== nothing
-        var1_emp = ac1_emp[lag0_idx]
-        var2_emp = ac2_emp[lag0_idx]
-    else
-        var1_emp = maximum(ac1_emp)
-        var2_emp = maximum(ac2_emp)
-    end
-    empirical_cc_norm = empirical_cc ./ sqrt(max(var1_emp * var2_emp, 1e-10))
+    # 3. Simulate many traces and compute their cross-covariances
+    simulation_cc_samples = zeros(ntrials, length(lags))
+    l2_norms = zeros(ntrials)
     
-    # Compare each theoretical cross-correlation file
-    results = []
-    for cov_file in cov_files
-        try
-            # Read theoretical cross-correlations
-            df_cov = CSV.read(cov_file, DataFrame)
-            
-            # Check if required columns exist
-            if !("cc_normalized" in names(df_cov)) || !("tau" in names(df_cov))
-                @warn "File $cov_file missing required columns (cc_normalized or tau)"
-                continue
-            end
-            
-            # Interpolate theoretical cross-correlation to match input lags
-            tau_theory = df_cov.tau
-            cc_theory = df_cov.cc_normalized
-            
-            # Map theoretical lags to input lags (find closest match)
-            theoretical_cc_norm = [cc_theory[argmin(abs.(tau_theory .- lag))] for lag in lags]
-            
-            # Ensure same length
-            if length(theoretical_cc_norm) != length(empirical_cc_norm)
-                @warn "Length mismatch in $cov_file: theoretical=$(length(theoretical_cc_norm)), empirical=$(length(empirical_cc_norm))"
-                continue
-            end
-            
-            # Compute comparison metrics
-            l2_norm = sqrt(sum((empirical_cc_norm .- theoretical_cc_norm).^2))
-            linf_norm = maximum(abs.(empirical_cc_norm .- theoretical_cc_norm))
-            pearson_corr = StatsBase.cor(empirical_cc_norm, theoretical_cc_norm)
-            
-            # AIC-like metric: penalize by number of parameters (approximate as 2 * number of rate files)
-            # Lower is better: L2_norm + penalty
-            # For simplicity, use a fixed penalty or estimate from model complexity
-            # Here we use L2_norm as the main term, can be adjusted
-            aic_like = l2_norm  # Can add penalty term if needed
-            
-            push!(results, (
-                filename=basename(cov_file),
-                filepath=cov_file,
+    for i in 1:ntrials
+        # Simulate a trace from the model
+        sim_trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, interval, trial_time, 1, col=2)
+        
+        # Compute cross-covariance from this simulation
+        _, _, sim_cc, _ = data_covariance(sim_trace, lags)
+        simulation_cc_samples[i, :] = sim_cc
+        
+        # Compute L² norm for this simulation
+        l2_norms[i] = sqrt(sum((sim_cc .- predicted_cc_full).^2))
+    end
+    
+    # 4. Compute statistics
+    simulation_cc_mean = vec(Statistics.mean(simulation_cc_samples, dims=1))
+    simulation_cc_std = vec(Statistics.std(simulation_cc_samples, dims=1))
+    
+    # Compare empirical to predicted
+    l2_norm = sqrt(sum((empirical_cc .- predicted_cc_full).^2))
+    linf_norm = maximum(abs.(empirical_cc .- predicted_cc_full))
+    
+    # Pearson correlation
+    pearson_corr = StatsBase.cor(empirical_cc, predicted_cc_full)
+    
+    # Percentile rank: where does empirical L² norm fall in simulation distribution?
+    percentile_rank = sum(l2_norms .<= l2_norm) / ntrials
+    
+    # Two-tailed p-value: proportion of simulations with larger or equal L² norm
+    # (more extreme than observed)
+    p_value = 2 * min(percentile_rank, 1.0 - percentile_rank)
+    
+    return (
+        empirical_cc=empirical_cc,
+        predicted_cc=predicted_cc_full,
+        simulation_cc_mean=simulation_cc_mean,
+        simulation_cc_std=simulation_cc_std,
+        simulation_cc_samples=simulation_cc_samples,
+        lags=lags,
         l2_norm=l2_norm,
         linf_norm=linf_norm,
         pearson_corr=pearson_corr,
-                aic_like=aic_like
-            ))
-        catch e
-            @warn "Error processing $cov_file: $e"
-            continue
-        end
-    end
-    
-    if isempty(results)
-        @warn "No valid results computed"
-        return DataFrame()
-    end
-    
-    # Convert to DataFrame
-    df_results = DataFrame(results)
-    
-    # Sort by metric (lower is better for L2/L∞/AIC, higher is better for Pearson)
-    if metric == :pearson_corr
-        sort!(df_results, :pearson_corr, rev=true)
-    else
-        sort!(df_results, metric)
-    end
-    
-    # Add rank column
-    df_results.rank = 1:nrow(df_results)
-    
-    return df_results
+        percentile_rank=percentile_rank,
+        p_value=p_value
+    )
 end
 
 """

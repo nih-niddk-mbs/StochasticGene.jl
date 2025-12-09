@@ -2664,6 +2664,8 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
+    ac1 = autocov_hmm(a, p0, mean_intensity[1], lags) * max_intensity[1]^2
+    ac2 = autocov_hmm(a, p0, mean_intensity[2], lags) * max_intensity[2]^2
     v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
     v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
     ac1 = vcat(reverse(ac1), ac1[2:end])
@@ -2696,7 +2698,13 @@ function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags
     components = TComponents(transitions, G, R, S, insertstep, "")
     mean_intensity = mean.(probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT))
     a, p0 = make_ap(r, interval, components)
-    crosscov_hmm(a, p0, mean_intensity, mean_intensity, lags) .- mean_hmm(p0, mean_intensity) .^ 2
+    autocov_hmm(a, p0, mean_intensity, lags)
+end
+
+function autocov_hmm(a, p0, meanintensity, lags)
+    ac = crosscov_hmm(a, p0, meanintensity, meanintensity, lags)
+    ac[1] = sum(p0 .* (meanintensity .^ 2))
+    ac .- mean_hmm(p0, meanintensity) .^ 2
 end
 
 """
