@@ -2643,51 +2643,190 @@ Simulate multiple trials of a gene expression system and compare with theoretica
 - `trial_time`: Total simulation time (default: 720.0)
 
 # Returns
-- Tuple containing:
-    1. `(linf_norm, l2_norm)`: L-infinity and L2 norms between theory and simulation
-    2. `cc_theory`: Theoretical steady-state value
-    3. `cc_simulated`: Array of maximum values from each trial
-    4. `running_means`: Running mean of simulated values
-    5. `running_errors`: Running standard errors of the mean
+- Named tuple with fields:
+    - `linf_norm`: L-infinity norms between theory and simulation (one per trial)
+    - `l2_norm`: L2 norms between theory and simulation (one per trial)
+    - `cc_theory`: Theoretical cross-covariance function
+    - `cc_mean`: Mean cross-covariance from simulations
+    - `cc_se`: Standard error of cross-covariance mean
+    - `lags`: Time lags
+    - `ac1_mean`: Mean autocovariance for first trace from simulations
+    - `ac1_theory`: Theoretical autocovariance for first trace
+    - `ac2_mean`: Mean autocovariance for second trace from simulations
+    - `ac2_theory`: Theoretical autocovariance for second trace
 
 # Example
 ```julia
 ntrials = 100
-(norms, theory, sims, means, errors) = simulate_trials(r, trans, G, R, S, 0.1, ntrials)
-plot(1:ntrials, errors, ylabel="Standard Error", xlabel="Number of Trials")
+result = simulate_trials(r, trans, G, R, S, insertstep, coupling, ntrials)
+plot(1:ntrials, result.l2_norm, ylabel="L2 Norm", xlabel="Number of Trials")
+plot(result.lags, result.cc_mean, label="Simulated")
+plot!(result.lags, result.cc_theory, label="Theoretical")
+```
 """
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
-    _, _, _, _, ac1, ac2, cc_theory, _ = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, collect(0:stride:lag))
-    simulate_trials(ac1, ac2, cc_theory, r, transitions, G, R, S, insertstep, coupling, ntrials, trial_time, lag, stride)
+    positive_lags = collect(0:stride:lag)
+    ac1, ac2, cc, _, full_lags, m1, m2, v1, v2 = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags)
+    # ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, r, transitions, G, R, S, insertstep, coupling, positive_lags, full_lags, ntrials, trial_time)
 end
 
-function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time::Float64=720.0, lag=60, stride=1, col=2)
-    lags = collect(-lag:stride:lag)
-    cc_mean = zeros(length(lags))
-    cc_var = zeros(length(lags))
-    lags_ac = collect(0:stride:lag)
-    ac1_mean = zeros(length(lags_ac))
-    ac1_var = zeros(length(lags_ac))
-    ac2_mean = zeros(length(lags_ac))
-    ac2_var = zeros(length(lags_ac))
-    linf_norm = Float64[]
-    l2_norm = Float64[]
-    ac1tuple = (0, ac1_mean, ac1_var)
-    ac2tuple = (0, ac2_mean, ac2_var)
-    vartuple = (0, cc_mean, cc_var)
-    for n in 1:ntrials
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=col)
-        vartuple = var_update(vartuple, StatsBase.crosscov(t[1][:, 1], t[1][:, 2], lags, demean=true))
-        ac1tuple = var_update(ac1tuple, StatsBase.autocov(t[1][:, 1], collect(0:stride:lag), demean=true))
-        ac2tuple = var_update(ac2tuple, StatsBase.autocov(t[1][:, 2], collect(0:stride:lag), demean=true))
-        push!(linf_norm, maximum(abs.(cc_theory .- vartuple[2])))
-        push!(l2_norm, sqrt(sum((cc_theory .- vartuple[2]) .^ 2)))
+function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, m1, m2, v1, v2, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0, col=2)
+    # lags = collect(-lags[end]:stride:lags[end])
+    # Store per-trial results for parallel processing and bootstrap
+    mean1_trials = Vector{Float64}(undef, ntrials)
+    mean2_trials = Vector{Float64}(undef, ntrials)
+    cc_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
+    ac1_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
+    ac2_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
+    trace1_trials = Vector{Vector{Float64}}(undef, ntrials)  # Store per-trial traces for variance
+    trace2_trials = Vector{Vector{Float64}}(undef, ntrials)
+    
+    # Parallel processing: run trials concurrently
+    # With 1 thread, this runs sequentially with minimal overhead
+    Threads.@threads for n in 1:ntrials
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time+100., 1, col=col)
+        trace1 = t[1][100:end, 1]
+        trace2 = t[1][100:end, 2]
+        
+        # Store traces for variance calculation (no locking needed - each thread writes to different index)
+        trace1_trials[n] = trace1
+        trace2_trials[n] = trace2
+        
+        # Compute per-trial means for bootstrap
+        mean1_trials[n] = mean(trace1)
+        mean2_trials[n] = mean(trace2)
+        
+        # Compute raw cross-correlation and autocorrelations WITHOUT demeaning
+        # We'll accumulate these and subtract the overall empirical mean at the end
+        cc_raw_trials[n] = StatsBase.crosscov(trace1, trace2, lags, demean=false)
+        ac1_raw_trials[n] = StatsBase.autocov(trace1, lags_ac, demean=false)
+        ac2_raw_trials[n] = StatsBase.autocov(trace2, lags_ac, demean=false)
     end
-    counts, cc_mean, cc_var = vartuple
-    counts1, ac1_mean, ac1_var = ac1tuple
-    counts2, ac2_mean, ac2_var = ac2tuple
-    return linf_norm, l2_norm, cc_theory, cc_mean, sqrt.(cc_var ./ (counts - 1) ./ counts), lags, ac1_mean, ac1_theory, ac2_mean, ac2_theory
+    
+    # Compute all statistics from stored results (no online updates needed)
+    # Combine all traces for overall mean and variance
+    trace1_all = vcat(trace1_trials...)
+    trace2_all = vcat(trace2_trials...)
+    mean1 = mean(trace1_all)
+    mean2 = mean(trace2_all)
+    var1 = var(trace1_all)
+    var2 = var(trace2_all)
+    
+    # Compute mean of raw moments across trials (element-wise)
+    cc_raw_mean = [mean([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]
+    ac1_raw_mean = [mean([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    ac2_raw_mean = [mean([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    
+    # Compute variance (standard error) of raw moments across trials
+    cc_var = [var([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]
+    ac1_var = [var([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    ac2_var = [var([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    
+    # Standard error of the mean
+    mean1_se = sqrt(var1 / length(trace1_all))
+    mean2_se = sqrt(var2 / length(trace2_all))
+    
+    # Bootstrap confidence intervals for means (handles non-normal distributions)
+    n_bootstrap = 10000
+    mean1_bootstrap = Float64[]
+    mean2_bootstrap = Float64[]
+    for _ in 1:n_bootstrap
+        # Resample with replacement from per-trial means
+        bootstrap_sample = StatsBase.sample(mean1_trials, length(mean1_trials), replace=true)
+        push!(mean1_bootstrap, mean(bootstrap_sample))
+        bootstrap_sample = StatsBase.sample(mean2_trials, length(mean2_trials), replace=true)
+        push!(mean2_bootstrap, mean(bootstrap_sample))
+    end
+    mean1_lower = quantile(mean1_bootstrap, 0.025)
+    mean1_median = median(mean1_bootstrap)
+    mean1_upper = quantile(mean1_bootstrap, 0.975)
+    mean2_lower = quantile(mean2_bootstrap, 0.025)
+    mean2_median = median(mean2_bootstrap)
+    mean2_upper = quantile(mean2_bootstrap, 0.975)
+    
+    # Keep SE for backward compatibility, but bootstrap intervals are more reliable for non-normal data
+    mean1_se = length(trace1_all) > 1 ? sqrt(var1 / length(trace1_all)) : 0.0
+    mean2_se = length(trace2_all) > 1 ? sqrt(var2 / length(trace2_all)) : 0.0
+    
+    # Subtract overall empirical means at the end to get cross-covariance and autocovariance
+    # This ensures consistency: E[xy] - E[x]E[y] where all expectations are empirical
+    cc_mean = cc_raw_mean .- (mean1 * mean2)
+    ac1_mean = ac1_raw_mean .- (mean1^2)
+    ac2_mean = ac2_raw_mean .- (mean2^2)
+    
+    # Bootstrap confidence intervals for covariance functions (handles non-normal distributions)
+    # For each lag, bootstrap resample trials and compute percentiles
+    n_bootstrap_cov = 10000
+    # Use thread-local storage to avoid contention
+    nthreads = Threads.nthreads()
+    cc_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    ac1_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]
+    ac2_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]
+    
+    # Parallel bootstrap loop
+    Threads.@threads for b in 1:n_bootstrap_cov
+        thread_id = Threads.threadid()
+        # Resample trials with replacement
+        bootstrap_trials = StatsBase.sample(1:ntrials, ntrials, replace=true)
+        
+        # Compute bootstrap means from resampled trials
+        bootstrap_mean1 = mean([mean1_trials[i] for i in bootstrap_trials])
+        bootstrap_mean2 = mean([mean2_trials[i] for i in bootstrap_trials])
+        
+        # Compute bootstrap raw moments
+        bootstrap_cc_raw = [mean([cc_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags)]
+        bootstrap_ac1_raw = [mean([ac1_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+        bootstrap_ac2_raw = [mean([ac2_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+        
+        # Compute bootstrap covariances (mean-subtracted)
+        bootstrap_cc = bootstrap_cc_raw .- (bootstrap_mean1 * bootstrap_mean2)
+        bootstrap_ac1 = bootstrap_ac1_raw .- (bootstrap_mean1^2)
+        bootstrap_ac2 = bootstrap_ac2_raw .- (bootstrap_mean2^2)
+        
+        # Store bootstrap values for each lag in thread-local arrays
+        for j in 1:length(lags)
+            push!(cc_bootstrap_threads[thread_id][j], bootstrap_cc[j])
+        end
+        for j in 1:length(lags_ac)
+            push!(ac1_bootstrap_threads[thread_id][j], bootstrap_ac1[j])
+            push!(ac2_bootstrap_threads[thread_id][j], bootstrap_ac2[j])
+        end
+    end
+    
+    # Combine thread-local results
+    cc_bootstrap = [Float64[] for _ in 1:length(lags)]
+    ac1_bootstrap = [Float64[] for _ in 1:length(lags_ac)]
+    ac2_bootstrap = [Float64[] for _ in 1:length(lags_ac)]
+    for t in 1:nthreads
+        for j in 1:length(lags)
+            append!(cc_bootstrap[j], cc_bootstrap_threads[t][j])
+        end
+        for j in 1:length(lags_ac)
+            append!(ac1_bootstrap[j], ac1_bootstrap_threads[t][j])
+            append!(ac2_bootstrap[j], ac2_bootstrap_threads[t][j])
+        end
+    end
+    
+    # Compute percentiles for each lag
+    cc_lower = [quantile(cc_bootstrap[j], 0.025) for j in 1:length(lags)]
+    cc_median = [median(cc_bootstrap[j]) for j in 1:length(lags)]
+    cc_upper = [quantile(cc_bootstrap[j], 0.975) for j in 1:length(lags)]
+    ac1_lower = [quantile(ac1_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
+    ac1_median = [median(ac1_bootstrap[j]) for j in 1:length(lags_ac)]
+    ac1_upper = [quantile(ac1_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
+    ac2_lower = [quantile(ac2_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
+    ac2_median = [median(ac2_bootstrap[j]) for j in 1:length(lags_ac)]
+    ac2_upper = [quantile(ac2_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
+    
+    # Compute norms from final mean-subtracted covariances
+    linf_norm = [maximum(abs.(cc_theory .- cc_mean))]
+    l2_norm = [sqrt(sum((cc_theory .- cc_mean) .^ 2))]
+    
+    # Standard error of cross-covariance (variance of mean across trials)
+    cc_se = sqrt.(cc_var ./ ntrials)
+    return (linf_norm=linf_norm, l2_norm=l2_norm, cc_theory=cc_theory, cc_mean=cc_mean, cc_se=cc_se, cc_lower=cc_lower, cc_median=cc_median, cc_upper=cc_upper, lags=lags, ac1_mean=ac1_mean, ac1_theory=ac1_theory, ac1_lower=ac1_lower, ac1_median=ac1_median, ac1_upper=ac1_upper, ac2_mean=ac2_mean, ac2_theory=ac2_theory, ac2_lower=ac2_lower, ac2_median=ac2_median, ac2_upper=ac2_upper, mean1=mean1, mean2=mean2, mean1_se=mean1_se, mean2_se=mean2_se, mean1_lower=mean1_lower, mean1_median=mean1_median, mean1_upper=mean1_upper, mean2_lower=mean2_lower, mean2_median=mean2_median, mean2_upper=mean2_upper, var1=var1, var2=var2, m1=m1, m2=m2, v1=v1, v2=v2)
 end
 
 """

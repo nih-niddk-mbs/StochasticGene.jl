@@ -2626,7 +2626,7 @@ Compute covariance functions for coupled HMM model.
 - `interval`: Time interval
 - `probfn`: Probability function
 - `coupling`: Coupling parameters
-- `lags::Vector`: Time lags for covariance calculation
+- `lags::Vector`: Time lags for covariance calculation, monotonic increasing from 0
 
 # Returns
 - `Tuple`: (ac1, ac2, cc, ac1_norm, ac2_norm, cc_norm, lags_full, m1, m2, v1, v2) containing:
@@ -2644,13 +2644,66 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
+    second_moment_intensity = Vector[]  # E[O^2|state] for each state
+    # max_intensity = Float64[]
+    ON = Vector[]
+    for i in eachindex(noiseparams)
+        dists = probfn(noiseparams[i], num_per_state[i], components.N)
+        mi = mean.(dists)  # E[O|state]
+        vi = var.(dists)   # Var(O|state)
+        # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
+        second_moment = vi .+ mi.^2
+        # mmax = max(maximum(mi), 1.0)
+        # push!(max_intensity, mmax)
+        push!(mean_intensity, mi)
+        # Normalize second moment by mmax^2 to match normalized mean_intensity
+        push!(second_moment_intensity, second_moment)
+        push!(ON, float(num_per_state[i] .> 0.0))
+    end
+    a, p0 = make_ap(r, couplingStrength, interval, components)
+    m1 = mean_hmm(p0, mean_intensity[1])
+    m2 = mean_hmm(p0, mean_intensity[2])
+    mON1 = mean_hmm(p0, ON[1])
+    mON2 = mean_hmm(p0, ON[2])
+
+    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) 
+    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
+    ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
+    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) 
+    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) 
+    ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
+    ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
+    
+    # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
+    v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2)
+    v2 = (sum(p0 .* second_moment_intensity[2]) - m2^2)
+
+    cc = vcat(reverse(cc21), cc12[2:end])
+    ccON = vcat(reverse(ccON), ccON[2:end])
+    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+end
+
+function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    sourceStates = [c.sourceState for c in components.modelcomponents]
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
+    num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    mean_intensity = Vector[]
+    second_moment_intensity = Vector[]  # E[O^2|state] for each state
     max_intensity = Float64[]
     ON = Vector[]
     for i in eachindex(noiseparams)
-        mi = mean.(probfn(noiseparams[i], num_per_state[i], components.N))
+        dists = probfn(noiseparams[i], num_per_state[i], components.N)
+        mi = mean.(dists)  # E[O|state]
+        vi = var.(dists)   # Var(O|state)
+        # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
+        second_moment = vi .+ mi.^2
         mmax = max(maximum(mi), 1.0)
         push!(max_intensity, mmax)
         push!(mean_intensity, mi / mmax)
+        # Normalize second moment by mmax^2 to match normalized mean_intensity
+        push!(second_moment_intensity, second_moment / (mmax^2))
         push!(ON, float(num_per_state[i] .> 0.0))
     end
     a, p0 = make_ap(r, couplingStrength, interval, components)
@@ -2664,15 +2717,19 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
-    ac1 = autocov_hmm(a, p0, mean_intensity[1], lags) * max_intensity[1]^2
-    ac2 = autocov_hmm(a, p0, mean_intensity[2], lags) * max_intensity[2]^2
-    v1 = variance_hmm(p0, mean_intensity[1]) * max_intensity[1]^2
-    v2 = variance_hmm(p0, mean_intensity[2]) * max_intensity[2]^2
-    ac1 = vcat(reverse(ac1), ac1[2:end])
-    ac2 = vcat(reverse(ac2), ac2[2:end])
+    ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) * max_intensity[1]^2
+    ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags) * max_intensity[2]^2
+    # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
+    v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2) * max_intensity[1]^2
+    v2 = (sum(p0 .* second_moment_intensity[2]) - m2^2) * max_intensity[2]^2
+    # Scale means back to original scale (m1 and m2 are computed on normalized scale)
+    m1_scaled = m1 * max_intensity[1]
+    m2_scaled = m2 * max_intensity[2]
+    # ac1 = vcat(reverse(ac1), ac1[2:end])
+    # ac2 = vcat(reverse(ac2), ac2[2:end])
     cc = vcat(reverse(cc21), cc12[2:end])
     ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1_scaled, m2_scaled, v1, v2
 end
 
 """
@@ -2696,14 +2753,22 @@ Compute autocovariance function for HMM model.
 """
 function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
     components = TComponents(transitions, G, R, S, insertstep, "")
-    mean_intensity = mean.(probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT))
+    dists = probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT)
+    mean_intensity = mean.(dists)
+    vi = var.(dists)
+    # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
+    second_moment_intensity = vi .+ mean_intensity.^2
     a, p0 = make_ap(r, interval, components)
-    autocov_hmm(a, p0, mean_intensity, lags)
+    autocov_hmm(a, p0, mean_intensity, second_moment_intensity, lags)
 end
 
-function autocov_hmm(a, p0, meanintensity, lags)
-    ac = crosscov_hmm(a, p0, meanintensity, meanintensity, lags)
-    ac[1] = sum(p0 .* (meanintensity .^ 2))
+function autocov_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+    # For autocovariance: E[X(t)X(t+τ)] - E[X]^2
+    # At lag 0 (t=t'): E[X^2] - E[X]^2 = Var(X)
+    # We need E[X^2] = sum(p0 .* second_moment_intensity), not sum(p0 .* meanintensity^2)
+    ac = crosscorfn_hmm(a, p0, meanintensity, meanintensity, lags)
+    # At lag 0, use the actual second moment (includes noise variance)
+    ac[1] = sum(p0 .* second_moment_intensity)
     ac .- mean_hmm(p0, meanintensity) .^ 2
 end
 
@@ -2791,9 +2856,9 @@ Compute variance of intensity signal under HMM model.
 # Returns
 - `Float64`: Variance of the intensity signal
 """
-function variance_hmm(p0, meanintensity)
-    sum(p0 .* (meanintensity .^ 2)) - mean_hmm(p0, meanintensity) .^ 2
-end
+# function variance_hmm(p0, meanintensity)
+#     sum(p0 .* (meanintensity .^ 2)) - mean_hmm(p0, meanintensity) .^ 2
+# end
 
 """
     mean_hmm(p0, meanintensity)
