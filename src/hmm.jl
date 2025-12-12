@@ -2674,13 +2674,17 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
     ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
     
+    # ON state autocovariances: For binary ON/OFF, ON^2 = ON, so second moment = ON itself
+    ac1ON = autocov_hmm(a, p0, ON[1], ON[1], lags)
+    ac2ON = autocov_hmm(a, p0, ON[2], ON[2], lags)
+    
     # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
     v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2)
     v2 = (sum(p0 .* second_moment_intensity[2]) - m2^2)
 
     cc = vcat(reverse(cc21), cc12[2:end])
     ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
+    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON
 end
 
 function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)

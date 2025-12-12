@@ -632,11 +632,25 @@ function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, cou
             r[hierarchical[1]] = hierarchical[2][i]
         end
         t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=0, verbose=verbose)[1]
-        tr = Vector[]
-        for t in t
-            tr = push!(tr, t[1:end-1, col])
+        if col isa Vector
+            # When col is a vector, extract multiple columns and combine them
+            tr = Vector[]
+            for t in t
+                extracted = t[1:end-1, col]  # This is a Matrix when col is a vector
+                # Convert each column to a vector and push them
+                for j in 1:size(extracted, 2)
+                    push!(tr, extracted[:, j])
+                end
+            end
+            trace[i] = hcat(tr...)
+        else
+            # When col is a scalar, extract single column
+            tr = Vector[]
+            for t in t
+                push!(tr, t[1:end-1, col])
+            end
+            trace[i] = hcat(tr...)
         end
-        trace[i] = hcat(tr...)
     end
     trace
 end

@@ -2538,9 +2538,13 @@ function write_cov(folder, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                ac1, ac2, cc, ac1f, ac2f, ccf, ccON, tau, _, _, _, _ = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                ac1, ac2, cc, ccON, tau, m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
-                CSV.write(out, DataFrame(tau=tau, crosscovariance=cc, autocovariance1=ac1, autocovariance2=ac2, cc_normalized=ccf, ac1_normalized=ac1f, ac2_normalized=ac2f, cc_ON=ccON))
+                ac1 = ac1/v1
+                ac2 = ac2/v2
+                ac1ON = ac1ON/mON1^2
+                ac2ON = ac2ON/mON2^2
+                CSV.write(out, DataFrame(tau=tau, crosscorrelation=cc/sqrt(v1*v2), autocor1=[reverse(ac1); ac1[2:end]], autocor2=[reverse(ac2); ac2[2:end]], cc_ON=ccON/mON1/mON2, ac1_ON=[reverse(ac1ON); ac1ON[2:end]], ac2_ON=[reverse(ac2ON); ac2ON[2:end]]))
             end
         end
     end
@@ -2667,62 +2671,108 @@ plot!(result.lags, result.cc_theory, label="Theoretical")
 
 function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
     positive_lags = collect(0:stride:lag)
-    ac1, ac2, cc, _, full_lags, m1, m2, v1, v2 = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags)
-    # ac1, ac2, cc, ac1 / v1, ac2 / v2, cc / sqrt(v1 * v2), ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2
-    simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, r, transitions, G, R, S, insertstep, coupling, positive_lags, full_lags, ntrials, trial_time)
+    # Get both intensity and ON/OFF cross-covariances and autocovariances
+    ac1, ac2, cc, ccON, full_lags, m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags)
+    # Use ccON (ON/OFF cross-covariance) and ac1ON/ac2ON (ON/OFF autocovariances) for comparison
+    simulate_trials(ac1, ac2, cc, ac1ON, ac2ON, ccON, mON1, mON2, v1, v2, r, transitions, G, R, S, insertstep, coupling, positive_lags, full_lags, ntrials, trial_time)
 end
 
-function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, m1, m2, v1, v2, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0, col=2)
-    # lags = collect(-lags[end]:stride:lags[end])
+function simulate_trials(ac1, ac2, cc, ac1ON, ac2ON, ccON, mON1, mON2, v1, v2, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0)
     # Store per-trial results for parallel processing and bootstrap
+    # Need to compute 6 covariance sets: intensity (AC1, AC2, CC) and ON state (AC1, AC2, CC)
     mean1_trials = Vector{Float64}(undef, ntrials)
     mean2_trials = Vector{Float64}(undef, ntrials)
-    cc_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
-    ac1_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
-    ac2_raw_trials = Vector{Vector{Float64}}(undef, ntrials)
+    mean1_intensity_trials = Vector{Float64}(undef, ntrials)  # Intensity means
+    mean2_intensity_trials = Vector{Float64}(undef, ntrials)  # Intensity means
+    cc_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # ON state CC
+    cc_intensity_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # Intensity CC
+    ac1_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # Intensity AC
+    ac2_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # Intensity AC
+    ac1ON_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # ON state AC
+    ac2ON_raw_trials = Vector{Vector{Float64}}(undef, ntrials)  # ON state AC
     trace1_trials = Vector{Vector{Float64}}(undef, ntrials)  # Store per-trial traces for variance
     trace2_trials = Vector{Vector{Float64}}(undef, ntrials)
+    trace1_intensity_trials = Vector{Vector{Float64}}(undef, ntrials)  # Store intensity traces for AC
+    trace2_intensity_trials = Vector{Vector{Float64}}(undef, ntrials)
     
     # Parallel processing: run trials concurrently
     # With 1 thread, this runs sequentially with minimal overhead
     Threads.@threads for n in 1:ntrials
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time+100., 1, col=col)
-        trace1 = t[1][100:end, 1]
-        trace2 = t[1][100:end, 2]
+        # Get traces with col=[2,3] returns matrix with columns: [intensity1, reporters1, intensity2, reporters2]
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time+100., 1, col=[2,3])
+        
+        # Extract from the combined trace matrix (skip warmup period)
+        # t[1] is a matrix with columns: [intensity1, reporters1, intensity2, reporters2]
+        trace_data = t[1][100:end, :]
+        
+        # Extract intensity traces (columns 1 and 3)
+        trace1_intensity = trace_data[:, 1]  # Intensity for component 1 (enhancer)
+        trace2_intensity = trace_data[:, 3]  # Intensity for component 2 (gene)
+        
+        # Extract reporter traces (columns 2 and 4) and convert to binary ON/OFF
+        reporters1 = trace_data[:, 2]  # Reporters for component 1 (enhancer)
+        reporters2 = trace_data[:, 4]  # Reporters for component 2 (gene)
+        trace1_ON = Float64.(reporters1 .> 0.0)  # Binary ON/OFF for enhancer (reporter > 0)
+        trace2_ON = Float64.(reporters2 .> 0.0)  # Binary ON/OFF for gene (reporter > 0)
         
         # Store traces for variance calculation (no locking needed - each thread writes to different index)
-        trace1_trials[n] = trace1
-        trace2_trials[n] = trace2
+        trace1_trials[n] = trace1_ON
+        trace2_trials[n] = trace2_ON
+        trace1_intensity_trials[n] = trace1_intensity
+        trace2_intensity_trials[n] = trace2_intensity
         
         # Compute per-trial means for bootstrap
-        mean1_trials[n] = mean(trace1)
-        mean2_trials[n] = mean(trace2)
+        mean1_trials[n] = mean(trace1_ON)  # ON state mean (fraction ON)
+        mean2_trials[n] = mean(trace2_ON)  # ON state mean (fraction ON)
+        mean1_intensity_trials[n] = mean(trace1_intensity)  # Intensity mean
+        mean2_intensity_trials[n] = mean(trace2_intensity)  # Intensity mean
         
-        # Compute raw cross-correlation and autocorrelations WITHOUT demeaning
-        # We'll accumulate these and subtract the overall empirical mean at the end
-        cc_raw_trials[n] = StatsBase.crosscov(trace1, trace2, lags, demean=false)
-        ac1_raw_trials[n] = StatsBase.autocov(trace1, lags_ac, demean=false)
-        ac2_raw_trials[n] = StatsBase.autocov(trace2, lags_ac, demean=false)
+        # Compute raw cross-correlations and autocorrelations WITHOUT demeaning
+        # ON state correlations
+        cc_raw_trials[n] = StatsBase.crosscov(trace1_ON, trace2_ON, lags, demean=false)  # ON state CC
+        ac1ON_raw_trials[n] = StatsBase.autocov(trace1_ON, lags_ac, demean=false)  # ON state AC1
+        ac2ON_raw_trials[n] = StatsBase.autocov(trace2_ON, lags_ac, demean=false)  # ON state AC2
+        # Intensity correlations
+        cc_intensity_raw_trials[n] = StatsBase.crosscov(trace1_intensity, trace2_intensity, lags, demean=false)  # Intensity CC
+        ac1_raw_trials[n] = StatsBase.autocov(trace1_intensity, lags_ac, demean=false)  # Intensity AC1
+        ac2_raw_trials[n] = StatsBase.autocov(trace2_intensity, lags_ac, demean=false)  # Intensity AC2
     end
     
     # Compute all statistics from stored results (no online updates needed)
     # Combine all traces for overall mean and variance
+    # ON state traces
     trace1_all = vcat(trace1_trials...)
     trace2_all = vcat(trace2_trials...)
-    mean1 = mean(trace1_all)
-    mean2 = mean(trace2_all)
+    mean1 = mean(trace1_all)  # ON state mean (fraction ON)
+    mean2 = mean(trace2_all)  # ON state mean (fraction ON)
     var1 = var(trace1_all)
     var2 = var(trace2_all)
     
+    # Intensity traces
+    trace1_intensity_all = vcat(trace1_intensity_trials...)
+    trace2_intensity_all = vcat(trace2_intensity_trials...)
+    mean1_intensity = mean(trace1_intensity_all)  # Intensity mean
+    mean2_intensity = mean(trace2_intensity_all)  # Intensity mean
+    var1_intensity = var(trace1_intensity_all)
+    var2_intensity = var(trace2_intensity_all)
+    
     # Compute mean of raw moments across trials (element-wise)
-    cc_raw_mean = [mean([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]
-    ac1_raw_mean = [mean([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
-    ac2_raw_mean = [mean([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    # ON state correlations
+    cc_raw_mean = [mean([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]  # ON state CC
+    ac1ON_raw_mean = [mean([ac1ON_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC1
+    ac2ON_raw_mean = [mean([ac2ON_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC2
+    # Intensity correlations
+    cc_intensity_raw_mean = [mean([cc_intensity_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]  # Intensity CC
+    ac1_raw_mean = [mean([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC1
+    ac2_raw_mean = [mean([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC2
     
     # Compute variance (standard error) of raw moments across trials
-    cc_var = [var([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]
-    ac1_var = [var([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
-    ac2_var = [var([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+    cc_var = [var([cc_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]  # ON state CC variance
+    cc_intensity_var = [var([cc_intensity_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags)]  # Intensity CC variance
+    ac1_var = [var([ac1_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC1 variance
+    ac2_var = [var([ac2_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC2 variance
+    ac1ON_var = [var([ac1ON_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC1 variance
+    ac2ON_var = [var([ac2ON_raw_trials[i][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC2 variance
     
     # Standard error of the mean
     mean1_se = sqrt(var1 / length(trace1_all))
@@ -2730,15 +2780,21 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, m1, m2, v1, 
     
     # Bootstrap confidence intervals for means (handles non-normal distributions)
     n_bootstrap = 10000
-    mean1_bootstrap = Float64[]
-    mean2_bootstrap = Float64[]
-    for _ in 1:n_bootstrap
+    # Use thread-local storage to avoid contention
+    nthreads_mean = Threads.nthreads()
+    mean1_bootstrap_threads = [Float64[] for _ in 1:nthreads_mean]
+    mean2_bootstrap_threads = [Float64[] for _ in 1:nthreads_mean]
+    Threads.@threads for _ in 1:n_bootstrap
+        thread_id = Threads.threadid()
         # Resample with replacement from per-trial means
         bootstrap_sample = StatsBase.sample(mean1_trials, length(mean1_trials), replace=true)
-        push!(mean1_bootstrap, mean(bootstrap_sample))
+        push!(mean1_bootstrap_threads[thread_id], mean(bootstrap_sample))
         bootstrap_sample = StatsBase.sample(mean2_trials, length(mean2_trials), replace=true)
-        push!(mean2_bootstrap, mean(bootstrap_sample))
+        push!(mean2_bootstrap_threads[thread_id], mean(bootstrap_sample))
     end
+    # Combine thread-local results
+    mean1_bootstrap = vcat(mean1_bootstrap_threads...)
+    mean2_bootstrap = vcat(mean2_bootstrap_threads...)
     mean1_lower = quantile(mean1_bootstrap, 0.025)
     mean1_median = median(mean1_bootstrap)
     mean1_upper = quantile(mean1_bootstrap, 0.975)
@@ -2752,18 +2808,26 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, m1, m2, v1, 
     
     # Subtract overall empirical means at the end to get cross-covariance and autocovariance
     # This ensures consistency: E[xy] - E[x]E[y] where all expectations are empirical
-    cc_mean = cc_raw_mean .- (mean1 * mean2)
-    ac1_mean = ac1_raw_mean .- (mean1^2)
-    ac2_mean = ac2_raw_mean .- (mean2^2)
+    # ON state correlations
+    cc_mean = cc_raw_mean .- (mean1 * mean2)  # ON state CC
+    ac1ON_mean = ac1ON_raw_mean .- (mean1^2)  # ON state AC1
+    ac2ON_mean = ac2ON_raw_mean .- (mean2^2)  # ON state AC2
+    # Intensity correlations
+    cc_intensity_mean = cc_intensity_raw_mean .- (mean1_intensity * mean2_intensity)  # Intensity CC
+    ac1_mean = ac1_raw_mean .- (mean1_intensity^2)  # Intensity AC1
+    ac2_mean = ac2_raw_mean .- (mean2_intensity^2)  # Intensity AC2
     
     # Bootstrap confidence intervals for covariance functions (handles non-normal distributions)
     # For each lag, bootstrap resample trials and compute percentiles
     n_bootstrap_cov = 10000
     # Use thread-local storage to avoid contention
     nthreads = Threads.nthreads()
-    cc_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
-    ac1_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]
-    ac2_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]
+    cc_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]  # ON state CC
+    cc_intensity_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]  # Intensity CC
+    ac1_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]  # Intensity AC
+    ac2_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]  # Intensity AC
+    ac1ON_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]  # ON state AC
+    ac2ON_bootstrap_threads = [[Float64[] for _ in 1:length(lags_ac)] for _ in 1:nthreads]  # ON state AC
     
     # Parallel bootstrap loop
     Threads.@threads for b in 1:n_bootstrap_cov
@@ -2772,61 +2836,118 @@ function simulate_trials(ac1_theory, ac2_theory, cc_theory::Vector, m1, m2, v1, 
         bootstrap_trials = StatsBase.sample(1:ntrials, ntrials, replace=true)
         
         # Compute bootstrap means from resampled trials
-        bootstrap_mean1 = mean([mean1_trials[i] for i in bootstrap_trials])
-        bootstrap_mean2 = mean([mean2_trials[i] for i in bootstrap_trials])
+        bootstrap_mean1 = mean([mean1_trials[i] for i in bootstrap_trials])  # ON state mean
+        bootstrap_mean2 = mean([mean2_trials[i] for i in bootstrap_trials])  # ON state mean
+        bootstrap_mean1_intensity = mean([mean1_intensity_trials[i] for i in bootstrap_trials])  # Intensity mean
+        bootstrap_mean2_intensity = mean([mean2_intensity_trials[i] for i in bootstrap_trials])  # Intensity mean
         
         # Compute bootstrap raw moments
-        bootstrap_cc_raw = [mean([cc_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags)]
-        bootstrap_ac1_raw = [mean([ac1_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
-        bootstrap_ac2_raw = [mean([ac2_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]
+        bootstrap_cc_raw = [mean([cc_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags)]  # ON state CC
+        bootstrap_cc_intensity_raw = [mean([cc_intensity_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags)]  # Intensity CC
+        bootstrap_ac1_raw = [mean([ac1_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC
+        bootstrap_ac2_raw = [mean([ac2_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # Intensity AC
+        bootstrap_ac1ON_raw = [mean([ac1ON_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC
+        bootstrap_ac2ON_raw = [mean([ac2ON_raw_trials[bootstrap_trials[i]][j] for i in 1:ntrials]) for j in 1:length(lags_ac)]  # ON state AC
         
         # Compute bootstrap covariances (mean-subtracted)
-        bootstrap_cc = bootstrap_cc_raw .- (bootstrap_mean1 * bootstrap_mean2)
-        bootstrap_ac1 = bootstrap_ac1_raw .- (bootstrap_mean1^2)
-        bootstrap_ac2 = bootstrap_ac2_raw .- (bootstrap_mean2^2)
+        # Use GLOBAL all-trial means for centering to match main computation
+        bootstrap_cc = bootstrap_cc_raw .- (mean1 * mean2)  # ON state CC (unnormalized, centered by global mean)
+        # Normalize by GLOBAL all-trial means for consistency
+        bootstrap_cc_normalized = bootstrap_cc ./ (mean1 * mean2)  # ON state CC (normalized by global mean)
+        bootstrap_cc_intensity = bootstrap_cc_intensity_raw .- (mean1_intensity * mean2_intensity)  # Intensity CC (centered by global mean)
+        bootstrap_ac1 = bootstrap_ac1_raw .- (mean1_intensity^2)  # Intensity AC1 (centered by global mean)
+        bootstrap_ac2 = bootstrap_ac2_raw .- (mean2_intensity^2)  # Intensity AC2 (centered by global mean)
+        bootstrap_ac1ON = bootstrap_ac1ON_raw .- (mean1^2)  # ON state AC1 (centered by global mean)
+        bootstrap_ac2ON = bootstrap_ac2ON_raw .- (mean2^2)  # ON state AC2 (centered by global mean)
         
         # Store bootstrap values for each lag in thread-local arrays
         for j in 1:length(lags)
-            push!(cc_bootstrap_threads[thread_id][j], bootstrap_cc[j])
+            push!(cc_bootstrap_threads[thread_id][j], bootstrap_cc_normalized[j])  # ON state CC (normalized)
+            push!(cc_intensity_bootstrap_threads[thread_id][j], bootstrap_cc_intensity[j])  # Intensity CC
         end
         for j in 1:length(lags_ac)
-            push!(ac1_bootstrap_threads[thread_id][j], bootstrap_ac1[j])
-            push!(ac2_bootstrap_threads[thread_id][j], bootstrap_ac2[j])
+            push!(ac1_bootstrap_threads[thread_id][j], bootstrap_ac1[j])  # Intensity AC1
+            push!(ac2_bootstrap_threads[thread_id][j], bootstrap_ac2[j])  # Intensity AC2
+            push!(ac1ON_bootstrap_threads[thread_id][j], bootstrap_ac1ON[j])  # ON state AC1
+            push!(ac2ON_bootstrap_threads[thread_id][j], bootstrap_ac2ON[j])  # ON state AC2
         end
     end
     
     # Combine thread-local results
-    cc_bootstrap = [Float64[] for _ in 1:length(lags)]
-    ac1_bootstrap = [Float64[] for _ in 1:length(lags_ac)]
-    ac2_bootstrap = [Float64[] for _ in 1:length(lags_ac)]
+    cc_bootstrap = [Float64[] for _ in 1:length(lags)]  # ON state CC
+    cc_intensity_bootstrap = [Float64[] for _ in 1:length(lags)]  # Intensity CC
+    ac1_bootstrap = [Float64[] for _ in 1:length(lags_ac)]  # Intensity AC1
+    ac2_bootstrap = [Float64[] for _ in 1:length(lags_ac)]  # Intensity AC2
+    ac1ON_bootstrap = [Float64[] for _ in 1:length(lags_ac)]  # ON state AC1
+    ac2ON_bootstrap = [Float64[] for _ in 1:length(lags_ac)]  # ON state AC2
     for t in 1:nthreads
         for j in 1:length(lags)
-            append!(cc_bootstrap[j], cc_bootstrap_threads[t][j])
+            append!(cc_bootstrap[j], cc_bootstrap_threads[t][j])  # ON state CC
+            append!(cc_intensity_bootstrap[j], cc_intensity_bootstrap_threads[t][j])  # Intensity CC
         end
         for j in 1:length(lags_ac)
-            append!(ac1_bootstrap[j], ac1_bootstrap_threads[t][j])
-            append!(ac2_bootstrap[j], ac2_bootstrap_threads[t][j])
+            append!(ac1_bootstrap[j], ac1_bootstrap_threads[t][j])  # Intensity AC1
+            append!(ac2_bootstrap[j], ac2_bootstrap_threads[t][j])  # Intensity AC2
+            append!(ac1ON_bootstrap[j], ac1ON_bootstrap_threads[t][j])  # ON state AC1
+            append!(ac2ON_bootstrap[j], ac2ON_bootstrap_threads[t][j])  # ON state AC2
         end
     end
     
     # Compute percentiles for each lag
+    # ON state CC
     cc_lower = [quantile(cc_bootstrap[j], 0.025) for j in 1:length(lags)]
     cc_median = [median(cc_bootstrap[j]) for j in 1:length(lags)]
     cc_upper = [quantile(cc_bootstrap[j], 0.975) for j in 1:length(lags)]
+    # Intensity CC
+    cc_intensity_lower = [quantile(cc_intensity_bootstrap[j], 0.025) for j in 1:length(lags)]
+    cc_intensity_median = [median(cc_intensity_bootstrap[j]) for j in 1:length(lags)]
+    cc_intensity_upper = [quantile(cc_intensity_bootstrap[j], 0.975) for j in 1:length(lags)]
+    # Intensity AC
     ac1_lower = [quantile(ac1_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
     ac1_median = [median(ac1_bootstrap[j]) for j in 1:length(lags_ac)]
     ac1_upper = [quantile(ac1_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
     ac2_lower = [quantile(ac2_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
     ac2_median = [median(ac2_bootstrap[j]) for j in 1:length(lags_ac)]
     ac2_upper = [quantile(ac2_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
+    # ON state AC
+    ac1ON_lower = [quantile(ac1ON_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
+    ac1ON_median = [median(ac1ON_bootstrap[j]) for j in 1:length(lags_ac)]
+    ac1ON_upper = [quantile(ac1ON_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
+    ac2ON_lower = [quantile(ac2ON_bootstrap[j], 0.025) for j in 1:length(lags_ac)]
+    ac2ON_median = [median(ac2ON_bootstrap[j]) for j in 1:length(lags_ac)]
+    ac2ON_upper = [quantile(ac2ON_bootstrap[j], 0.975) for j in 1:length(lags_ac)]
     
     # Compute norms from final mean-subtracted covariances
-    linf_norm = [maximum(abs.(cc_theory .- cc_mean))]
-    l2_norm = [sqrt(sum((cc_theory .- cc_mean) .^ 2))]
+    # Use intensity CC for norms (cc_theory = cc, cc_mean = cc_intensity_mean)
+    linf_norm = [maximum(abs.(cc .- cc_intensity_mean))]
+    l2_norm = [sqrt(sum((cc .- cc_intensity_mean) .^ 2))]
     
-    # Standard error of cross-covariance (variance of mean across trials)
-    cc_se = sqrt.(cc_var ./ ntrials)
-    return (linf_norm=linf_norm, l2_norm=l2_norm, cc_theory=cc_theory, cc_mean=cc_mean, cc_se=cc_se, cc_lower=cc_lower, cc_median=cc_median, cc_upper=cc_upper, lags=lags, ac1_mean=ac1_mean, ac1_theory=ac1_theory, ac1_lower=ac1_lower, ac1_median=ac1_median, ac1_upper=ac1_upper, ac2_mean=ac2_mean, ac2_theory=ac2_theory, ac2_lower=ac2_lower, ac2_median=ac2_median, ac2_upper=ac2_upper, mean1=mean1, mean2=mean2, mean1_se=mean1_se, mean2_se=mean2_se, mean1_lower=mean1_lower, mean1_median=mean1_median, mean1_upper=mean1_upper, mean2_lower=mean2_lower, mean2_median=mean2_median, mean2_upper=mean2_upper, var1=var1, var2=var2, m1=m1, m2=m2, v1=v1, v2=v2)
+    # Standard error of cross-covariances (variance of mean across trials)
+    cc_se = sqrt.(cc_var ./ ntrials)  # ON state CC SE
+    cc_intensity_se = sqrt.(cc_intensity_var ./ ntrials)  # Intensity CC SE
+    
+    # Normalize ON state cross-covariances (matching IDL format)
+    # Normalize theoretical ccON
+    ccON = ccON ./ (mON1 * mON2)  # Normalize theoretical ON state cross-covariance
+    # Normalize empirical ccON
+    cc_ON_mean = cc_mean ./ (mean1 * mean2)  # Normalized ON state cross-covariance (empirical)
+    
+    return (
+        # Intensity correlations (theory: ac1, ac2, cc)
+        cc_theory=cc, cc_mean=cc_intensity_mean, cc_se=cc_intensity_se, cc_lower=cc_intensity_lower, cc_median=cc_intensity_median, cc_upper=cc_intensity_upper,  # Intensity CC
+        ac1_mean=ac1_mean, ac1_theory=ac1, ac1_lower=ac1_lower, ac1_median=ac1_median, ac1_upper=ac1_upper,  # Intensity AC1
+        ac2_mean=ac2_mean, ac2_theory=ac2, ac2_lower=ac2_lower, ac2_median=ac2_median, ac2_upper=ac2_upper,  # Intensity AC2
+        # ON state correlations (theory: ac1ON, ac2ON, ccON) - all normalized
+        ccON_theory=ccON, ccON_mean=cc_ON_mean, ccON_se=cc_se ./ (mean1 * mean2), ccON_lower=cc_lower, ccON_median=cc_median, ccON_upper=cc_upper,  # ON state CC (normalized)
+        cc_ON_theory=ccON, cc_ON_mean=cc_ON_mean,  # Normalized ON state CC (same as ccON, kept for compatibility)
+        ac1ON_mean=ac1ON_mean, ac1ON_theory=ac1ON, ac1ON_lower=ac1ON_lower, ac1ON_median=ac1ON_median, ac1ON_upper=ac1ON_upper,  # ON state AC1
+        ac2ON_mean=ac2ON_mean, ac2ON_theory=ac2ON, ac2ON_lower=ac2ON_lower, ac2ON_median=ac2ON_median, ac2ON_upper=ac2ON_upper,  # ON state AC2
+        # Other statistics
+        linf_norm=linf_norm, l2_norm=l2_norm, lags=lags,
+        mean1=mean1, mean2=mean2, mean1_se=mean1_se, mean2_se=mean2_se, 
+        mean1_lower=mean1_lower, mean1_median=mean1_median, mean1_upper=mean1_upper, 
+        mean2_lower=mean2_lower, mean2_median=mean2_median, mean2_upper=mean2_upper, 
+        var1=var1, var2=var2, m1=mON1, m2=mON2, v1=v1, v2=v2)
 end
 
 """
@@ -2867,15 +2988,169 @@ ac1, ac2, cov, lags = data_covariance(traces, lags)
 ```
 """
 function data_covariance(traces, lags)
-    ac1 = zeros(length(lags))
-    ac2 = zeros(length(lags))
-    cov = zeros(length(lags))
-    for t in traces
-        cov += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
-        ac1 += StatsBase.crosscov(t[:, 1], t[:, 1], lags, demean=true)
-        ac2 += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
+    result = compute_covariance(traces, lags, bootstrap=false)
+    return result.ac1, result.ac2, result.cc, result.lags
+end
+
+"""
+    compute_covariance(traces, lags; bootstrap=false, n_bootstrap=10000)
+
+Core covariance computing engine. Computes cross-covariance and autocovariances from traces.
+
+# Arguments
+- `traces::Vector{Matrix{Float64}}`: Vector of trace matrices, each with columns [unit1, unit2]
+- `lags::Vector{Int}`: Time lags for correlation calculation
+- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates (if bootstrap=true)
+
+# Returns
+Named tuple with:
+- `cc`: Cross-covariance (E[x(t)y(t+τ)] - E[x]E[y])
+- `ac1`: Autocovariance for unit1 (E[x(t)x(t+τ)] - E[x]^2)
+- `ac2`: Autocovariance for unit2 (E[y(t)y(t+τ)] - E[y]^2)
+- `mean1`, `mean2`: Mean values
+- `lags`: Time lags
+
+If `bootstrap=true`, also includes confidence intervals for all quantities.
+
+# Algorithm
+Uses `StatsBase.crosscov` with `demean=true` to compute demeaned covariances.
+Averages across all traces.
+"""
+function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{Int}; bootstrap=false, n_bootstrap=10000)
+    n_traces = length(traces)
+    
+    if n_traces == 0
+        error("No traces provided")
     end
-    ac1 / length(traces), ac2 / length(traces), cov / length(traces), lags
+    
+    # Compute overall means from all traces
+    trace1_all = Float64[]
+    trace2_all = Float64[]
+    for t in traces
+        append!(trace1_all, t[:, 1])
+        append!(trace2_all, t[:, 2])
+    end
+    mean1 = mean(trace1_all)
+    mean2 = mean(trace2_all)
+    
+    # Compute cross-covariance and autocovariances using StatsBase.crosscov
+    cc_sum = zeros(length(lags))
+    ac1_sum = zeros(length(lags))
+    ac2_sum = zeros(length(lags))
+    
+    for t in traces
+        # Use StatsBase.crosscov with demean=true
+        cc_sum += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
+        ac1_sum += StatsBase.crosscov(t[:, 1], t[:, 1], lags, demean=true)
+        ac2_sum += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
+    end
+    
+    # Average across traces
+    cc = cc_sum / n_traces
+    ac1 = ac1_sum / n_traces
+    ac2 = ac2_sum / n_traces
+    
+    result = (
+        cc=cc,
+        ac1=ac1,
+        ac2=ac2,
+        mean1=mean1,
+        mean2=mean2,
+        lags=lags
+    )
+    
+    # Bootstrap if requested
+    if bootstrap
+        cc_bootstrap = [Float64[] for _ in 1:length(lags)]
+        ac1_bootstrap = [Float64[] for _ in 1:length(lags)]
+        ac2_bootstrap = [Float64[] for _ in 1:length(lags)]
+        mean1_bootstrap = Float64[]
+        mean2_bootstrap = Float64[]
+        
+        for b in 1:n_bootstrap
+            # Resample traces with replacement
+            bootstrap_traces = StatsBase.sample(traces, n_traces, replace=true)
+            
+            # Compute bootstrap means
+            bootstrap_trace1_all = Float64[]
+            bootstrap_trace2_all = Float64[]
+            for t in bootstrap_traces
+                append!(bootstrap_trace1_all, t[:, 1])
+                append!(bootstrap_trace2_all, t[:, 2])
+            end
+            push!(mean1_bootstrap, mean(bootstrap_trace1_all))
+            push!(mean2_bootstrap, mean(bootstrap_trace2_all))
+            
+            # Compute bootstrap correlations
+            bootstrap_cc_sum = zeros(length(lags))
+            bootstrap_ac1_sum = zeros(length(lags))
+            bootstrap_ac2_sum = zeros(length(lags))
+            
+            for t in bootstrap_traces
+                bootstrap_cc_sum += StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=true)
+                bootstrap_ac1_sum += StatsBase.crosscov(t[:, 1], t[:, 1], lags, demean=true)
+                bootstrap_ac2_sum += StatsBase.crosscov(t[:, 2], t[:, 2], lags, demean=true)
+            end
+            
+            bootstrap_cc = bootstrap_cc_sum / n_traces
+            bootstrap_ac1 = bootstrap_ac1_sum / n_traces
+            bootstrap_ac2 = bootstrap_ac2_sum / n_traces
+            
+            for j in 1:length(lags)
+                push!(cc_bootstrap[j], bootstrap_cc[j])
+                push!(ac1_bootstrap[j], bootstrap_ac1[j])
+                push!(ac2_bootstrap[j], bootstrap_ac2[j])
+            end
+        end
+        
+        # Compute percentiles
+        cc_lower = [quantile(cc_bootstrap[j], 0.025) for j in 1:length(lags)]
+        cc_median = [median(cc_bootstrap[j]) for j in 1:length(lags)]
+        cc_upper = [quantile(cc_bootstrap[j], 0.975) for j in 1:length(lags)]
+        
+        ac1_lower = [quantile(ac1_bootstrap[j], 0.025) for j in 1:length(lags)]
+        ac1_median = [median(ac1_bootstrap[j]) for j in 1:length(lags)]
+        ac1_upper = [quantile(ac1_bootstrap[j], 0.975) for j in 1:length(lags)]
+        
+        ac2_lower = [quantile(ac2_bootstrap[j], 0.025) for j in 1:length(lags)]
+        ac2_median = [median(ac2_bootstrap[j]) for j in 1:length(lags)]
+        ac2_upper = [quantile(ac2_bootstrap[j], 0.975) for j in 1:length(lags)]
+        
+        mean1_lower = quantile(mean1_bootstrap, 0.025)
+        mean1_median = median(mean1_bootstrap)
+        mean1_upper = quantile(mean1_bootstrap, 0.975)
+        
+        mean2_lower = quantile(mean2_bootstrap, 0.025)
+        mean2_median = median(mean2_bootstrap)
+        mean2_upper = quantile(mean2_bootstrap, 0.975)
+        
+        return merge(result, (
+            cc_lower=cc_lower,
+            cc_median=cc_median,
+            cc_upper=cc_upper,
+            ac1_lower=ac1_lower,
+            ac1_median=ac1_median,
+            ac1_upper=ac1_upper,
+            ac2_lower=ac2_lower,
+            ac2_median=ac2_median,
+            ac2_upper=ac2_upper,
+            mean1_lower=mean1_lower,
+            mean1_median=mean1_median,
+            mean1_upper=mean1_upper,
+            mean2_lower=mean2_lower,
+            mean2_median=mean2_median,
+            mean2_upper=mean2_upper
+        ))
+    end
+    
+    return result
+end
+
+# Backward compatibility wrapper
+function data_covariance(traces, lags)
+    result = compute_covariance(traces, lags, bootstrap=false)
+    return result.ac1, result.ac2, result.cc, result.lags
 end
 
 """
@@ -2938,6 +3213,7 @@ println("Percentile rank: ", results.percentile_rank)
 
 # Visualize: empirical vs predicted vs simulation distribution
 using Plots
+using Printf
 plot(results.lags, results.empirical_cc, label="Empirical")
 plot!(results.lags, results.predicted_cc, label="Predicted")
 plot!(results.lags, results.simulation_cc_mean, ribbon=results.simulation_cc_std, 
@@ -3361,7 +3637,6 @@ function prune_file(list, file, outfile, header=true)
     end
     close(f)
 end
-
 """
     getratefile(files, gene)
 
@@ -3642,4 +3917,1540 @@ source, target = extract_source_target("gene", "rates_geneR3_condition.txt")
 # Returns: ("R", 3)
 ```
 """
+
+"""
+    bootstrap_crosscovariance(data_traces, lags; n_bootstrap=10000)
+
+Compute bootstrap confidence intervals for cross-covariance from empirical trace data.
+
+# Arguments
+- `data_traces::Vector{Matrix}`: Vector of trace matrices, each with columns [enhancer, gene]
+  - 137 traces for simultaneous measurements
+- `lags::Vector{Int}`: Time lags for cross-covariance calculation
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates
+
+# Returns
+Named tuple with:
+- `empirical_cc`: Mean empirical cross-covariance across all traces
+- `empirical_cc_lower`: Lower bootstrap CI (2.5th percentile)
+- `empirical_cc_median`: Median bootstrap value
+- `empirical_cc_upper`: Upper bootstrap CI (97.5th percentile)
+- `empirical_cc_std`: Standard deviation across bootstrap samples
+- `lags`: Time lags
+
+# Algorithm
+Matches `simulate_trials` approach:
+1. Compute raw cross-correlation with `demean=false`
+2. Compute overall means from all traces
+3. Subtract `mean1 * mean2` to get cross-covariance
+4. Bootstrap resample traces with replacement
+5. Compute cross-covariance for each bootstrap sample
+6. Compute percentiles for confidence intervals
+
+# Notes
+- Maintains trace pairing (enhancer and gene from same trace stay together)
+- Uses thread-local storage for parallel bootstrap computation
+"""
+function bootstrap_crosscovariance(data_traces::Vector{Matrix{Float64}}, lags; n_bootstrap=10000)
+    n_traces = length(data_traces)
+    
+    # Compute overall means from all traces (for consistency with simulate_trials)
+    trace1_all = Float64[]
+    trace2_all = Float64[]
+    for t in data_traces
+        append!(trace1_all, t[:, 1])
+        append!(trace2_all, t[:, 2])
+    end
+    mean1 = mean(trace1_all)
+    mean2 = mean(trace2_all)
+    
+    # Compute empirical cross-covariance from all data
+    cc_raw_all = zeros(length(lags))
+    for t in data_traces
+        cc_raw_all .+= StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=false)
+    end
+    cc_raw_mean = cc_raw_all / n_traces
+    empirical_cc = cc_raw_mean .- (mean1 * mean2)
+    
+    # Bootstrap resampling
+    nthreads = Threads.nthreads()
+    cc_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    
+    Threads.@threads for b in 1:n_bootstrap
+        thread_id = Threads.threadid()
+        # Resample traces with replacement (maintains pairing)
+        bootstrap_traces = StatsBase.sample(1:n_traces, n_traces, replace=true)
+        
+        # Compute raw cross-correlation for bootstrap sample
+        cc_raw_bootstrap = zeros(length(lags))
+        mean1_bootstrap = 0.0
+        mean2_bootstrap = 0.0
+        n_points_bootstrap = 0
+        
+        for idx in bootstrap_traces
+            t = data_traces[idx]
+            cc_raw_bootstrap .+= StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=false)
+            mean1_bootstrap += sum(t[:, 1])
+            mean2_bootstrap += sum(t[:, 2])
+            n_points_bootstrap += size(t, 1)
+        end
+        
+        # Compute means for bootstrap sample
+        mean1_bs = mean1_bootstrap / n_points_bootstrap
+        mean2_bs = mean2_bootstrap / n_points_bootstrap
+        
+        # Compute cross-covariance (subtract means)
+        cc_bootstrap = (cc_raw_bootstrap / n_traces) .- (mean1_bs * mean2_bs)
+        
+        # Store in thread-local arrays
+        for j in 1:length(lags)
+            push!(cc_bootstrap_threads[thread_id][j], cc_bootstrap[j])
+        end
+    end
+    
+    # Combine thread-local arrays
+    cc_bootstrap = [Float64[] for _ in 1:length(lags)]
+    for t in 1:nthreads
+        for j in 1:length(lags)
+            append!(cc_bootstrap[j], cc_bootstrap_threads[t][j])
+        end
+    end
+    
+    # Compute percentiles
+    empirical_cc_lower = [quantile(cc_bootstrap[j], 0.025) for j in 1:length(lags)]
+    empirical_cc_median = [median(cc_bootstrap[j]) for j in 1:length(lags)]
+    empirical_cc_upper = [quantile(cc_bootstrap[j], 0.975) for j in 1:length(lags)]
+    empirical_cc_std = [std(cc_bootstrap[j]) for j in 1:length(lags)]
+    
+    return (
+        empirical_cc=empirical_cc,
+        empirical_cc_lower=empirical_cc_lower,
+        empirical_cc_median=empirical_cc_median,
+        empirical_cc_upper=empirical_cc_upper,
+        empirical_cc_std=empirical_cc_std,
+        lags=lags
+    )
+end
+
+"""
+    score_crosscovariance_model(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; n_bootstrap=10000)
+
+Score a fitted model's cross-covariance predictions against empirical data using bootstrap confidence intervals.
+
+# Arguments
+- `data_traces::Vector{Matrix}`: Vector of 137 trace matrices [enhancer, gene]
+- `r::Vector{Float64}`: Fitted rate parameters
+- `transitions`, `G`, `R`, `S`, `insertstep`, `coupling`: Model structure
+- `interval::Float64`: Time interval between frames
+- `probfn`: Observation distribution function
+- `lags::Vector{Int}`: Time lags for comparison
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates
+
+# Returns
+Named tuple with scoring metrics:
+- `theoretical_cc`: Theoretical cross-covariance from model
+- `empirical_cc`: Mean empirical cross-covariance
+- `empirical_cc_lower`, `empirical_cc_upper`: Bootstrap confidence intervals
+- `l2_norm`: L² distance between theory and empirical
+- `linf_norm`: L∞ distance (maximum absolute difference)
+- `z_scores`: Per-lag z-scores: (theory - empirical_mean) / empirical_std
+- `coverage`: Boolean vector indicating if theory is within CI for each lag
+- `coverage_fraction`: Fraction of lags where theory is within CI
+- `lags`: Time lags
+- `m1`, `m2`: Theoretical means
+
+# Algorithm Comparison:
+- **IDL**: Computes normalized cross-covariance (divides by product of means), stores unnormalized, then normalizes in bootstrap
+- **Julia**: Computes unnormalized cross-covariance directly (matches theory)
+- Both should give similar results after accounting for normalization differences
+"""
+function score_crosscovariance_model(data_traces::Vector{Matrix{Float64}}, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; n_bootstrap=10000)
+    # 1. Compute theoretical cross-covariance
+    positive_lags = lags[lags .>= 0]
+    if isempty(positive_lags)
+        error("lags must contain at least one non-negative lag")
+    end
+    
+    ac1_theory, ac2_theory, cc_theory, _, full_lags, m1, m2, v1, v2 = 
+        StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, positive_lags)
+    
+    # Ensure lags match - handle negative lags by using symmetry
+    if any(lags .< 0)
+        # For cross-covariance, we need both positive and negative lags
+        # Theory gives us positive lags, we need to construct full symmetric version
+        all_positive_lags = sort(unique([abs.(lags); positive_lags]))
+        ac1_theory_full, ac2_theory_full, cc_theory_full, _, full_lags_full, m1, m2, v1, v2 = 
+            StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, all_positive_lags)
+        
+        # Construct symmetric cross-covariance (cc(-τ) = cc(τ) for autocovariance, but cross-covariance is not symmetric)
+        # For cross-covariance, we need cc12(τ) and cc21(τ) = cc12(-τ)
+        # The theory function returns cc12 for positive lags
+        # We need to construct the full symmetric array
+        cc_theory_symmetric = zeros(length(lags))
+        for (i, lag) in enumerate(lags)
+            if lag >= 0
+                idx = findfirst(==(lag), full_lags_full)
+                if !isnothing(idx)
+                    cc_theory_symmetric[i] = cc_theory_full[idx]
+                end
+            else
+                # For negative lags, find the corresponding positive lag
+                idx = findfirst(==(abs(lag)), full_lags_full)
+                if !isnothing(idx)
+                    # Cross-covariance: cc12(-τ) = cc21(τ), but we computed cc12
+                    # Need to check if theory returns cc12 or combined cc
+                    # Based on covariance_functions, it returns combined cc with negative lags first
+                    # So we need to find the corresponding entry
+                    cc_theory_symmetric[i] = cc_theory_full[idx]
+                end
+            end
+        end
+        cc_theory = cc_theory_symmetric
+        full_lags = full_lags_full
+    end
+    
+    # Match lags if they don't align exactly
+    if full_lags != lags
+        cc_theory_matched = zeros(length(lags))
+        for (i, lag) in enumerate(lags)
+            idx = findfirst(==(lag), full_lags)
+            if !isnothing(idx)
+                cc_theory_matched[i] = cc_theory[idx]
+            else
+                # Linear interpolation if lag not found
+                idx1 = findlast(<(lag), full_lags)
+                idx2 = findfirst(>(lag), full_lags)
+                if !isnothing(idx1) && !isnothing(idx2)
+                    w1 = (full_lags[idx2] - lag) / (full_lags[idx2] - full_lags[idx1])
+                    w2 = (lag - full_lags[idx1]) / (full_lags[idx2] - full_lags[idx1])
+                    cc_theory_matched[i] = w1 * cc_theory[idx1] + w2 * cc_theory[idx2]
+                end
+            end
+        end
+        cc_theory = cc_theory_matched
+    end
+    
+    # 2. Compute bootstrap empirical cross-covariance
+    bootstrap_result = bootstrap_crosscovariance(data_traces, lags; n_bootstrap=n_bootstrap)
+    
+    # 3. Compute scoring metrics
+    l2_norm = sqrt(sum((cc_theory .- bootstrap_result.empirical_cc).^2))
+    linf_norm = maximum(abs.(cc_theory .- bootstrap_result.empirical_cc))
+    
+    # Compute z-scores: (theory - empirical_mean) / empirical_std
+    z_scores = (cc_theory .- bootstrap_result.empirical_cc) ./ bootstrap_result.empirical_cc_std
+    z_scores[isnan.(z_scores)] .= 0.0  # Handle division by zero
+    
+    # Coverage: whether theory is within bootstrap CI
+    coverage = (cc_theory .>= bootstrap_result.empirical_cc_lower) .& 
+               (cc_theory .<= bootstrap_result.empirical_cc_upper)
+    
+    return (
+        theoretical_cc=cc_theory,
+        empirical_cc=bootstrap_result.empirical_cc,
+        empirical_cc_lower=bootstrap_result.empirical_cc_lower,
+        empirical_cc_median=bootstrap_result.empirical_cc_median,
+        empirical_cc_upper=bootstrap_result.empirical_cc_upper,
+        empirical_cc_std=bootstrap_result.empirical_cc_std,
+        l2_norm=l2_norm,
+        linf_norm=linf_norm,
+        z_scores=z_scores,
+        coverage=coverage,
+        coverage_fraction=mean(coverage),
+        lags=lags,
+        m1=m1,
+        m2=m2
+    )
+end
+
+"""
+    compute_normalized_crosscovariance(fitted_traces, lags; bootstrap=false, n_bootstrap=10000)
+
+Compute normalized cross-covariance (CC_ON format) from precomputed fitted traces.
+
+# Arguments
+- `fitted_traces::Vector{Matrix{Float64}}`: Vector of fitted trace matrices, each with columns [enhancer, gene]
+- `lags::Vector{Int}`: Time lags for cross-covariance calculation
+- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates (if bootstrap=true)
+
+# Returns
+If `bootstrap=false`: Named tuple with:
+- `cc_normalized`: Normalized cross-covariance: (mean(xy) - mean(x)*mean(y)) / (mean(x)*mean(y))
+- `cc_unnormalized`: Unnormalized cross-covariance: mean(xy) - mean(x)*mean(y)
+- `mean1`, `mean2`: Means of enhancer and gene traces
+- `lags`: Time lags
+
+If `bootstrap=true`: Also includes:
+- `cc_normalized_lower`, `cc_normalized_upper`: Bootstrap CI for normalized CC
+- `cc_normalized_median`: Median bootstrap value
+- `cc_normalized_std`: Standard deviation across bootstrap samples
+
+# Algorithm
+Matches IDL algorithm (line 709):
+- Computes: `Gn = (n * Go) / (Mdirect * Mdelayed) - 1.0`
+- Where: `Go = sum(xy)`, `Mdirect = sum(x)`, `Mdelayed = sum(y)`, `n = number of pairs`
+- This gives: `Gn = mean(xy) / (mean(x) * mean(y)) - 1.0 = (mean(xy) - mean(x)*mean(y)) / (mean(x)*mean(y))`
+
+This is the normalized cross-covariance format used by experimentalists (CC_ON).
+
+# Notes
+- Normalized format allows comparison across different mean intensity levels
+- Bootstrap resampling maintains trace pairing (enhancer and gene from same trace stay together)
+"""
+function compute_normalized_crosscovariance(fitted_traces::Vector{Matrix{Float64}}, lags; bootstrap=false, n_bootstrap=10000)
+    n_traces = length(fitted_traces)
+    
+    # Compute overall means from all traces
+    trace1_all = Float64[]
+    trace2_all = Float64[]
+    for t in fitted_traces
+        append!(trace1_all, t[:, 1])
+        append!(trace2_all, t[:, 2])
+    end
+    mean1 = mean(trace1_all)
+    mean2 = mean(trace2_all)
+    
+    # Compute raw cross-correlation (unnormalized)
+    cc_raw_all = zeros(length(lags))
+    for t in fitted_traces
+        cc_raw_all .+= StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=false)
+    end
+    cc_raw_mean = cc_raw_all / n_traces
+    
+    # Compute unnormalized cross-covariance
+    cc_unnormalized = cc_raw_mean .- (mean1 * mean2)
+    
+    # Compute normalized cross-covariance (CC_ON format)
+    # Normalize by product of means: (mean(xy) - mean(x)*mean(y)) / (mean(x)*mean(y))
+    cc_normalized = cc_unnormalized ./ (mean1 * mean2)
+    
+    result = (
+        cc_normalized=cc_normalized,
+        cc_unnormalized=cc_unnormalized,
+        mean1=mean1,
+        mean2=mean2,
+        lags=lags
+    )
+    
+    if !bootstrap
+        return result
+    end
+    
+    # Bootstrap resampling for confidence intervals
+    nthreads = Threads.nthreads()
+    cc_normalized_bootstrap_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    
+    Threads.@threads for b in 1:n_bootstrap
+        thread_id = Threads.threadid()
+        # Resample traces with replacement (maintains pairing)
+        bootstrap_traces = StatsBase.sample(1:n_traces, n_traces, replace=true)
+        
+        # Compute means for bootstrap sample
+        mean1_bs = 0.0
+        mean2_bs = 0.0
+        n_points_bs = 0
+        cc_raw_bs = zeros(length(lags))
+        
+        for idx in bootstrap_traces
+            t = fitted_traces[idx]
+            cc_raw_bs .+= StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=false)
+            mean1_bs += sum(t[:, 1])
+            mean2_bs += sum(t[:, 2])
+            n_points_bs += size(t, 1)
+        end
+        
+        mean1_bs /= n_points_bs
+        mean2_bs /= n_points_bs
+        cc_raw_mean_bs = cc_raw_bs / n_traces
+        
+        # Compute normalized cross-covariance for bootstrap sample
+        cc_unnormalized_bs = cc_raw_mean_bs .- (mean1_bs * mean2_bs)
+        cc_normalized_bs = cc_unnormalized_bs ./ (mean1_bs * mean2_bs)
+        
+        # Store in thread-local arrays
+        for j in 1:length(lags)
+            push!(cc_normalized_bootstrap_threads[thread_id][j], cc_normalized_bs[j])
+        end
+    end
+    
+    # Combine thread-local arrays
+    cc_normalized_bootstrap = [Float64[] for _ in 1:length(lags)]
+    for t in 1:nthreads
+        for j in 1:length(lags)
+            append!(cc_normalized_bootstrap[j], cc_normalized_bootstrap_threads[t][j])
+        end
+    end
+    
+    # Compute percentiles
+    cc_normalized_lower = [quantile(cc_normalized_bootstrap[j], 0.025) for j in 1:length(lags)]
+    cc_normalized_median = [median(cc_normalized_bootstrap[j]) for j in 1:length(lags)]
+    cc_normalized_upper = [quantile(cc_normalized_bootstrap[j], 0.975) for j in 1:length(lags)]
+    cc_normalized_std = [std(cc_normalized_bootstrap[j]) for j in 1:length(lags)]
+    
+    return (
+        cc_normalized=cc_normalized,
+        cc_unnormalized=cc_unnormalized,
+        cc_normalized_lower=cc_normalized_lower,
+        cc_normalized_median=cc_normalized_median,
+        cc_normalized_upper=cc_normalized_upper,
+        cc_normalized_std=cc_normalized_std,
+        mean1=mean1,
+        mean2=mean2,
+        lags=lags
+    )
+end
+
+"""
+    load_predicted_traces_csv(filename; enhancer_col="Reporters1_n", gene_col="Reporters2_n", trace_id_col=nothing)
+
+Load predicted traces from CSV file and convert reporter counts to binary ON/OFF states.
+
+# Arguments
+- `filename::String`: Path to CSV file
+- `enhancer_col::String="Reporters1_n"`: Column name for enhancer reporter counts
+- `gene_col::String="Reporters2_n"`: Column name for gene reporter counts
+- `trace_id_col::Union{String, Nothing}=nothing`: Column name for trace ID (if multiple traces in file)
+
+# Returns
+- `Vector{Matrix{Float64}}`: Vector of binary ON/OFF trace matrices, each with columns [enhancer_ONOFF, gene_ONOFF]
+  - ON = 1 (reporters > 0), OFF = 0 (reporters <= 0)
+
+# Notes
+- If `trace_id_col` is provided, traces are grouped by that column
+- If not provided, assumes single trace or uses row index to group traces
+- Binary conversion: > 0 reporter = ON (1), <= 0 reporter = OFF (0)
+"""
+function load_predicted_traces_csv(unit1_filename, unit2_filename; reporters_col=nothing, trace_id_col=nothing)
+    # Load CSV files (requires CSV and DataFrames packages)
+    # unit1_filename: file for enhancer (unit 1)
+    # unit2_filename: file for gene (unit 2)
+    df1 = CSV.read(unit1_filename, DataFrame)
+    df2 = CSV.read(unit2_filename, DataFrame)
+    
+    # Auto-detect reporter columns if not specified
+    if isnothing(reporters_col)
+        # Look for columns matching pattern "Reporters_1", "Reporters_2", etc.
+        reporters_cols1 = filter(n -> startswith(string(n), "Reporters_"), names(df1))
+        reporters_cols2 = filter(n -> startswith(string(n), "Reporters_"), names(df2))
+        
+        if isempty(reporters_cols1) || isempty(reporters_cols2)
+            error("Could not find 'Reporters_n' columns in files. Found columns: unit1=$(names(df1)), unit2=$(names(df2))")
+        end
+        
+        # Sort to ensure matching order (Reporters_1, Reporters_2, ...)
+        reporters_cols1 = sort(reporters_cols1)
+        reporters_cols2 = sort(reporters_cols2)
+        
+        if length(reporters_cols1) != length(reporters_cols2)
+            error("Different number of reporter columns: unit1 has $(length(reporters_cols1)), unit2 has $(length(reporters_cols2))")
+        end
+        
+        # Extract all traces
+        traces = Matrix{Float64}[]
+        for i in 1:length(reporters_cols1)
+            unit1_counts = df1[:, reporters_cols1[i]]
+            unit2_counts = df2[:, reporters_cols2[i]]
+            
+            # Handle missing values: replace with 0 (OFF state)
+            unit1_counts = coalesce.(unit1_counts, 0.0)
+            unit2_counts = coalesce.(unit2_counts, 0.0)
+            
+            # Convert to binary ON/OFF: > 0 = ON (1), <= 0 = OFF (0)
+            # Match experimentalist convention: reporter > 0
+            unit1_onoff = Float64.(unit1_counts .> 0)
+            unit2_onoff = Float64.(unit2_counts .> 0)
+            
+            # Ensure same length
+            if length(unit1_onoff) != length(unit2_onoff)
+                error("Trace $i has different lengths: unit1=$(length(unit1_onoff)), unit2=$(length(unit2_onoff))")
+            end
+            
+            trace_matrix = hcat(unit1_onoff, unit2_onoff)
+            push!(traces, trace_matrix)
+        end
+        
+        return traces
+    end
+    
+    # Original behavior: single reporter column specified
+    unit1_counts = df1[:, reporters_col]
+    unit2_counts = df2[:, reporters_col]
+    
+    # Handle missing values: replace with 0 (OFF state)
+    unit1_counts = coalesce.(unit1_counts, 0.0)
+    unit2_counts = coalesce.(unit2_counts, 0.0)
+    
+    # Convert to binary ON/OFF: > 0 = ON (1), <= 0 = OFF (0)
+    # Match experimentalist convention: reporter > 0
+    unit1_onoff = Float64.(unit1_counts .> 0)
+    unit2_onoff = Float64.(unit2_counts .> 0)
+    
+    # Group by trace if trace_id_col is provided
+    if !isnothing(trace_id_col)
+        # Check if trace_id_col exists in both dataframes
+        if trace_id_col in names(df1) && trace_id_col in names(df2)
+            trace_ids1 = df1[:, trace_id_col]
+            trace_ids2 = df2[:, trace_id_col]
+            unique_traces1 = unique(trace_ids1)
+            unique_traces2 = unique(trace_ids2)
+            
+            # Ensure both files have the same trace IDs
+            if unique_traces1 != unique_traces2
+                error("Trace IDs in unit1 and unit2 files do not match")
+            end
+            
+            traces = Matrix{Float64}[]
+            for trace_id in unique_traces1
+                idx1 = trace_ids1 .== trace_id
+                idx2 = trace_ids2 .== trace_id
+                # Ensure same length for this trace
+                if sum(idx1) != sum(idx2)
+                    error("Trace $trace_id has different lengths in unit1 and unit2 files")
+                end
+                trace_matrix = hcat(unit1_onoff[idx1], unit2_onoff[idx2])
+                push!(traces, trace_matrix)
+            end
+            
+            return traces
+        else
+            error("trace_id_col '$trace_id_col' not found in one or both dataframes")
+        end
+    else
+        # Assume single trace - ensure both files have same number of rows
+        if length(unit1_onoff) != length(unit2_onoff)
+            error("Unit1 and unit2 files have different numbers of rows")
+        end
+        trace_matrix = hcat(unit1_onoff, unit2_onoff)
+        return [trace_matrix]
+    end
+end
+
+"""
+    load_raw_reporters_csv(unit1_filename, unit2_filename; reporters_col=nothing, trace_id_col=nothing)
+
+Load raw reporter counts from CSV files (without converting to binary ON/OFF).
+
+# Arguments
+- `unit1_filename::String`: Path to CSV file for unit 1 (enhancer)
+- `unit2_filename::String`: Path to CSV file for unit 2 (gene)
+- `reporters_col::Union{String, Nothing}=nothing`: Column name for reporter counts (auto-detected if nothing)
+- `trace_id_col::Union{String, Nothing}=nothing`: Column name for trace ID (if multiple traces)
+
+# Returns
+- `Vector{Matrix{Float64}}`: Vector of raw reporter count matrices, each with columns [unit1_counts, unit2_counts]
+"""
+function load_raw_reporters_csv(unit1_filename, unit2_filename; reporters_col=nothing, trace_id_col=nothing)
+    df1 = CSV.read(unit1_filename, DataFrame)
+    df2 = CSV.read(unit2_filename, DataFrame)
+    
+    # Auto-detect reporter columns if not specified
+    if isnothing(reporters_col)
+        reporters_cols1 = filter(n -> startswith(string(n), "Reporters_"), names(df1))
+        reporters_cols2 = filter(n -> startswith(string(n), "Reporters_"), names(df2))
+        
+        if isempty(reporters_cols1) || isempty(reporters_cols2)
+            error("Could not find 'Reporters_' columns in files. Found columns: unit1=$(names(df1)), unit2=$(names(df2))")
+        end
+        
+        reporters_cols1 = sort(reporters_cols1)
+        reporters_cols2 = sort(reporters_cols2)
+        
+        if length(reporters_cols1) != length(reporters_cols2)
+            error("Different number of reporter columns: unit1 has $(length(reporters_cols1)), unit2 has $(length(reporters_cols2))")
+        end
+        
+        traces = Matrix{Float64}[]
+        for i in 1:length(reporters_cols1)
+            unit1_counts = df1[:, reporters_cols1[i]]
+            unit2_counts = df2[:, reporters_cols2[i]]
+            
+            # Handle missing values: replace with 0
+            unit1_counts = coalesce.(unit1_counts, 0.0)
+            unit2_counts = coalesce.(unit2_counts, 0.0)
+            
+            # Keep as raw counts (don't convert to binary)
+            if length(unit1_counts) != length(unit2_counts)
+                error("Trace $i has different lengths: unit1=$(length(unit1_counts)), unit2=$(length(unit2_counts))")
+            end
+            
+            trace_matrix = hcat(unit1_counts, unit2_counts)
+            push!(traces, trace_matrix)
+        end
+        
+        return traces
+    end
+    
+    # Single reporter column specified
+    unit1_counts = df1[:, reporters_col]
+    unit2_counts = df2[:, reporters_col]
+    
+    # Handle missing values
+    unit1_counts = coalesce.(unit1_counts, 0.0)
+    unit2_counts = coalesce.(unit2_counts, 0.0)
+    
+    # Group by trace if trace_id_col is provided
+    if !isnothing(trace_id_col)
+        if trace_id_col in names(df1) && trace_id_col in names(df2)
+            trace_ids1 = df1[:, trace_id_col]
+            trace_ids2 = df2[:, trace_id_col]
+            unique_traces1 = unique(trace_ids1)
+            unique_traces2 = unique(trace_ids2)
+            
+            if unique_traces1 != unique_traces2
+                error("Trace IDs in unit1 and unit2 files do not match")
+            end
+            
+            traces = Matrix{Float64}[]
+            for trace_id in unique_traces1
+                idx1 = trace_ids1 .== trace_id
+                idx2 = trace_ids2 .== trace_id
+                if sum(idx1) != sum(idx2)
+                    error("Trace $trace_id has different lengths in unit1 and unit2 files")
+                end
+                trace_matrix = hcat(unit1_counts[idx1], unit2_counts[idx2])
+                push!(traces, trace_matrix)
+            end
+            
+            return traces
+        else
+            error("trace_id_col '$trace_id_col' not found in one or both dataframes")
+        end
+    else
+        # Single trace
+        if length(unit1_counts) != length(unit2_counts)
+            error("Unit1 and unit2 files have different numbers of rows")
+        end
+        trace_matrix = hcat(unit1_counts, unit2_counts)
+        return [trace_matrix]
+    end
+end
+
+"""
+    load_raw_intensity_csv(unit1_filename, unit2_filename; intensity_col=nothing, trace_id_col=nothing)
+
+Load raw intensity traces from CSV files.
+
+# Arguments
+- `unit1_filename::String`: Path to CSV file for unit 1 (enhancer)
+- `unit2_filename::String`: Path to CSV file for unit 2 (gene)
+- `intensity_col::Union{String, Nothing}=nothing`: Column name for intensity (default: auto-detect "model_mean" or "Intensity" columns)
+- `trace_id_col::Union{String, Nothing}=nothing`: Column name for trace ID (if multiple traces)
+
+# Returns
+- `Vector{Matrix{Float64}}`: Vector of raw intensity matrices, each with columns [unit1_intensity, unit2_intensity]
+"""
+function load_raw_intensity_csv(unit1_filename, unit2_filename; intensity_col=nothing, trace_id_col=nothing)
+    df1 = CSV.read(unit1_filename, DataFrame)
+    df2 = CSV.read(unit2_filename, DataFrame)
+    
+    # Auto-detect intensity columns
+    if isnothing(intensity_col)
+        # Look for "model_mean1", "model_mean2", etc. or "Intensity1", "Intensity2", etc.
+        intensity_cols1 = filter(n -> occursin("mean", lowercase(string(n))) || occursin("intensity", lowercase(string(n))), names(df1))
+        intensity_cols2 = filter(n -> occursin("mean", lowercase(string(n))) || occursin("intensity", lowercase(string(n))), names(df2))
+        
+        if isempty(intensity_cols1) || isempty(intensity_cols2)
+            error("Could not find intensity columns in files. Found columns: unit1=$(names(df1)), unit2=$(names(df2))")
+        end
+        
+        intensity_cols1 = sort(intensity_cols1)
+        intensity_cols2 = sort(intensity_cols2)
+        
+        if length(intensity_cols1) != length(intensity_cols2)
+            error("Different number of intensity columns: unit1 has $(length(intensity_cols1)), unit2 has $(length(intensity_cols2))")
+        end
+        
+        traces = Matrix{Float64}[]
+        for i in 1:length(intensity_cols1)
+            unit1_intensity = df1[:, intensity_cols1[i]]
+            unit2_intensity = df2[:, intensity_cols2[i]]
+            
+            # Handle missing values: replace with 0
+            unit1_intensity = coalesce.(unit1_intensity, 0.0)
+            unit2_intensity = coalesce.(unit2_intensity, 0.0)
+            
+            if length(unit1_intensity) != length(unit2_intensity)
+                error("Trace $i has different lengths: unit1=$(length(unit1_intensity)), unit2=$(length(unit2_intensity))")
+            end
+            
+            trace_matrix = hcat(unit1_intensity, unit2_intensity)
+            push!(traces, trace_matrix)
+        end
+        
+        return traces
+    end
+    
+    # Single intensity column specified
+    unit1_intensity = df1[:, intensity_col]
+    unit2_intensity = df2[:, intensity_col]
+    
+    # Handle missing values
+    unit1_intensity = coalesce.(unit1_intensity, 0.0)
+    unit2_intensity = coalesce.(unit2_intensity, 0.0)
+    
+    # Group by trace if trace_id_col is provided
+    if !isnothing(trace_id_col)
+        if trace_id_col in names(df1) && trace_id_col in names(df2)
+            trace_ids1 = df1[:, trace_id_col]
+            trace_ids2 = df2[:, trace_id_col]
+            unique_traces1 = unique(trace_ids1)
+            unique_traces2 = unique(trace_ids2)
+            
+            if unique_traces1 != unique_traces2
+                error("Trace IDs in unit1 and unit2 files do not match")
+            end
+            
+            traces = Matrix{Float64}[]
+            for trace_id in unique_traces1
+                idx1 = trace_ids1 .== trace_id
+                idx2 = trace_ids2 .== trace_id
+                if sum(idx1) != sum(idx2)
+                    error("Trace $trace_id has different lengths in unit1 and unit2 files")
+                end
+                trace_matrix = hcat(unit1_intensity[idx1], unit2_intensity[idx2])
+                push!(traces, trace_matrix)
+            end
+            
+            return traces
+        else
+            error("trace_id_col '$trace_id_col' not found in one or both dataframes")
+        end
+    else
+        # Single trace
+        if length(unit1_intensity) != length(unit2_intensity)
+            error("Unit1 and unit2 files have different numbers of rows")
+        end
+        trace_matrix = hcat(unit1_intensity, unit2_intensity)
+        return [trace_matrix]
+    end
+end
+
+"""
+    compute_binary_correlations(binary_traces, lags; bootstrap=false, n_bootstrap=10000)
+
+Compute normalized cross-covariance and autocovariance on binary ON/OFF traces.
+
+# Arguments
+- `binary_traces::Vector{Matrix{Float64}}`: Vector of binary trace matrices [enhancer_ONOFF, gene_ONOFF]
+  - Values should be 0 (OFF) or 1 (ON)
+- `lags::Vector{Int}`: Time lags for correlation calculation
+- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates (if bootstrap=true)
+
+# Returns
+Named tuple with:
+- `cc_normalized`: Normalized cross-covariance (CC_ON format)
+- `ac1_normalized`: Normalized autocovariance for enhancer
+- `ac2_normalized`: Normalized autocovariance for gene
+- `cc_unnormalized`: Unnormalized cross-covariance
+- `ac1_unnormalized`: Unnormalized autocovariance for enhancer
+- `ac2_unnormalized`: Unnormalized autocovariance for gene
+- `mean1`, `mean2`: Mean ON probabilities (fraction ON)
+- `lags`: Time lags
+
+If `bootstrap=true`, also includes confidence intervals for all quantities.
+
+# Algorithm
+For binary traces, the normalized correlations are:
+- Cross-covariance: `(P(enhancer=ON, gene=ON) - P(enhancer=ON)*P(gene=ON)) / (P(enhancer=ON)*P(gene=ON))`
+- Autocovariance: `(P(state(t)=ON, state(t+τ)=ON) - P(ON)^2) / P(ON)^2`
+
+This matches the CC_ON format used by experimentalists.
+"""
+function compute_binary_correlations(binary_traces::Vector{Matrix{Float64}}, lags; bootstrap=false, n_bootstrap=10000)
+    n_traces = length(binary_traces)
+    
+    # Compute overall means (fraction ON) from all traces
+    trace1_all = Float64[]
+    trace2_all = Float64[]
+    for t in binary_traces
+        append!(trace1_all, t[:, 1])
+        append!(trace2_all, t[:, 2])
+    end
+    mean1 = mean(trace1_all)  # P(enhancer=ON)
+    mean2 = mean(trace2_all)  # P(gene=ON)
+    
+    # Compute raw cross-correlation and autocorrelations manually
+    # Track sums for each lag to compute E[x(t)y(t+lag)] etc.
+    # This matches the IDL approach: compute per trace, then average
+    cc_sum_xy = zeros(length(lags))  # sum of x*y for each lag
+    cc_n_pairs = zeros(Int, length(lags))  # number of pairs for each lag
+    
+    ac1_sum_xx = zeros(length(lags))  # sum of x*x for each lag
+    ac1_n_pairs = zeros(Int, length(lags))
+    
+    ac2_sum_yy = zeros(length(lags))  # sum of y*y for each lag
+    ac2_n_pairs = zeros(Int, length(lags))
+    
+    for t in binary_traces
+        trace_len = size(t, 1)
+        x = t[:, 1]
+        y = t[:, 2]
+        
+        # Compute correlations manually for each lag
+        # Use symmetric time range: for lag ±τ, use time points where both x(t) and y(t±τ) are valid
+        # This ensures symmetry: same number of pairs for +τ and -τ
+        for (i, lag) in enumerate(lags)
+            # Check if this lag is valid for this trace
+            lag_abs = abs(lag)
+            if lag_abs >= trace_len
+                continue
+            end
+            
+            # Use symmetric range: start at max(1, 1+lag_abs) and end at min(trace_len, trace_len-lag_abs)
+            # For positive lag: use t from 1 to trace_len-lag
+            # For negative lag: use t from lag_abs+1 to trace_len
+            # To ensure symmetry, use the intersection: t from lag_abs+1 to trace_len-lag_abs
+            start_idx = lag_abs + 1
+            end_idx = trace_len - lag_abs
+            
+            if start_idx > end_idx
+                continue
+            end
+            
+            n_pairs = end_idx - start_idx + 1
+            
+            if lag >= 0
+                # Positive lag: E[x(t)y(t+lag)]
+                # x_seg = x[t] for t from start_idx to end_idx
+                # y_seg = y[t+lag] for t from start_idx to end_idx
+                x_seg = x[start_idx:end_idx]
+                y_seg = y[(start_idx+lag):(end_idx+lag)]
+            else
+                # Negative lag: E[x(t)y(t-|lag|)]
+                # x_seg = x[t] for t from start_idx to end_idx
+                # y_seg = y[t-lag_abs] for t from start_idx to end_idx
+                x_seg = x[start_idx:end_idx]
+                y_seg = y[(start_idx-lag_abs):(end_idx-lag_abs)]
+            end
+            
+            # Verify lengths match
+            if length(x_seg) != length(y_seg) || length(x_seg) != n_pairs
+                error("Length mismatch: x_seg=$(length(x_seg)), y_seg=$(length(y_seg)), expected=$n_pairs, lag=$lag, trace_len=$trace_len")
+            end
+            
+            cc_sum_xy[i] += sum(x_seg .* y_seg)
+            cc_n_pairs[i] += n_pairs
+            
+            ac1_sum_xx[i] += sum(x_seg .* x_seg)
+            ac1_n_pairs[i] += n_pairs
+            
+            ac2_sum_yy[i] += sum(y_seg .* y_seg)
+            ac2_n_pairs[i] += n_pairs
+        end
+    end
+    
+    # Compute mean correlations (E[x(t)y(t+lag)] etc.) for each lag
+    # This gives mean(xy) averaged across all traces and pairs
+    cc_mean_xy = [n > 0 ? sum_xy / n : 0.0 for (n, sum_xy) in zip(cc_n_pairs, cc_sum_xy)]
+    ac1_mean_xx = [n > 0 ? sum_xx / n : 0.0 for (n, sum_xx) in zip(ac1_n_pairs, ac1_sum_xx)]
+    ac2_mean_yy = [n > 0 ? sum_yy / n : 0.0 for (n, sum_yy) in zip(ac2_n_pairs, ac2_sum_yy)]
+    
+    # Compute unnormalized covariances (using global means)
+    # This matches IDL: compiled stores unnormalized covariance per trace
+    cc_unnormalized = cc_mean_xy .- (mean1 * mean2)
+    ac1_unnormalized = ac1_mean_xx .- (mean1^2)
+    ac2_unnormalized = ac2_mean_yy .- (mean2^2)
+    
+    # Compute normalized covariances (CC_ON format) using global means
+    # IDL formula (line 311): (total(compiled) / (global_direct_ave * global_delayed_ave)) / n_traces
+    # This is: (sum of unnormalized_covariances) / (global_mean1 * global_mean2) / n_traces
+    # = (mean of unnormalized_covariances) / (global_mean1 * global_mean2)
+    # = (E[xy] - E[x]E[y]) / (E[x]E[y])
+    cc_normalized = cc_unnormalized ./ (mean1 * mean2)
+    ac1_normalized = ac1_unnormalized ./ (mean1^2)
+    ac2_normalized = ac2_unnormalized ./ (mean2^2)
+    
+    # Debug: Print detailed diagnostic info
+    lag0_idx = findfirst(==(0), lags)
+    if !isnothing(lag0_idx)
+        @info "Cross-correlation diagnostics at lag 0" begin
+            println("  mean1 (enhancer ON prob): ", mean1)
+            println("  mean2 (gene ON prob): ", mean2)
+            println("  E[xy] at lag 0: ", cc_mean_xy[lag0_idx])
+            println("  E[x]E[y]: ", mean1 * mean2)
+            println("  Unnormalized cov (E[xy] - E[x]E[y]): ", cc_unnormalized[lag0_idx])
+            println("  Normalized cov: ", cc_normalized[lag0_idx])
+            println("  Number of pairs at lag 0: ", cc_n_pairs[lag0_idx])
+            println("  Number of traces: ", length(binary_traces))
+        end
+        @info "First few lags" begin
+            println("  Lags: ", lags[1:min(5, length(lags))])
+            println("  CC normalized: ", cc_normalized[1:min(5, length(cc_normalized))])
+            println("  CC unnormalized: ", cc_unnormalized[1:min(5, length(cc_unnormalized))])
+            println("  E[xy] values: ", cc_mean_xy[1:min(5, length(cc_mean_xy))])
+        end
+    end
+    
+    result = (
+        cc_normalized=cc_normalized,
+        ac1_normalized=ac1_normalized,
+        ac2_normalized=ac2_normalized,
+        cc_unnormalized=cc_unnormalized,
+        ac1_unnormalized=ac1_unnormalized,
+        ac2_unnormalized=ac2_unnormalized,
+        mean1=mean1,
+        mean2=mean2,
+        lags=lags
+    )
+    
+    if !bootstrap
+        return result
+    end
+    
+    # Bootstrap resampling for confidence intervals
+    nthreads = Threads.nthreads()
+    cc_norm_bs_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    ac1_norm_bs_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    ac2_norm_bs_threads = [[Float64[] for _ in 1:length(lags)] for _ in 1:nthreads]
+    
+    Threads.@threads for b in 1:n_bootstrap
+        thread_id = Threads.threadid()
+        # Resample traces with replacement (maintains pairing)
+        bootstrap_traces = StatsBase.sample(1:n_traces, n_traces, replace=true)
+        
+        # Compute means for bootstrap sample
+        mean1_bs = 0.0
+        mean2_bs = 0.0
+        n_points_bs = 0
+        cc_raw_bs = zeros(length(lags))
+        ac1_raw_bs = zeros(length(lags))
+        ac2_raw_bs = zeros(length(lags))
+        
+        for idx in bootstrap_traces
+            t = binary_traces[idx]
+            cc_raw_bs .+= StatsBase.crosscov(t[:, 1], t[:, 2], lags, demean=false)
+            ac1_raw_bs .+= StatsBase.autocov(t[:, 1], lags, demean=false)
+            ac2_raw_bs .+= StatsBase.autocov(t[:, 2], lags, demean=false)
+            mean1_bs += sum(t[:, 1])
+            mean2_bs += sum(t[:, 2])
+            n_points_bs += size(t, 1)
+        end
+        
+        mean1_bs /= n_points_bs
+        mean2_bs /= n_points_bs
+        cc_raw_mean_bs = cc_raw_bs / n_traces
+        ac1_raw_mean_bs = ac1_raw_bs / n_traces
+        ac2_raw_mean_bs = ac2_raw_bs / n_traces
+        
+        # Compute normalized covariances for bootstrap sample
+        cc_unnorm_bs = cc_raw_mean_bs .- (mean1_bs * mean2_bs)
+        ac1_unnorm_bs = ac1_raw_mean_bs .- (mean1_bs^2)
+        ac2_unnorm_bs = ac2_raw_mean_bs .- (mean2_bs^2)
+        
+        cc_norm_bs = cc_unnorm_bs ./ (mean1_bs * mean2_bs)
+        ac1_norm_bs = ac1_unnorm_bs ./ (mean1_bs^2)
+        ac2_norm_bs = ac2_unnorm_bs ./ (mean2_bs^2)
+        
+        # Store in thread-local arrays
+        for j in 1:length(lags)
+            push!(cc_norm_bs_threads[thread_id][j], cc_norm_bs[j])
+            push!(ac1_norm_bs_threads[thread_id][j], ac1_norm_bs[j])
+            push!(ac2_norm_bs_threads[thread_id][j], ac2_norm_bs[j])
+        end
+    end
+    
+    # Combine thread-local arrays
+    cc_norm_bs = [Float64[] for _ in 1:length(lags)]
+    ac1_norm_bs = [Float64[] for _ in 1:length(lags)]
+    ac2_norm_bs = [Float64[] for _ in 1:length(lags)]
+    for t in 1:nthreads
+        for j in 1:length(lags)
+            append!(cc_norm_bs[j], cc_norm_bs_threads[t][j])
+            append!(ac1_norm_bs[j], ac1_norm_bs_threads[t][j])
+            append!(ac2_norm_bs[j], ac2_norm_bs_threads[t][j])
+        end
+    end
+    
+    # Compute percentiles
+    cc_norm_lower = [quantile(cc_norm_bs[j], 0.025) for j in 1:length(lags)]
+    cc_norm_median = [median(cc_norm_bs[j]) for j in 1:length(lags)]
+    cc_norm_upper = [quantile(cc_norm_bs[j], 0.975) for j in 1:length(lags)]
+    cc_norm_std = [std(cc_norm_bs[j]) for j in 1:length(lags)]
+    
+    ac1_norm_lower = [quantile(ac1_norm_bs[j], 0.025) for j in 1:length(lags)]
+    ac1_norm_median = [median(ac1_norm_bs[j]) for j in 1:length(lags)]
+    ac1_norm_upper = [quantile(ac1_norm_bs[j], 0.975) for j in 1:length(lags)]
+    ac1_norm_std = [std(ac1_norm_bs[j]) for j in 1:length(lags)]
+    
+    ac2_norm_lower = [quantile(ac2_norm_bs[j], 0.025) for j in 1:length(lags)]
+    ac2_norm_median = [median(ac2_norm_bs[j]) for j in 1:length(lags)]
+    ac2_norm_upper = [quantile(ac2_norm_bs[j], 0.975) for j in 1:length(lags)]
+    ac2_norm_std = [std(ac2_norm_bs[j]) for j in 1:length(lags)]
+    
+    return (
+        cc_normalized=cc_normalized,
+        ac1_normalized=ac1_normalized,
+        ac2_normalized=ac2_normalized,
+        cc_unnormalized=cc_unnormalized,
+        ac1_unnormalized=ac1_unnormalized,
+        ac2_unnormalized=ac2_unnormalized,
+        cc_normalized_lower=cc_norm_lower,
+        cc_normalized_median=cc_norm_median,
+        cc_normalized_upper=cc_norm_upper,
+        cc_normalized_std=cc_norm_std,
+        ac1_normalized_lower=ac1_norm_lower,
+        ac1_normalized_median=ac1_norm_median,
+        ac1_normalized_upper=ac1_norm_upper,
+        ac1_normalized_std=ac1_norm_std,
+        ac2_normalized_lower=ac2_norm_lower,
+        ac2_normalized_median=ac2_norm_median,
+        ac2_normalized_upper=ac2_norm_upper,
+        ac2_normalized_std=ac2_norm_std,
+        mean1=mean1,
+        mean2=mean2,
+        lags=lags
+    )
+end
+
+"""
+    score_model_on_state(unit1_filename, unit2_filename, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; trace_id_col=nothing, n_bootstrap=10000)
+
+Score model predictions against data for ON state cross-covariances and autocovariances.
+
+This function walks through the complete stack:
+1. Loads data from two CSV files (unit1 and unit2) using `load_predicted_traces_csv`
+2. Computes ON state correlations from data using `compute_binary_correlations`
+3. Gets theoretical predictions from `covariance_functions`
+4. Compares them and computes scoring metrics
+
+# Arguments
+- `unit1_filename::String`: Path to CSV file for unit 1 (enhancer)
+- `unit2_filename::String`: Path to CSV file for unit 2 (gene)
+- `r`: Rate parameters
+- `transitions`: Transition definitions
+- `G`: Gene definitions
+- `R`: Rate definitions
+- `S`: State definitions
+- `insertstep`: Insert step definitions
+- `coupling`: Coupling parameters
+- `interval`: Time interval
+- `probfn`: Probability function
+- `lags::Vector{Int}`: Time lags for correlation calculation
+- `trace_id_col::Union{String, Nothing}=nothing`: Column name for trace IDs (if traces are grouped)
+- `n_bootstrap::Int=10000`: Number of bootstrap replicates for confidence intervals
+
+# Returns
+Named tuple with:
+- `cc_theory`: Theoretical normalized ON state cross-covariance
+- `cc_data`: Empirical normalized ON state cross-covariance
+- `cc_data_lower`, `cc_data_upper`: Bootstrap confidence intervals for data
+- `ac1_theory`, `ac2_theory`: Theoretical normalized ON state autocovariances
+- `ac1_data`, `ac2_data`: Empirical normalized ON state autocovariances
+- `ac1_data_lower`, `ac1_data_upper`: Bootstrap CIs for AC1
+- `ac2_data_lower`, `ac2_data_upper`: Bootstrap CIs for AC2
+- `cc_l2_norm`, `cc_linf_norm`: L² and L∞ norms for cross-covariance
+- `ac1_l2_norm`, `ac1_linf_norm`: L² and L∞ norms for AC1
+- `ac2_l2_norm`, `ac2_linf_norm`: L² and L∞ norms for AC2
+- `cc_z_scores`: Z-scores for cross-covariance (theory - data) / data_std
+- `cc_coverage`: Boolean array indicating if theory is within bootstrap CI
+- `cc_coverage_fraction`: Fraction of lags where theory is within CI
+- `mean1_data`, `mean2_data`: Empirical ON state means (fraction ON)
+- `mean1_theory`, `mean2_theory`: Theoretical ON state means
+- `lags`: Time lags
+
+# Example
+```julia
+results = score_model_on_state(
+    "predictedtraces_trace-HBEC-nstate-h_enhancer_MYC_3301_1.csv",
+    "predictedtraces_trace-HBEC-nstate-h_gene_MYC_3301_1.csv",
+    r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags
+)
+```
+"""
+function score_model_on_state(unit1_filename, unit2_filename, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; trace_id_col=nothing, n_bootstrap=10000)
+    # Step 1: Load data from CSV files
+    data_traces = load_predicted_traces_csv(unit1_filename, unit2_filename; trace_id_col=trace_id_col)
+    
+    # Step 2: Compute ON state correlations from data (with bootstrap)
+    data_result = compute_binary_correlations(data_traces, lags; bootstrap=true, n_bootstrap=n_bootstrap)
+    
+    # Step 3: Get theoretical predictions
+    # covariance_functions expects positive lags only, but returns full symmetric array
+    positive_lags = unique([abs.(lags); lags[lags .>= 0]])
+    sort!(positive_lags)
+    
+    ac1_theory, ac2_theory, cc_intensity_theory, ccON_theory, full_lags, m1, m2, v1, v2, mON1, mON2, ac1ON_theory, ac2ON_theory = 
+        StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, positive_lags)
+    
+    # Match lags: theory returns full symmetric array, we need to extract matching lags
+    # Theory returns: [negative_lags..., 0, positive_lags...]
+    # We need to find indices for our requested lags
+    ccON_theory_matched = zeros(length(lags))
+    ac1ON_theory_matched = zeros(length(lags))
+    ac2ON_theory_matched = zeros(length(lags))
+    
+    for (i, lag) in enumerate(lags)
+        idx = findfirst(==(lag), full_lags)
+        if !isnothing(idx)
+            ccON_theory_matched[i] = ccON_theory[idx]
+            ac1ON_theory_matched[i] = ac1ON_theory[idx]
+            ac2ON_theory_matched[i] = ac2ON_theory[idx]
+        else
+            # Linear interpolation if lag not found
+            idx1 = findlast(<(lag), full_lags)
+            idx2 = findfirst(>(lag), full_lags)
+            if !isnothing(idx1) && !isnothing(idx2)
+                w1 = (full_lags[idx2] - lag) / (full_lags[idx2] - full_lags[idx1])
+                w2 = (lag - full_lags[idx1]) / (full_lags[idx2] - full_lags[idx1])
+                ccON_theory_matched[i] = w1 * ccON_theory[idx1] + w2 * ccON_theory[idx2]
+                ac1ON_theory_matched[i] = w1 * ac1ON_theory[idx1] + w2 * ac1ON_theory[idx2]
+                ac2ON_theory_matched[i] = w1 * ac2ON_theory[idx1] + w2 * ac2ON_theory[idx2]
+            end
+        end
+    end
+    
+    # Step 4: Compute scoring metrics
+    # Cross-covariance metrics
+    cc_l2_norm = sqrt(sum((ccON_theory_matched .- data_result.cc_normalized).^2))
+    cc_linf_norm = maximum(abs.(ccON_theory_matched .- data_result.cc_normalized))
+    
+    # Z-scores: (theory - data_mean) / data_std
+    cc_z_scores = (ccON_theory_matched .- data_result.cc_normalized) ./ data_result.cc_normalized_se
+    cc_z_scores[isnan.(cc_z_scores)] .= 0.0  # Handle division by zero
+    
+    # Coverage: whether theory is within bootstrap CI
+    cc_coverage = (ccON_theory_matched .>= data_result.cc_normalized_lower) .& 
+                  (ccON_theory_matched .<= data_result.cc_normalized_upper)
+    
+    # Autocovariance metrics
+    ac1_l2_norm = sqrt(sum((ac1ON_theory_matched .- data_result.ac1_normalized).^2))
+    ac1_linf_norm = maximum(abs.(ac1ON_theory_matched .- data_result.ac1_normalized))
+    
+    ac2_l2_norm = sqrt(sum((ac2ON_theory_matched .- data_result.ac2_normalized).^2))
+    ac2_linf_norm = maximum(abs.(ac2ON_theory_matched .- data_result.ac2_normalized))
+    
+    return (
+        # Cross-covariance
+        cc_theory=ccON_theory_matched,
+        cc_data=data_result.cc_normalized,
+        cc_data_lower=data_result.cc_normalized_lower,
+        cc_data_median=data_result.cc_normalized_median,
+        cc_data_upper=data_result.cc_normalized_upper,
+        cc_data_se=data_result.cc_normalized_se,
+        cc_l2_norm=cc_l2_norm,
+        cc_linf_norm=cc_linf_norm,
+        cc_z_scores=cc_z_scores,
+        cc_coverage=cc_coverage,
+        cc_coverage_fraction=mean(cc_coverage),
+        # Autocovariance 1
+        ac1_theory=ac1ON_theory_matched,
+        ac1_data=data_result.ac1_normalized,
+        ac1_data_lower=data_result.ac1_normalized_lower,
+        ac1_data_median=data_result.ac1_normalized_median,
+        ac1_data_upper=data_result.ac1_normalized_upper,
+        ac1_data_se=data_result.ac1_normalized_se,
+        ac1_l2_norm=ac1_l2_norm,
+        ac1_linf_norm=ac1_linf_norm,
+        # Autocovariance 2
+        ac2_theory=ac2ON_theory_matched,
+        ac2_data=data_result.ac2_normalized,
+        ac2_data_lower=data_result.ac2_normalized_lower,
+        ac2_data_median=data_result.ac2_normalized_median,
+        ac2_data_upper=data_result.ac2_normalized_upper,
+        ac2_data_se=data_result.ac2_normalized_se,
+        ac2_l2_norm=ac2_l2_norm,
+        ac2_linf_norm=ac2_linf_norm,
+        # Means
+        mean1_data=data_result.mean1,
+        mean2_data=data_result.mean2,
+        mean1_theory=mON1,
+        mean2_theory=mON2,
+        lags=lags
+    )
+end
+
+"""
+    score_models_from_crosscovariance_files(folder_path, r, transitions, G, R, S, insertstep, interval, probfn, lags; pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
+
+Score model predictions against data from precomputed crosscovariance CSV files.
+
+This function:
+1. Reads all crosscovariance CSV files from a folder matching the pattern
+2. Extracts coupling model identifier (e.g., "31", "R2") from filenames
+3. Reads `tau` and `cc_ON` columns from each file
+4. Computes theoretical predictions for each coupling model
+5. Scores each model against its corresponding data
+
+# Arguments
+- `folder_path::String`: Path to folder containing crosscovariance CSV files
+- `r`: Rate parameters (can be a function of coupling model or a single value)
+- `transitions`: Transition definitions
+- `G`: Gene definitions
+- `R`: Rate definitions
+- `S`: State definitions
+- `insertstep`: Insert step definitions
+- `interval`: Time interval
+- `probfn`: Probability function
+- `coupling`: Coupling parameter (can be a single value, a Dict mapping coupling_model_str to coupling, or a Function)
+- `lags::Vector{Int}`: Time lags for correlation calculation (should match tau in files)
+- `pattern::String="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene"`: Filename pattern to match
+
+# Returns
+Dictionary mapping coupling model identifiers to named tuples with:
+- `coupling_model::String`: Coupling model identifier
+- `cc_theory`: Theoretical normalized ON state cross-covariance
+- `cc_data`: Empirical normalized ON state cross-covariance from file
+- `tau`: Time lags from file
+- `cc_l2_norm`: L² norm (goodness of fit)
+- `cc_linf_norm`: L∞ norm (worst-case error)
+- `cc_z_scores`: Z-scores (if theory std available)
+- `mean1_theory`, `mean2_theory`: Theoretical ON state means
+
+# Example
+```julia
+# If coupling is the same for all models:
+results = score_models_from_crosscovariance_files(
+    "/path/to/folder",
+    r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags
+)
+
+# If coupling varies by model (as Dict):
+coupling_dict = Dict("31" => coupling31, "R2" => couplingR2)
+results = score_models_from_crosscovariance_files(
+    "/path/to/folder",
+    r, transitions, G, R, S, insertstep, interval, probfn, coupling_dict, lags
+)
+
+# Access results for coupling model "31":
+results["31"].cc_l2_norm
+```
+"""
+function score_models_from_crosscovariance_files(folder_path, r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags; pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
+    # Find all matching files
+    files = filter(f -> startswith(f, pattern) && endswith(f, ".csv"), readdir(folder_path))
+    
+    if isempty(files)
+        error("No files matching pattern '$pattern*.csv' found in folder '$folder_path'")
+    end
+    
+    results = Dict{String, NamedTuple}()
+    
+    for file in files
+        # Extract coupling model from filename
+        # Pattern: crosscovariance_tracejoint-HBEC-nstate_enhancer-gene{COUPLING}_MYC_...
+        # Find position after "gene"
+        gene_pos = findfirst("gene", file)
+        if isnothing(gene_pos)
+            @warn "Could not find 'gene' in filename '$file', skipping"
+            continue
+        end
+        
+        # Extract two characters after "gene"
+        coupling_start = gene_pos.stop + 1
+        if coupling_start + 1 > length(file)
+            @warn "Filename '$file' too short to extract coupling model, skipping"
+            continue
+        end
+        
+        coupling_model_str = file[coupling_start:coupling_start+1]
+        
+        # Read CSV file (CSV and DataFrames should be available in the module)
+        filepath = joinpath(folder_path, file)
+        df = CSV.read(filepath, DataFrame)
+        
+        # Check required columns
+        if !("tau" in names(df)) || !("cc_ON" in names(df))
+            @warn "File '$file' missing required columns 'tau' or 'cc_ON', skipping"
+            continue
+        end
+        
+        # Extract data
+        tau_data = df.tau
+        cc_ON_data = df.cc_ON
+        
+        # Match lags: we need to find which lags from our requested lags match tau_data
+        # Interpolate if needed
+        cc_ON_matched = zeros(length(lags))
+        for (i, lag) in enumerate(lags)
+            idx = findfirst(==(lag), tau_data)
+            if !isnothing(idx)
+                cc_ON_matched[i] = cc_ON_data[idx]
+            else
+                # Linear interpolation if lag not found
+                idx1 = findlast(<(lag), tau_data)
+                idx2 = findfirst(>(lag), tau_data)
+                if !isnothing(idx1) && !isnothing(idx2)
+                    w1 = (tau_data[idx2] - lag) / (tau_data[idx2] - tau_data[idx1])
+                    w2 = (lag - tau_data[idx1]) / (tau_data[idx2] - tau_data[idx1])
+                    cc_ON_matched[i] = w1 * cc_ON_data[idx1] + w2 * cc_ON_data[idx2]
+                else
+                    @warn "Lag $lag not found in file '$file' and cannot interpolate, using 0"
+                end
+            end
+        end
+        
+        # Get theoretical predictions
+        # Handle coupling parameter: can be single value, Dict, or Function
+        coupling_actual = if isa(coupling, Dict)
+            get(coupling, coupling_model_str, error("Coupling model '$coupling_model_str' not found in coupling dictionary"))
+        elseif isa(coupling, Function)
+            coupling(coupling_model_str)
+        else
+            coupling  # Single value, use for all models
+        end
+        
+        # Handle r parameter: can be single value or Function
+        r_actual = isa(r, Function) ? r(coupling_model_str) : r
+        
+        positive_lags = unique([abs.(lags); lags[lags .>= 0]])
+        sort!(positive_lags)
+        
+        ac1_theory, ac2_theory, cc_intensity_theory, ccON_theory, full_lags, m1, m2, v1, v2, mON1, mON2, ac1ON_theory, ac2ON_theory = 
+            StochasticGene.covariance_functions(r_actual, transitions, G, R, S, insertstep, interval, probfn, coupling_actual, positive_lags)
+        
+        # Match theoretical lags to requested lags
+        ccON_theory_matched = zeros(length(lags))
+        for (i, lag) in enumerate(lags)
+            idx = findfirst(==(lag), full_lags)
+            if !isnothing(idx)
+                ccON_theory_matched[i] = ccON_theory[idx]
+            else
+                # Linear interpolation
+                idx1 = findlast(<(lag), full_lags)
+                idx2 = findfirst(>(lag), full_lags)
+                if !isnothing(idx1) && !isnothing(idx2)
+                    w1 = (full_lags[idx2] - lag) / (full_lags[idx2] - full_lags[idx1])
+                    w2 = (lag - full_lags[idx1]) / (full_lags[idx2] - full_lags[idx1])
+                    ccON_theory_matched[i] = w1 * ccON_theory[idx1] + w2 * ccON_theory[idx2]
+                end
+            end
+        end
+        
+        # Compute scoring metrics
+        cc_l2_norm = sqrt(sum((ccON_theory_matched .- cc_ON_matched).^2))
+        cc_linf_norm = maximum(abs.(ccON_theory_matched .- cc_ON_matched))
+        
+        # Store results
+        results[coupling_model_str] = (
+            coupling_model=coupling_model_str,
+            cc_theory=ccON_theory_matched,
+            cc_data=cc_ON_matched,
+            tau=tau_data,
+            cc_l2_norm=cc_l2_norm,
+            cc_linf_norm=cc_linf_norm,
+            mean1_theory=mON1,
+            mean2_theory=mON2,
+            lags=lags
+        )
+    end
+    
+    return results
+end
+
+"""
+    score_models_from_traces(enhancer_file, gene_file, crosscov_folder; 
+        crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
+
+Score model predictions against empirical cross-covariance computed from trace predictions.
+
+The crosscovariance files contain the theoretical predictions (precomputed).
+Workflow:
+1. Load enhancer and gene trace prediction files (from separate fits)
+2. Read theoretical cross-covariance from CSV files in crosscov_folder (includes tau/lags)
+3. Compute empirical cross-covariance (Xcor) from traces using lags from the file
+4. Score theoretical predictions (from files) against empirical data (from traces)
+
+The coupling model is extracted from crosscovariance filenames (two characters after "gene").
+Lags are read from the `tau` column in the crosscovariance files.
+
+# Arguments
+- `enhancer_file::String`: Path to enhancer prediction CSV file
+- `gene_file::String`: Path to gene prediction CSV file
+- `crosscov_folder::String`: Folder containing crosscovariance CSV files (with theoretical predictions)
+- `crosscov_pattern::String`: Filename pattern for crosscovariance files
+
+# Returns
+Dictionary mapping coupling model identifiers to named tuples with:
+- `coupling_model::String`: Coupling model identifier
+- `cc_empirical`: Empirical cross-covariance computed from traces
+- `cc_theory`: Theoretical cross-covariance read from file
+- `cc_l2_norm`: L² norm (theory vs empirical)
+- `cc_linf_norm`: L∞ norm (theory vs empirical)
+- `mean1_empirical`, `mean2_empirical`: Empirical ON state means
+- `lags`: Time lags
+
+# Example
+```julia
+results = score_models_from_traces(
+    "/path/to/enhancer/folder",
+    "/path/to/gene/folder",
+    r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags
+)
+
+# Access results for coupling model "31":
+results["31"].cc_l2_norm
+results["31"].cc_empirical
+results["31"].cc_theory
+```
+"""
+function score_models_from_traces(enhancer_file, gene_file, crosscov_folder;
+    crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
+    
+    # Find all crosscovariance files (these contain the coupling model identifier)
+    crosscov_files = filter(f -> startswith(f, crosscov_pattern) && endswith(f, ".csv"), readdir(crosscov_folder))
+    
+    if isempty(crosscov_files)
+        error("No crosscovariance files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
+    end
+    
+    results = Dict{String, NamedTuple}()
+    
+    # 1. Load traces first to determine valid lag range
+    data_traces = try
+        load_predicted_traces_csv(enhancer_file, gene_file)
+    catch e
+        error("Error loading traces from '$enhancer_file' and '$gene_file': $e")
+    end
+    
+    # Determine minimum trace length
+    min_trace_length = minimum([size(t, 1) for t in data_traces])
+    
+    # Get lags from the first crosscovariance file (assume all files use same lags)
+    first_file = joinpath(crosscov_folder, crosscov_files[1])
+    df_first = CSV.read(first_file, DataFrame)
+    if !("tau" in names(df_first))
+        error("First crosscovariance file missing 'tau' column")
+    end
+    lags_all = Vector{Int}(df_first.tau)
+    
+    # Filter lags to only include those valid for trace length
+    # Use maximum possible lags: abs(lag) < min_trace_length (strictly less than)
+    # This maximizes the lag range in both directions
+    max_valid_lag = min_trace_length - 1
+    lags_all_filtered = filter(lag -> abs(lag) < max_valid_lag, lags_all)
+    
+    # Optionally use higher resolution: if lags are coarsely spaced, interpolate
+    # Check if we should use higher resolution (lag step > 1)
+    if length(lags_all_filtered) > 1
+        lag_step = abs(lags_all_filtered[2] - lags_all_filtered[1])
+        if lag_step > 1
+            # Create higher resolution lags
+            min_lag = minimum(lags_all_filtered)
+            max_lag = maximum(lags_all_filtered)
+            lags = collect(min_lag:max_lag)  # Step size of 1
+            @info "Using higher resolution: original step=$lag_step, new step=1, lags from $min_lag to $max_lag"
+        else
+            lags = lags_all_filtered
+        end
+    else
+        lags = lags_all_filtered
+    end
+    
+    if isempty(lags)
+        error("No valid lags found. Trace length is $min_trace_length, but lags range from $(minimum(lags_all)) to $(maximum(lags_all))")
+    end
+    
+    # Compute empirical correlations using filtered lags
+    data_result = try
+        compute_binary_correlations(data_traces, lags; bootstrap=false)
+    catch e
+        error("Error computing correlations from traces: $e")
+    end
+    
+    for crosscov_file in crosscov_files
+        # Extract coupling model from crosscovariance filename
+        gene_pos = findfirst("gene", crosscov_file)
+        if isnothing(gene_pos)
+            @warn "Could not find 'gene' in filename '$crosscov_file', skipping"
+            continue
+        end
+        
+        coupling_start = gene_pos.stop + 1
+        if coupling_start + 1 > length(crosscov_file)
+            @warn "Filename '$crosscov_file' too short to extract coupling model, skipping"
+            continue
+        end
+        
+        coupling_model_str = crosscov_file[coupling_start:coupling_start+1]
+        crosscov_filepath = joinpath(crosscov_folder, crosscov_file)
+        
+        # 2. Read crosscovariance from file
+        try
+            df = CSV.read(crosscov_filepath, DataFrame)
+            if !("tau" in names(df)) || !("cc_ON" in names(df))
+                @warn "File '$crosscov_file' missing required columns 'tau' or 'cc_ON', skipping"
+                continue
+            end
+            
+            tau_data = Vector{Int}(df.tau)
+            cc_ON_theory_all = df.cc_ON  # Theoretical predictions from file
+            
+            # Filter theory to only valid lags (matching what we used for empirical)
+            cc_ON_theory = Float64[]
+            for lag in lags
+                idx = findfirst(==(lag), tau_data)
+                if !isnothing(idx)
+                    push!(cc_ON_theory, cc_ON_theory_all[idx])
+                else
+                    # Linear interpolation if lag not found
+                    idx1 = findlast(<(lag), tau_data)
+                    idx2 = findfirst(>(lag), tau_data)
+                    if !isnothing(idx1) && !isnothing(idx2)
+                        w1 = (tau_data[idx2] - lag) / (tau_data[idx2] - tau_data[idx1])
+                        w2 = (lag - tau_data[idx1]) / (tau_data[idx2] - tau_data[idx1])
+                        val = w1 * cc_ON_theory_all[idx1] + w2 * cc_ON_theory_all[idx2]
+                        push!(cc_ON_theory, val)
+                    else
+                        @warn "Could not find or interpolate lag $lag in file '$crosscov_file', skipping"
+                    end
+                end
+            end
+            
+            if length(cc_ON_theory) != length(lags)
+                @warn "Mismatch in filtered theory length for '$crosscov_file', skipping"
+                continue
+            end
+            
+            cc_ON_theory = Vector{Float64}(cc_ON_theory)
+            
+            # 3. Compute scoring metrics (theory from file vs empirical from traces)
+            cc_l2_norm = sqrt(sum((cc_ON_theory .- data_result.cc_normalized).^2))
+            cc_linf_norm = maximum(abs.(cc_ON_theory .- data_result.cc_normalized))
+            
+            # Store results
+            results[coupling_model_str] = (
+                coupling_model=coupling_model_str,
+                cc_empirical=data_result.cc_normalized,
+                cc_theory=cc_ON_theory,
+                cc_l2_norm=cc_l2_norm,
+                cc_linf_norm=cc_linf_norm,
+                mean1_empirical=data_result.mean1,
+                mean2_empirical=data_result.mean2,
+                lags=lags
+            )
+            
+        catch e
+            @warn "Error reading crosscovariance file '$crosscov_file': $e, skipping"
+            continue
+        end
+    end
+    
+    return results
+end
+
+"""
+    summarize_model_scores(results::Dict{String, NamedTuple})
+
+Print a summary table of model scores sorted by L² norm (best fit first).
+"""
+function summarize_model_scores(results::Dict{String, NamedTuple})
+    println("\nModel Scoring Summary (sorted by L² norm, best fit first):")
+    println("=" ^ 80)
+    println(@sprintf("%-10s %15s %15s %15s", "Model", "L² Norm", "L∞ Norm", "Mean1"))
+    println("-" ^ 80)
+    
+    # Sort by L² norm
+    sorted_models = sort(collect(keys(results)), by=k -> results[k].cc_l2_norm)
+    
+    for model in sorted_models
+        r = results[model]
+        println(@sprintf("%-10s %15.6f %15.6f %15.6f", 
+            model, r.cc_l2_norm, r.cc_linf_norm, r.mean1_empirical))
+    end
+    println("=" ^ 80)
+    println("\nNote: cc_empirical is the same for all models (computed from data).")
+    println("      Differences are in cc_theory, which determines the norms.\n")
+end
 
