@@ -2665,10 +2665,25 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     m2 = mean_hmm(p0, mean_intensity[2])
     mON1 = mean_hmm(p0, ON[1])
     mON2 = mean_hmm(p0, ON[2])
+    
+    # Reporter counts (not binary ON/OFF)
+    reporters = Vector[]
+    second_moment_reporters = Vector[]
+    for i in eachindex(num_per_state)
+        push!(reporters, Float64.(num_per_state[i]))
+        # Second moment for reporter counts: E[reporter^2|state] = reporter_count^2 (deterministic per state)
+        push!(second_moment_reporters, Float64.(num_per_state[i]).^2)
+    end
+    mR1 = mean_hmm(p0, reporters[1])
+    mR2 = mean_hmm(p0, reporters[2])
 
     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) 
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
-    ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
+    # For enhancer-leads convention (positive tau means enhancer leads):
+    # Use ON[2], ON[1] to compute <gene(t)enhancer(t+tau)>, which for positive tau means enhancer leads
+    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, mON2, mON1)
+    # Reporter count cross-covariance
+    ccReporters = crosscov_hmm(a, p0, reporters[2], reporters[1], lags, mR2, mR1)
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) 
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) 
     ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
@@ -2677,6 +2692,9 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     # ON state autocovariances: For binary ON/OFF, ON^2 = ON, so second moment = ON itself
     ac1ON = autocov_hmm(a, p0, ON[1], ON[1], lags)
     ac2ON = autocov_hmm(a, p0, ON[2], ON[2], lags)
+    # Reporter count autocovariances
+    ac1Reporters = autocov_hmm(a, p0, reporters[1], second_moment_reporters[1], lags)
+    ac2Reporters = autocov_hmm(a, p0, reporters[2], second_moment_reporters[2], lags)
     
     # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
     v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2)
@@ -2684,7 +2702,8 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
 
     cc = vcat(reverse(cc21), cc12[2:end])
     ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON
+    ccReporters = vcat(reverse(ccReporters), ccReporters[2:end])
+    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON, ccReporters, mR1, mR2, ac1Reporters, ac2Reporters
 end
 
 function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
@@ -2718,7 +2737,9 @@ function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertste
 
     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
-    ccON = crosscov_hmm(a, p0, ON[1], ON[2], lags, mON1, mON2)
+    # For enhancer-leads convention (positive tau means enhancer leads):
+    # Use ON[2], ON[1] to compute <gene(t)enhancer(t+tau)>, which for positive tau means enhancer leads
+    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, mON2, mON1)
     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
     ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) * max_intensity[1]^2

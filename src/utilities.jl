@@ -41,6 +41,52 @@ function eig_decompose(M)
 end
 
 """
+    unbiased_crosscov(x, y, lags; demean=true)
+
+Compute unbiased cross-covariance that accounts for different numbers of valid pairs at different lags.
+
+This function wraps `StatsBase.crosscov` and applies a correction factor to account for the fact
+that `StatsBase.crosscov` normalizes by `n` (length of input) for all lags, but the actual number
+of valid pairs for lag τ is `n - |τ|`. The correction factor is `n / (n - |τ|)`.
+
+# Arguments
+- `x`: First time series vector
+- `y`: Second time series vector  
+- `lags`: Vector of time lags (can include negative values)
+- `demean`: Whether to remove means before computation (default: true)
+
+# Returns
+- `Vector{Float64}`: Unbiased cross-covariance at specified lags
+
+# Example
+```julia
+x = randn(100)
+y = randn(100)
+lags = collect(-20:20)
+cc = unbiased_crosscov(x, y, lags, demean=true)
+```
+"""
+function unbiased_crosscov(x, y, lags; demean::Bool=true)
+    n = length(x)
+    if length(y) != n
+        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
+    end
+    
+    # Call StatsBase.crosscov
+    cc = StatsBase.crosscov(x, y, lags, demean=demean)
+    
+    # Apply correction factor: n / (n - |τ|) for each lag
+    # This accounts for the fact that StatsBase.crosscov normalizes by n,
+    # but the actual number of valid pairs is n - |τ|
+    correction_factors = [n / (n - abs(τ)) for τ in lags]
+    
+    # Apply correction
+    cc_unbiased = cc .* correction_factors
+    
+    return cc_unbiased
+end
+
+"""
     nonzero_rows(T)
 
 Returns an array of row indices that have at least one nonzero element.
