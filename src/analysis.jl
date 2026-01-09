@@ -3237,12 +3237,25 @@ function simulate_trials(ac1, ac2, cc, ac1ON, ac2ON, ccON, mON1, mON2, v1, v2, r
         push!(on_traces, hcat(Float64.(trace_data[:, 2] .> 0.0), Float64.(trace_data[:, 4] .> 0.0)))
     end
 
-    empirical = covariance_functions_from_traces(
-        lags=Vector{Int}(lags),
-        intensity_traces=intensity_traces,
-        on_traces=on_traces,
-        bootstrap=true,
-        n_bootstrap=n_bootstrap
+    # Compute empirical cross-correlation using compute_cov_empirical
+    empirical_result = compute_cov_empirical(intensity_traces, [], on_traces; lags=Vector{Int}(lags), bootstrap=true, n_bootstrap=n_bootstrap)
+    
+    # Extract ON state results
+    empirical = (
+        cc=empirical_result.intensity.cc,
+        ac1=empirical_result.intensity.ac1,
+        ac2=empirical_result.intensity.ac2,
+        ccON=empirical_result.on_states.cc,
+        ac1ON=empirical_result.on_states.ac1,
+        ac2ON=empirical_result.on_states.ac2,
+        mON1=empirical_result.on_states.mean1,
+        mON2=empirical_result.on_states.mean2,
+        v1=empirical_result.intensity.mean1,
+        v2=empirical_result.intensity.mean2,
+        cc_lower=hasproperty(empirical_result.intensity, :cc_lower) ? empirical_result.intensity.cc_lower : nothing,
+        cc_median=hasproperty(empirical_result.intensity, :cc_median) ? empirical_result.intensity.cc_median : nothing,
+        cc_upper=hasproperty(empirical_result.intensity, :cc_upper) ? empirical_result.intensity.cc_upper : nothing,
+        cc_se=hasproperty(empirical_result.intensity, :cc_se) ? empirical_result.intensity.cc_se : nothing
     )
 
     # Theory autocovariances from `covariance_functions` are on positive lags; symmetrize to compare on `lags`.
@@ -3488,7 +3501,7 @@ function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=noth
     cc_s = summarize_matrix(cc_bs)
     ac1_s = summarize_matrix(ac1_bs)
     ac2_s = summarize_matrix(ac2_bs)
-
+    
     return (
         cc_lower=cc_s.lower, cc_median=cc_s.median, cc_upper=cc_s.upper, cc_se=cc_s.se,
         ac1_lower=ac1_s.lower, ac1_median=ac1_s.median, ac1_upper=ac1_s.upper, ac1_se=ac1_s.se,
@@ -3543,284 +3556,12 @@ function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{Int}; 
 end
 
 # ============================================================================
-# EMPIRICAL COVARIANCE COMPUTATION (matches theory output format)
+# REMOVED: covariance_functions_from_traces and crosscovariance_gof_test
 # ============================================================================
-# Function: covariance_functions_from_traces
-# Purpose: Unified empirical covariance engine that outputs format matching
-#          covariance_functions (theory) in hmm.jl
-# Creation date: 2026-01-06 (AI-created during refactoring)
-# NOTE: This wraps compute_covariance for multiple trace types (intensity, ON, reporters)
-
-"""
-    covariance_functions_from_traces(; lags, intensity_traces=nothing, reporter_traces=nothing, on_traces=nothing,
-        bootstrap=false, n_bootstrap=1000, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing)
-
-Compute empirical cross-covariance functions from traces with a return shape aligned to `covariance_functions` (theory).
-
-All cross-covariance functions are **unnormalized** (centered: `C_XY(τ) = E[(x(t) - μ_X)(y(t+τ) - μ_Y)]`).
-
-The cross-covariance function is computed as:
-    C_XY(τ) = (1/M) * Σ_{i=1}^{M} [ (1/(T-τ)) * Σ_{t=1}^{T-τ} (X_i(t) - μ_X)(Y_i(t+τ) - μ_Y) ]
-
-If theoretical means are provided (e.g., `mON1_theory`, `mON2_theory`), they are used instead of empirical means,
-matching the theoretical computation: C_XY(τ) = R_XY(τ) - μ_X μ_Y using theoretical means.
-
-Otherwise, uses empirical means:
-1. Compute uncentered cross-correlation R_XY(τ) = (1/(T-τ)) * Σ X(t)Y(t+τ) per trace
-2. Average across traces: `mean_i(R_{XY,i}(τ))`
-3. Compute overall empirical means: `E[X] = mean_i(E_i[X])`, `E[Y] = mean_i(E_i[Y])`
-4. Convert to cross-covariance: `C_XY(τ) = mean_i(R_{XY,i}(τ)) - E[X]E[Y]`
-
-Notes:
-- If `intensity_traces` are not provided, `cc/ac1/ac2` (and `m1/m2/v1/v2`) are computed from `reporter_traces`
-  for backward compatibility with earlier code paths.
-- `ccON/ac1ON/ac2ON/mON1/mON2` are computed from `on_traces` (typically derived from reporter counts).
-- `ccReporters/ac1Reporters/ac2Reporters/mR1/mR2` are computed from `reporter_traces`.
-"""
-function covariance_functions_from_traces(; lags::Vector{Int}, intensity_traces=nothing, reporter_traces=nothing, on_traces=nothing,
-    bootstrap::Bool=false, n_bootstrap::Int=1000, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing)
-
-    # helper to map bootstrap fields to a different prefix/name family
-    function map_bootstrap_fields(bs::NamedTuple, cc_sym::Symbol, ac1_sym::Symbol, ac2_sym::Symbol, m1_sym::Symbol, m2_sym::Symbol)
-        return (
-            Symbol(cc_sym, "_lower") => bs.cc_lower,
-            Symbol(cc_sym, "_median") => bs.cc_median,
-            Symbol(cc_sym, "_upper") => bs.cc_upper,
-            Symbol(cc_sym, "_se") => bs.cc_se,
-            Symbol(ac1_sym, "_lower") => bs.ac1_lower,
-            Symbol(ac1_sym, "_median") => bs.ac1_median,
-            Symbol(ac1_sym, "_upper") => bs.ac1_upper,
-            Symbol(ac1_sym, "_se") => bs.ac1_se,
-            Symbol(ac2_sym, "_lower") => bs.ac2_lower,
-            Symbol(ac2_sym, "_median") => bs.ac2_median,
-            Symbol(ac2_sym, "_upper") => bs.ac2_upper,
-            Symbol(ac2_sym, "_se") => bs.ac2_se,
-            Symbol(m1_sym, "_lower") => bs.mean1_lower,
-            Symbol(m1_sym, "_median") => bs.mean1_median,
-            Symbol(m1_sym, "_upper") => bs.mean1_upper,
-            Symbol(m1_sym, "_se") => bs.mean1_se,
-            Symbol(m2_sym, "_lower") => bs.mean2_lower,
-            Symbol(m2_sym, "_median") => bs.mean2_median,
-            Symbol(m2_sym, "_upper") => bs.mean2_upper,
-            Symbol(m2_sym, "_se") => bs.mean2_se
-        )
-    end
-
-    # Always compute reporter covariances if provided (used by scoring)
-    reporter_res = nothing
-    reporter_bs = nothing
-    if reporter_traces !== nothing
-        per_trace_r = _per_trace_covariance_mats(reporter_traces, lags; demean=false, mean1_global=mR1_theory, mean2_global=mR2_theory)
-        reporter_res = _aggregate_covariance_mats(per_trace_r; mean1_global=mR1_theory, mean2_global=mR2_theory)
-        reporter_bs = bootstrap ? bootstrap_tracewise(per_trace_r; n_bootstrap=n_bootstrap, mean1_global=mR1_theory, mean2_global=mR2_theory) : nothing
-    end
-
-    # Compute ON covariances if provided
-    on_res = nothing
-    on_bs = nothing
-    if on_traces !== nothing
-        per_trace_on = _per_trace_covariance_mats(on_traces, lags; demean=false, mean1_global=mON1_theory, mean2_global=mON2_theory)
-        on_res = _aggregate_covariance_mats(per_trace_on; mean1_global=mON1_theory, mean2_global=mON2_theory)
-        on_bs = bootstrap ? bootstrap_tracewise(per_trace_on; n_bootstrap=n_bootstrap, mean1_global=mON1_theory, mean2_global=mON2_theory) : nothing
-    end
-
-    # Compute intensity covariances if provided; otherwise fall back to reporter covariances
-    intensity_res = nothing
-    intensity_bs = nothing
-    if intensity_traces !== nothing
-        per_trace_i = _per_trace_covariance_mats(intensity_traces, lags; demean=false)
-        intensity_res = _aggregate_covariance_mats(per_trace_i)
-        intensity_bs = bootstrap ? bootstrap_tracewise(per_trace_i; n_bootstrap=n_bootstrap) : nothing
-    elseif reporter_res !== nothing
-        intensity_res = reporter_res
-        intensity_bs = reporter_bs
-    end
-
-    # Build output aligned to theory naming
-    tau = lags
-    out_pairs = Pair{Symbol, Any}[
-        :tau => tau,
-    ]
-
-    if intensity_res !== nothing
-        push!(out_pairs, :ac1 => intensity_res.ac1)
-        push!(out_pairs, :ac2 => intensity_res.ac2)
-        push!(out_pairs, :cc => intensity_res.cc)
-        push!(out_pairs, :m1 => intensity_res.mean1)
-        push!(out_pairs, :m2 => intensity_res.mean2)
-        push!(out_pairs, :v1 => intensity_res.v1)
-        push!(out_pairs, :v2 => intensity_res.v2)
-        if bootstrap && intensity_bs !== nothing
-            for p in map_bootstrap_fields(intensity_bs, :cc, :ac1, :ac2, :m1, :m2)
-                push!(out_pairs, p)
-            end
-        end
-    end
-
-    if on_res !== nothing
-        push!(out_pairs, :ccON => on_res.cc)
-        push!(out_pairs, :ac1ON => on_res.ac1)
-        push!(out_pairs, :ac2ON => on_res.ac2)
-        push!(out_pairs, :mON1 => on_res.mean1)
-        push!(out_pairs, :mON2 => on_res.mean2)
-        if bootstrap && on_bs !== nothing
-            for p in map_bootstrap_fields(on_bs, :ccON, :ac1ON, :ac2ON, :mON1, :mON2)
-                push!(out_pairs, p)
-            end
-        end
-    end
-
-    if reporter_res !== nothing
-        push!(out_pairs, :ccReporters => reporter_res.cc)
-        push!(out_pairs, :ac1Reporters => reporter_res.ac1)
-        push!(out_pairs, :ac2Reporters => reporter_res.ac2)
-        push!(out_pairs, :mR1 => reporter_res.mean1)
-        push!(out_pairs, :mR2 => reporter_res.mean2)
-        if bootstrap && reporter_bs !== nothing
-            for p in map_bootstrap_fields(reporter_bs, :ccReporters, :ac1Reporters, :ac2Reporters, :mR1, :mR2)
-                push!(out_pairs, p)
-            end
-        end
-    end
-
-    return (; out_pairs...)
-end
-
+# These functions were redundant and have been replaced by:
+# - compute_cov_empirical: Single unified empirical cross-correlation function
+# - score_models_from_traces: Scoring function that reads precomputed results
 # ============================================================================
-# GOODNESS-OF-FIT TESTING
-# ============================================================================
-# Function: crosscovariance_gof_test
-# Creation date: 2025-12-09 (AI-created)
-# Purpose: Simulation-based goodness-of-fit test comparing empirical to model predictions
-
-"""
-    crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
-
-Simulation-based goodness-of-fit test comparing empirical cross-covariance to model predictions.
-
-This function performs a comprehensive test by:
-1. Computing empirical cross-covariance from data traces
-2. Computing predicted cross-covariance from model parameters
-3. Simulating many traces from the model and computing their cross-covariances
-4. Comparing where the empirical cross-covariance falls in the simulation distribution
-
-# Arguments
-- `data_traces::Vector`: Vector of empirical trace data (matrices with columns [enhancer, gene])
-- `r::Vector`: Fitted rate parameters from the model
-- `transitions::Tuple`: Model transition structure
-- `G, R, S, insertstep`: Model structure parameters
-- `coupling::Tuple`: Coupling structure for coupled models
-- `interval::Float64`: Time interval between trace points
-- `probfn::Function`: Probability function for noise (e.g., `prob_Gaussian`)
-- `lags::Vector{Int}`: Time lags for cross-covariance calculation
-- `ntrials::Int=1000`: Number of simulation trials (default: 1000)
-- `trial_time::Float64=720.0`: Length of each simulated trace (default: 720.0 minutes)
-
-# Returns
-- `NamedTuple` with fields:
-  - `empirical_cc::Vector`: Empirical cross-covariance from data
-  - `predicted_cc::Vector`: Predicted cross-covariance from model
-  - `simulation_cc_mean::Vector`: Mean cross-covariance across simulations
-  - `simulation_cc_std::Vector`: Standard deviation of cross-covariance across simulations
-  - `simulation_cc_samples::Matrix`: All simulation cross-covariances (ntrials × length(lags))
-  - `lags::Vector`: Time lags
-  - `l2_norm::Float64`: L² norm of difference between empirical and predicted
-  - `linf_norm::Float64`: L∞ norm (max absolute difference)
-  - `pearson_corr::Float64`: Pearson correlation between empirical and predicted
-  - `percentile_rank::Float64`: Percentile rank of empirical L² norm in simulation distribution
-  - `p_value::Float64`: Two-tailed p-value (proportion of simulations with larger L² norm)
-
-# Notes
-- Uses `data_covariance` to compute empirical cross-covariance (handles edge effects and trends)
-- Uses `covariance_functions` to compute predicted cross-covariance
-- Simulates traces using `simulate_trace_vector` and computes cross-covariances
-- Accounts for finite-sample effects by comparing to simulation distribution
-- Edge effects and trends are automatically handled by `unbiased_crosscov` with `demean=true`
-
-# Examples
-```julia
-# Perform goodness-of-fit test
-lags = collect(-60:1:60)
-results = crosscovariance_gof_test(
-    data_traces, fitted_rates, transitions, G, R, S, insertstep,
-    coupling, interval, prob_Gaussian, lags;
-    ntrials=1000, trial_time=720.0
-)
-
-# Check p-value
-println("P-value: ", results.p_value)
-println("Percentile rank: ", results.percentile_rank)
-
-# Visualize: empirical vs predicted vs simulation distribution
-using Plots
-using Printf
-plot(results.lags, results.empirical_cc, label="Empirical")
-plot!(results.lags, results.predicted_cc, label="Predicted")
-plot!(results.lags, results.simulation_cc_mean, ribbon=results.simulation_cc_std, 
-      label="Simulation mean ± std", alpha=0.3)
-```
-"""
-function crosscovariance_gof_test(data_traces, r, transitions, G, R, S, insertstep, coupling, interval, probfn, lags; ntrials=1000, trial_time=720.0)
-    # 1. Compute empirical cross-covariance from data
-    empirical_cc = compute_covariance(data_traces, lags; bootstrap=false).cc
-    
-    # 2. Compute predicted cross-covariance from model
-    _, _, predicted_cc, _, _, _, _, _, _, _ = covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags[lags.>=0])
-    # Extend to negative lags (symmetric)
-    if any(lags.<0)
-        lags_positive = lags[lags.>=0]
-        predicted_cc_full = vcat(reverse(predicted_cc[2:end]), predicted_cc)
-    else
-        predicted_cc_full = predicted_cc
-    end
-    
-    # 3. Simulate many traces and compute their cross-covariances
-    simulation_cc_samples = zeros(ntrials, length(lags))
-    l2_norms = zeros(ntrials)
-    
-    for i in 1:ntrials
-        # Simulate a trace from the model
-        sim_trace = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, interval, trial_time, 1, col=2)
-        
-        # Compute cross-covariance from this simulation
-        simulation_cc_samples[i, :] = compute_covariance(sim_trace, lags; bootstrap=false).cc
-        
-        # Compute L² norm for this simulation
-        l2_norms[i] = sqrt(sum((sim_cc .- predicted_cc_full).^2))
-    end
-    
-    # 4. Compute statistics
-    simulation_cc_mean = vec(Statistics.mean(simulation_cc_samples, dims=1))
-    simulation_cc_std = vec(Statistics.std(simulation_cc_samples, dims=1))
-    
-    # Compare empirical to predicted
-    l2_norm = sqrt(sum((empirical_cc .- predicted_cc_full).^2))
-    linf_norm = maximum(abs.(empirical_cc .- predicted_cc_full))
-    
-    # Pearson correlation
-    pearson_corr = StatsBase.cor(empirical_cc, predicted_cc_full)
-    
-    # Percentile rank: where does empirical L² norm fall in simulation distribution?
-    percentile_rank = sum(l2_norms .<= l2_norm) / ntrials
-    
-    # Two-tailed p-value: proportion of simulations with larger or equal L² norm
-    # (more extreme than observed)
-    p_value = 2 * min(percentile_rank, 1.0 - percentile_rank)
-    
-    return (
-        empirical_cc=empirical_cc,
-        predicted_cc=predicted_cc_full,
-        simulation_cc_mean=simulation_cc_mean,
-        simulation_cc_std=simulation_cc_std,
-        simulation_cc_samples=simulation_cc_samples,
-        lags=lags,
-        l2_norm=l2_norm,
-        linf_norm=linf_norm,
-        pearson_corr=pearson_corr,
-        percentile_rank=percentile_rank,
-        p_value=p_value
-    )
-end
 
 # ============================================================================
 # MODEL PARAMETER UTILITIES (OLD - Pre-2025)
@@ -5094,22 +4835,21 @@ end
     score_models_from_traces(enhancer_file, gene_file, crosscov_folder; 
         crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
 
-Score model predictions against empirical cross-covariance computed from trace predictions.
+Score model predictions against empirical cross-covariance by reading precomputed results from CSV files.
 
-The crosscovariance files contain the theoretical predictions (precomputed).
+The crosscovariance files contain the theoretical predictions (precomputed by `write_cov`).
+The empirical file contains empirical results (precomputed by `write_cov_empirical`).
 Workflow:
-1. Load enhancer and gene trace prediction files (from separate fits)
+1. Read empirical cross-covariance from CSV file (precomputed)
 2. Read theoretical cross-covariance from CSV files in crosscov_folder (includes tau/lags)
-3. Compute empirical cross-covariance (Xcor) from traces using lags from the file
-4. Score theoretical predictions (from files) against empirical data (from traces)
+3. Score theoretical predictions (from files) against empirical data (from file)
 
 The coupling model is extracted from crosscovariance filenames (two characters after "gene").
 Lags are read from the `tau` column in the crosscovariance files.
 
 # Arguments
-- `enhancer_file::String`: Path to enhancer prediction CSV file
-- `gene_file::String`: Path to gene prediction CSV file
-- `crosscov_folder::String`: Folder containing crosscovariance CSV files (with theoretical predictions)
+- `empirical_file::String`: Path to empirical cross-covariance CSV file (from `write_cov_empirical`)
+- `crosscov_folder::String`: Folder containing crosscovariance CSV files (with theoretical predictions from `write_cov`)
 - `crosscov_pattern::String`: Filename pattern for crosscovariance files
 
 # Returns
@@ -5136,8 +4876,8 @@ results["31"].cc_empirical
 results["31"].cc_theory
 ```
 """
-function score_models_from_traces(enhancer_file, gene_file, crosscov_folder;
-    crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene", n_bootstrap=1000)
+function score_models_from_traces(empirical_file::String, crosscov_folder::String;
+    crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
     
     # Find all crosscovariance files (these contain the coupling model identifier)
     crosscov_files = filter(f -> startswith(f, crosscov_pattern) && endswith(f, ".csv"), readdir(crosscov_folder))
@@ -5146,76 +4886,58 @@ function score_models_from_traces(enhancer_file, gene_file, crosscov_folder;
         error("No crosscovariance files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
     end
     
-    results = Dict{String, NamedTuple}()
+    # Read empirical results from CSV file (precomputed by write_cov_empirical)
+    df_empirical = CSV.read(empirical_file, DataFrame)
+    if !("tau" in names(df_empirical))
+        error("Empirical file missing 'tau' column")
+    end
+    lags = Vector{Int}(df_empirical.tau)
     
-    # 1. Get lags from the first crosscovariance file (assume all files use same lags)
-    first_file = joinpath(crosscov_folder, crosscov_files[1])
-    df_first = CSV.read(first_file, DataFrame)
-    if !("tau" in names(df_first))
-        error("First crosscovariance file missing 'tau' column")
-    end
-    lags = Vector{Int}(df_first.tau)
-
-    # 2. Prepare traces once (both reporter counts and ON/OFF derived from those counts)
-    traces_bundle = try
-        prepare_traces_from_prediction(enhancer_file, gene_file; on_threshold=0)
-    catch e
-        error("Error preparing traces from '$enhancer_file' and '$gene_file': $e")
-    end
-
-    # 3. Compute empirical covariances in one unified call (StatsBase-based via `unbiased_crosscov`)
-    empirical = try
-        covariance_functions_from_traces(lags=lags,
-            reporter_traces=traces_bundle.reporter_traces,
-            on_traces=traces_bundle.on_traces,
-            bootstrap=true,
-            n_bootstrap=n_bootstrap)
-    catch e
-        error("Error computing empirical covariance functions from traces: $e")
-    end
-
-    # Provide compatibility views expected by the rest of this function
+    # Extract empirical ON state data
     data_result = (
-        cc_unnormalized=empirical.ccON,
-        ac1_unnormalized=empirical.ac1ON,
-        ac2_unnormalized=empirical.ac2ON,
-        mean1=empirical.mON1,
-        mean2=empirical.mON2,
-        lags=empirical.tau,
-        cc_unnormalized_lower=hasproperty(empirical, :ccON_lower) ? empirical.ccON_lower : nothing,
-        cc_unnormalized_median=hasproperty(empirical, :ccON_median) ? empirical.ccON_median : nothing,
-        cc_unnormalized_upper=hasproperty(empirical, :ccON_upper) ? empirical.ccON_upper : nothing,
-        cc_unnormalized_se=hasproperty(empirical, :ccON_se) ? empirical.ccON_se : nothing,
-        ac1_unnormalized_lower=hasproperty(empirical, :ac1ON_lower) ? empirical.ac1ON_lower : nothing,
-        ac1_unnormalized_median=hasproperty(empirical, :ac1ON_median) ? empirical.ac1ON_median : nothing,
-        ac1_unnormalized_upper=hasproperty(empirical, :ac1ON_upper) ? empirical.ac1ON_upper : nothing,
-        ac1_unnormalized_se=hasproperty(empirical, :ac1ON_se) ? empirical.ac1ON_se : nothing,
-        ac2_unnormalized_lower=hasproperty(empirical, :ac2ON_lower) ? empirical.ac2ON_lower : nothing,
-        ac2_unnormalized_median=hasproperty(empirical, :ac2ON_median) ? empirical.ac2ON_median : nothing,
-        ac2_unnormalized_upper=hasproperty(empirical, :ac2ON_upper) ? empirical.ac2ON_upper : nothing,
-        ac2_unnormalized_se=hasproperty(empirical, :ac2ON_se) ? empirical.ac2ON_se : nothing
+        cc_unnormalized=df_empirical.cc_ON,
+        ac1_unnormalized=df_empirical.ac1_ON,
+        ac2_unnormalized=df_empirical.ac2_ON,
+        mean1=df_empirical.mON1[1],
+        mean2=df_empirical.mON2[1],
+        lags=lags,
+        cc_unnormalized_lower=hasproperty(df_empirical, :cc_ON_lower) ? df_empirical.cc_ON_lower : nothing,
+        cc_unnormalized_median=hasproperty(df_empirical, :cc_ON_median) ? df_empirical.cc_ON_median : nothing,
+        cc_unnormalized_upper=hasproperty(df_empirical, :cc_ON_upper) ? df_empirical.cc_ON_upper : nothing,
+        cc_unnormalized_se=hasproperty(df_empirical, :cc_ON_se) ? df_empirical.cc_ON_se : nothing,
+        ac1_unnormalized_lower=hasproperty(df_empirical, :ac1_ON_lower) ? df_empirical.ac1_ON_lower : nothing,
+        ac1_unnormalized_median=hasproperty(df_empirical, :ac1_ON_median) ? df_empirical.ac1_ON_median : nothing,
+        ac1_unnormalized_upper=hasproperty(df_empirical, :ac1_ON_upper) ? df_empirical.ac1_ON_upper : nothing,
+        ac1_unnormalized_se=hasproperty(df_empirical, :ac1_ON_se) ? df_empirical.ac1_ON_se : nothing,
+        ac2_unnormalized_lower=hasproperty(df_empirical, :ac2_ON_lower) ? df_empirical.ac2_ON_lower : nothing,
+        ac2_unnormalized_median=hasproperty(df_empirical, :ac2_ON_median) ? df_empirical.ac2_ON_median : nothing,
+        ac2_unnormalized_upper=hasproperty(df_empirical, :ac2_ON_upper) ? df_empirical.ac2_ON_upper : nothing,
+        ac2_unnormalized_se=hasproperty(df_empirical, :ac2_ON_se) ? df_empirical.ac2_ON_se : nothing
     )
 
+    # Extract empirical Reporter data
     reporter_result = (
-        cc=empirical.ccReporters,
-        ac1=empirical.ac1Reporters,
-        ac2=empirical.ac2Reporters,
-        mean1=empirical.mR1,
-        mean2=empirical.mR2,
-        lags=empirical.tau,
-        cc_lower=hasproperty(empirical, :ccReporters_lower) ? empirical.ccReporters_lower : nothing,
-        cc_median=hasproperty(empirical, :ccReporters_median) ? empirical.ccReporters_median : nothing,
-        cc_upper=hasproperty(empirical, :ccReporters_upper) ? empirical.ccReporters_upper : nothing,
-        cc_se=hasproperty(empirical, :ccReporters_se) ? empirical.ccReporters_se : nothing,
-        ac1_lower=hasproperty(empirical, :ac1Reporters_lower) ? empirical.ac1Reporters_lower : nothing,
-        ac1_median=hasproperty(empirical, :ac1Reporters_median) ? empirical.ac1Reporters_median : nothing,
-        ac1_upper=hasproperty(empirical, :ac1Reporters_upper) ? empirical.ac1Reporters_upper : nothing,
-        ac1_se=hasproperty(empirical, :ac1Reporters_se) ? empirical.ac1Reporters_se : nothing,
-        ac2_lower=hasproperty(empirical, :ac2Reporters_lower) ? empirical.ac2Reporters_lower : nothing,
-        ac2_median=hasproperty(empirical, :ac2Reporters_median) ? empirical.ac2Reporters_median : nothing,
-        ac2_upper=hasproperty(empirical, :ac2Reporters_upper) ? empirical.ac2Reporters_upper : nothing,
-        ac2_se=hasproperty(empirical, :ac2Reporters_se) ? empirical.ac2Reporters_se : nothing
+        cc=hasproperty(df_empirical, :cc_Reporters) ? df_empirical.cc_Reporters : nothing,
+        ac1=hasproperty(df_empirical, :ac1_Reporters) ? df_empirical.ac1_Reporters : nothing,
+        ac2=hasproperty(df_empirical, :ac2_Reporters) ? df_empirical.ac2_Reporters : nothing,
+        mean1=hasproperty(df_empirical, :mR1) ? df_empirical.mR1[1] : nothing,
+        mean2=hasproperty(df_empirical, :mR2) ? df_empirical.mR2[1] : nothing,
+        lags=lags,
+        cc_lower=hasproperty(df_empirical, :cc_Reporters_lower) ? df_empirical.cc_Reporters_lower : nothing,
+        cc_median=hasproperty(df_empirical, :cc_Reporters_median) ? df_empirical.cc_Reporters_median : nothing,
+        cc_upper=hasproperty(df_empirical, :cc_Reporters_upper) ? df_empirical.cc_Reporters_upper : nothing,
+        cc_se=hasproperty(df_empirical, :cc_Reporters_se) ? df_empirical.cc_Reporters_se : nothing,
+        ac1_lower=hasproperty(df_empirical, :ac1_Reporters_lower) ? df_empirical.ac1_Reporters_lower : nothing,
+        ac1_median=hasproperty(df_empirical, :ac1_Reporters_median) ? df_empirical.ac1_Reporters_median : nothing,
+        ac1_upper=hasproperty(df_empirical, :ac1_Reporters_upper) ? df_empirical.ac1_Reporters_upper : nothing,
+        ac1_se=hasproperty(df_empirical, :ac1_Reporters_se) ? df_empirical.ac1_Reporters_se : nothing,
+        ac2_lower=hasproperty(df_empirical, :ac2_Reporters_lower) ? df_empirical.ac2_Reporters_lower : nothing,
+        ac2_median=hasproperty(df_empirical, :ac2_Reporters_median) ? df_empirical.ac2_Reporters_median : nothing,
+        ac2_upper=hasproperty(df_empirical, :ac2_Reporters_upper) ? df_empirical.ac2_Reporters_upper : nothing,
+        ac2_se=hasproperty(df_empirical, :ac2_Reporters_se) ? df_empirical.ac2_Reporters_se : nothing
     )
+    
+    results = Dict{String, NamedTuple}()
     
     for crosscov_file in crosscov_files
         # Extract coupling model from crosscovariance filename
