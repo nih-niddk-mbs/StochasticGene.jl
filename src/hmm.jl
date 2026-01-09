@@ -2612,32 +2612,50 @@ function viterbi_grid(a, a_grid, b, p0)
 end
 
 """
-    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.001)
 
-Compute covariance functions for coupled HMM model.
+Compute theoretical covariance functions for coupled HMM model.
+
+Computes cross-covariances and autocovariances for intensity (with noise), ON states (binary),
+and reporter counts (deterministic per state). All covariances are unnormalized (E[xy] - E[x]E[y]).
 
 # Arguments
-- `rin`: Input rates
-- `transitions`: Transition definitions
-- `G::Tuple`: Gene definitions
-- `R`: Rate definitions
-- `S`: State definitions
-- `insertstep`: Insert step definitions
-- `interval`: Time interval
-- `probfn`: Probability function
-- `coupling`: Coupling parameters
-- `lags::Vector`: Time lags for covariance calculation, monotonic increasing from 0
+- `rin`: Input rate parameters
+- `transitions::Tuple`: Transition definitions for each unit
+- `G::Tuple`: Number of gene states for each unit
+- `R`: Number of RNA states for each unit
+- `S`: Number of splice sites for each unit
+- `insertstep`: Reporter insertion step definitions
+- `interval::Float64`: Time interval for transitions
+- `probfn`: Probability function for observation model (e.g., `prob_Gaussian`)
+- `coupling::Tuple`: Coupling structure between units
+- `lags::Vector{Int}`: Time lags for covariance calculation (monotonic increasing from 0)
+- `offset::Float64=0.001`: Offset added to ON states and reporter counts (default: 0.001)
+  - Added for compatibility with experimental data processing conventions
 
 # Returns
-- `Tuple`: (ac1, ac2, cc, ac1_norm, ac2_norm, cc_norm, lags_full, m1, m2, v1, v2) containing:
-  - ac1, ac2: Autocovariance functions for each channel
-  - cc: Cross-covariance function
-  - ac1_norm, ac2_norm, cc_norm: Normalized covariance functions
-  - lags_full: Full lag vector including negative lags
-  - m1, m2: Mean intensities
-  - v1, v2: Variances
+- `Tuple` containing (in order):
+  - `ac1, ac2`: Autocovariance functions for intensity (unit1, unit2) - includes noise variance at lag 0
+  - `cc`: Cross-covariance function for intensity (symmetric: includes negative lags)
+  - `ccON`: Cross-covariance function for ON states (unnormalized, symmetric)
+  - `tau`: Time lags (symmetric: includes negative lags)
+  - `m1, m2`: Mean intensities
+  - `v1, v2`: Variances of intensities
+  - `m1ON, m2ON`: Mean ON state probabilities (with offset)
+  - `ac1ON, ac2ON`: Autocovariance functions for ON states (unnormalized, symmetric)
+  - `ccReporters`: Cross-covariance function for reporter counts (unnormalized, symmetric)
+  - `m1Reporters, m2Reporters`: Mean reporter counts (with offset)
+  - `ac1Reporters, ac2Reporters`: Autocovariance functions for reporter counts (unnormalized, symmetric)
+
+# Notes
+- **Intensity covariances**: Use `autocov_hmm` to account for noise variance at lag 0
+- **ON state covariances**: Use `crosscov_hmm` (binary: ON² = ON, so no second moment needed)
+- **Reporter covariances**: Use `crosscov_hmm` (deterministic per state, variance only from state transitions)
+- **Offset**: Applied to ON states and reporter counts to match experimental data processing
+- All covariances are **unnormalized** (centered: E[xy] - E[x]E[y])
+- Positive τ in input `lags` means first unit leads; output `tau` includes symmetric negative lags
 """
-function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.001)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
@@ -2656,45 +2674,41 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
         # mmax = max(maximum(mi), 1.0)
         # push!(max_intensity, mmax)
         push!(mean_intensity, mi)
-        # Normalize second moment by mmax^2 to match normalized mean_intensity
         push!(second_moment_intensity, second_moment)
-        push!(ON, float(num_per_state[i] .> 0.0))
+        push!(ON, float(num_per_state[i] .> 0.0) .+ offset)
     end
     a, p0 = make_ap(r, couplingStrength, interval, components)
     m1 = mean_hmm(p0, mean_intensity[1])
     m2 = mean_hmm(p0, mean_intensity[2])
-    mON1 = mean_hmm(p0, ON[1])
-    mON2 = mean_hmm(p0, ON[2])
+    m1ON = mean_hmm(p0, ON[1])
+    m2ON = mean_hmm(p0, ON[2])
     
     # Reporter counts (not binary ON/OFF)
     reporters = Vector[]
-    second_moment_reporters = Vector[]
     for i in eachindex(num_per_state)
-        push!(reporters, Float64.(num_per_state[i]))
-        # Second moment for reporter counts: E[reporter^2|state] = reporter_count^2 (deterministic per state)
-        push!(second_moment_reporters, Float64.(num_per_state[i]).^2)
+        push!(reporters, Float64.(num_per_state[i]) .+ offset)
     end
-    mR1 = mean_hmm(p0, reporters[1])
-    mR2 = mean_hmm(p0, reporters[2])
+    m1Reporters = mean_hmm(p0, reporters[1])
+    m2Reporters = mean_hmm(p0, reporters[2])
 
     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) 
     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
-    # For enhancer-leads convention (positive tau means enhancer leads):
-    # Use ON[2], ON[1] to compute <gene(t)enhancer(t+tau)>, which for positive tau means enhancer leads
-    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, mON2, mON1)
-    # Reporter count cross-covariance
-    ccReporters = crosscov_hmm(a, p0, reporters[2], reporters[1], lags, mR2, mR1)
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) 
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) 
+
+    # Need to account for intensity variance at lag 0 for autocovariance functions
     ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
     ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
     
-    # ON state autocovariances: For binary ON/OFF, ON^2 = ON, so second moment = ON itself
-    ac1ON = autocov_hmm(a, p0, ON[1], ON[1], lags)
-    ac2ON = autocov_hmm(a, p0, ON[2], ON[2], lags)
-    # Reporter count autocovariances
-    ac1Reporters = autocov_hmm(a, p0, reporters[1], second_moment_reporters[1], lags)
-    ac2Reporters = autocov_hmm(a, p0, reporters[2], second_moment_reporters[2], lags)
+    # ON state cross-covariances
+    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, m2ON, m1ON)
+    # ON state autocovariances
+    ac1ON = crosscov_hmm(a, p0, ON[1], ON[1], lags)
+    ac2ON = crosscov_hmm(a, p0, ON[2], ON[2], lags)
+
+    # Reporter count cross-covariance
+    ccReporters = crosscov_hmm(a, p0, reporters[2], reporters[1], lags, m2Reporters, m1Reporters)
+    # Reporter count covariances
+    ac1Reporters = crosscov_hmm(a, p0, reporters[1], reporters[1], lags)
+    ac2Reporters = crosscov_hmm(a, p0, reporters[2], reporters[2], lags)
     
     # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
     v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2)
@@ -2703,59 +2717,59 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     cc = vcat(reverse(cc21), cc12[2:end])
     ccON = vcat(reverse(ccON), ccON[2:end])
     ccReporters = vcat(reverse(ccReporters), ccReporters[2:end])
-    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON, ccReporters, mR1, mR2, ac1Reporters, ac2Reporters
+    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters
 end
 
-function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    sourceStates = [c.sourceState for c in components.modelcomponents]
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
-    num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
-    mean_intensity = Vector[]
-    second_moment_intensity = Vector[]  # E[O^2|state] for each state
-    max_intensity = Float64[]
-    ON = Vector[]
-    for i in eachindex(noiseparams)
-        dists = probfn(noiseparams[i], num_per_state[i], components.N)
-        mi = mean.(dists)  # E[O|state]
-        vi = var.(dists)   # Var(O|state)
-        # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
-        second_moment = vi .+ mi.^2
-        mmax = max(maximum(mi), 1.0)
-        push!(max_intensity, mmax)
-        push!(mean_intensity, mi / mmax)
-        # Normalize second moment by mmax^2 to match normalized mean_intensity
-        push!(second_moment_intensity, second_moment / (mmax^2))
-        push!(ON, float(num_per_state[i] .> 0.0))
-    end
-    a, p0 = make_ap(r, couplingStrength, interval, components)
-    m1 = mean_hmm(p0, mean_intensity[1])
-    m2 = mean_hmm(p0, mean_intensity[2])
-    mON1 = mean_hmm(p0, ON[1])
-    mON2 = mean_hmm(p0, ON[2])
+# function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
+#     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+#     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+#     sourceStates = [c.sourceState for c in components.modelcomponents]
+#     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
+#     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+#     mean_intensity = Vector[]
+#     second_moment_intensity = Vector[]  # E[O^2|state] for each state
+#     max_intensity = Float64[]
+#     ON = Vector[]
+#     for i in eachindex(noiseparams)
+#         dists = probfn(noiseparams[i], num_per_state[i], components.N)
+#         mi = mean.(dists)  # E[O|state]
+#         vi = var.(dists)   # Var(O|state)
+#         # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
+#         second_moment = vi .+ mi.^2
+#         mmax = max(maximum(mi), 1.0)
+#         push!(max_intensity, mmax)
+#         push!(mean_intensity, mi / mmax)
+#         # Normalize second moment by mmax^2 to match normalized mean_intensity
+#         push!(second_moment_intensity, second_moment / (mmax^2))
+#         push!(ON, float(num_per_state[i] .> 0.0))
+#     end
+#     a, p0 = make_ap(r, couplingStrength, interval, components)
+#     m1 = mean_hmm(p0, mean_intensity[1])
+#     m2 = mean_hmm(p0, mean_intensity[2])
+#     mON1 = mean_hmm(p0, ON[1])
+#     mON2 = mean_hmm(p0, ON[2])
 
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
-    # For enhancer-leads convention (positive tau means enhancer leads):
-    # Use ON[2], ON[1] to compute <gene(t)enhancer(t+tau)>, which for positive tau means enhancer leads
-    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, mON2, mON1)
-    ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
-    ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
-    ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) * max_intensity[1]^2
-    ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags) * max_intensity[2]^2
-    # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
-    v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2) * max_intensity[1]^2
-    v2 = (sum(p0 .* second_moment_intensity[2]) - m2^2) * max_intensity[2]^2
-    # Scale means back to original scale (m1 and m2 are computed on normalized scale)
-    m1_scaled = m1 * max_intensity[1]
-    m2_scaled = m2 * max_intensity[2]
-    # ac1 = vcat(reverse(ac1), ac1[2:end])
-    # ac2 = vcat(reverse(ac2), ac2[2:end])
-    cc = vcat(reverse(cc21), cc12[2:end])
-    ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1_scaled, m2_scaled, v1, v2
-end
+#     cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+#     cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2) * max_intensity[1] * max_intensity[2]
+#     # For enhancer-leads convention (positive tau means enhancer leads):
+#     # Use ON[2], ON[1] to compute <gene(t)enhancer(t+tau)>, which for positive tau means enhancer leads
+#     ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, mON2, mON1)
+#     ac1 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[1], lags, m1, m1) * max_intensity[1]^2
+#     ac2 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[2], lags, m2, m2) * max_intensity[2]^2
+#     ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) * max_intensity[1]^2
+#     ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags) * max_intensity[2]^2
+#     # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
+#     v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2) * max_intensity[1]^2
+#     v2 = (sum(p0 .* second_moment_intensity[2]) - m2^2) * max_intensity[2]^2
+#     # Scale means back to original scale (m1 and m2 are computed on normalized scale)
+#     m1_scaled = m1 * max_intensity[1]
+#     m2_scaled = m2 * max_intensity[2]
+#     # ac1 = vcat(reverse(ac1), ac1[2:end])
+#     # ac2 = vcat(reverse(ac2), ac2[2:end])
+#     cc = vcat(reverse(cc21), cc12[2:end])
+#     ccON = vcat(reverse(ccON), ccON[2:end])
+#     ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1_scaled, m2_scaled, v1, v2
+# end
 
 """
     autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)

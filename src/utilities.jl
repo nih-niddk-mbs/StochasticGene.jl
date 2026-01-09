@@ -41,49 +41,138 @@ function eig_decompose(M)
 end
 
 """
-    unbiased_crosscov(x, y, lags; demean=true)
+    crosscorrelation_function(x, y, lags; meanx=0.0, meany=0.0)
 
-Compute unbiased cross-covariance that accounts for different numbers of valid pairs at different lags.
+Explicitly compute the unbiased cross-correlation function without calling Julia's StatsBase.crosscov.
 
-This function wraps `StatsBase.crosscov` and applies a correction factor to account for the fact
-that `StatsBase.crosscov` normalizes by `n` (length of input) for all lags, but the actual number
-of valid pairs for lag τ is `n - |τ|`. The correction factor is `n / (n - |τ|)`.
+The cross-correlation function is defined as:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
+
+If `meanx=0.0` and `meany=0.0` (default), computes the uncentered cross-correlation:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
+
+The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
 
 # Arguments
 - `x`: First time series vector
 - `y`: Second time series vector  
 - `lags`: Vector of time lags (can include negative values)
-- `demean`: Whether to remove means before computation (default: true)
+- `meanx::Float64=0.0`: Mean to subtract from x (if 0.0, no centering)
+- `meany::Float64=0.0`: Mean to subtract from y (if 0.0, no centering)
 
 # Returns
-- `Vector{Float64}`: Unbiased cross-covariance at specified lags
+- `Vector{Float64}`: Unbiased cross-correlation function at specified lags
 
 # Example
 ```julia
 x = randn(100)
 y = randn(100)
 lags = collect(-20:20)
-cc = unbiased_crosscov(x, y, lags, demean=true)
+# Uncentered cross-correlation
+R_XY = crosscorrelation_function(x, y, lags)
+# Cross-covariance with empirical means
+R_XY_centered = crosscorrelation_function(x, y, lags, meanx=mean(x), meany=mean(y))
+# Cross-covariance with theoretical means
+R_XY_theory = crosscorrelation_function(x, y, lags, meanx=μ_X_theory, meany=μ_Y_theory)
 ```
 """
-function unbiased_crosscov(x, y, lags; demean::Bool=true)
+function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0)
     n = length(x)
     if length(y) != n
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
     end
     
-    # Call StatsBase.crosscov
-    cc = StatsBase.crosscov(x, y, lags, demean=demean)
+    # Center the data if means are provided
+    if meanx != 0.0 || meany != 0.0
+        x = x .- meanx
+        y = y .- meany
+    end
     
-    # Apply correction factor: n / (n - |τ|) for each lag
-    # This accounts for the fact that StatsBase.crosscov normalizes by n,
-    # but the actual number of valid pairs is n - |τ|
-    correction_factors = [n / (n - abs(τ)) for τ in lags]
+    # Pre-allocate result
+    result = Vector{Float64}(undef, length(lags))
     
-    # Apply correction
-    cc_unbiased = cc .* correction_factors
+    # Compute cross-correlation for each lag
+    for (i, τ) in enumerate(lags)
+        τ_abs = abs(τ)
+        n_valid = n - τ_abs
+        
+        if n_valid <= 0
+            result[i] = 0.0
+            continue
+        end
+        
+        # Compute sum of products for valid pairs
+        sum_xy = 0.0
+        if τ >= 0
+            # Positive lag: X(t) * Y(t+τ)
+            for t in 1:n_valid
+                sum_xy += x[t] * y[t + τ]
+            end
+        else
+            # Negative lag: X(t-|τ|) * Y(t) = Y(t) * X(t-|τ|)
+            for t in 1:n_valid
+                sum_xy += y[t] * x[t + τ_abs]
+            end
+        end
+        
+        # Normalize by number of valid pairs: 1/(T-τ)
+        result[i] = sum_xy / n_valid
+    end
     
-    return cc_unbiased
+    return result
+end
+
+"""
+    unbiased_crosscov(x, y, lags; demean=true)
+
+Compute unbiased uncentered cross-correlation or cross-covariance that accounts for different numbers of valid pairs at different lags.
+
+This function wraps `StatsBase.crosscov` and applies a correction factor to account for the fact
+that `StatsBase.crosscov` normalizes by `n` (length of input) for all lags, but the actual number
+of valid pairs for lag τ is `n - |τ|`. The correction factor is `n / (n - |τ|)`.
+
+When `demean=false`, computes the uncentered cross-correlation function:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
+
+When `demean=true`, computes the cross-covariance function:
+    C_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
+
+where μ_X and μ_Y are computed over the full time series (not windowed means).
+
+The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
+
+# Arguments
+- `x`: First time series vector
+- `y`: Second time series vector  
+- `lags`: Vector of time lags (can include negative values)
+- `demean`: Whether to remove means before computation (default: true). If false, returns uncentered cross-correlation R_XY(τ).
+
+# Returns
+- `Vector{Float64}`: Unbiased uncentered cross-correlation (if `demean=false`) or cross-covariance (if `demean=true`) at specified lags
+
+# Example
+```julia
+x = randn(100)
+y = randn(100)
+lags = collect(-20:20)
+# Uncentered cross-correlation
+R_XY = unbiased_crosscov(x, y, lags, demean=false)
+# Cross-covariance
+C_XY = unbiased_crosscov(x, y, lags, demean=true)
+```
+"""
+function unbiased_crosscov(x, y, lags; demean::Bool=true)
+    # Compute empirical means if demeaning is requested
+    if demean
+        meanx = mean(x)
+        meany = mean(y)
+    else
+        meanx = 0.0
+        meany = 0.0
+    end
+    
+    # Call crosscorrelation_function with computed means
+    return crosscorrelation_function(x, y, lags; meanx=meanx, meany=meany)
 end
 
 """

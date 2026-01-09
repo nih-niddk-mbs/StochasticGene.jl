@@ -213,6 +213,8 @@ export
     TraceRNAData,
     Tsit5,
     unbiased_crosscov,
+    crosscorrelation_function,
+    compute_cov_empirical,
     write_augmented,
     write_cov,
     write_dataframes,
