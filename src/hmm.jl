@@ -2612,7 +2612,7 @@ function viterbi_grid(a, a_grid, b, p0)
 end
 
 """
-    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.001)
+    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.0)
 
 Compute theoretical covariance functions for coupled HMM model.
 
@@ -2623,39 +2623,56 @@ and reporter counts (deterministic per state). All covariances are unnormalized 
 - `rin`: Input rate parameters
 - `transitions::Tuple`: Transition definitions for each unit
 - `G::Tuple`: Number of gene states for each unit
-- `R`: Number of RNA states for each unit
-- `S`: Number of splice sites for each unit
-- `insertstep`: Reporter insertion step definitions
-- `interval::Float64`: Time interval for transitions
+- `R`: Number of RNA states for each unit (Tuple for coupled models)
+- `S`: Number of splice sites for each unit (Tuple for coupled models)
+- `insertstep`: Reporter insertion step definitions (Tuple for coupled models)
+- `interval::Float64`: Time interval for transitions (same units as rate parameters)
 - `probfn`: Probability function for observation model (e.g., `prob_Gaussian`)
 - `coupling::Tuple`: Coupling structure between units
-- `lags::Vector{Int}`: Time lags for covariance calculation (monotonic increasing from 0)
-- `offset::Float64=0.001`: Offset added to ON states and reporter counts (default: 0.001)
+- `lags::Vector{<:Real}`: Time lags for covariance calculation (positive lags only, monotonic increasing from 0)
+- `offset::Float64=0.0`: Offset added to ON states and reporter counts (default: 0.0)
+  - Applied as: ON = float(num_per_state .> 0.0) .+ offset
   - Added for compatibility with experimental data processing conventions
 
 # Returns
-- `Tuple` containing (in order):
-  - `ac1, ac2`: Autocovariance functions for intensity (unit1, unit2) - includes noise variance at lag 0
-  - `cc`: Cross-covariance function for intensity (symmetric: includes negative lags)
-  - `ccON`: Cross-covariance function for ON states (unnormalized, symmetric)
-  - `tau`: Time lags (symmetric: includes negative lags)
-  - `m1, m2`: Mean intensities
-  - `v1, v2`: Variances of intensities
-  - `m1ON, m2ON`: Mean ON state probabilities (with offset)
-  - `ac1ON, ac2ON`: Autocovariance functions for ON states (unnormalized, symmetric)
-  - `ccReporters`: Cross-covariance function for reporter counts (unnormalized, symmetric)
-  - `m1Reporters, m2Reporters`: Mean reporter counts (with offset)
-  - `ac1Reporters, ac2Reporters`: Autocovariance functions for reporter counts (unnormalized, symmetric)
+- `Tuple` containing (in order, total of 18 values):
+  1. `ac1`: Autocovariance function for intensity unit 1 (positive lags only, NOT symmetrized)
+  2. `ac2`: Autocovariance function for intensity unit 2 (positive lags only, NOT symmetrized)
+  3. `cc`: Cross-covariance function for intensity (SYMMETRIZED: includes negative lags)
+  4. `ccON`: Cross-covariance function for ON states (SYMMETRIZED: includes negative lags)
+  5. `tau`: Time lags (SYMMETRIZED: includes negative lags, format: [-max_lag, ..., -1, 0, 1, ..., max_lag])
+  6. `m1`: Mean intensity for unit 1
+  7. `m2`: Mean intensity for unit 2
+  8. `v1`: Variance of intensity for unit 1 (E[O²] - E[O]², includes noise variance)
+  9. `v2`: Variance of intensity for unit 2 (E[O²] - E[O]², includes noise variance)
+  10. `m1ON`: Mean ON state probability for unit 1 (with offset applied)
+  11. `m2ON`: Mean ON state probability for unit 2 (with offset applied)
+  12. `ac1ON`: Autocovariance function for ON states unit 1 (positive lags only, NOT symmetrized)
+  13. `ac2ON`: Autocovariance function for ON states unit 2 (positive lags only, NOT symmetrized)
+  14. `ccReporters`: Cross-covariance function for reporter counts (SYMMETRIZED: includes negative lags)
+  15. `m1Reporters`: Mean reporter count for unit 1 (with offset applied)
+  16. `m2Reporters`: Mean reporter count for unit 2 (with offset applied)
+  17. `ac1Reporters`: Autocovariance function for reporter counts unit 1 (positive lags only, NOT symmetrized)
+  18. `ac2Reporters`: Autocovariance function for reporter counts unit 2 (positive lags only, NOT symmetrized)
 
 # Notes
-- **Intensity covariances**: Use `autocov_hmm` to account for noise variance at lag 0
-- **ON state covariances**: Use `crosscov_hmm` (binary: ON² = ON, so no second moment needed)
-- **Reporter covariances**: Use `crosscov_hmm` (deterministic per state, variance only from state transitions)
+- **Input lags**: Must be positive lags only (monotonic increasing from 0, e.g., `collect(0:1:60)`)
+- **Output lags (tau)**: Symmetric lags including negative values: `[-max_lag, ..., -1, 0, 1, ..., max_lag]`
+- **Symmetrized vs. Non-symmetrized**:
+  - **Symmetrized** (include negative lags): `cc`, `ccON`, `ccReporters`, `tau`
+  - **NOT symmetrized** (positive lags only): `ac1`, `ac2`, `ac1ON`, `ac2ON`, `ac1Reporters`, `ac2Reporters`
+  - Autocovariances are symmetric functions (ac(τ) = ac(-τ)), so they can be symmetrized by the caller if needed
+- **Intensity covariances**: Use `autocorfn_hmm` to account for noise variance at lag 0 (uses second moment)
+- **ON state covariances**: Use `crosscorfn_hmm` (binary: ON² = ON, so no separate second moment needed)
+- **Reporter covariances**: Use `crosscorfn_hmm` (deterministic per state, variance only from state transitions)
 - **Offset**: Applied to ON states and reporter counts to match experimental data processing
+  - ON states: `float(num_per_state .> 0.0) .+ offset` (binary with offset)
+  - Reporters: `Float64.(num_per_state) .+ offset` (counts with offset)
 - All covariances are **unnormalized** (centered: E[xy] - E[x]E[y])
-- Positive τ in input `lags` means first unit leads; output `tau` includes symmetric negative lags
+- **Lag convention**: Positive τ in input `lags` means first unit leads second unit
+- **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.001)
+function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.0)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
@@ -2691,24 +2708,24 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     m1Reporters = mean_hmm(p0, reporters[1])
     m2Reporters = mean_hmm(p0, reporters[2])
 
-    cc12 = crosscov_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags, m1, m2) 
-    cc21 = crosscov_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags, m1, m2)
+    cc12 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) 
+    cc21 = crosscorfn_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags)
 
     # Need to account for intensity variance at lag 0 for autocovariance functions
-    ac1 = autocov_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
-    ac2 = autocov_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
+    ac1 = autocorfn_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
+    ac2 = autocorfn_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
     
     # ON state cross-covariances
-    ccON = crosscov_hmm(a, p0, ON[2], ON[1], lags, m2ON, m1ON)
+    ccON = crosscorfn_hmm(a, p0, ON[2], ON[1], lags)
     # ON state autocovariances
-    ac1ON = crosscov_hmm(a, p0, ON[1], ON[1], lags)
-    ac2ON = crosscov_hmm(a, p0, ON[2], ON[2], lags)
+    ac1ON = crosscorfn_hmm(a, p0, ON[1], ON[1], lags)
+    ac2ON = crosscorfn_hmm(a, p0, ON[2], ON[2], lags)
 
     # Reporter count cross-covariance
-    ccReporters = crosscov_hmm(a, p0, reporters[2], reporters[1], lags, m2Reporters, m1Reporters)
+    ccReporters = crosscorfn_hmm(a, p0, reporters[2], reporters[1], lags)
     # Reporter count covariances
-    ac1Reporters = crosscov_hmm(a, p0, reporters[1], reporters[1], lags)
-    ac2Reporters = crosscov_hmm(a, p0, reporters[2], reporters[2], lags)
+    ac1Reporters = crosscorfn_hmm(a, p0, reporters[1], reporters[1], lags)
+    ac2Reporters = crosscorfn_hmm(a, p0, reporters[2], reporters[2], lags)
     
     # Variance: E[O^2] - E[O]^2, using second moment for E[O^2]
     v1 = (sum(p0 .* second_moment_intensity[1]) - m1^2)
@@ -2719,6 +2736,168 @@ function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, inte
     ccReporters = vcat(reverse(ccReporters), ccReporters[2:end])
     ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters
 end
+
+"""
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+Compute cross-correlation function between two intensity signals.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Cross-correlation function at specified lags
+"""
+function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    cc = zeros(length(lags))
+    m1 = meanintensity1 .* p0
+    al = a^lags[1]
+    as = a^(lags[2] - lags[1])
+    for l in eachindex(lags)
+        for i in eachindex(meanintensity1)
+            for j in eachindex(meanintensity2)
+                cc[l] += m1[i] * al[i, j] * meanintensity2[j]
+            end
+        end
+        al *= as
+    end
+    cc
+end
+
+"""
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
+
+Compute cross-covariance function between two intensity signals.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+- `m1`: Mean of first signal
+- `m2`: Mean of second signal
+
+# Returns
+- `Vector{Float64}`: Cross-covariance function at specified lags
+"""
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
+end
+
+"""
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+
+Compute cross-covariance function between two intensity signals (auto-compute means).
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity1`: Mean intensity for first signal
+- `meanintensity2`: Mean intensity for second signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Cross-covariance function at specified lags
+"""
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
+end
+
+
+
+"""
+    autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+
+Compute autocorrelation function for HMM model.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity`: Mean intensity for signal
+- `second_moment_intensity`: Second moment intensity for signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Autocorrelation function at specified lags
+"""
+function autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+    ac = crosscorfn_hmm(a, p0, meanintensity, meanintensity, lags)
+    ac[1] = sum(p0 .* second_moment_intensity)
+    ac
+end
+
+"""
+    autocov_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+
+Compute autocovariance function for HMM model.
+
+# Arguments
+- `a`: Transition probability matrix
+- `p0`: Initial state distribution
+- `meanintensity`: Mean intensity for signal
+- `second_moment_intensity`: Second moment intensity for signal
+- `lags`: Time lags
+
+# Returns
+- `Vector{Float64}`: Autocovariance function at specified lags
+"""
+function autocov_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+    ac = autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+    ac .- mean_hmm(p0, meanintensity) .^ 2
+end
+
+"""
+    autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+
+Compute autocovariance function for HMM model.
+
+# Arguments
+- `r`: Rate parameters
+- `transitions`: Transition definitions
+- `G`: Gene definitions
+- `R`: Rate definitions
+- `S`: State definitions
+- `insertstep`: Insert step definitions
+- `interval`: Time interval
+- `probfn`: Probability function
+- `lags::Vector`: Time lags for covariance calculation
+
+# Returns
+- `Vector{Float64}`: Autocovariance function at specified lags
+"""
+function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+    components = TComponents(transitions, G, R, S, insertstep, "")
+    dists = probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT)
+    mean_intensity = mean.(dists)
+    vi = var.(dists)
+    # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
+    second_moment_intensity = vi .+ mean_intensity.^2
+    a, p0 = make_ap(r, interval, components)
+    autocov_hmm(a, p0, mean_intensity, second_moment_intensity, lags)
+end
+
+"""
+    mean_hmm(p0, meanintensity)
+
+Compute mean of intensity signal under HMM model.
+
+# Arguments
+- `p0`: Initial state distribution
+- `meanintensity`: Mean intensity per state
+
+# Returns
+- `Float64`: Mean of the intensity signal
+"""
+function mean_hmm(p0, meanintensity)
+    sum(p0 .* meanintensity)
+end
+
+
 
 # function covariance_functions_scaled(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector)
 #     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
@@ -2770,152 +2949,6 @@ end
 #     ccON = vcat(reverse(ccON), ccON[2:end])
 #     ac1, ac2, cc, ccON, vcat(-reverse(lags), lags[2:end]), m1_scaled, m2_scaled, v1, v2
 # end
-
-"""
-    autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
-
-Compute autocovariance function for HMM model.
-
-# Arguments
-- `r`: Rate parameters
-- `transitions`: Transition definitions
-- `G`: Gene definitions
-- `R`: Rate definitions
-- `S`: State definitions
-- `insertstep`: Insert step definitions
-- `interval`: Time interval
-- `probfn`: Probability function
-- `lags::Vector`: Time lags for covariance calculation
-
-# Returns
-- `Vector{Float64}`: Autocovariance function at specified lags
-"""
-function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
-    components = TComponents(transitions, G, R, S, insertstep, "")
-    dists = probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT)
-    mean_intensity = mean.(dists)
-    vi = var.(dists)
-    # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
-    second_moment_intensity = vi .+ mean_intensity.^2
-    a, p0 = make_ap(r, interval, components)
-    autocov_hmm(a, p0, mean_intensity, second_moment_intensity, lags)
-end
-
-function autocov_hmm(a, p0, meanintensity, second_moment_intensity, lags)
-    # For autocovariance: E[X(t)X(t+τ)] - E[X]^2
-    # At lag 0 (t=t'): E[X^2] - E[X]^2 = Var(X)
-    # We need E[X^2] = sum(p0 .* second_moment_intensity), not sum(p0 .* meanintensity^2)
-    ac = crosscorfn_hmm(a, p0, meanintensity, meanintensity, lags)
-    # At lag 0, use the actual second moment (includes noise variance)
-    ac[1] = sum(p0 .* second_moment_intensity)
-    ac .- mean_hmm(p0, meanintensity) .^ 2
-end
-
-"""
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
-
-Compute cross-covariance function between two intensity signals.
-
-# Arguments
-- `a`: Transition probability matrix
-- `p0`: Initial state distribution
-- `meanintensity1`: Mean intensity for first signal
-- `meanintensity2`: Mean intensity for second signal
-- `lags`: Time lags
-- `m1`: Mean of first signal
-- `m2`: Mean of second signal
-
-# Returns
-- `Vector{Float64}`: Cross-covariance function at specified lags
-"""
-function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
-    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
-end
-
-"""
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
-
-Compute cross-covariance function between two intensity signals (auto-compute means).
-
-# Arguments
-- `a`: Transition probability matrix
-- `p0`: Initial state distribution
-- `meanintensity1`: Mean intensity for first signal
-- `meanintensity2`: Mean intensity for second signal
-- `lags`: Time lags
-
-# Returns
-- `Vector{Float64}`: Cross-covariance function at specified lags
-"""
-function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
-end
-
-"""
-    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
-
-Compute cross-correlation function between two intensity signals.
-
-# Arguments
-- `a`: Transition probability matrix
-- `p0`: Initial state distribution
-- `meanintensity1`: Mean intensity for first signal
-- `meanintensity2`: Mean intensity for second signal
-- `lags`: Time lags
-
-# Returns
-- `Vector{Float64}`: Cross-correlation function at specified lags
-"""
-function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
-    cc = zeros(length(lags))
-    m1 = meanintensity1 .* p0
-    al = a^lags[1]
-    as = a^(lags[2] - lags[1])
-    for l in eachindex(lags)
-        for i in eachindex(meanintensity1)
-            for j in eachindex(meanintensity2)
-                cc[l] += m1[i] * al[i, j] * meanintensity2[j]
-            end
-        end
-        al *= as
-    end
-    cc
-end
-
-
-"""
-    variance_hmm(p0, meanintensity)
-
-Compute variance of intensity signal under HMM model.
-
-# Arguments
-- `p0`: Initial state distribution
-- `meanintensity`: Mean intensity per state
-
-# Returns
-- `Float64`: Variance of the intensity signal
-"""
-# function variance_hmm(p0, meanintensity)
-#     sum(p0 .* (meanintensity .^ 2)) - mean_hmm(p0, meanintensity) .^ 2
-# end
-
-"""
-    mean_hmm(p0, meanintensity)
-
-Compute mean of intensity signal under HMM model.
-
-# Arguments
-- `p0`: Initial state distribution
-- `meanintensity`: Mean intensity per state
-
-# Returns
-- `Float64`: Mean of the intensity signal
-"""
-function mean_hmm(p0, meanintensity)
-    sum(p0 .* meanintensity)
-end
-
-
 
 ########################
 # Old functions

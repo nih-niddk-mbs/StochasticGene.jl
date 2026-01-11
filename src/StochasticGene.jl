@@ -215,6 +215,7 @@ export
     unbiased_crosscov,
     crosscorrelation_function,
     compute_cov_empirical,
+    export_per_trace_crosscorrelations,
     write_augmented,
     write_cov,
     write_dataframes,

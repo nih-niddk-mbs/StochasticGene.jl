@@ -2988,22 +2988,24 @@ function read_tracefiles(path::String, label::Vector{String}, start::Int, stop::
     if isempty(path)
         return traces
     else
-        for (root, dirs, files) in walkdir(path)
+        # Get all files from the directory
+        all_files = readdir(path)
+        # Split files by label (e.g., all files with "enhancer", all files with "gene")
+        files_by_label = split_files_by_label(all_files, label)
+        # Check that we have files for all labels
+        if any(isempty, files_by_label)
+            return traces
+        end
+        # Sort each group to ensure consistent pairing by numeric prefix
+        files_by_label = [sort(fs) for fs in files_by_label]
+        # Pair files by index (assumes they're in the same order after sorting)
+        n_pairs = minimum(length.(files_by_label))
+        for i in 1:n_pairs
             tset = Vector{Vector}(undef, l)
-            files = sort(readdir(path))
-            for file in files
-                complete = true
-                for i in eachindex(label)
-                    if occursin(label[i], file)
-                        tset[i] = read_tracefile(joinpath(root, file), start, stop, col)
-                    end
-                    complete &= isassigned(tset, i)
-                end
-                if complete
-                    push!(traces, hcat(tset...))
-                    tset = Vector{Vector}(undef, length(label))
-                end
+            for j in 1:l
+                tset[j] = read_tracefile(joinpath(path, files_by_label[j][i]), start, stop, col)
             end
+            push!(traces, hcat(tset...))
         end
         return traces
     end

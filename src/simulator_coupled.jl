@@ -153,18 +153,26 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         totalsteps = 0
     end
 
-    # if warmupsteps > 0
-    #     for steps in 1:warmupsteps
-    #         t, index, allele = findmin_tau(tau)
-    #         initial, final, disabled, enabled, action = set_arguments(reactions, index)
-    #         m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
-    #     end # for
-    #     println(tau)
-    #     for taui in tau
-    #         taui .-= t
-    #     end
-    #     t = t0
-    # end # if
+    if warmupsteps > 0
+        for steps in 1:warmupsteps
+            t, index, allele = findmin_tau(tau)
+            initial, final, disabled, enabled, action = set_arguments(reactions, index)
+            m = update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final, action, coupling)
+        end # for
+        # After warmup, tau values are absolute times (proposed next event times)
+        # Shift all tau values back by the warmup time t so they remain absolute times
+        # but now relative to the new time 0 (start of main simulation)
+        # Note: tau[e] = -log(rand()) / r[e] + t during update!, so tau[e] > t
+        # Therefore after shifting, tau[e] - t > 0 (proposed next absolute time is positive)
+        # Note: for taui in tau iterates over each Matrix in Vector{Matrix}, and
+        # taui .-= t modifies each matrix in place (taui is a reference, not a copy)
+        for taui in tau
+            taui .-= t
+        end
+        # Reset simulation time to match t0 initialization from initialize_sim
+        t = 0.0
+        t0 = 0.0
+    end # if
 
     while (err > tol && steps < totalsteps) || t < totaltime
         steps += 1
@@ -597,7 +605,7 @@ end
 
 - `hierarchical`: tuple of (background mean index, vector of background means)
 """
-function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
+function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), warmupsteps=100, col=2)
     trace = Vector{Vector{Float64}}(undef, ntrials)
     r = copy(rin)
     for i in eachindex(trace)
@@ -605,9 +613,9 @@ function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, inter
             r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1][1:end-1, col]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1][1:end-1, col]
         else
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=100)[1]
+            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1]
         end
     end
     trace
@@ -620,18 +628,22 @@ end
 TBW
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false)
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Int=100)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     if verbose
         totaltime = 0.0
         totalsteps = 10
     end
+    # Convert warmup_time to warmup steps (events). For coupled models, we want sufficient warmup.
+    # Use conservative estimate: if average event rate is ~1 per time unit, use warmup_time steps.
+    # But ensure minimum of 1000 steps for stability.
+    # warmup_steps = warmup_time > 0.0 ? max(Int(round(warmup_time)), 1000) : 0
     for i in eachindex(trace)
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=0, verbose=verbose)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, verbose=verbose)[1]
         if col isa Vector
             # When col is a vector, extract multiple columns and combine them
             tr = Vector[]

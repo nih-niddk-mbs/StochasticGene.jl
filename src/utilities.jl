@@ -76,7 +76,7 @@ R_XY_centered = crosscorrelation_function(x, y, lags, meanx=mean(x), meany=mean(
 R_XY_theory = crosscorrelation_function(x, y, lags, meanx=μ_X_theory, meany=μ_Y_theory)
 ```
 """
-function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0)
+function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing)
     n = length(x)
     if length(y) != n
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
@@ -88,13 +88,43 @@ function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float6
         y = y .- meany
     end
     
+    # Use provided frame_interval, or infer from lags (difference between consecutive lags)
+    # If frame_interval is provided, use it. Otherwise, infer it from lag spacing.
+    # This handles non-integer lags (e.g., lags = collect(0:5/3:30) for 100s frame intervals)
+    # but frame_interval should be the trace sampling interval (e.g., 1.0 minute per frame),
+    # NOT the lag spacing (e.g., 10 minutes between lag samples)
+    if isnothing(frame_interval)
+        frame_interval = 1.0  # Default to 1 if only one lag or all lags are identical
+        if length(lags) > 1
+            # Find difference between any two consecutive lags (prefer positive differences)
+            for i in 2:length(lags)
+                diff = abs(lags[i] - lags[i-1])
+                if diff > 0.0
+                    frame_interval = diff
+                    break
+                end
+            end
+            # If no positive difference found, try difference from first lag
+            if frame_interval == 1.0
+                for i in 2:length(lags)
+                    diff = abs(lags[i] - lags[1])
+                    if diff > 0.0
+                        frame_interval = diff
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
     # Pre-allocate result
     result = Vector{Float64}(undef, length(lags))
     
     # Compute cross-correlation for each lag
     for (i, τ) in enumerate(lags)
-        τ_abs = abs(τ)
-        n_valid = n - τ_abs
+        # Convert lag to integer frame index
+        τ_frames = round(Int, abs(τ) / frame_interval)
+        n_valid = n - τ_frames
         
         if n_valid <= 0
             result[i] = 0.0
@@ -104,18 +134,131 @@ function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float6
         # Compute sum of products for valid pairs
         sum_xy = 0.0
         if τ >= 0
-            # Positive lag: X(t) * Y(t+τ)
+            # Positive lag: X(t) * Y(t+τ_frames)
             for t in 1:n_valid
-                sum_xy += x[t] * y[t + τ]
+                sum_xy += x[t] * y[t + τ_frames]
             end
         else
-            # Negative lag: X(t-|τ|) * Y(t) = Y(t) * X(t-|τ|)
+            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
+            # For negative lag -τ, compute Y(t) * X(t+τ_frames) to get C_YX(τ_frames) = C_XY(-τ)
             for t in 1:n_valid
-                sum_xy += y[t] * x[t + τ_abs]
+                sum_xy += y[t] * x[t + τ_frames]
             end
         end
         
-        # Normalize by number of valid pairs: 1/(T-τ)
+        # Normalize by number of valid pairs: 1/(T-τ_frames)
+        result[i] = sum_xy / n_valid
+    end
+    
+    return result
+end
+
+"""
+    crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+
+Compute cross-correlation using windowed (lag-dependent) means, as in the IDL algorithm.
+
+For each lag τ, computes:
+- Mean of x over the valid window: <x>_τ = (1/(T-τ)) * Σ_{t=1}^{T-τ} x(t)
+- Mean of y over the valid window: <y>_τ = (1/(T-τ)) * Σ_{t=1+τ}^{T} y(t)  (for positive τ)
+- Centered cross-correlation: C_XY(τ) = <(x(t) - <x>_τ)(y(t+τ) - <y>_τ)>_τ
+
+This reduces bias from finite-sample effects when trace length is short relative to correlation time.
+
+# Arguments
+- `x`, `y`: Time series vectors of equal length
+- `lags`: Vector of lags to compute
+- `frame_interval`: Sampling interval (default: inferred from lags)
+
+# Returns
+- Vector of cross-correlation values, one per lag
+"""
+function crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+    n = length(x)
+    if length(y) != n
+        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
+    end
+    
+    # Infer frame_interval if not provided (same logic as crosscorrelation_function)
+    if isnothing(frame_interval)
+        frame_interval = 1.0
+        if length(lags) > 1
+            for i in 2:length(lags)
+                diff = abs(lags[i] - lags[i-1])
+                if diff > 0.0
+                    frame_interval = diff
+                    break
+                end
+            end
+            if frame_interval == 1.0
+                for i in 2:length(lags)
+                    diff = abs(lags[i] - lags[1])
+                    if diff > 0.0
+                        frame_interval = diff
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    # Pre-allocate result
+    result = Vector{Float64}(undef, length(lags))
+    
+    # Compute cross-correlation for each lag with windowed means
+    for (i, τ) in enumerate(lags)
+        # Convert lag to integer frame index
+        τ_frames = round(Int, abs(τ) / frame_interval)
+        n_valid = n - τ_frames
+        
+        if n_valid <= 0
+            result[i] = 0.0
+            continue
+        end
+        
+        # Compute windowed means over valid pairs
+        # For positive lag τ: x window is [1, n-τ_frames], y window is [1+τ_frames, n]
+        # For negative lag -τ: x window is [1+τ_frames, n], y window is [1, n-τ_frames]
+        mean_x_τ = 0.0
+        mean_y_τ = 0.0
+        sum_xy = 0.0
+        
+        if τ >= 0
+            # Positive lag: X(t) * Y(t+τ_frames)
+            # Window for x: [1, n_valid] = [1, n-τ_frames]
+            # Window for y: [1+τ_frames, n] = [1+τ_frames, n]
+            # Compute means and correlation in a single pass
+            for t in 1:n_valid
+                x_val = x[t]
+                y_val = y[t + τ_frames]
+                mean_x_τ += x_val
+                mean_y_τ += y_val
+            end
+            mean_x_τ /= n_valid
+            mean_y_τ /= n_valid
+            
+            # Compute centered cross-correlation in second pass
+            for t in 1:n_valid
+                sum_xy += (x[t] - mean_x_τ) * (y[t + τ_frames] - mean_y_τ)
+            end
+        else
+            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
+            # Window for x: [1+τ_frames, n] = [1+τ_frames, n]
+            # Window for y: [1, n_valid] = [1, n-τ_frames]
+            for t in 1:n_valid
+                mean_x_τ += x[t + τ_frames]
+                mean_y_τ += y[t]
+            end
+            mean_x_τ /= n_valid
+            mean_y_τ /= n_valid
+            
+            # Compute centered cross-correlation
+            for t in 1:n_valid
+                sum_xy += (y[t] - mean_y_τ) * (x[t + τ_frames] - mean_x_τ)
+            end
+        end
+        
+        # Normalize by number of valid pairs
         result[i] = sum_xy / n_valid
     end
     
