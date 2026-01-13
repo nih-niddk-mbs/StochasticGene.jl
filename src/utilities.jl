@@ -40,283 +40,6 @@ function eig_decompose(M)
     return Meiv.values, Meiv.vectors
 end
 
-"""
-    crosscorrelation_function(x, y, lags; meanx=0.0, meany=0.0)
-
-Explicitly compute the unbiased cross-correlation function without calling Julia's StatsBase.crosscov.
-
-The cross-correlation function is defined as:
-    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
-
-If `meanx=0.0` and `meany=0.0` (default), computes the uncentered cross-correlation:
-    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
-
-The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
-
-# Arguments
-- `x`: First time series vector
-- `y`: Second time series vector  
-- `lags`: Vector of time lags (can include negative values)
-- `meanx::Float64=0.0`: Mean to subtract from x (if 0.0, no centering)
-- `meany::Float64=0.0`: Mean to subtract from y (if 0.0, no centering)
-
-# Returns
-- `Vector{Float64}`: Unbiased cross-correlation function at specified lags
-
-# Example
-```julia
-x = randn(100)
-y = randn(100)
-lags = collect(-20:20)
-# Uncentered cross-correlation
-R_XY = crosscorrelation_function(x, y, lags)
-# Cross-covariance with empirical means
-R_XY_centered = crosscorrelation_function(x, y, lags, meanx=mean(x), meany=mean(y))
-# Cross-covariance with theoretical means
-R_XY_theory = crosscorrelation_function(x, y, lags, meanx=μ_X_theory, meany=μ_Y_theory)
-```
-"""
-function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing)
-    n = length(x)
-    if length(y) != n
-        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
-    end
-    
-    # Center the data if means are provided
-    if meanx != 0.0 || meany != 0.0
-        x = x .- meanx
-        y = y .- meany
-    end
-    
-    # Use provided frame_interval, or infer from lags (difference between consecutive lags)
-    # If frame_interval is provided, use it. Otherwise, infer it from lag spacing.
-    # This handles non-integer lags (e.g., lags = collect(0:5/3:30) for 100s frame intervals)
-    # but frame_interval should be the trace sampling interval (e.g., 1.0 minute per frame),
-    # NOT the lag spacing (e.g., 10 minutes between lag samples)
-    if isnothing(frame_interval)
-        frame_interval = 1.0  # Default to 1 if only one lag or all lags are identical
-        if length(lags) > 1
-            # Find difference between any two consecutive lags (prefer positive differences)
-            for i in 2:length(lags)
-                diff = abs(lags[i] - lags[i-1])
-                if diff > 0.0
-                    frame_interval = diff
-                    break
-                end
-            end
-            # If no positive difference found, try difference from first lag
-            if frame_interval == 1.0
-                for i in 2:length(lags)
-                    diff = abs(lags[i] - lags[1])
-                    if diff > 0.0
-                        frame_interval = diff
-                        break
-                    end
-                end
-            end
-        end
-    end
-    
-    # Pre-allocate result
-    result = Vector{Float64}(undef, length(lags))
-    
-    # Compute cross-correlation for each lag
-    for (i, τ) in enumerate(lags)
-        # Convert lag to integer frame index
-        τ_frames = round(Int, abs(τ) / frame_interval)
-        n_valid = n - τ_frames
-        
-        if n_valid <= 0
-            result[i] = 0.0
-            continue
-        end
-        
-        # Compute sum of products for valid pairs
-        sum_xy = 0.0
-        if τ >= 0
-            # Positive lag: X(t) * Y(t+τ_frames)
-            for t in 1:n_valid
-                sum_xy += x[t] * y[t + τ_frames]
-            end
-        else
-            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
-            # For negative lag -τ, compute Y(t) * X(t+τ_frames) to get C_YX(τ_frames) = C_XY(-τ)
-            for t in 1:n_valid
-                sum_xy += y[t] * x[t + τ_frames]
-            end
-        end
-        
-        # Normalize by number of valid pairs: 1/(T-τ_frames)
-        result[i] = sum_xy / n_valid
-    end
-    
-    return result
-end
-
-"""
-    crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
-
-Compute cross-correlation using windowed (lag-dependent) means, as in the IDL algorithm.
-
-For each lag τ, computes:
-- Mean of x over the valid window: <x>_τ = (1/(T-τ)) * Σ_{t=1}^{T-τ} x(t)
-- Mean of y over the valid window: <y>_τ = (1/(T-τ)) * Σ_{t=1+τ}^{T} y(t)  (for positive τ)
-- Centered cross-correlation: C_XY(τ) = <(x(t) - <x>_τ)(y(t+τ) - <y>_τ)>_τ
-
-This reduces bias from finite-sample effects when trace length is short relative to correlation time.
-
-# Arguments
-- `x`, `y`: Time series vectors of equal length
-- `lags`: Vector of lags to compute
-- `frame_interval`: Sampling interval (default: inferred from lags)
-
-# Returns
-- Vector of cross-correlation values, one per lag
-"""
-function crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
-    n = length(x)
-    if length(y) != n
-        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
-    end
-    
-    # Infer frame_interval if not provided (same logic as crosscorrelation_function)
-    if isnothing(frame_interval)
-        frame_interval = 1.0
-        if length(lags) > 1
-            for i in 2:length(lags)
-                diff = abs(lags[i] - lags[i-1])
-                if diff > 0.0
-                    frame_interval = diff
-                    break
-                end
-            end
-            if frame_interval == 1.0
-                for i in 2:length(lags)
-                    diff = abs(lags[i] - lags[1])
-                    if diff > 0.0
-                        frame_interval = diff
-                        break
-                    end
-                end
-            end
-        end
-    end
-    
-    # Pre-allocate result
-    result = Vector{Float64}(undef, length(lags))
-    
-    # Compute cross-correlation for each lag with windowed means
-    for (i, τ) in enumerate(lags)
-        # Convert lag to integer frame index
-        τ_frames = round(Int, abs(τ) / frame_interval)
-        n_valid = n - τ_frames
-        
-        if n_valid <= 0
-            result[i] = 0.0
-            continue
-        end
-        
-        # Compute windowed means over valid pairs
-        # For positive lag τ: x window is [1, n-τ_frames], y window is [1+τ_frames, n]
-        # For negative lag -τ: x window is [1+τ_frames, n], y window is [1, n-τ_frames]
-        mean_x_τ = 0.0
-        mean_y_τ = 0.0
-        sum_xy = 0.0
-        
-        if τ >= 0
-            # Positive lag: X(t) * Y(t+τ_frames)
-            # Window for x: [1, n_valid] = [1, n-τ_frames]
-            # Window for y: [1+τ_frames, n] = [1+τ_frames, n]
-            # Compute means and correlation in a single pass
-            for t in 1:n_valid
-                x_val = x[t]
-                y_val = y[t + τ_frames]
-                mean_x_τ += x_val
-                mean_y_τ += y_val
-            end
-            mean_x_τ /= n_valid
-            mean_y_τ /= n_valid
-            
-            # Compute centered cross-correlation in second pass
-            for t in 1:n_valid
-                sum_xy += (x[t] - mean_x_τ) * (y[t + τ_frames] - mean_y_τ)
-            end
-        else
-            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
-            # Window for x: [1+τ_frames, n] = [1+τ_frames, n]
-            # Window for y: [1, n_valid] = [1, n-τ_frames]
-            for t in 1:n_valid
-                mean_x_τ += x[t + τ_frames]
-                mean_y_τ += y[t]
-            end
-            mean_x_τ /= n_valid
-            mean_y_τ /= n_valid
-            
-            # Compute centered cross-correlation
-            for t in 1:n_valid
-                sum_xy += (y[t] - mean_y_τ) * (x[t + τ_frames] - mean_x_τ)
-            end
-        end
-        
-        # Normalize by number of valid pairs
-        result[i] = sum_xy / n_valid
-    end
-    
-    return result
-end
-
-"""
-    unbiased_crosscov(x, y, lags; demean=true)
-
-Compute unbiased uncentered cross-correlation or cross-covariance that accounts for different numbers of valid pairs at different lags.
-
-This function wraps `StatsBase.crosscov` and applies a correction factor to account for the fact
-that `StatsBase.crosscov` normalizes by `n` (length of input) for all lags, but the actual number
-of valid pairs for lag τ is `n - |τ|`. The correction factor is `n / (n - |τ|)`.
-
-When `demean=false`, computes the uncentered cross-correlation function:
-    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
-
-When `demean=true`, computes the cross-covariance function:
-    C_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
-
-where μ_X and μ_Y are computed over the full time series (not windowed means).
-
-The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
-
-# Arguments
-- `x`: First time series vector
-- `y`: Second time series vector  
-- `lags`: Vector of time lags (can include negative values)
-- `demean`: Whether to remove means before computation (default: true). If false, returns uncentered cross-correlation R_XY(τ).
-
-# Returns
-- `Vector{Float64}`: Unbiased uncentered cross-correlation (if `demean=false`) or cross-covariance (if `demean=true`) at specified lags
-
-# Example
-```julia
-x = randn(100)
-y = randn(100)
-lags = collect(-20:20)
-# Uncentered cross-correlation
-R_XY = unbiased_crosscov(x, y, lags, demean=false)
-# Cross-covariance
-C_XY = unbiased_crosscov(x, y, lags, demean=true)
-```
-"""
-function unbiased_crosscov(x, y, lags; demean::Bool=true)
-    # Compute empirical means if demeaning is requested
-    if demean
-        meanx = mean(x)
-        meany = mean(y)
-    else
-        meanx = 0.0
-        meany = 0.0
-    end
-    
-    # Call crosscorrelation_function with computed means
-    return crosscorrelation_function(x, y, lags; meanx=meanx, meany=meany)
-end
 
 """
     nonzero_rows(T)
@@ -2338,6 +2061,697 @@ function replace_outlier!(x::AbstractArray{T}) where {T<:Number}
         return true
     end
     return false
+end
+
+# Dispatch function for correlation algorithms (trait-based)
+"""
+    compute_correlation(alg::CorrelationTrait, x, y, lags; kwargs...)
+
+Compute correlation using the specified algorithm traits.
+
+This function dispatches based on the features (traits) of the algorithm:
+- Multi-tau binning
+- Centering method
+- Normalization method
+
+# Arguments
+- `alg::CorrelationTrait`: Correlation algorithm with specified traits
+- `x, y`: Time series vectors
+- `lags`: Vector of lag values
+- `meanx, meany`: Global means (used if `centering=:global_mean`, ignored otherwise)
+- `frame_interval`: Time interval between frames
+- `normalize_correlation::Union{Bool, Nothing}`: Whether to normalize (overrides alg.normalization if provided)
+- `return_raw_lags::Bool`: Whether to return raw multi-tau lags (for multi-tau only)
+- `kwargs...`: Additional arguments
+
+# Returns
+- `Vector{Float64}`: Correlation values for each lag
+- Or `NamedTuple` with `(lags, values)` if `return_raw_lags=true` and multi-tau is used
+
+# Note
+This function dispatches to the appropriate correlation function in utilities.jl
+based on the algorithm's traits.
+"""
+function compute_correlation(alg::CorrelationTrait, x, y, lags; 
+                             meanx::Float64=0.0, meany::Float64=0.0, 
+                             frame_interval=nothing, 
+                             normalize_correlation::Union{Bool, Nothing}=nothing,
+                             return_raw_lags::Bool=false,
+                             kwargs...)
+    # Determine normalization: use explicit parameter if provided, otherwise use trait
+    normalize = isnothing(normalize_correlation) ? (alg.normalization != :none) : normalize_correlation
+    
+    # Dispatch based on multi-tau feature
+    if hastrait(alg, :multitau)
+        # Multi-tau algorithm: use crosscorrelation_function_multitau
+        # For multi-tau, centering is handled internally (lag-dependent means)
+        # meanx/meany are ignored for multi-tau
+        return crosscorrelation_function_multitau(x, y, lags; 
+                                                  meanx=0.0, meany=0.0, 
+                                                  frame_interval=frame_interval, 
+                                                  m=alg.m, 
+                                                  normalize=normalize, 
+                                                  return_raw_lags=return_raw_lags)
+    elseif alg.centering == :windowed_mean
+        # Windowed means correlation: use crosscorrelation_function_windowed
+        # Windowed correlation computes lag-dependent means internally
+        # meanx/meany are ignored
+        return crosscorrelation_function_windowed(x, y, lags; frame_interval=frame_interval)
+    else
+        # Standard correlation (uncentered or global mean centered)
+        # Use meanx/meany if centering=:global_mean, otherwise use 0.0 (uncentered)
+        meanx_actual = (alg.centering == :global_mean) ? meanx : 0.0
+        meany_actual = (alg.centering == :global_mean) ? meany : 0.0
+        return crosscorrelation_function(x, y, lags; 
+                                         meanx=meanx_actual, 
+                                         meany=meany_actual, 
+                                         frame_interval=frame_interval)
+    end
+end
+
+"""
+    crosscorrelation_function(x, y, lags; meanx=0.0, meany=0.0)
+
+Explicitly compute the unbiased cross-correlation function without calling Julia's StatsBase.crosscov.
+
+The cross-correlation function is defined as:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
+
+If `meanx=0.0` and `meany=0.0` (default), computes the uncentered cross-correlation:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
+
+The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
+
+# Arguments
+- `x`: First time series vector
+- `y`: Second time series vector  
+- `lags`: Vector of time lags (can include negative values)
+- `meanx::Float64=0.0`: Mean to subtract from x (if 0.0, no centering)
+- `meany::Float64=0.0`: Mean to subtract from y (if 0.0, no centering)
+
+# Returns
+- `Vector{Float64}`: Unbiased cross-correlation function at specified lags
+
+# Example
+```julia
+x = randn(100)
+y = randn(100)
+lags = collect(-20:20)
+# Uncentered cross-correlation
+R_XY = crosscorrelation_function(x, y, lags)
+# Cross-covariance with empirical means
+R_XY_centered = crosscorrelation_function(x, y, lags, meanx=mean(x), meany=mean(y))
+# Cross-covariance with theoretical means
+R_XY_theory = crosscorrelation_function(x, y, lags, meanx=μ_X_theory, meany=μ_Y_theory)
+```
+"""
+function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing)
+    n = length(x)
+    if length(y) != n
+        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
+    end
+    
+    # Use provided frame_interval, or infer from lags (difference between consecutive lags)
+    # If frame_interval is provided, use it. Otherwise, infer it from lag spacing.
+    # This handles non-integer lags (e.g., lags = collect(0:5/3:30) for 100s frame intervals)
+    # but frame_interval should be the trace sampling interval (e.g., 1.0 minute per frame),
+    # NOT the lag spacing (e.g., 10 minutes between lag samples)
+    if isnothing(frame_interval)
+        frame_interval = 1.0  # Default to 1 if only one lag or all lags are identical
+        if length(lags) > 1
+            # Find difference between any two consecutive lags (prefer positive differences)
+            for i in 2:length(lags)
+                diff = abs(lags[i] - lags[i-1])
+                if diff > 0.0
+                    frame_interval = diff
+                    break
+                end
+            end
+            # If no positive difference found, try difference from first lag
+            if frame_interval == 1.0
+                for i in 2:length(lags)
+                    diff = abs(lags[i] - lags[1])
+                    if diff > 0.0
+                        frame_interval = diff
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    # Center the data using the provided means (always center, subtract means before computing correlation)
+    x_centered = x .- meanx
+    y_centered = y .- meany
+    
+    # Pre-allocate result
+    result = Vector{Float64}(undef, length(lags))
+    
+    # Compute cross-correlation for each lag
+    for (i, τ) in enumerate(lags)
+        # Convert lag to integer frame index
+        τ_frames = round(Int, abs(τ) / frame_interval)
+        n_valid = n - τ_frames
+        
+        if n_valid <= 0
+            result[i] = 0.0
+            continue
+        end
+        
+        # Compute sum of products for valid pairs (using centered data)
+        sum_xy = 0.0
+        if τ >= 0
+            # Positive lag: X(t) * Y(t+τ_frames)
+            for t in 1:n_valid
+                sum_xy += x_centered[t] * y_centered[t + τ_frames]
+            end
+        else
+            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
+            # For negative lag -τ, compute Y(t) * X(t+τ_frames) to get C_YX(τ_frames) = C_XY(-τ)
+            for t in 1:n_valid
+                sum_xy += y_centered[t] * x_centered[t + τ_frames]
+            end
+        end
+        
+        # Normalize by number of valid pairs: 1/(T-τ_frames)
+        result[i] = sum_xy / n_valid
+    end
+    
+    return result
+end
+
+"""
+    crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+
+Compute cross-correlation using windowed (lag-dependent) means, as in the IDL algorithm.
+
+For each lag τ, computes:
+- Mean of x over the valid window: <x>_τ = (1/(T-τ)) * Σ_{t=1}^{T-τ} x(t)
+- Mean of y over the valid window: <y>_τ = (1/(T-τ)) * Σ_{t=1+τ}^{T} y(t)  (for positive τ)
+- Centered cross-correlation: C_XY(τ) = <(x(t) - <x>_τ)(y(t+τ) - <y>_τ)>_τ
+
+This reduces bias from finite-sample effects when trace length is short relative to correlation time.
+
+# Arguments
+- `x`, `y`: Time series vectors of equal length
+- `lags`: Vector of lags to compute
+- `frame_interval`: Sampling interval (default: inferred from lags)
+
+# Returns
+- Vector of cross-correlation values, one per lag
+"""
+function crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+    n = length(x)
+    if length(y) != n
+        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
+    end
+    
+    # Infer frame_interval if not provided (same logic as crosscorrelation_function)
+    if isnothing(frame_interval)
+        frame_interval = 1.0
+        if length(lags) > 1
+            for i in 2:length(lags)
+                diff = abs(lags[i] - lags[i-1])
+                if diff > 0.0
+                    frame_interval = diff
+                    break
+                end
+            end
+            if frame_interval == 1.0
+                for i in 2:length(lags)
+                    diff = abs(lags[i] - lags[1])
+                    if diff > 0.0
+                        frame_interval = diff
+                        break
+                    end
+                end
+            end
+        end
+    end
+    
+    # Pre-allocate result
+    result = Vector{Float64}(undef, length(lags))
+    
+    # Compute cross-correlation for each lag with windowed means
+    for (i, τ) in enumerate(lags)
+        # Convert lag to integer frame index
+        τ_frames = round(Int, abs(τ) / frame_interval)
+        n_valid = n - τ_frames
+        
+        if n_valid <= 0
+            result[i] = 0.0
+            continue
+        end
+        
+        # Compute windowed means over valid pairs
+        # For positive lag τ: x window is [1, n-τ_frames], y window is [1+τ_frames, n]
+        # For negative lag -τ: x window is [1+τ_frames, n], y window is [1, n-τ_frames]
+        mean_x_τ = 0.0
+        mean_y_τ = 0.0
+        sum_xy = 0.0
+        
+        if τ >= 0
+            # Positive lag: X(t) * Y(t+τ_frames)
+            # Window for x: [1, n_valid] = [1, n-τ_frames]
+            # Window for y: [1+τ_frames, n] = [1+τ_frames, n]
+            # Compute means and correlation in a single pass
+            for t in 1:n_valid
+                x_val = x[t]
+                y_val = y[t + τ_frames]
+                mean_x_τ += x_val
+                mean_y_τ += y_val
+            end
+            mean_x_τ /= n_valid
+            mean_y_τ /= n_valid
+            
+            # Compute centered cross-correlation in second pass
+            for t in 1:n_valid
+                sum_xy += (x[t] - mean_x_τ) * (y[t + τ_frames] - mean_y_τ)
+            end
+        else
+            # Negative lag: C_XY(-τ) = C_YX(τ) = E[Y(t) * X(t+|τ|)]
+            # Window for x: [1+τ_frames, n] = [1+τ_frames, n]
+            # Window for y: [1, n_valid] = [1, n-τ_frames]
+            for t in 1:n_valid
+                mean_x_τ += x[t + τ_frames]
+                mean_y_τ += y[t]
+            end
+            mean_x_τ /= n_valid
+            mean_y_τ /= n_valid
+            
+            # Compute centered cross-correlation
+            for t in 1:n_valid
+                sum_xy += (y[t] - mean_y_τ) * (x[t + τ_frames] - mean_x_τ)
+            end
+        end
+        
+        # Normalize by number of valid pairs
+        result[i] = sum_xy / n_valid
+    end
+    
+    return result
+end
+
+"""
+    unbiased_crosscov(x, y, lags; demean=true)
+
+Compute unbiased uncentered cross-correlation or cross-covariance that accounts for different numbers of valid pairs at different lags.
+
+This function wraps `StatsBase.crosscov` and applies a correction factor to account for the fact
+that `StatsBase.crosscov` normalizes by `n` (length of input) for all lags, but the actual number
+of valid pairs for lag τ is `n - |τ|`. The correction factor is `n / (n - |τ|)`.
+
+When `demean=false`, computes the uncentered cross-correlation function:
+    R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)
+
+When `demean=true`, computes the cross-covariance function:
+    C_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} (X(t) - μ_X)(Y(t+τ) - μ_Y)
+
+where μ_X and μ_Y are computed over the full time series (not windowed means).
+
+The normalization `1/(T-τ)` is used for unbiased estimation, matching the number of valid pairs at each lag.
+
+# Arguments
+- `x`: First time series vector
+- `y`: Second time series vector  
+- `lags`: Vector of time lags (can include negative values)
+- `demean`: Whether to remove means before computation (default: true). If false, returns uncentered cross-correlation R_XY(τ).
+
+# Returns
+- `Vector{Float64}`: Unbiased uncentered cross-correlation (if `demean=false`) or cross-covariance (if `demean=true`) at specified lags
+
+# Example
+```julia
+x = randn(100)
+y = randn(100)
+lags = collect(-20:20)
+# Uncentered cross-correlation
+R_XY = unbiased_crosscov(x, y, lags, demean=false)
+# Cross-covariance
+C_XY = unbiased_crosscov(x, y, lags, demean=true)
+```
+"""
+function unbiased_crosscov(x, y, lags; demean::Bool=true)
+    # Compute empirical means if demeaning is requested
+    if demean
+        meanx = mean(x)
+        meany = mean(y)
+    else
+        meanx = 0.0
+        meany = 0.0
+    end
+    
+    # Call crosscorrelation_function with computed means
+    return crosscorrelation_function(x, y, lags; meanx=meanx, meany=meany)
+end
+
+
+"""
+    crosscorrelation_function_multitau(x, y, lags; meanx=0.0, meany=0.0, frame_interval=nothing, m=16)
+
+Compute cross-correlation using the IDL multi-tau algorithm with progressive binning.
+
+This implements the multi-tau algorithm from Wohland, Rigler, and Vogel (BJ 2001) as used in
+the IDL Xcor code. The algorithm:
+1. Level 0: Computes correlations for lags 1 to M*2 using original signal
+2. Higher levels: Progressively bins data by summing pairs, computes correlations for lags M+1 to 2M at each level
+
+The algorithm returns uncentered correlation R_XY(τ) = E[XY] (not normalized by means).
+
+# Arguments
+- `x, y`: Time series vectors
+- `lags`: Vector of desired lag values (will be matched to nearest multi-tau lag)
+- `frame_interval::Union{Float64, Nothing}=nothing`: Time interval between frames (default: inferred from lags)
+- `m::Int=16`: Number of points per level (default: 16, matching IDL)
+- `meanx, meany`: Means (ignored for multi-tau, kept for API compatibility)
+
+# Returns
+- `Vector{Float64}`: Correlation values for each input lag (interpolated/extracted from multi-tau results)
+  If `return_raw_lags=true`, returns a NamedTuple `(lags=lags, values=values)` with actual multi-tau lags
+"""
+function crosscorrelation_function_multitau(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing, m::Int=16, normalize::Bool=true, return_raw_lags::Bool=false)
+    n = length(x)
+    if length(y) != n
+        error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
+    end
+    
+    # Infer frame_interval if not provided
+    if isnothing(frame_interval)
+        frame_interval = 1.0
+        if length(lags) > 1
+            for i in 2:length(lags)
+                diff = abs(lags[i] - lags[i-1])
+                if diff > 0.0
+                    frame_interval = diff
+                    break
+                end
+            end
+        end
+    end
+    
+    # Determine number of levels needed based on max lag
+    max_lag = maximum(abs.(lags))
+    max_lag_frames = round(Int, max_lag / frame_interval)
+    # IDL uses: N = round(log2((last_point - first_point + 1) / M))
+    # where n = last_point - first_point + 1, so: N = round(log2(n / m))
+    # (not (n-1)/m, which could give different N for small n)
+    N = round(Int, log2(n / m))  # Number of binning levels
+    N = max(1, N)  # At least 1 level
+    
+    # Pre-allocate result array (will interpolate/extract for requested lags)
+    result = Vector{Float64}(undef, length(lags))
+    
+    # Structure to store multi-tau results: (lag_frames, correlation_value)
+    multitau_results = Vector{Tuple{Int, Float64}}()
+    
+    # Level 0: First M*2 lags using original signal (no binning)
+    # IDL uses lag=1,2,...,M*2 where lag=1 means zero-lag (IDL is 1-based)
+    # So we compute lags 0,1,...,M*2-1 (Julia is 0-based)
+    # IDL computes: Go = sum(left[j]*right[j+lag]), Mdirect = sum(left[j]), Mdelayed = sum(right[j+lag]), n = count
+    # Then: Gn = (n*Go)/(Mdirect*Mdelayed) - 1.0
+    # We return Go/n = E[XY] (uncentered correlation)
+    for lag_idl in 1:min(m*2, max_lag_frames)
+        lag_frames = lag_idl - 1  # Convert from IDL's 1-based to 0-based (lag=1 in IDL means lag=0)
+        n_valid = n - lag_frames
+        if n_valid <= 0
+            continue
+        end
+        
+        # Compute uncentered product sum (Go), sum of x (Mdirect), sum of y (Mdelayed)
+        Go = 0.0
+        Mdirect = 0.0
+        Mdelayed = 0.0
+        for j in 1:n_valid
+            Go += x[j] * y[j + lag_frames]
+            Mdirect += x[j]
+            Mdelayed += y[j + lag_frames]
+        end
+        
+        # Compute uncentered correlation: E[XY] = Go/n
+        E_XY = Go / n_valid
+        mean_x = Mdirect / n_valid
+        mean_y = Mdelayed / n_valid
+        if normalize
+            # IDL formula: Gn = (n*Go)/(Mdirect*Mdelayed) - 1.0
+            # This is equivalent to: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+            # IDL's normalized, centered correlation: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+            if mean_x * mean_y > 0.0
+                R_XY = (E_XY - mean_x * mean_y) / (mean_x * mean_y)
+            else
+                R_XY = 0.0
+            end
+        else
+            # Return centered covariance: E[XY] - E[X]E[Y] (matches IDL stored value)
+            # IDL stores: Gn * Mdirect * Mdelayed / (n*n) = E[XY] - E[X]E[Y]
+            R_XY = E_XY - mean_x * mean_y
+        end
+        push!(multitau_results, (lag_frames, R_XY))
+    end
+    
+    # Higher levels: Progressive binning
+    left_binned = copy(x)
+    right_binned = copy(y)
+    points = n
+    
+    # IDL uses: for p=1, N-2 do begin (not N-1!)
+    for p in 1:max(1, N-2)
+        # Bin by summing pairs: binned[j] = stream[2j] + stream[2j+1]
+        points = points - (points % 2)  # Make even (IDL: points=points - (points mod 2L))
+        j = 1
+        # IDL uses: for i=0L, points-1, 2 do begin (0-based, step 2)
+        # Julia equivalent: for i in 1:2:points-1
+        for i in 1:2:points-1
+            if i+1 <= points
+                left_binned[j] = left_binned[i] + left_binned[i+1]
+                right_binned[j] = right_binned[i] + right_binned[i+1]
+                j += 1
+            end
+        end
+        points = points ÷ 2
+        left_binned = left_binned[1:points]
+        right_binned = right_binned[1:points]
+        
+        # Compute correlations at this level
+        # For binned levels, use smaller base lags to prevent bins from getting too fat too fast
+        # Level 0 uses lags 0 to m*2-1 (unbinned)
+        # For binned levels (p >= 1), use base lags that scale down with p to keep progression smooth
+        # Use lag_frames = m/(2^p) + i, which gives smaller base lags for higher levels
+        base_lag = round(Int, m / (2^p))
+        base_lag = max(1, base_lag)  # At least 1
+        # Keep same number of lags per level (m), but adjust range
+        max_i = m - 1
+        
+        for i in 0:max_i
+            lag_frames = base_lag + i  # Base lag in binned units
+            lag_frames_scaled = lag_frames * (2^p)  # Scale lag by binning factor (IDL: lag*(2^p*binwidth))
+            
+            if lag_frames_scaled > max_lag_frames
+                break
+            end
+            
+            n_valid = points - lag_frames
+            if n_valid <= 0
+                continue
+            end
+            
+            # Compute uncentered product sum for binned data
+            Go = 0.0
+            Mdirect = 0.0
+            Mdelayed = 0.0
+            # IDL uses: for j=0L, points-1-lag do begin (0-based)
+            # Julia equivalent: for j in 1:n_valid
+            for j in 1:n_valid
+                Go += left_binned[j] * right_binned[j + lag_frames]
+                Mdirect += left_binned[j]
+                Mdelayed += right_binned[j + lag_frames]
+            end
+            
+            # When binning by summing pairs, each binned value = sum of binning_factor original values
+            # So Go scales by binning_factor^2, and we need to normalize by binning_factor^2
+            # to get E[XY] on the original scale
+            # The binning factor is 2^p (each level doubles the bin size by summing pairs)
+            binning_factor = 2^p
+            E_XY = Go / (n_valid * binning_factor^2)
+            # Compute means for this lag window (also need to normalize by binning_factor)
+            mean_x = Mdirect / (n_valid * binning_factor)
+            mean_y = Mdelayed / (n_valid * binning_factor)
+            if normalize
+                # IDL's normalized, centered correlation: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+                if mean_x * mean_y > 0.0
+                    R_XY = (E_XY - mean_x * mean_y) / (mean_x * mean_y)
+                else
+                    R_XY = 0.0
+                end
+            else
+                # Return centered covariance: E[XY] - E[X]E[Y] (matches IDL stored value)
+                R_XY = E_XY - mean_x * mean_y
+            end
+            push!(multitau_results, (lag_frames_scaled, R_XY))
+        end
+    end
+    
+    # Handle negative lags by computing with swapped signals (IDL does this in repeat loop)
+    multitau_results_neg = Vector{Tuple{Int, Float64}}()
+    
+    # Swap x and y and recompute for negative lags
+    x_swapped = copy(y)
+    y_swapped = copy(x)
+    
+    # Level 0: First M*2 lags with swapped signals
+    # IDL uses lag=1,2,...,M*2 where lag=1 means zero-lag (IDL is 1-based)
+    for lag_idl in 1:min(m*2, max_lag_frames)
+        lag_frames = lag_idl - 1  # Convert from IDL's 1-based to 0-based
+        n_valid = n - lag_frames
+        if n_valid <= 0
+            continue
+        end
+        
+            Go = 0.0
+            Mdirect = 0.0
+            Mdelayed = 0.0
+            for j in 1:n_valid
+                Go += x_swapped[j] * y_swapped[j + lag_frames]
+                Mdirect += x_swapped[j]
+                Mdelayed += y_swapped[j + lag_frames]
+            end
+            # Level 0 uses original data (no binning), so binning_factor = 1
+            E_YX = Go / n_valid
+            mean_x = Mdirect / n_valid
+            mean_y = Mdelayed / n_valid
+            if normalize
+                # IDL's normalized, centered correlation: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+                if mean_x * mean_y > 0.0
+                    R_YX = (E_YX - mean_x * mean_y) / (mean_x * mean_y)
+                else
+                    R_YX = 0.0
+                end
+            else
+                # Return centered covariance: E[XY] - E[X]E[Y] (matches IDL stored value)
+                R_YX = E_YX - mean_x * mean_y
+            end
+            push!(multitau_results_neg, (lag_frames, R_YX))
+    end
+    
+    # Higher levels with swapped signals
+    left_binned = copy(x_swapped)
+    right_binned = copy(y_swapped)
+    points = n
+    
+    for p in 1:max(1, N-2)
+        points = points - (points % 2)
+        j = 1
+        for i in 1:2:points-1
+            if i+1 <= points
+                left_binned[j] = left_binned[i] + left_binned[i+1]
+                right_binned[j] = right_binned[i] + right_binned[i+1]
+                j += 1
+            end
+        end
+        points = points ÷ 2
+        left_binned = left_binned[1:points]
+        right_binned = right_binned[1:points]
+        
+        # Use same base lag logic as positive lags to keep progression smooth
+        base_lag = round(Int, m / (2^p))
+        base_lag = max(1, base_lag)  # At least 1
+        max_i = m - 1
+        
+        for i in 0:max_i
+            lag_frames = base_lag + i  # Base lag in binned units
+            lag_frames_scaled = lag_frames * (2^p)
+            
+            if lag_frames_scaled > max_lag_frames
+                break
+            end
+            
+            n_valid = points - lag_frames
+            if n_valid <= 0
+                continue
+            end
+            
+            Go = 0.0
+            Mdirect = 0.0
+            Mdelayed = 0.0
+            for j in 1:n_valid
+                Go += left_binned[j] * right_binned[j + lag_frames]
+                Mdirect += left_binned[j]
+                Mdelayed += right_binned[j + lag_frames]
+            end
+            # When binning by summing pairs, each binned value = sum of binning_factor original values
+            # So Go scales by binning_factor^2, and we need to normalize by binning_factor^2
+            # to get E[XY] on the original scale
+            binning_factor = 2^p
+            E_YX = Go / (n_valid * binning_factor^2)
+            # Compute means for this lag window (also need to normalize by binning_factor)
+            mean_x = Mdirect / (n_valid * binning_factor)
+            mean_y = Mdelayed / (n_valid * binning_factor)
+            if normalize
+                # IDL's normalized, centered correlation: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+                if mean_x * mean_y > 0.0
+                    R_YX = (E_YX - mean_x * mean_y) / (mean_x * mean_y)
+                else
+                    R_YX = 0.0
+                end
+            else
+                # Return centered covariance: E[XY] - E[X]E[Y] (matches IDL stored value)
+                R_YX = E_YX - mean_x * mean_y
+            end
+            push!(multitau_results_neg, (lag_frames_scaled, R_YX))
+        end
+    end
+    
+    # Extract/interpolate results for requested lags
+    multitau_lags_pos = [r[1] * frame_interval for r in multitau_results]
+    multitau_vals_pos = [r[2] for r in multitau_results]
+    multitau_lags_neg = [r[1] * frame_interval for r in multitau_results_neg]
+    multitau_vals_neg = [r[2] for r in multitau_results_neg]
+    
+    # If return_raw_lags=true, return the actual multi-tau lags and values
+    if return_raw_lags
+        # Combine positive and negative lags (negative first, then positive)
+        raw_lags = vcat(-reverse(multitau_lags_neg), multitau_lags_pos)
+        raw_values = vcat(reverse(multitau_vals_neg), multitau_vals_pos)
+        return (lags=raw_lags, values=raw_values)
+    end
+    
+    # For each requested lag, find nearest multi-tau lag
+    for (i, τ) in enumerate(lags)
+        if τ >= 0
+            idx = argmin(abs.(multitau_lags_pos .- τ))
+            result[i] = multitau_vals_pos[idx]
+        else
+            idx = argmin(abs.(multitau_lags_neg .- abs(τ)))
+            result[i] = multitau_vals_neg[idx]
+        end
+    end
+    
+    return result
+end
+
+"""
+    crosscorrelation_function_idl(x, y, lags; frame_interval=nothing, m=16)
+
+Compute cross-correlation using the full IDL algorithm combining multi-tau progressive binning
+with the IDL normalization formula.
+
+This exactly matches the IDL Xcor algorithm implementation:
+1. Uses multi-tau progressive binning (summing pairs to create fatter bins)
+2. For each lag, computes: Go = sum(x*y), Mdirect = sum(x), Mdelayed = sum(y), n = count
+3. Normalizes using: Gn = (n*Go)/(Mdirect*Mdelayed) - 1.0
+4. Returns uncentered correlation: R_XY = Go/n = E[XY]
+
+# Arguments
+- `x, y`: Time series vectors
+- `lags`: Vector of desired lag values (will be matched to nearest multi-tau lag)
+- `frame_interval::Union{Float64, Nothing}=nothing`: Time interval between frames (default: inferred from lags)
+- `m::Int=16`: Number of points per level (default: 16, matching IDL)
+
+# Returns
+- `Vector{Float64}`: Correlation values for each input lag (interpolated/extracted from multi-tau results)
+"""
+function crosscorrelation_function_idl(x, y, lags; frame_interval=nothing, m::Int=16, normalize::Bool=true, return_raw_lags::Bool=false)
+    # IDL algorithm is identical to multi-tau, just reuse it
+    return crosscorrelation_function_multitau(x, y, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, m=m, normalize=normalize, return_raw_lags=return_raw_lags)
 end
 
 

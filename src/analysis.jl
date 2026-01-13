@@ -2598,7 +2598,7 @@ function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1
     source, target = extract_source_target(pattern, file)
     (source == "R") && (source = collect(G[1]+1:G[1]+R[1]))
     coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-    covariance_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
+    correlation_functions_hmm(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
 end
 
 """
@@ -2716,7 +2716,7 @@ function write_cov(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                ac1, ac2, cc, ccON, tau, m1, m2, v1, v2, mON1, mON2, ac1ON, ac2ON, ccReporters, mR1, mR2, ac1Reporters, ac2Reporters = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
                 out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
                 n_lags = length(tau)
                 
@@ -2726,65 +2726,19 @@ function write_cov(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2
                     cc_ON=ccON,
                     ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
                     ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-                    mON1=fill(mON1, n_lags),
-                    mON2=fill(mON2, n_lags),
+                    m_ON1=fill(mON1, n_lags),
+                    m_ON2=fill(mON2, n_lags),
                     # Reporters: unnormalized cc, ac1, ac2, m1, m2
                     cc_Reporters=ccReporters,
                     ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
                     ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-                    mR1=fill(mR1, n_lags),
-                    mR2=fill(mR2, n_lags)
+                    m_Reporters1=fill(mReporters1, n_lags),
+                    mReporters2=fill(mReporters2, n_lags)
                 ))
             end
         end
     end
 end
-
-"""
-    compute_cov_empirical(intensity_traces, reporter_traces, on_traces; lags=collect(0:1:200), mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
-
-Compute empirical cross-correlation functions from traces.
-
-Computes cross-correlation for:
-1. **Intensity**: From experimental intensity traces
-2. **ON states**: From binary ON/OFF traces (1 if reporter > threshold, 0 otherwise)
-3. **Reporter counts**: From raw reporter count traces
-
-# Arguments
-- `intensity_traces::Vector{Matrix{Float64}}`: Experimental intensity traces (each matrix has columns [enhancer, gene])
-- `reporter_traces::Vector{Matrix{Float64}}`: Predicted reporter count traces
-- `on_traces::Vector{Matrix{Float64}}`: Predicted ON state traces (binary)
-- `lags::Vector{Int}=collect(0:1:200)`: Time lags for cross-correlation computation
-- `mON1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for enhancer (if provided, used for centered version)
-- `mON2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for gene (if provided, used for centered version)
-- `mR1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for enhancer (if provided, used for centered version)
-- `mR2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for gene (if provided, used for centered version)
-- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
-- `n_bootstrap::Int=1000`: Number of bootstrap replicates (if bootstrap=true)
-
-# Returns
-NamedTuple with:
-- `intensity`: NamedTuple with `cc`, `ac1`, `ac2`, `mean1`, `mean2`, `lags` (and bootstrap fields if requested)
-- `on_states`: NamedTuple with `cc`, `ac1`, `ac2`, `mean1`, `mean2`, `lags` (and bootstrap fields if requested)
-- `reporters`: NamedTuple with `cc`, `ac1`, `ac2`, `mean1`, `mean2`, `lags` (and bootstrap fields if requested)
-"""
-function compute_cov_empirical(intensity_traces::Vector{Matrix{Float64}}, reporter_traces::Vector{Matrix{Float64}}, on_traces::Vector{Matrix{Float64}}; lags=collect(0:1:200), mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, use_windowed_means::Bool=false, bootstrap=false, n_bootstrap=1000, frame_interval::Float64=1.0)
-    # Compute cross-correlation for intensity (only if traces provided)
-    intensity_result = isempty(intensity_traces) ? nothing : compute_covariance(intensity_traces, lags; use_windowed_means=use_windowed_means, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=frame_interval)
-    
-    # Compute cross-correlation for predicted ON states (with theoretical means if provided)
-    on_result = compute_covariance(on_traces, lags; use_windowed_means=use_windowed_means, bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mON1_theory, mean2_global=mON2_theory, frame_interval=frame_interval)
-    
-    # Compute cross-correlation for predicted reporter counts (with theoretical means if provided)
-    reporter_result = compute_covariance(reporter_traces, lags; use_windowed_means=use_windowed_means, bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mR1_theory, mean2_global=mR2_theory, frame_interval=frame_interval)
-    
-    return (
-        intensity=intensity_result,
-        on_states=on_result,
-        reporters=reporter_result
-    )
-end
-
 
 """
     write_cov_empirical(trace_folder, unit1_filename, unit2_filename, output_file; intensity_labels=nothing, intensity_start=1, intensity_stop=-1, intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
@@ -3509,132 +3463,170 @@ result = simulate_trials(r, transitions, G, R, S, (1, 1), coupling, 100,
 println("L2 norm: ", result.l2_norm)
 ```
 """
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian, offset::Float64=0.0, use_windowed_means::Bool=false, warmupsteps::Int=1000)
-    positive_lags = collect(0:stride:lag)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
+    # If lags is a single integer, treat it as max lag (backward compatibility)
+    if lags isa Integer
+        positive_lags = collect(0:lags)
+    else
+        # Extract positive lags for covariance_functions (it expects positive lags)
+        lags_vec = collect(lags)
+        positive_lags = unique(sort([abs(τ) for τ in lags_vec if τ >= 0]))
+    end
     # Get both intensity and ON/OFF cross-covariances and autocovariances
     # Use same offset as in covariance_functions to ensure theory and empirical match
     ac1, ac2, cc, ccON, full_lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags, offset=offset)
+    # Pack into NamedTuple
+    theory = (
+        ac1=ac1, ac2=ac2, cc=cc,
+        m1=m1, m2=m2, v1=v1, v2=v2,
+        ccON=ccON, m1ON=m1ON, m2ON=m2ON, ac1ON=ac1ON, ac2ON=ac2ON,
+        ccReporters=ccReporters, m1Reporters=m1Reporters, m2Reporters=m2Reporters,
+        ac1Reporters=ac1Reporters, ac2Reporters=ac2Reporters,
+        full_lags=full_lags
+    )
     # Use ccON (ON/OFF cross-covariance) and ac1ON/ac2ON (ON/OFF autocovariances) for comparison
-    simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters, r, transitions, G, R, S, insertstep, coupling, positive_lags, full_lags, ntrials, trial_time, offset, use_windowed_means, warmupsteps)
+    # Use the provided lags (or convert if it was an integer)
+    actual_lags = lags isa Integer ? full_lags : lags_vec
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, positive_lags, actual_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps)
 end
 
 """
-    simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters, r, transitions, G, R, S, insertstep, coupling, lags_ac, lags; ntrials=1, trial_time=720.0)
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, lags_ac, lags; ntrials=1, trial_time=720.0, offset=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps=1000)
 
 Internal method that performs the actual simulation and comparison.
 
 This is the lower-level method called by the main `simulate_trials` function.
 It takes precomputed theoretical covariances and performs simulations.
 
-Theory parameters are grouped in the same order as returned by `covariance_functions`:
-- Intensity: ac1, ac2, cc, m1, m2, v1, v2
-- ON states: ccON, m1ON, m2ON, ac1ON, ac2ON
-- Reporters: ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters
-
 # Arguments
-- `ac1, ac2, cc`: Theoretical autocovariances and cross-covariance for intensity
-- `m1, m2, v1, v2`: Theoretical means and variances for intensity
-- `ccON, ac1ON, ac2ON`: Theoretical cross-covariance and autocovariances for ON states
-- `m1ON, m2ON`: Theoretical mean ON state probabilities
-- `ccReporters, ac1Reporters, ac2Reporters`: Theoretical cross-covariance and autocovariances for reporter counts
-- `m1Reporters, m2Reporters`: Theoretical mean reporter counts
+- `theory::NamedTuple`: NamedTuple containing all theoretical correlation functions and means:
+  - `ac1, ac2, cc`: Theoretical autocovariances and cross-covariance for intensity
+  - `m1, m2, v1, v2`: Theoretical means and variances for intensity
+  - `ccON, ac1ON, ac2ON`: Theoretical cross-covariance and autocovariances for ON states
+  - `m1ON, m2ON`: Theoretical mean ON state probabilities
+  - `ccReporters, ac1Reporters, ac2Reporters`: Theoretical cross-covariance and autocovariances for reporter counts
+  - `m1Reporters, m2Reporters`: Theoretical mean reporter counts
+  - `full_lags`: Full lag vector (symmetric)
 - `r::Vector{Float64}`: Rate parameters (used for simulation)
 - `transitions, G, R, S, insertstep, coupling`: Model structure parameters
 - `lags_ac, lags::Vector{Int}`: Time lags for autocovariance and cross-covariance
 - `ntrials::Int=1`: Number of simulation trials
 - `trial_time::Float64=720.0`: Length of each simulated trace (minutes)
+- `offset::Float64=0.0`: Offset for ON state computation
+- `correlation_algorithm::CorrelationTrait`: Correlation algorithm to use for empirical computation
+- `warmupsteps::Int=1000`: Number of warmup steps for simulation
 
 # Returns
 NamedTuple with theoretical and empirical results (see main `simulate_trials` docstring).
 """
-function simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, use_windowed_means::Bool=false, warmupsteps::Int=1000)
+function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
+    # Extract theory values from NamedTuple
+    ac1 = theory.ac1
+    ac2 = theory.ac2
+    cc = theory.cc
+    m1 = theory.m1
+    m2 = theory.m2
+    v1 = theory.v1
+    v2 = theory.v2
+    ccON = theory.ccON
+    m1ON = theory.m1ON
+    m2ON = theory.m2ON
+    ac1ON = theory.ac1ON
+    ac2ON = theory.ac2ON
+    ccReporters = theory.ccReporters
+    m1Reporters = theory.m1Reporters
+    m2Reporters = theory.m2Reporters
+    ac1Reporters = theory.ac1Reporters
+    ac2Reporters = theory.ac2Reporters
     n_bootstrap = min(1000, max(50, ntrials * 10))
 
-    intensity_traces = Matrix{Float64}[]
-    reporter_traces = Matrix{Float64}[]
-    on_traces = Matrix{Float64}[]
+    intensity_traces = Vector{Matrix{Float64}}(undef, ntrials)
+    reporter_traces = Vector{Matrix{Float64}}(undef, ntrials)
+    on_traces = Vector{Matrix{Float64}}(undef, ntrials)
 
-    for _ in 1:ntrials
+    Threads.@threads for i in 1:ntrials
         # Warmup is handled by simulator's warmupsteps parameter (converted from warmup_time)
         t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=[2,3],warmupsteps=warmupsteps)
         # Warmup is already handled by simulator, so use all the trace data
         trace_data = t[1]
         # trace_data columns: [intensity1, reporters1, intensity2, reporters2]
-        push!(intensity_traces, hcat(Float64.(trace_data[:, 1]), Float64.(trace_data[:, 3])))
-        push!(reporter_traces, hcat(Float64.(trace_data[:, 2]), Float64.(trace_data[:, 4])))
+        intensity_traces[i] = hcat(Float64.(trace_data[:, 1]), Float64.(trace_data[:, 3]))
+        reporter_traces[i] = hcat(Float64.(trace_data[:, 2]), Float64.(trace_data[:, 4]))
         # Apply same offset as theory: ON states = (binary > 0) + offset
         # This matches covariance_functions which computes: ON = float(num_per_state .> 0.0) .+ offset
-        push!(on_traces, hcat(Float64.(trace_data[:, 2] .> 0.0) .+ offset, Float64.(trace_data[:, 4] .> 0.0) .+ offset))
+        on_traces[i] = hcat(Float64.(trace_data[:, 2] .> 0.0) .+ offset, Float64.(trace_data[:, 4] .> 0.0) .+ offset)
     end
 
-    # Compute empirical cross-correlation using compute_cov_empirical
+    # Compute empirical correlations using compute_covariance directly
     # lags should already be symmetric (full_lags from covariance_functions)
-    # Remove theoretical means - compute uncentered cross-correlation
     # frame_interval = 1.0 because simulate_trace_vector uses interval=1.0 (one frame per minute)
-    empirical_result = compute_cov_empirical(intensity_traces, reporter_traces, on_traces; lags=lags, use_windowed_means=use_windowed_means, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    intensity_result = isempty(intensity_traces) ? nothing : compute_covariance(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    on_result = compute_covariance(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    reporter_result = compute_covariance(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
     
-    # Extract results (covariance_functions already returns symmetrized cc, ac1, ac2, etc.)
+    # Extract results
     empirical = (
-        cc=empirical_result.intensity.cc,
-        ac1=empirical_result.intensity.ac1,
-        ac2=empirical_result.intensity.ac2,
-        ccON=empirical_result.on_states.cc,
-        ac1ON=empirical_result.on_states.ac1,
-        ac2ON=empirical_result.on_states.ac2,
-        ccReporters=empirical_result.reporters.cc,
-        ac1Reporters=empirical_result.reporters.ac1,
-        ac2Reporters=empirical_result.reporters.ac2,
-        mON1=empirical_result.on_states.mean1,
-        mON2=empirical_result.on_states.mean2,
-        mR1=empirical_result.reporters.mean1,
-        mR2=empirical_result.reporters.mean2,
-        # Compute empirical variances from intensity means (E[X^2] - E[X]^2)
-        # Use the empirical mean intensities for variance calculation
-        v1_empirical=nothing,  # TODO: compute from intensity traces if needed
-        v2_empirical=nothing,  # TODO: compute from intensity traces if needed
-        cc_lower=hasproperty(empirical_result.intensity, :cc_lower) ? empirical_result.intensity.cc_lower : nothing,
-        cc_median=hasproperty(empirical_result.intensity, :cc_median) ? empirical_result.intensity.cc_median : nothing,
-        cc_upper=hasproperty(empirical_result.intensity, :cc_upper) ? empirical_result.intensity.cc_upper : nothing,
-        cc_se=hasproperty(empirical_result.intensity, :cc_se) ? empirical_result.intensity.cc_se : nothing,
-        ccON_lower=hasproperty(empirical_result.on_states, :cc_lower) ? empirical_result.on_states.cc_lower : nothing,
-        ccON_median=hasproperty(empirical_result.on_states, :cc_median) ? empirical_result.on_states.cc_median : nothing,
-        ccON_upper=hasproperty(empirical_result.on_states, :cc_upper) ? empirical_result.on_states.cc_upper : nothing,
-        ccON_se=hasproperty(empirical_result.on_states, :cc_se) ? empirical_result.on_states.cc_se : nothing,
-        ccReporters_lower=hasproperty(empirical_result.reporters, :cc_lower) ? empirical_result.reporters.cc_lower : nothing,
-        ccReporters_median=hasproperty(empirical_result.reporters, :cc_median) ? empirical_result.reporters.cc_median : nothing,
-        ccReporters_upper=hasproperty(empirical_result.reporters, :cc_upper) ? empirical_result.reporters.cc_upper : nothing,
-        ccReporters_se=hasproperty(empirical_result.reporters, :cc_se) ? empirical_result.reporters.cc_se : nothing,
-        # Bootstrap statistics for autocovariances
-        ac1_lower=hasproperty(empirical_result.intensity, :ac1_lower) ? empirical_result.intensity.ac1_lower : nothing,
-        ac1_median=hasproperty(empirical_result.intensity, :ac1_median) ? empirical_result.intensity.ac1_median : nothing,
-        ac1_upper=hasproperty(empirical_result.intensity, :ac1_upper) ? empirical_result.intensity.ac1_upper : nothing,
-        ac1_se=hasproperty(empirical_result.intensity, :ac1_se) ? empirical_result.intensity.ac1_se : nothing,
-        ac2_lower=hasproperty(empirical_result.intensity, :ac2_lower) ? empirical_result.intensity.ac2_lower : nothing,
-        ac2_median=hasproperty(empirical_result.intensity, :ac2_median) ? empirical_result.intensity.ac2_median : nothing,
-        ac2_upper=hasproperty(empirical_result.intensity, :ac2_upper) ? empirical_result.intensity.ac2_upper : nothing,
-        ac2_se=hasproperty(empirical_result.intensity, :ac2_se) ? empirical_result.intensity.ac2_se : nothing,
-        ac1ON_lower=hasproperty(empirical_result.on_states, :ac1_lower) ? empirical_result.on_states.ac1_lower : nothing,
-        ac1ON_median=hasproperty(empirical_result.on_states, :ac1_median) ? empirical_result.on_states.ac1_median : nothing,
-        ac1ON_upper=hasproperty(empirical_result.on_states, :ac1_upper) ? empirical_result.on_states.ac1_upper : nothing,
-        ac1ON_se=hasproperty(empirical_result.on_states, :ac1_se) ? empirical_result.on_states.ac1_se : nothing,
-        ac2ON_lower=hasproperty(empirical_result.on_states, :ac2_lower) ? empirical_result.on_states.ac2_lower : nothing,
-        ac2ON_median=hasproperty(empirical_result.on_states, :ac2_median) ? empirical_result.on_states.ac2_median : nothing,
-        ac2ON_upper=hasproperty(empirical_result.on_states, :ac2_upper) ? empirical_result.on_states.ac2_upper : nothing,
-        ac2ON_se=hasproperty(empirical_result.on_states, :ac2_se) ? empirical_result.on_states.ac2_se : nothing,
-        ac1Reporters_lower=hasproperty(empirical_result.reporters, :ac1_lower) ? empirical_result.reporters.ac1_lower : nothing,
-        ac1Reporters_median=hasproperty(empirical_result.reporters, :ac1_median) ? empirical_result.reporters.ac1_median : nothing,
-        ac1Reporters_upper=hasproperty(empirical_result.reporters, :ac1_upper) ? empirical_result.reporters.ac1_upper : nothing,
-        ac1Reporters_se=hasproperty(empirical_result.reporters, :ac1_se) ? empirical_result.reporters.ac1_se : nothing,
-        ac2Reporters_lower=hasproperty(empirical_result.reporters, :ac2_lower) ? empirical_result.reporters.ac2_lower : nothing,
-        ac2Reporters_median=hasproperty(empirical_result.reporters, :ac2_median) ? empirical_result.reporters.ac2_median : nothing,
-        ac2Reporters_upper=hasproperty(empirical_result.reporters, :ac2_upper) ? empirical_result.reporters.ac2_upper : nothing,
-        ac2Reporters_se=hasproperty(empirical_result.reporters, :ac2_se) ? empirical_result.reporters.ac2_se : nothing
+        cc=isnothing(intensity_result) ? Float64[] : intensity_result.cc,
+        ac1=isnothing(intensity_result) ? Float64[] : intensity_result.ac1,
+        ac2=isnothing(intensity_result) ? Float64[] : intensity_result.ac2,
+        ccON=on_result.cc,
+        ac1ON=on_result.ac1,
+        ac2ON=on_result.ac2,
+        ccReporters=reporter_result.cc,
+        ac1Reporters=reporter_result.ac1,
+        ac2Reporters=reporter_result.ac2,
+        mON1=on_result.mean1,
+        mON2=on_result.mean2,
+        mR1=reporter_result.mean1,
+        mR2=reporter_result.mean2,
+        v1_empirical=isnothing(intensity_result) ? 0.0 : intensity_result.v1,
+        v2_empirical=isnothing(intensity_result) ? 0.0 : intensity_result.v2,
+        cc_lower=isnothing(intensity_result) ? nothing : intensity_result.cc_lower,
+        cc_median=isnothing(intensity_result) ? nothing : intensity_result.cc_median,
+        cc_upper=isnothing(intensity_result) ? nothing : intensity_result.cc_upper,
+        cc_se=isnothing(intensity_result) ? nothing : intensity_result.cc_se,
+        ccON_lower=on_result.cc_lower,
+        ccON_median=on_result.cc_median,
+        ccON_upper=on_result.cc_upper,
+        ccON_se=on_result.cc_se,
+        ccReporters_lower=reporter_result.cc_lower,
+        ccReporters_median=reporter_result.cc_median,
+        ccReporters_upper=reporter_result.cc_upper,
+        ccReporters_se=reporter_result.cc_se,
+        ac1_lower=isnothing(intensity_result) ? nothing : intensity_result.ac1_lower,
+        ac1_median=isnothing(intensity_result) ? nothing : intensity_result.ac1_median,
+        ac1_upper=isnothing(intensity_result) ? nothing : intensity_result.ac1_upper,
+        ac1_se=isnothing(intensity_result) ? nothing : intensity_result.ac1_se,
+        ac2_lower=isnothing(intensity_result) ? nothing : intensity_result.ac2_lower,
+        ac2_median=isnothing(intensity_result) ? nothing : intensity_result.ac2_median,
+        ac2_upper=isnothing(intensity_result) ? nothing : intensity_result.ac2_upper,
+        ac2_se=isnothing(intensity_result) ? nothing : intensity_result.ac2_se,
+        ac1ON_lower=on_result.ac1_lower,
+        ac1ON_median=on_result.ac1_median,
+        ac1ON_upper=on_result.ac1_upper,
+        ac1ON_se=on_result.ac1_se,
+        ac2ON_lower=on_result.ac2_lower,
+        ac2ON_median=on_result.ac2_median,
+        ac2ON_upper=on_result.ac2_upper,
+        ac2ON_se=on_result.ac2_se,
+        ac1Reporters_lower=reporter_result.ac1_lower,
+        ac1Reporters_median=reporter_result.ac1_median,
+        ac1Reporters_upper=reporter_result.ac1_upper,
+        ac1Reporters_se=reporter_result.ac1_se,
+        ac2Reporters_lower=reporter_result.ac2_lower,
+        ac2Reporters_median=reporter_result.ac2_median,
+        ac2Reporters_upper=reporter_result.ac2_upper,
+        ac2Reporters_se=reporter_result.ac2_se
     )
 
-    # Normalize theory by theoretical global means: G_XY(τ) = R_XY(τ) / (E[X] * E[Y])
-    # For cross-correlation: normalize by m1 * m2, m1ON * m2ON, m1Reporters * m2Reporters
-    # For autocorrelation: normalize by m^2, mON^2, mReporters^2
-    # Avoid division by zero
+    # Transform theory to match empirical based on CorrelationTrait
+    # Theory: cc = E[XY] (raw uncentered correlation from covariance_functions)
+    # Empirical: Uses CorrelationTrait directly - no transformations needed
+    
+    needs_centering = correlation_algorithm.centering != :none
+    needs_normalization = correlation_algorithm.normalization != :none
+    
+    # Compute normalization factors (theoretical means)
     norm_cc = (m1 * m2) > 0 ? (m1 * m2) : 1.0
     norm_ac1 = m1^2 > 0 ? m1^2 : 1.0
     norm_ac2 = m2^2 > 0 ? m2^2 : 1.0
@@ -3645,16 +3637,51 @@ function simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, 
     norm_ac1Reporters = isnothing(m1Reporters) || m1Reporters^2 <= 0 ? 1.0 : m1Reporters^2
     norm_ac2Reporters = isnothing(m2Reporters) || m2Reporters^2 <= 0 ? 1.0 : m2Reporters^2
     
-    # Normalize theory cross-correlations and autocorrelations
-    cc_normalized = cc ./ norm_cc
-    ac1_normalized = ac1 ./ norm_ac1
-    ac2_normalized = ac2 ./ norm_ac2
-    ccON_normalized = ccON ./ norm_ccON
-    ac1ON_normalized = ac1ON ./ norm_ac1ON
-    ac2ON_normalized = ac2ON ./ norm_ac2ON
-    ccReporters_normalized = isnothing(ccReporters) ? nothing : ccReporters ./ norm_ccReporters
-    ac1Reporters_normalized = isnothing(ac1Reporters) ? nothing : ac1Reporters ./ norm_ac1Reporters
-    ac2Reporters_normalized = isnothing(ac2Reporters) ? nothing : ac2Reporters ./ norm_ac2Reporters
+    # Step 1: Center (if centering is enabled)
+    if needs_centering
+        cc_centered = cc .- norm_cc
+        ac1_centered = ac1 .- norm_ac1
+        ac2_centered = ac2 .- norm_ac2
+        ccON_centered = ccON .- norm_ccON
+        ac1ON_centered = ac1ON .- norm_ac1ON
+        ac2ON_centered = ac2ON .- norm_ac2ON
+        ccReporters_centered = isnothing(ccReporters) ? nothing : ccReporters .- norm_ccReporters
+        ac1Reporters_centered = isnothing(ac1Reporters) ? nothing : ac1Reporters .- norm_ac1Reporters
+        ac2Reporters_centered = isnothing(ac2Reporters) ? nothing : ac2Reporters .- norm_ac2Reporters
+    else
+        cc_centered = cc
+        ac1_centered = ac1
+        ac2_centered = ac2
+        ccON_centered = ccON
+        ac1ON_centered = ac1ON
+        ac2ON_centered = ac2ON
+        ccReporters_centered = ccReporters
+        ac1Reporters_centered = ac1Reporters
+        ac2Reporters_centered = ac2Reporters
+    end
+    
+    # Step 2: Normalize (if normalization is enabled)
+    if needs_normalization
+        cc_normalized = cc_centered ./ norm_cc
+        ac1_normalized = ac1_centered ./ norm_ac1
+        ac2_normalized = ac2_centered ./ norm_ac2
+        ccON_normalized = ccON_centered ./ norm_ccON
+        ac1ON_normalized = ac1ON_centered ./ norm_ac1ON
+        ac2ON_normalized = ac2ON_centered ./ norm_ac2ON
+        ccReporters_normalized = isnothing(ccReporters_centered) ? nothing : ccReporters_centered ./ norm_ccReporters
+        ac1Reporters_normalized = isnothing(ac1Reporters_centered) ? nothing : ac1Reporters_centered ./ norm_ac1Reporters
+        ac2Reporters_normalized = isnothing(ac2Reporters_centered) ? nothing : ac2Reporters_centered ./ norm_ac2Reporters
+    else
+        cc_normalized = cc_centered
+        ac1_normalized = ac1_centered
+        ac2_normalized = ac2_centered
+        ccON_normalized = ccON_centered
+        ac1ON_normalized = ac1ON_centered
+        ac2ON_normalized = ac2ON_centered
+        ccReporters_normalized = ccReporters_centered
+        ac1Reporters_normalized = ac1Reporters_centered
+        ac2Reporters_normalized = ac2Reporters_centered
+    end
     
     # Theory autocovariances from `covariance_functions` are on positive lags only;
     # symmetrize to compare with empirical (which has symmetric lags from compute_covariance).
@@ -3680,15 +3707,16 @@ function simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, 
     n_lags_theory = length(lags)  # full_lags from covariance_functions
     n_lags_empirical = length(empirical.cc)
     
-    # Verify that empirical_result.lags matches theory lags (they should be identical)
-    if hasproperty(empirical_result.intensity, :lags) && !isnothing(empirical_result.intensity.lags)
-        empirical_lags = empirical_result.intensity.lags
+    # Verify that empirical lags match theory lags (they should be identical)
+    # Check using on_result since it's always computed
+    if hasproperty(on_result, :lags) && !isnothing(on_result.lags)
+        empirical_lags = on_result.lags
         if length(empirical_lags) != length(lags) || !all(isapprox.(empirical_lags, lags, atol=1e-10))
             error("""
             LAG VALUES MISMATCH:
             Theory lags: $(lags[1:min(5, length(lags))]) ... $(lags[max(1, length(lags)-4):length(lags)])
             Empirical lags: $(empirical_lags[1:min(5, length(empirical_lags))]) ... $(empirical_lags[max(1, length(empirical_lags)-4):length(empirical_lags)])
-            The lags passed to compute_cov_empirical must exactly match full_lags from covariance_functions.
+            The lags passed to compute_covariance must exactly match full_lags from covariance_functions.
             """)
         end
     end
@@ -3786,13 +3814,13 @@ function simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, 
     
     Intensity cross-covariance (cc):
       Theory zero-lag: $(cc[mid_idx])
-      Empirical zero-lag: $(empirical.cc[mid_idx])
+      Empirical zero-lag (mean): $(empirical.cc[mid_idx])
       L∞ norm: $(linf_norm[1])
       L² norm: $(l2_norm[1])
     
     ON state cross-covariance (ccON):
       Theory zero-lag: $(ccON[mid_idx])
-      Empirical zero-lag: $(empirical.ccON[mid_idx])
+      Empirical zero-lag (mean): $(empirical.ccON[mid_idx])
       Theory max: $(maximum(ccON)) at lag $(lags[argmax(ccON)])
       Empirical max: $(maximum(empirical.ccON)) at lag $(lags[argmax(empirical.ccON)])
     
@@ -3806,7 +3834,7 @@ function simulate_trials(ac1, ac2, cc, m1, m2, v1, v2, ccON, m1ON, m2ON, ac1ON, 
     
     ON state autocovariance unit 2 (ac2ON):
       Theory zero-lag: $(ac2ON_theory_full[mid_idx])
-      Empirical zero-lag: $(empirical.ac2ON[mid_idx])
+      Empirical zero-lag (mean): $(empirical.ac2ON[mid_idx])
       Difference at zero-lag: $(ac2ON_theory_full[mid_idx] - empirical.ac2ON[mid_idx])
       Relative difference at zero-lag: $((ac2ON_theory_full[mid_idx] - empirical.ac2ON[mid_idx]) / ac2ON_theory_full[mid_idx] * 100)%
       Theory max: $(maximum(ac2ON_theory_full)) at lag $(lags[argmax(ac2ON_theory_full)])
@@ -3900,7 +3928,7 @@ and per-trace variances computed as `E[x^2] - E[x]^2` (population form).
 """
 
 """
-    compute_covariance(traces, lags; mean1_global=nothing, mean2_global=nothing, use_windowed_means=false, bootstrap=false, n_bootstrap=1000, frame_interval=1.0)
+    compute_covariance(traces, lags; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap=false, n_bootstrap=1000, frame_interval=1.0)
 
 Compute cross-covariance and autocovariance functions from traces.
 
@@ -3909,11 +3937,9 @@ Compute cross-covariance and autocovariance functions from traces.
 - `lags::Vector{<:Real}`: Vector of lags to compute (can be integers or floats)
 
 # Keyword Arguments
-- `mean1_global`: Global mean for first unit (if provided, used for centering when `use_windowed_means=false`)
-- `mean2_global`: Global mean for second unit (if provided, used for centering when `use_windowed_means=false`)
-- `use_windowed_means::Bool`: If `true`, use IDL windowed (lag-dependent) means approach to reduce finite-sample bias.
-  Each trace is centered using lag-dependent means computed over the valid window for each lag.
-  If `false`, uses global means (if provided) or uncentered correlations.
+- `mean1_global`: Global mean for first unit (if provided, used for centering when `correlation_algorithm.centering=:global_mean`)
+- `mean2_global`: Global mean for second unit (if provided, used for centering when `correlation_algorithm.centering=:global_mean`)
+- `correlation_algorithm::CorrelationTrait`: Algorithm traits (centering, multi-tau, normalization)
 - `bootstrap::Bool`: Whether to compute bootstrap confidence intervals
 - `n_bootstrap::Int`: Number of bootstrap iterations
 - `frame_interval::Float64`: Sampling interval (default: 1.0)
@@ -3927,25 +3953,25 @@ NamedTuple with:
 - `lags`: The input lags vector
 - Bootstrap fields (`*_lower`, `*_median`, `*_upper`, `*_se`) if `bootstrap=true`
 """
-function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, use_windowed_means::Bool=false, bootstrap::Bool=false, n_bootstrap::Int=1000, frame_interval::Float64=1.0)
+function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false, n_bootstrap::Int=1000, frame_interval::Float64=1.0)
     # Compute per-trace covariance matrices
     # Note: _per_trace_covariance_mats expects integer lags, but crosscorrelation_function
     # will handle the conversion internally using frame_interval, so we pass the original lags
-    per_trace = _per_trace_covariance_mats(traces, lags; mean1_global=mean1_global, mean2_global=mean2_global, use_windowed_means=use_windowed_means, frame_interval=frame_interval)
+    per_trace = _per_trace_covariance_mats(traces, lags; mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm, frame_interval=frame_interval)
     
     # Aggregate to get overall covariance functions
-    result = _aggregate_covariance_mats(per_trace; mean1_global=mean1_global, mean2_global=mean2_global, use_windowed_means=use_windowed_means)
+    result = _aggregate_covariance_mats(per_trace; mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm)
     
     # Bootstrap if requested
     if bootstrap
-        bootstrap_result = bootstrap_tracewise(per_trace; n_bootstrap=n_bootstrap, mean1_global=mean1_global, mean2_global=mean2_global, use_windowed_means=use_windowed_means)
+        bootstrap_result = bootstrap_tracewise(per_trace; n_bootstrap=n_bootstrap, mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm)
         return merge(result, bootstrap_result)
     end
     
     return result
 end
 
-function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; demean::Bool=false, mean1_global=nothing, mean2_global=nothing, use_windowed_means::Bool=false, frame_interval::Float64=1.0)
+function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), frame_interval::Float64=1.0)
     _validate_lags_for_traces(traces, lags; label="traces", frame_interval=frame_interval)
     n_traces = length(traces)
     n_lags = length(lags)
@@ -3957,8 +3983,33 @@ function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vect
     var1 = Vector{Float64}(undef, n_traces)
     var2 = Vector{Float64}(undef, n_traces)
 
-    # If global means provided, use them; otherwise compute empirical means per trace
-    use_global_means = !isnothing(mean1_global) && !isnothing(mean2_global)
+    # Determine centering strategy from CorrelationTrait
+    centering_type = correlation_algorithm.centering
+    
+    # If global_mean centering, pre-compute empirical global means from ALL data points across ALL traces
+    # Also compute true global mean for all centering types (needed for normalization and reporting)
+    sum1_total = 0.0
+    sum2_total = 0.0
+    n_total = 0
+    for i in 1:n_traces
+        t = traces[i]
+        x_col = Float64.(t[:, 1])
+        y_col = Float64.(t[:, 2])
+        sum1_total += sum(x_col)
+        sum2_total += sum(y_col)
+        n_total += length(x_col)
+    end
+    mean1_global_empirical_true = sum1_total / n_total
+    mean2_global_empirical_true = sum2_total / n_total
+    
+    # For backward compatibility, set local variable for centering
+    if centering_type == :global_mean
+        mean1_global_empirical = mean1_global_empirical_true
+        mean2_global_empirical = mean2_global_empirical_true
+    else
+        mean1_global_empirical = nothing
+        mean2_global_empirical = nothing
+    end
 
     # Parallelize correlation computation across traces
     Threads.@threads for i in 1:n_traces
@@ -3970,42 +4021,42 @@ function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vect
         var1[i] = mean(x .^ 2) - mean1[i]^2
         var2[i] = mean(y .^ 2) - mean2[i]^2
         
-        if use_windowed_means
-            # IDL approach: use windowed (lag-dependent) means within each trace
-            # This computes C_XY(τ) = <(x(t) - <x>_τ)(y(t+τ) - <y>_τ)>_τ
-            # where <x>_τ and <y>_τ are computed over the valid window for each lag
-            R_XY[i, :] = crosscorrelation_function_windowed(x, y, lags; frame_interval=frame_interval)
-            R_XX[i, :] = crosscorrelation_function_windowed(x, x, lags; frame_interval=frame_interval)
-            R_YY[i, :] = crosscorrelation_function_windowed(y, y, lags; frame_interval=frame_interval)
-        elseif use_global_means
-            # Center each trace using global theoretical means, then compute cross-correlation
-            # crosscorrelation_function handles both positive and negative lags correctly:
-            # - For τ >= 0: computes X(t) * Y(t+τ)
-            # - For τ < 0: computes Y(t) * X(t+|τ|) which is R_XY(-τ)
-            R_XY[i, :] = crosscorrelation_function(x, y, lags; meanx=mean1_global, meany=mean2_global, frame_interval=frame_interval)
-            R_XX[i, :] = crosscorrelation_function(x, x, lags; meanx=mean1_global, meany=mean1_global, frame_interval=frame_interval)
-            R_YY[i, :] = crosscorrelation_function(y, y, lags; meanx=mean2_global, meany=mean2_global, frame_interval=frame_interval)
+        # Determine means to use for centering based on centering_type
+        local_meanx = 0.0
+        local_meany = 0.0
+        if centering_type == :global_mean
+            local_meanx = mean1_global_empirical
+            local_meany = mean2_global_empirical
+        elseif centering_type == :windowed_mean
+            # Windowed means are handled internally by crosscorrelation_function_windowed
+            # No explicit mean subtraction here, as it's done per-lag within the function
+            local_meanx = 0.0 # Not used for windowed, but set for clarity
+            local_meany = 0.0 # Not used for windowed, but set for clarity
+        else # :none
+            local_meanx = 0.0
+            local_meany = 0.0
+        end
+        
+        # Compute correlation based on multi-tau trait
+        if hastrait(correlation_algorithm, :multitau)
+            # Multi-tau correlation function (can be centered or uncentered based on local_meanx/y)
+            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+        elseif centering_type == :windowed_mean
+            # Windowed correlation function (already handles internal centering)
+            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; frame_interval=frame_interval, normalize_correlation=false)
         else
-            # Compute uncentered cross-correlation R_XY(τ) = (1/(T-τ)) * Σ X(t)Y(t+τ)
-            # crosscorrelation_function handles both positive and negative lags
-            # Will subtract overall empirical means later in _aggregate_covariance_mats
-            if demean
-                # Use per-trace empirical means to center each trace individually
-                meanx_emp = mean(x)
-                meany_emp = mean(y)
-                R_XY[i, :] = crosscorrelation_function(x, y, lags; meanx=meanx_emp, meany=meany_emp, frame_interval=frame_interval)
-                R_XX[i, :] = crosscorrelation_function(x, x, lags; meanx=meanx_emp, meany=meanx_emp, frame_interval=frame_interval)
-                R_YY[i, :] = crosscorrelation_function(y, y, lags; meanx=meany_emp, meany=meany_emp, frame_interval=frame_interval)
-            else
-                # Uncentered (no means subtracted)
-                R_XY[i, :] = crosscorrelation_function(x, y, lags; frame_interval=frame_interval)
-                R_XX[i, :] = crosscorrelation_function(x, x, lags; frame_interval=frame_interval)
-                R_YY[i, :] = crosscorrelation_function(y, y, lags; frame_interval=frame_interval)
-            end
+            # Standard correlation function (centered or uncentered based on local_meanx/y)
+            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
         end
     end
 
-    return (R_XY=R_XY, R_XX=R_XX, R_YY=R_YY, mean1=mean1, mean2=mean2, var1=var1, var2=var2, lags=lags)
+    return (R_XY=R_XY, R_XX=R_XX, R_YY=R_YY, mean1=mean1, mean2=mean2, var1=var1, var2=var2, lags=lags, mean1_global_true=mean1_global_empirical_true, mean2_global_true=mean2_global_empirical_true)
 end
 
 """
@@ -4026,7 +4077,7 @@ Returns:
 - `ac1`: C_XX(τ) (autocovariance of first unit, symmetric)
 - `ac2`: C_YY(τ) (autocovariance of second unit, symmetric)
 """
-function _aggregate_covariance_mats(per_trace; mean1_global=nothing, mean2_global=nothing, use_windowed_means::Bool=false)
+function _aggregate_covariance_mats(per_trace; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
     n_traces = length(per_trace.mean1)
     
     # Average cross-correlation functions across traces (R_XY already includes both positive and negative lags)
@@ -4034,48 +4085,45 @@ function _aggregate_covariance_mats(per_trace; mean1_global=nothing, mean2_globa
     R_XX_mean = vec(sum(per_trace.R_XX, dims=1)) ./ n_traces
     R_YY_mean = vec(sum(per_trace.R_YY, dims=1)) ./ n_traces
     
-    # Compute overall means (average of per-trace means)
-    # Note: Since all traces have the same length, we can just average the per-trace means
-    mean1 = mean(per_trace.mean1)
-    mean2 = mean(per_trace.mean2)
+    # Use true global mean (computed from all data points) instead of average of per-trace means
+    # per_trace now always includes mean1_global_true and mean2_global_true
+    mean1_empirical = per_trace.mean1_global_true
+    mean2_empirical = per_trace.mean2_global_true
     
-    if use_windowed_means
-        # Windowed means: Each trace was already centered with lag-dependent means,
-        # so R_XY already contains cross-covariances C_XY(τ) = <(x(t) - <x>_τ)(y(t+τ) - <y>_τ)>_τ
-        # Just average them across traces (no need to subtract means again)
-        C_XY = R_XY_mean
-        C_XX = R_XX_mean
-        C_YY = R_YY_mean
-    elseif !isnothing(mean1_global) && !isnothing(mean2_global)
-        # Global means: Cross-covariance already computed correctly in _per_trace_covariance_mats:
-        # Each trace was centered using global means before computing cross-correlation,
-        # so R_XY_mean already equals mean_i(E_i[(X_i - μ_X_global)(Y_i - μ_Y_global)])
-        # R_XY already includes both positive and negative lags
-        C_XY = R_XY_mean
-        C_XX = R_XX_mean
-        C_YY = R_YY_mean
-    else
-        # Uncentered: Normalize uncentered cross-correlation by empirical global means
-        # R_XY(τ) = mean_i(E_i[XY]) where E_i[XY] = (1/(T-|τ|)) * Σ X_i(t)Y_i(t+|τ|)
-        # Normalized: G_XY(τ) = R_XY(τ) / (E[X] * E[Y]) where E[X] and E[Y] are empirical global means
-        # Note: R_XY already includes both positive and negative lags from crosscorrelation_function
-        # Note: Since traces have same length, mean1 and mean2 are correctly computed as averages of per-trace means
-        # Avoid division by zero
-        norm_factor_xy = (mean1 * mean2) > 0 ? (mean1 * mean2) : 1.0
-        norm_factor_xx = mean1^2 > 0 ? mean1^2 : 1.0
-        norm_factor_yy = mean2^2 > 0 ? mean2^2 : 1.0
-        C_XY = R_XY_mean ./ norm_factor_xy
-        C_XX = R_XX_mean ./ norm_factor_xx
-        C_YY = R_YY_mean ./ norm_factor_yy
+    # Correlations are already centered in _per_trace_covariance_mats via compute_correlation
+    # So we just average them - no centering needed here
+    C_XY = R_XY_mean
+    C_XX = R_XX_mean
+    C_YY = R_YY_mean
+
+    # Apply normalization if specified by the algorithm
+    if correlation_algorithm.normalization == :global_mean
+        # Normalize by empirical global means
+        norm_factor_xy = (mean1_empirical * mean2_empirical) > 0 ? (mean1_empirical * mean2_empirical) : 1.0
+        norm_factor_xx = mean1_empirical^2 > 0 ? mean1_empirical^2 : 1.0
+        norm_factor_yy = mean2_empirical^2 > 0 ? mean2_empirical^2 : 1.0
+        C_XY = C_XY ./ norm_factor_xy
+        C_XX = C_XX ./ norm_factor_xx
+        C_YY = C_YY ./ norm_factor_yy
+    elseif correlation_algorithm.normalization == :variance
+        # Normalize by variance (standard correlation coefficient)
+        var1_empirical = mean(per_trace.var1)
+        var2_empirical = mean(per_trace.var2)
+        norm_factor_xy = sqrt(var1_empirical * var2_empirical) > 0 ? sqrt(var1_empirical * var2_empirical) : 1.0
+        norm_factor_xx = var1_empirical > 0 ? var1_empirical : 1.0
+        norm_factor_yy = var2_empirical > 0 ? var2_empirical : 1.0
+        C_XY = C_XY ./ norm_factor_xy
+        C_XX = C_XX ./ norm_factor_xx
+        C_YY = C_YY ./ norm_factor_yy
     end
     
     v1 = mean(per_trace.var1)
     v2 = mean(per_trace.var2)
-    return (cc=C_XY, ac1=C_XX, ac2=C_YY, mean1=mean1, mean2=mean2, v1=v1, v2=v2, lags=per_trace.lags)
+    return (cc=C_XY, ac1=C_XX, ac2=C_YY, mean1=mean1_empirical, mean2=mean2_empirical, v1=v1, v2=v2, lags=per_trace.lags)
 end
 
 """
-    bootstrap_tracewise(per_trace; n_bootstrap=1000, mean1_global=nothing, mean2_global=nothing, use_windowed_means=false)
+    bootstrap_tracewise(per_trace; n_bootstrap=1000, mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
 
 Generic trace-wise bootstrap for cross-covariance functions.
 
@@ -4083,7 +4131,7 @@ Bootstraps by resampling traces with replacement, aggregating by the same rule a
 `_aggregate_covariance_mats`: if windowed means or global means were used, just average; otherwise average
 uncentered cross-correlation functions R_XY(τ) then subtract overall means to get cross-covariance C_XY(τ).
 """
-function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=nothing, mean2_global=nothing, use_windowed_means::Bool=false)
+function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
     n_traces, n_lags = size(per_trace.R_XY)
 
     cc_bs = Matrix{Float64}(undef, n_bootstrap, n_lags)
@@ -4092,7 +4140,9 @@ function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=noth
     mean1_bs = Vector{Float64}(undef, n_bootstrap)
     mean2_bs = Vector{Float64}(undef, n_bootstrap)
 
-    use_global_means = !isnothing(mean1_global) && !isnothing(mean2_global)
+    # Determine centering and normalization strategy from CorrelationTrait
+    centering_type = correlation_algorithm.centering
+    normalization_type = correlation_algorithm.normalization
 
     # bootstrap by resampling trace indices (parallelize across bootstrap iterations)
     Threads.@threads for b in 1:n_bootstrap
@@ -4100,57 +4150,57 @@ function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=noth
         s_R_XY = zeros(n_lags)
         s_R_XX = zeros(n_lags)
         s_R_YY = zeros(n_lags)
-        m1 = 0.0
-        m2 = 0.0
+        m1_b_raw = 0.0
+        m2_b_raw = 0.0
+        var1_b_raw = 0.0
+        var2_b_raw = 0.0
         @inbounds for idx in idxs
             s_R_XY .+= view(per_trace.R_XY, idx, :)
             s_R_XX .+= view(per_trace.R_XX, idx, :)
             s_R_YY .+= view(per_trace.R_YY, idx, :)
-            m1 += per_trace.mean1[idx]
-            m2 += per_trace.mean2[idx]
+            m1_b_raw += per_trace.mean1[idx]
+            m2_b_raw += per_trace.mean2[idx]
+            var1_b_raw += per_trace.var1[idx]
+            var2_b_raw += per_trace.var2[idx]
         end
-        # Average cross-correlation functions (R_XY already includes both positive and negative lags)
-        R_XY_mean = s_R_XY ./ n_traces
-        R_XX_mean = s_R_XX ./ n_traces
-        R_YY_mean = s_R_YY ./ n_traces
-        mean1_b = m1 / n_traces
-        mean2_b = m2 / n_traces
+        # Average correlation functions and means for this bootstrap sample
+        # NOTE: per_trace.R_XY, R_XX, R_YY are already centered (if centering was requested)
+        # in _per_trace_covariance_mats via compute_correlation, so we should NOT center again here
+        R_XY_mean_b = s_R_XY ./ n_traces
+        R_XX_mean_b = s_R_XX ./ n_traces
+        R_YY_mean_b = s_R_YY ./ n_traces
+        mean1_b = m1_b_raw / n_traces
+        mean2_b = m2_b_raw / n_traces
+        var1_b = var1_b_raw / n_traces
+        var2_b = var2_b_raw / n_traces
         
-        # Store unnormalized correlation functions for this bootstrap sample
-        # (average across resampled traces)
-        # Normalization by bootstrap global mean will happen after all bootstrap samples are collected
-        if use_windowed_means || use_global_means
-            cc_bs[b, :] = R_XY_mean
-            ac1_bs[b, :] = R_XX_mean
-            ac2_bs[b, :] = R_YY_mean
-        else
-            # Store unnormalized uncentered cross-correlation for this bootstrap sample
-            cc_bs[b, :] = R_XY_mean
-            ac1_bs[b, :] = R_XX_mean
-            ac2_bs[b, :] = R_YY_mean
+        # Correlations are already centered in _per_trace_covariance_mats, so no centering needed here
+        current_cc = R_XY_mean_b
+        current_ac1 = R_XX_mean_b
+        current_ac2 = R_YY_mean_b
+        
+        # Apply normalization for this bootstrap sample
+        if normalization_type == :global_mean
+            norm_factor_xy = (mean1_b * mean2_b) > 0 ? (mean1_b * mean2_b) : 1.0
+            norm_factor_xx = mean1_b^2 > 0 ? mean1_b^2 : 1.0
+            norm_factor_yy = mean2_b^2 > 0 ? mean2_b^2 : 1.0
+            current_cc = current_cc ./ norm_factor_xy
+            current_ac1 = current_ac1 ./ norm_factor_xx
+            current_ac2 = current_ac2 ./ norm_factor_yy
+        elseif normalization_type == :variance
+            norm_factor_xy = sqrt(var1_b * var2_b) > 0 ? sqrt(var1_b * var2_b) : 1.0
+            norm_factor_xx = var1_b > 0 ? var1_b : 1.0
+            norm_factor_yy = var2_b > 0 ? var2_b : 1.0
+            current_cc = current_cc ./ norm_factor_xy
+            current_ac1 = current_ac1 ./ norm_factor_xx
+            current_ac2 = current_ac2 ./ norm_factor_yy
         end
-        # Store means for this bootstrap sample
+        
+        cc_bs[b, :] = current_cc
+        ac1_bs[b, :] = current_ac1
+        ac2_bs[b, :] = current_ac2
         mean1_bs[b] = mean1_b
         mean2_bs[b] = mean2_b
-    end
-
-    # Compute bootstrap global mean (mean of means across all bootstrap samples)
-    mean1_bootstrap = mean(mean1_bs)
-    mean2_bootstrap = mean(mean2_bs)
-    
-    # Normalize all bootstrap samples by the bootstrap global mean
-    # This is the mean of the means from all bootstrap samples
-    if !use_windowed_means && !use_global_means
-        norm_factor_xy = (mean1_bootstrap * mean2_bootstrap) > 0 ? (mean1_bootstrap * mean2_bootstrap) : 1.0
-        norm_factor_xx = mean1_bootstrap^2 > 0 ? mean1_bootstrap^2 : 1.0
-        norm_factor_yy = mean2_bootstrap^2 > 0 ? mean2_bootstrap^2 : 1.0
-        
-        # Normalize each bootstrap sample's correlation function by the bootstrap global mean
-        for b in 1:n_bootstrap
-            cc_bs[b, :] ./= norm_factor_xy
-            ac1_bs[b, :] ./= norm_factor_xx
-            ac2_bs[b, :] ./= norm_factor_yy
-        end
     end
     
     # summarize bootstrap samples column-wise (now normalized)

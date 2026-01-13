@@ -454,3 +454,133 @@ is_histogram_compatible(::RNACountData) = false
 
 
 
+# ============================================================================
+# Correlation Function Abstraction Layer
+# ============================================================================
+
+"""
+    CorrelationTrait
+
+Structure for correlation algorithm traits (features).
+
+# Fields
+- `centering::Symbol`: Centering method:
+  - `:none`: No centering (uncentered correlation)
+  - `:global_mean`: Center by global mean (constant across all lags)
+  - `:windowed_mean`: Center by lag-dependent windowed mean (IDL-style)
+- `multitau::Symbol`: Multi-tau binning:
+  - `:none`: No multi-tau binning (uniform lag spacing)
+  - `:multitau`: Use multi-tau progressive binning (IDL-style)
+- `normalization::Symbol`: Normalization method:
+  - `:none`: No normalization (return raw covariance/correlation)
+  - `:global_mean`: Normalize by global means: (E[XY] - E[X]E[Y])/(E[X]E[Y])
+  - `:windowed_mean`: Normalize by windowed means (lag-dependent)
+  - `:variance`: Normalize by variance (autocorrelation normalization)
+- `m::Int`: Number of points per level for multi-tau (default: 16)
+
+# Examples
+Standard correlation (uncentered, no multi-tau, no normalization):
+    alg = CorrelationTrait()  # All defaults
+    # or explicitly:
+    alg = CorrelationTrait(centering=:none, multitau=:none, normalization=:none)
+
+IDL correlation (windowed means, multi-tau, global mean normalization):
+    alg = CorrelationTrait(centering=:windowed_mean, multitau=:multitau, normalization=:global_mean)
+
+Windowed correlation (windowed means, no multi-tau, no normalization):
+    alg = CorrelationTrait(centering=:windowed_mean)
+    # or explicitly:
+    alg = CorrelationTrait(centering=:windowed_mean, multitau=:none, normalization=:none)
+
+Windowed centering + global mean normalization:
+    alg = CorrelationTrait(centering=:windowed_mean, normalization=:global_mean)
+"""
+struct CorrelationTrait
+    centering::Symbol
+    multitau::Symbol
+    normalization::Symbol
+    m::Int  # Points per level for multi-tau
+    
+    function CorrelationTrait(; centering::Symbol=:none, multitau::Symbol=:none, normalization::Symbol=:none, m::Int=16)
+        centering in (:none, :global_mean, :windowed_mean) || 
+            error("centering must be :none, :global_mean, or :windowed_mean")
+        multitau in (:none, :multitau) || 
+            error("multitau must be :none or :multitau")
+        normalization in (:none, :global_mean, :windowed_mean, :variance) || 
+            error("normalization must be :none, :global_mean, :windowed_mean, or :variance")
+        new(centering, multitau, normalization, m)
+    end
+end
+
+"""
+    hastrait(alg::CorrelationTrait, feature::Symbol)
+
+Check if a correlation algorithm has a specific feature.
+
+# Arguments
+- `alg::CorrelationTrait`: Correlation algorithm to check
+- `feature::Symbol`: Feature to check (`:centering`, `:multitau`, `:normalization`, or specific values like `:windowed_mean`)
+
+# Returns
+- `Bool`: Whether the algorithm has the specified feature
+
+# Examples
+```julia
+alg = CorrelationTrait(:windowed_mean, :multitau, :global_mean)
+hastrait(alg, :multitau)  # true
+hastrait(alg, :windowed_mean)  # true (checks if centering is :windowed_mean)
+hastrait(alg, :none)  # false
+```
+"""
+function hastrait(alg::CorrelationTrait, feature::Symbol)
+    if feature == :centering
+        return alg.centering != :none
+    elseif feature == :multitau
+        return alg.multitau == :multitau
+    elseif feature == :normalization
+        return alg.normalization != :none
+    elseif feature in (:none, :global_mean, :windowed_mean)
+        return alg.centering == feature || alg.normalization == feature
+    elseif feature == :variance
+        return alg.normalization == :variance
+    else
+        return false
+    end
+end
+
+# Convenience constructors for common algorithms
+"""
+    StandardCorrelation()
+
+Standard correlation algorithm (uncentered, no multi-tau, no normalization).
+"""
+StandardCorrelation() = CorrelationTrait(centering=:none, multitau=:none, normalization=:none)
+
+"""
+    WindowedCorrelation()
+
+Windowed means correlation algorithm (windowed centering, no multi-tau, no normalization).
+"""
+WindowedCorrelation() = CorrelationTrait(centering=:windowed_mean, multitau=:none, normalization=:none)
+
+"""
+    MultiTauCorrelation(; m=16)
+
+Multi-tau correlation algorithm (uncentered, multi-tau binning, no normalization).
+"""
+MultiTauCorrelation(; m=16) = CorrelationTrait(centering=:none, multitau=:multitau, normalization=:none, m=m)
+
+"""
+    IDLCorrelation(; m=16)
+
+Full IDL algorithm (windowed centering, multi-tau binning, global mean normalization).
+This exactly matches the IDL Xcor algorithm implementation.
+"""
+IDLCorrelation(; m=16) = CorrelationTrait(centering=:windowed_mean, multitau=:multitau, normalization=:global_mean, m=m)
+
+# Default correlation algorithm
+const DEFAULT_CORRELATION_ALGORITHM = StandardCorrelation()
+
+# Type alias for backward compatibility
+const CorrelationAlgorithm = CorrelationTrait
+

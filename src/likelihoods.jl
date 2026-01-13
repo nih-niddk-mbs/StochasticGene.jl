@@ -172,16 +172,6 @@ function prepare_rates(r, param, hierarchy::HierarchicalTrait)
     return rshared, rindividual, pindividual, rhyper
 end
 
-function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindices)
-    r = Vector{Vector{Float64}}(undef, length(nrates))
-    k = 1
-    for i in eachindex(r)
-        n = nrates[i]
-        r[i] = rates[k:k+n-1]
-        k += n
-    end
-    return r, rates[couplingindices]
-end
 """
 prepare_rates_noiseparams(rates, nrates, reporter)
 """
@@ -280,6 +270,42 @@ function prepare_rates_coupled(r, nrates, reporter, couplingindices)
     rates, noiseparams = prepare_rates_noiseparams(r, nrates, reporter)
     couplingStrength = prepare_coupling(r, couplingindices)
     return rates, noiseparams, couplingStrength
+end
+
+function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindices)
+    r = Vector{Vector{Float64}}(undef, length(nrates))
+    k = 1
+    for i in eachindex(r)
+        n = nrates[i]
+        r[i] = rates[k:k+n-1]
+        k += n
+    end
+    return r, rates[couplingindices]
+end
+
+function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    noiseparams = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    for i in eachindex(R)
+        s = sourceStates[i]
+        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+            push!(couplingStrength, rates[j])
+            j += 1
+        else
+            push!(couplingStrength, 0.0)
+        end
+    end
+    for i in eachindex(r)
+        push!(noiseparams, r[i][end-n_noise[i]+1:end])
+    end
+    return r, couplingStrength, noiseparams
 end
 
 """

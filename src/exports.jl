@@ -19,4 +19,7 @@ export mean, norm, normalize_histogram, mean_elongationtime, on_states, source_s
 # Utility Functions
 export make_array, make_mat, prepare_rates, prob_Gaussian, prob_GaussianMixture, prob_Gaussian_grid
 
+# Correlation Algorithms
+export CorrelationAlgorithm, StandardCorrelation, WindowedCorrelation, MultiTauCorrelation, IDLCorrelation, DEFAULT_CORRELATION_ALGORITHM
+
 # Note: Test functions are not exported as they are for internal use only 
