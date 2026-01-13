@@ -2065,9 +2065,9 @@ end
 
 # Dispatch function for correlation algorithms (trait-based)
 """
-    compute_correlation(alg::CorrelationTrait, x, y, lags; kwargs...)
+    compute_correlation_function(alg::CorrelationTrait, x, y, lags; kwargs...)
 
-Compute correlation using the specified algorithm traits.
+Compute correlation function using the specified algorithm traits.
 
 This function dispatches based on the features (traits) of the algorithm:
 - Multi-tau binning
@@ -2092,7 +2092,7 @@ This function dispatches based on the features (traits) of the algorithm:
 This function dispatches to the appropriate correlation function in utilities.jl
 based on the algorithm's traits.
 """
-function compute_correlation(alg::CorrelationTrait, x, y, lags; 
+function compute_correlation_function(alg::CorrelationTrait, x, y, lags; 
                              meanx::Float64=0.0, meany::Float64=0.0, 
                              frame_interval=nothing, 
                              normalize_correlation::Union{Bool, Nothing}=nothing,
@@ -2103,26 +2103,26 @@ function compute_correlation(alg::CorrelationTrait, x, y, lags;
     
     # Dispatch based on multi-tau feature
     if hastrait(alg, :multitau)
-        # Multi-tau algorithm: use crosscorrelation_function_multitau
+        # Multi-tau algorithm: use correlation_function_multitau
         # For multi-tau, centering is handled internally (lag-dependent means)
         # meanx/meany are ignored for multi-tau
-        return crosscorrelation_function_multitau(x, y, lags; 
+        return correlation_function_multitau(x, y, lags; 
                                                   meanx=0.0, meany=0.0, 
                                                   frame_interval=frame_interval, 
                                                   m=alg.m, 
                                                   normalize=normalize, 
                                                   return_raw_lags=return_raw_lags)
     elseif alg.centering == :windowed_mean
-        # Windowed means correlation: use crosscorrelation_function_windowed
+        # Windowed means correlation: use correlation_function_windowed
         # Windowed correlation computes lag-dependent means internally
         # meanx/meany are ignored
-        return crosscorrelation_function_windowed(x, y, lags; frame_interval=frame_interval)
+        return correlation_function_windowed(x, y, lags; frame_interval=frame_interval)
     else
         # Standard correlation (uncentered or global mean centered)
         # Use meanx/meany if centering=:global_mean, otherwise use 0.0 (uncentered)
         meanx_actual = (alg.centering == :global_mean) ? meanx : 0.0
         meany_actual = (alg.centering == :global_mean) ? meany : 0.0
-        return crosscorrelation_function(x, y, lags; 
+        return correlation_function(x, y, lags; 
                                          meanx=meanx_actual, 
                                          meany=meany_actual, 
                                          frame_interval=frame_interval)
@@ -2130,7 +2130,7 @@ function compute_correlation(alg::CorrelationTrait, x, y, lags;
 end
 
 """
-    crosscorrelation_function(x, y, lags; meanx=0.0, meany=0.0)
+    correlation_function(x, y, lags; meanx=0.0, meany=0.0)
 
 Explicitly compute the unbiased cross-correlation function without calling Julia's StatsBase.crosscov.
 
@@ -2158,14 +2158,14 @@ x = randn(100)
 y = randn(100)
 lags = collect(-20:20)
 # Uncentered cross-correlation
-R_XY = crosscorrelation_function(x, y, lags)
+R_XY = correlation_function(x, y, lags)
 # Cross-covariance with empirical means
 R_XY_centered = crosscorrelation_function(x, y, lags, meanx=mean(x), meany=mean(y))
 # Cross-covariance with theoretical means
 R_XY_theory = crosscorrelation_function(x, y, lags, meanx=μ_X_theory, meany=μ_Y_theory)
 ```
 """
-function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing)
+function correlation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing)
     n = length(x)
     if length(y) != n
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
@@ -2241,7 +2241,7 @@ function crosscorrelation_function(x, y, lags; meanx::Float64=0.0, meany::Float6
 end
 
 """
-    crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+    correlation_function_windowed(x, y, lags; frame_interval=nothing)
 
 Compute cross-correlation using windowed (lag-dependent) means, as in the IDL algorithm.
 
@@ -2260,7 +2260,7 @@ This reduces bias from finite-sample effects when trace length is short relative
 # Returns
 - Vector of cross-correlation values, one per lag
 """
-function crosscorrelation_function_windowed(x, y, lags; frame_interval=nothing)
+function correlation_function_windowed(x, y, lags; frame_interval=nothing)
     n = length(x)
     if length(y) != n
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
@@ -2407,7 +2407,7 @@ end
 
 
 """
-    crosscorrelation_function_multitau(x, y, lags; meanx=0.0, meany=0.0, frame_interval=nothing, m=16)
+    correlation_function_multitau(x, y, lags; meanx=0.0, meany=0.0, frame_interval=nothing, m=16)
 
 Compute cross-correlation using the IDL multi-tau algorithm with progressive binning.
 
@@ -2429,7 +2429,7 @@ The algorithm returns uncentered correlation R_XY(τ) = E[XY] (not normalized by
 - `Vector{Float64}`: Correlation values for each input lag (interpolated/extracted from multi-tau results)
   If `return_raw_lags=true`, returns a NamedTuple `(lags=lags, values=values)` with actual multi-tau lags
 """
-function crosscorrelation_function_multitau(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing, m::Int=16, normalize::Bool=true, return_raw_lags::Bool=false)
+function correlation_function_multitau(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0, frame_interval=nothing, m::Int=16, normalize::Bool=true, return_raw_lags::Bool=false)
     n = length(x)
     if length(y) != n
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
@@ -2728,31 +2728,6 @@ function crosscorrelation_function_multitau(x, y, lags; meanx::Float64=0.0, mean
     return result
 end
 
-"""
-    crosscorrelation_function_idl(x, y, lags; frame_interval=nothing, m=16)
-
-Compute cross-correlation using the full IDL algorithm combining multi-tau progressive binning
-with the IDL normalization formula.
-
-This exactly matches the IDL Xcor algorithm implementation:
-1. Uses multi-tau progressive binning (summing pairs to create fatter bins)
-2. For each lag, computes: Go = sum(x*y), Mdirect = sum(x), Mdelayed = sum(y), n = count
-3. Normalizes using: Gn = (n*Go)/(Mdirect*Mdelayed) - 1.0
-4. Returns uncentered correlation: R_XY = Go/n = E[XY]
-
-# Arguments
-- `x, y`: Time series vectors
-- `lags`: Vector of desired lag values (will be matched to nearest multi-tau lag)
-- `frame_interval::Union{Float64, Nothing}=nothing`: Time interval between frames (default: inferred from lags)
-- `m::Int=16`: Number of points per level (default: 16, matching IDL)
-
-# Returns
-- `Vector{Float64}`: Correlation values for each input lag (interpolated/extracted from multi-tau results)
-"""
-function crosscorrelation_function_idl(x, y, lags; frame_interval=nothing, m::Int=16, normalize::Bool=true, return_raw_lags::Bool=false)
-    # IDL algorithm is identical to multi-tau, just reuse it
-    return crosscorrelation_function_multitau(x, y, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, m=m, normalize=normalize, return_raw_lags=return_raw_lags)
-end
 
 
 

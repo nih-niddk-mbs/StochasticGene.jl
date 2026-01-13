@@ -2555,482 +2555,7 @@ function extract_source_target(pattern::String, filepath::String)
     return nothing
 end
 
-"""
-    write_cov_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
 
-Compute theoretical covariance functions for a single rate file and return the results.
-
-# Arguments
-- `file::String`: Path to the rate file (typically a `.txt` file containing rate parameters)
-- `transitions::Tuple`: Tuple of transition definitions for each unit (default: 3-state model transitions)
-- `G::Tuple`: Number of gene states for each unit (default: (3, 3))
-- `R::Tuple`: Number of RNA states for each unit (default: (3, 3))
-- `S::Tuple`: Initial state definitions (default: (1, 0))
-- `insertstep::Tuple`: Insert step definitions (default: (1, 1))
-- `interval::Float64`: Time interval for transitions (default: 1.0)
-- `pattern::String`: Pattern to extract coupling information from filename (default: "gene")
-- `lags::Vector{Int}`: Time lags for covariance computation (default: 0:10:1000)
-- `probfn`: Probability function for observation model (default: prob_Gaussian)
-- `ratetype::String`: Which row of rates to use from file (default: "ml" for maximum likelihood)
-
-# Returns
-- `Tuple` containing:
-  - `ac1, ac2`: Autocovariance functions for intensity (unit1, unit2)
-  - `cc`: Cross-covariance function for intensity
-  - `ccON`: Cross-covariance function for ON states (unnormalized: E[xy] - E[x]E[y])
-  - `tau`: Time lags (with negative lags included)
-  - `m1, m2`: Mean intensities
-  - `v1, v2`: Variances
-  - `mON1, mON2`: Mean ON state probabilities
-  - `ac1ON, ac2ON`: Autocovariance functions for ON states
-  - `ccReporters`: Cross-covariance function for reporter counts (unnormalized)
-  - `mR1, mR2`: Mean reporter counts
-  - `ac1Reporters, ac2Reporters`: Autocovariance functions for reporter counts
-
-# Notes
-- Extracts coupling information from the filename using `pattern`
-- All cross-covariances and autocovariances are unnormalized (E[xy] - E[x]E[y])
-- ON states are binary (1 if reporter count > 0, 0 otherwise)
-"""
-function write_cov_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
-    println(file)
-    r = readrates(file, get_row(ratetype))
-    source, target = extract_source_target(pattern, file)
-    (source == "R") && (source = collect(G[1]+1:G[1]+R[1]))
-    coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-    correlation_functions_hmm(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
-end
-
-"""
-    write_cov(folder, transitions=..., G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
-
-Compute theoretical covariance functions for all rate files in a folder and write results to CSV files.
-
-This is the main function for batch-processing rate parameter files to generate theoretical cross-covariance
-and autocovariance predictions. It recursively searches a folder for files matching the pattern
-`*rates*tracejoint*`, computes theoretical covariance functions for each using the HMM framework,
-and writes comprehensive results to CSV files that can be used for model scoring against empirical data.
-
-# Arguments
-- `folder::String`: Path to folder containing rate files. The function recursively searches all subdirectories.
-- `transitions::Tuple`: Tuple of transition definitions for each unit. Each element specifies allowed
-  state transitions as a vector of pairs `[from, to]`. Default: `(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))`
-  for a 3-state model with forward/backward transitions for both units.
-- `G::Tuple{Int, Int}`: Number of gene states for each unit (default: `(3, 3)`).
-- `R::Tuple{Int, Int}`: Number of RNA states for each unit (default: `(3, 3)`).
-- `S::Tuple{Int, Int}`: Initial state definitions (default: `(0, 0)`).
-- `insertstep::Tuple{Int, Int}`: Insert step definitions (default: `(1, 1)`).
-- `interval::Float64`: Time interval for transitions in the same units as the rate parameters (default: `1.0`).
-- `pattern::String`: Pattern to extract coupling information from filename (default: `"gene"`). Used by
-  `extract_source_target` to determine which states are coupled.
-- `lags::Vector{Int}`: Time lags for covariance computation. The function computes covariances at these
-  lags and also includes negative lags (symmetric). Default: `collect(0:1:200)` which gives lags from -200 to 200.
-- `probfn`: Probability function for the observation model (default: `prob_Gaussian`). Determines how
-  reporter counts are generated from hidden states.
-- `ratetype::String`: Which row of rates to use from the rate file (default: `"median"`). Other options
-  include `"ml"` (maximum likelihood), `"mean"`, etc. This selects which parameter estimate to use when
-  multiple estimates are stored in the file.
-
-# Output Files
-
-For each input file matching `*rates*tracejoint*.txt`, creates a corresponding output file
-`*crosscovariance*tracejoint*.csv` in the same directory. The CSV file contains the following columns:
-
-## Time Lags
-- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
-
-## ON State Covariances (Binary: 1 if reporter > 0, 0 otherwise)
-- `cc_ON::Vector{Float64}`: Cross-covariance between enhancer and gene ON states (unnormalized: E[xy] - E[x]E[y]).
-  Positive τ means enhancer leads (E[enhancer(t) × gene(t+τ)] - E[enhancer] × E[gene]).
-- `ac1_ON::Vector{Float64}`: Autocovariance of enhancer ON states (unnormalized, symmetric: includes negative lags).
-- `ac2_ON::Vector{Float64}`: Autocovariance of gene ON states (unnormalized, symmetric: includes negative lags).
-- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag, scalar value).
-- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag, scalar value).
-
-## Reporter Count Covariances (Raw integer counts)
-- `cc_Reporters::Vector{Float64}`: Cross-covariance between enhancer and gene reporter counts (unnormalized).
-  Same convention as `cc_ON` (positive τ means enhancer leads).
-- `ac1_Reporters::Vector{Float64}`: Autocovariance of enhancer reporter counts (unnormalized, symmetric).
-- `ac2_Reporters::Vector{Float64}`: Autocovariance of gene reporter counts (unnormalized, symmetric).
-- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag, scalar value).
-- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag, scalar value).
-
-# Workflow
-
-1. **File Discovery**: Recursively walks through `folder` and identifies all files containing both
-   `"rates"` and `"tracejoint"` in the filename.
-
-2. **Rate Loading**: For each matching file, loads rate parameters using `readrates(file, get_row(ratetype))`.
-
-3. **Coupling Extraction**: Extracts coupling information from the filename using `extract_source_target(pattern, file)`
-   to determine which states are coupled (e.g., gene state 1 to gene state 3, or RNA states).
-
-4. **Covariance Computation**: Calls `covariance_functions` (via `write_cov_file`) to compute all theoretical
-   covariance functions using the HMM framework.
-
-5. **File Writing**: Writes results to CSV with filename pattern: `rates_*.txt` → `crosscovariance_*.csv`.
-
-# Usage Example
-
-```julia
-# Process all rate files in a results folder
-write_cov(
-    "results/5Prime-coupled-2025-11-27/",
-    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
-    G=(3, 3),
-    R=(3, 3),
-    lags=collect(0:1:200),  # Lags from -200 to 200
-    ratetype="median"
-)
-```
-
-# Notes
-
-- **Unnormalized Covariances**: All covariance values are unnormalized (E[xy] - E[x]E[y]). To normalize
-  by means, divide by (m1 × m2) for cross-covariances or by (m × m) for autocovariances.
-
-- **Lag Convention**: Positive τ means the first unit (enhancer) leads the second unit (gene). This matches
-  the convention used in `StatsBase.crosscov(enhancer, gene, lags)`.
-
-- **Symmetric Autocovariances**: Autocovariances are symmetric (ac(τ) = ac(-τ)), so negative lags are
-  included by reversing the positive lag values.
-
-- **File Matching**: Only files containing both `"rates"` and `"tracejoint"` in the filename are processed.
-  This pattern identifies files containing joint trace fitting results.
-
-- **Batch Processing**: This function is designed for batch processing of multiple model fits. Each rate
-  file typically corresponds to a different coupling model (e.g., gene state 1→3 coupling vs. gene state 2→3).
-
-- **Model Scoring**: The output CSV files are designed to be read by `score_models_from_traces`, which
-  compares these theoretical predictions against empirical covariance functions computed from experimental
-  or simulated trace data.
-
-# See Also
-- `write_cov_file`: Processes a single rate file (called internally by this function)
-- `covariance_functions`: Core HMM function that computes theoretical covariances
-- `score_models_from_traces`: Scores theoretical predictions against empirical data
-- `readrates`: Loads rate parameters from text files
-"""
-function write_cov(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f) && occursin("tracejoint", f)
-                file = joinpath(root, f)
-                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_cov_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
-                out = replace(file, "rates" => "crosscovariance", ".txt" => ".csv")
-                n_lags = length(tau)
-                
-                CSV.write(out, DataFrame(
-                    tau=tau,
-                    # ON state: unnormalized cc, ac1, ac2, m1, m2
-                    cc_ON=ccON,
-                    ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-                    ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-                    m_ON1=fill(mON1, n_lags),
-                    m_ON2=fill(mON2, n_lags),
-                    # Reporters: unnormalized cc, ac1, ac2, m1, m2
-                    cc_Reporters=ccReporters,
-                    ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-                    ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-                    m_Reporters1=fill(mReporters1, n_lags),
-                    mReporters2=fill(mReporters2, n_lags)
-                ))
-            end
-        end
-    end
-end
-
-"""
-    write_cov_empirical(trace_folder, unit1_filename, unit2_filename, output_file; intensity_labels=nothing, intensity_start=1, intensity_stop=-1, intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
-
-Compute empirical cross-correlation functions from trace files and write results to CSV file.
-
-This function computes cross-correlation functions for:
-1. **Intensity**: From experimental intensity traces (if `intensity_datapath` and `intensity_labels` provided)
-2. **Predicted ON states**: From predicted trace files (binary: 1 if reporter > threshold, 0 otherwise)
-3. **Predicted reporter counts**: From predicted trace files (raw reporter counts)
-
-Then writes the results to a CSV file in the same format as `write_cov` output.
-
-# Arguments
-- `trace_folder::String`: Path to folder containing intensity trace files
-- `unit1_filename::String`: Path to predicted trace file for unit 1 (enhancer) (from uncoupled model)
-- `unit2_filename::String`: Path to predicted trace file for unit 2 (gene) (from uncoupled model)
-- `output_file::String`: Path to output CSV file
-- `intensity_labels::Union{Vector{String}, Nothing}=nothing`: Labels to match in filenames for joint traces (e.g., `["enhancer", "gene"]`). The function will find files containing each label in their filename and pair them (typically by numeric prefix, e.g., `001_enhancer.trk` pairs with `001_gene.trk`). Each pair becomes a joint trace matrix with columns `[enhancer, gene]`. If `nothing`, intensity traces are not loaded.
-- `traceinfo::Tuple=(1.0, 1.0, -1)`: Trace parameters tuple `(dt, start, stop)` where `dt` is the frame interval in minutes, `start` is the starting frame time in minutes, and `stop` is the ending frame time (-1 for last frame). Same format as used in `load_data_trace`.
-- `intensity_col::Int=3`: Column to read from intensity trace files (default: 3)
-- `lags::Vector{Int}=collect(0:1:200)`: Time lags for cross-correlation computation
-- `on_threshold::Real=0`: Threshold for converting reporter counts to ON/OFF states
-- `mON1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for enhancer (if provided, used for centered version)
-- `mON2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for gene (if provided, used for centered version)
-- `mR1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for enhancer (if provided, used for centered version)
-- `mR2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for gene (if provided, used for centered version)
-- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
-- `n_bootstrap::Int=1000`: Number of bootstrap replicates (if bootstrap=true)
-
-# Output CSV Structure
-
-The CSV file contains the same structure as `write_cov` output:
-
-## Time Lags
-- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
-
-## ON State Covariances (Binary: 1 if reporter > threshold, 0 otherwise)
-- `cc_ON::Vector{Float64}`: Empirical cross-covariance between enhancer and gene ON states (unnormalized).
-- `ac1_ON::Vector{Float64}`: Empirical autocovariance of enhancer ON states (unnormalized, symmetric).
-- `ac2_ON::Vector{Float64}`: Empirical autocovariance of gene ON states (unnormalized, symmetric).
-- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag).
-- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag).
-
-## Reporter Count Covariances (Raw integer counts)
-- `cc_Reporters::Vector{Float64}`: Empirical cross-covariance between enhancer and gene reporter counts (unnormalized).
-- `ac1_Reporters::Vector{Float64}`: Empirical autocovariance of enhancer reporter counts (unnormalized, symmetric).
-- `ac2_Reporters::Vector{Float64}`: Empirical autocovariance of gene reporter counts (unnormalized, symmetric).
-- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag).
-- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag).
-
-## Intensity Covariances (if intensity traces provided)
-- `cc::Vector{Float64}`: Empirical cross-covariance between enhancer and gene intensity (unnormalized).
-- `ac1::Vector{Float64}`: Empirical autocovariance of enhancer intensity (unnormalized, symmetric).
-- `ac2::Vector{Float64}`: Empirical autocovariance of gene intensity (unnormalized, symmetric).
-- `m1::Vector{Float64}`: Mean intensity for enhancer (repeated for each lag).
-- `m2::Vector{Float64}`: Mean intensity for gene (repeated for each lag).
-
-If `bootstrap=true`, also includes confidence intervals (`_lower`, `_median`, `_upper`, `_se`) for all quantities.
-
-# Algorithm
-
-1. **Compute Cross-Correlations**: Calls `compute_cov_empirical` to compute empirical cross-correlation functions
-2. **Symmetrize Lags**: Adds negative lags for symmetric output (same as `write_cov`)
-3. **Write CSV**: Writes results to CSV file in the same format as `write_cov`
-
-# Notes
-
-- The output format matches `write_cov` exactly, ensuring direct comparability.
-- Uses the same lags as specified, with symmetric negative lags included.
-- All covariances are unnormalized (centered: E[xy] - E[x]E[y]).
-
-# Usage Example
-
-```julia
-# Compute empirical covariances from predicted trace files only (no intensity)
-write_cov_empirical(
-    "data/traces/",
-    "results/predicted_enhancer.csv",
-    "results/predicted_gene.csv",
-    "results/crosscovariance_empirical.csv",
-    lags=collect(0:1:200),
-    bootstrap=true,
-    n_bootstrap=1000
-)
-
-# With intensity traces from folder (files like 001_enhancer.trk, 001_gene.trk, etc.)
-write_cov_empirical(
-    "data/3Prime_gene_enhancer/including_background/short/",
-    "results/predicted_enhancer.csv",
-    "results/predicted_gene.csv",
-    "results/crosscovariance_empirical.csv",
-    intensity_labels=["enhancer", "gene"],  # Matches files: 001_enhancer.trk with 001_gene.trk, etc.
-    traceinfo=(1.0, 1.0, -1),  # (dt, start, stop) in minutes, -1 means last frame
-    intensity_col=3,
-    lags=collect(0:1:200),
-    bootstrap=true
-)
-```
-"""
-function write_cov_empirical(trace_folder::String, unit1_filename::String, unit2_filename::String, output_file::String; intensity_labels=nothing, traceinfo=(1.0, 1.0, -1), intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
-    # Load intensity traces if labels provided (following load_data_trace pattern)
-    intensity_traces = Vector{Matrix{Float64}}()
-    if !isnothing(intensity_labels)
-        if intensity_labels isa Vector{String}
-            # Joint traces: use read_tracefiles with traceinfo tuple format (like load_data_trace)
-            traces_raw = read_tracefiles(trace_folder, intensity_labels, traceinfo, intensity_col)
-            if length(traces_raw) == 0
-                throw("No traces found for intensity_labels=$intensity_labels in $trace_folder")
-            end
-            # Apply zero_median with zeromedian=true (following load_data_trace pattern)
-            traces_zeroed, _ = zero_median(traces_raw, true)
-            # Convert to Vector{Matrix{Float64}} to match expected type
-            intensity_traces = Vector{Matrix{Float64}}(map(t -> Matrix{Float64}(Float64.(t)), traces_zeroed))
-        else
-            error("intensity_labels must be a Vector{String} for joint traces (e.g., [\"enhancer\", \"gene\"])")
-        end
-    end
-    
-    # Load predicted traces (from uncoupled models) - gives reporter counts and ON states
-    predicted_traces = prepare_traces_from_prediction(unit1_filename, unit2_filename; on_threshold=on_threshold)
-    reporter_traces = predicted_traces.reporter_traces
-    on_traces = predicted_traces.on_traces
-    
-    # Construct symmetric lags (same as write_cov): tau = [-max_lag, ..., -1, 0, 1, ..., max_lag]
-    # Pass symmetric lags to compute_covariance - crosscorrelation_function handles negative lags correctly
-    lags_symmetric = vcat(-reverse(lags[2:end]), lags)
-    tau = lags_symmetric
-    n_lags = length(tau)
-    
-    # Compute empirical cross-correlation functions with symmetric lags
-    on_result_full = compute_covariance(on_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mON1_theory, mean2_global=mON2_theory)
-    reporter_result_full = compute_covariance(reporter_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mR1_theory, mean2_global=mR2_theory)
-    
-    # Check if we have intensity results
-    has_intensity = !isnothing(intensity_labels) && !isempty(intensity_traces)
-    
-    # Results already have both positive and negative lags from crosscorrelation_function
-    cc_ON_full = on_result_full.cc
-    cc_Reporters_full = reporter_result_full.cc
-    
-    # Autocovariances ARE symmetric, but crosscorrelation_function already handles negative lags correctly
-    ac1_ON_sym = on_result_full.ac1
-    ac2_ON_sym = on_result_full.ac2
-    ac1_Reporters_sym = reporter_result_full.ac1
-    ac2_Reporters_sym = reporter_result_full.ac2
-    
-    # Build output DataFrame with same column order as write_cov
-    # write_cov order: tau, cc_ON, ac1_ON, ac2_ON, mON1, mON2, cc_Reporters, ac1_Reporters, ac2_Reporters, mR1, mR2
-    # Use OrderedDict or construct DataFrame with columns in correct order
-    df = DataFrame(
-        tau=tau,
-        cc_ON=cc_ON_full,
-        ac1_ON=ac1_ON_sym,
-        ac2_ON=ac2_ON_sym,
-        mON1=fill(on_result_full.mean1, n_lags),
-        mON2=fill(on_result_full.mean2, n_lags),
-        cc_Reporters=cc_Reporters_full,
-        ac1_Reporters=ac1_Reporters_sym,
-        ac2_Reporters=ac2_Reporters_sym,
-        mR1=fill(reporter_result_full.mean1, n_lags),
-        mR2=fill(reporter_result_full.mean2, n_lags)
-    )
-    
-    # Add intensity covariances if available (after base columns, same order as write_cov would if it had intensity)
-    if has_intensity
-        # Compute intensity with symmetric lags as well (already includes both positive and negative lags)
-        intensity_result_full = compute_covariance(intensity_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap)
-        cc_intensity_full = intensity_result_full.cc
-        ac1_intensity_sym = intensity_result_full.ac1  # Already includes both positive and negative lags
-        ac2_intensity_sym = intensity_result_full.ac2  # Already includes both positive and negative lags
-        df.cc = cc_intensity_full
-        df.ac1 = ac1_intensity_sym
-        df.ac2 = ac2_intensity_sym
-        df.m1 = fill(intensity_result_full.mean1, n_lags)
-        df.m2 = fill(intensity_result_full.mean2, n_lags)
-    end
-    
-    # Add bootstrap fields if available (after all base columns)
-    # Bootstrap results already include both positive and negative lags
-    if bootstrap && hasproperty(on_result_full, :cc_lower)
-        # ON state bootstrap fields
-        df.cc_ON_lower = on_result_full.cc_lower
-        df.cc_ON_median = on_result_full.cc_median
-        df.cc_ON_upper = on_result_full.cc_upper
-        df.cc_ON_se = on_result_full.cc_se
-        df.ac1_ON_lower = on_result_full.ac1_lower
-        df.ac1_ON_median = on_result_full.ac1_median
-        df.ac1_ON_upper = on_result_full.ac1_upper
-        df.ac1_ON_se = on_result_full.ac1_se
-        df.ac2_ON_lower = on_result_full.ac2_lower
-        df.ac2_ON_median = on_result_full.ac2_median
-        df.ac2_ON_upper = on_result_full.ac2_upper
-        df.ac2_ON_se = on_result_full.ac2_se
-        
-        # Reporter bootstrap fields
-        df.cc_Reporters_lower = reporter_result_full.cc_lower
-        df.cc_Reporters_median = reporter_result_full.cc_median
-        df.cc_Reporters_upper = reporter_result_full.cc_upper
-        df.cc_Reporters_se = reporter_result_full.cc_se
-        df.ac1_Reporters_lower = reporter_result_full.ac1_lower
-        df.ac1_Reporters_median = reporter_result_full.ac1_median
-        df.ac1_Reporters_upper = reporter_result_full.ac1_upper
-        df.ac1_Reporters_se = reporter_result_full.ac1_se
-        df.ac2_Reporters_lower = reporter_result_full.ac2_lower
-        df.ac2_Reporters_median = reporter_result_full.ac2_median
-        df.ac2_Reporters_upper = reporter_result_full.ac2_upper
-        df.ac2_Reporters_se = reporter_result_full.ac2_se
-        
-        # Add intensity bootstrap fields if available
-        if has_intensity && hasproperty(intensity_result_full, :cc_lower)
-            df.cc_lower = intensity_result_full.cc_lower
-            df.cc_median = intensity_result_full.cc_median
-            df.cc_upper = intensity_result_full.cc_upper
-            df.cc_se = intensity_result_full.cc_se
-            df.ac1_lower = intensity_result_full.ac1_lower
-            df.ac1_median = intensity_result_full.ac1_median
-            df.ac1_upper = intensity_result_full.ac1_upper
-            df.ac1_se = intensity_result_full.ac1_se
-            df.ac2_lower = intensity_result_full.ac2_lower
-            df.ac2_median = intensity_result_full.ac2_median
-            df.ac2_upper = intensity_result_full.ac2_upper
-            df.ac2_se = intensity_result_full.ac2_se
-        end
-    end
-    
-    # Write to CSV (DataFrame constructor with kwargs preserves column order)
-    CSV.write(output_file, df)
-    println("Wrote empirical covariances to: $output_file")
-end
-
-"""
-    export_per_trace_crosscorrelations(traces, lags, output_file; mean1_global=nothing, mean2_global=nothing)
-
-Export per-trace cross-correlation functions to a CSV file for diagnostic purposes.
-
-This function computes the cross-correlation function for each trace individually and exports
-the results to a CSV file where each row is a trace and each column is a lag. This is useful
-for debugging bootstrap behavior and understanding trace-to-trace variability.
-
-# Arguments
-- `traces::Vector{Matrix{Float64}}`: Vector of trace matrices, each with columns [unit1, unit2]
-- `lags::Vector{<:Real}`: Vector of lags at which to compute cross-correlation
-- `output_file::String`: Path to output CSV file
-- `mean1_global::Union{Nothing, Float64}`: Global mean for unit1 (if provided, traces are centered)
-- `mean2_global::Union{Nothing, Float64}`: Global mean for unit2 (if provided, traces are centered)
-
-# Returns
-- `Nothing`
-
-# Notes
-- This exports the per-trace cross-correlation values before averaging
-- Useful for understanding why bootstrap bands might be parallel
-- Each row in the output CSV corresponds to one trace
-- Column names are "trace_N" for trace N, and lag columns are "lag_L" for lag L
-"""
-function export_per_trace_crosscorrelations(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}, output_file::String; mean1_global=nothing, mean2_global=nothing)
-    isempty(traces) && error("No traces provided")
-    n_traces = length(traces)
-    n_lags = length(lags)
-    
-    # Center traces if means provided
-    if !isnothing(mean1_global) && !isnothing(mean2_global)
-        traces_to_use = [hcat(t[:, 1] .- mean1_global, t[:, 2] .- mean2_global) for t in traces]
-    else
-        traces_to_use = traces
-    end
-    
-    # Compute cross-correlation for each trace
-    R_XY_all = Matrix{Float64}(undef, n_traces, n_lags)
-    
-    for (i, t) in enumerate(traces_to_use)
-        x = Float64.(t[:, 1])
-        y = Float64.(t[:, 2])
-        R_XY_all[i, :] = crosscorrelation_function(x, y, lags)
-    end
-    
-    # Create DataFrame with lags as columns and traces as rows
-    # Column names: trace, lag_0, lag_1, lag_-1, etc.
-    data_dict = Dict{String, Any}("trace" => collect(1:n_traces))
-    for (i, l) in enumerate(lags)
-        data_dict["lag_$l"] = R_XY_all[:, i]
-    end
-    df = DataFrame(data_dict)
-    
-    # Write to CSV
-    CSV.write(output_file, df)
-    println("Wrote per-trace cross-correlations to: $output_file")
-    println("  $n_traces traces, $n_lags lags")
-    println("  Mean cross-correlation at lag 0: $(mean(R_XY_all[:, findfirst(==(0), lags)]))")
-    println("  Std of cross-correlations at lag 0: $(std(R_XY_all[:, findfirst(==(0), lags)]))")
-end
 
 """
     write_residency_G_allgenes(fileout::String, filein::String, G, header)
@@ -3419,7 +2944,7 @@ Simulate multiple trials and compute empirical cross-covariance from simulated t
 This function integrates simulation with empirical covariance computation:
 1. Computes theoretical cross-covariances from model parameters
 2. Simulates multiple traces from the model
-3. Computes empirical cross-covariances from simulated traces using `compute_cov_empirical`
+3. Computes empirical cross-correlation functions from simulated traces using `compute_correlation_functions`
 4. Compares theoretical and empirical results
 
 # Arguments
@@ -3446,7 +2971,7 @@ NamedTuple with:
 - Bootstrap confidence intervals if available (`cc_se`, `cc_lower`, etc.)
 
 # Notes
-- Uses `compute_cov_empirical` internally to compute empirical cross-correlations from simulated traces
+- Uses `compute_correlation_functions` internally to compute empirical cross-correlations from simulated traces
 - Performs bootstrap resampling for error estimation
 - Compares theoretical predictions (from `covariance_functions`) with empirical results from simulations
 - Useful for validating model predictions and assessing finite-sample effects
@@ -3474,7 +2999,7 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     end
     # Get both intensity and ON/OFF cross-covariances and autocovariances
     # Use same offset as in covariance_functions to ensure theory and empirical match
-    ac1, ac2, cc, ccON, full_lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = StochasticGene.covariance_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags, offset=offset)
+    full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, 1.0, probfn, coupling, positive_lags, offset=offset)
     # Pack into NamedTuple
     theory = (
         ac1=ac1, ac2=ac2, cc=cc,
@@ -3487,7 +3012,7 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Use ccON (ON/OFF cross-covariance) and ac1ON/ac2ON (ON/OFF autocovariances) for comparison
     # Use the provided lags (or convert if it was an integer)
     actual_lags = lags isa Integer ? full_lags : lags_vec
-    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, positive_lags, actual_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps)
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, actual_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps)
 end
 
 """
@@ -3519,7 +3044,7 @@ It takes precomputed theoretical covariances and performs simulations.
 # Returns
 NamedTuple with theoretical and empirical results (see main `simulate_trials` docstring).
 """
-function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags_ac, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
+function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
     # Extract theory values from NamedTuple
     ac1 = theory.ac1
     ac2 = theory.ac2
@@ -3560,9 +3085,9 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     # Compute empirical correlations using compute_covariance directly
     # lags should already be symmetric (full_lags from covariance_functions)
     # frame_interval = 1.0 because simulate_trace_vector uses interval=1.0 (one frame per minute)
-    intensity_result = isempty(intensity_traces) ? nothing : compute_covariance(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
-    on_result = compute_covariance(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
-    reporter_result = compute_covariance(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
+    reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
     
     # Extract results
     empirical = (
@@ -3627,15 +3152,15 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     needs_normalization = correlation_algorithm.normalization != :none
     
     # Compute normalization factors (theoretical means)
-    norm_cc = (m1 * m2) > 0 ? (m1 * m2) : 1.0
-    norm_ac1 = m1^2 > 0 ? m1^2 : 1.0
-    norm_ac2 = m2^2 > 0 ? m2^2 : 1.0
-    norm_ccON = (m1ON * m2ON) > 0 ? (m1ON * m2ON) : 1.0
-    norm_ac1ON = m1ON^2 > 0 ? m1ON^2 : 1.0
-    norm_ac2ON = m2ON^2 > 0 ? m2ON^2 : 1.0
-    norm_ccReporters = isnothing(m1Reporters) || isnothing(m2Reporters) || (m1Reporters * m2Reporters) <= 0 ? 1.0 : (m1Reporters * m2Reporters)
-    norm_ac1Reporters = isnothing(m1Reporters) || m1Reporters^2 <= 0 ? 1.0 : m1Reporters^2
-    norm_ac2Reporters = isnothing(m2Reporters) || m2Reporters^2 <= 0 ? 1.0 : m2Reporters^2
+    norm_cc = (m1 * m2) != 0 ? (m1 * m2) : 1.0
+    norm_ac1 = m1^2 != 0 ? m1^2 : 1.0
+    norm_ac2 = m2^2 != 0 ? m2^2 : 1.0
+    norm_ccON = (m1ON * m2ON) != 0 ? (m1ON * m2ON) : 1.0
+    norm_ac1ON = m1ON^2 != 0 ? m1ON^2 : 1.0
+    norm_ac2ON = m2ON^2 != 0 ? m2ON^2 : 1.0
+    norm_ccReporters = isnothing(m1Reporters) || isnothing(m2Reporters) || (m1Reporters * m2Reporters) != 0 ? (m1Reporters * m2Reporters) : 1.0
+    norm_ac1Reporters = isnothing(m1Reporters) || m1Reporters^2 != 0 ? m1Reporters^2 : 1.0
+    norm_ac2Reporters = isnothing(m2Reporters) || m2Reporters^2 != 0 ? m2Reporters^2 : 1.0
     
     # Step 1: Center (if centering is enabled)
     if needs_centering
@@ -3726,7 +3251,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         LAG LENGTH MISMATCH:
         Theory has $(n_lags_theory) lags: $(lags[1:min(5, length(lags))]) ... $(lags[max(1, length(lags)-4):length(lags)])
         Empirical has $(n_lags_empirical) lags
-        Check that lags passed to compute_cov_empirical match full_lags from covariance_functions.
+        Check that lags passed to compute_correlation_functions match full_lags from correlation_functions.
         """)
     end
     
@@ -3885,13 +3410,430 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     )
 end
 
+
+"""
+    write_correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
+
+Compute theoretical correlation functions for a single rate file and return the results.
+
+# Arguments
+- `file::String`: Path to the rate file (typically a `.txt` file containing rate parameters)
+- `transitions::Tuple`: Tuple of transition definitions for each unit (default: 3-state model transitions)
+- `G::Tuple`: Number of gene states for each unit (default: (3, 3))
+- `R::Tuple`: Number of RNA states for each unit (default: (3, 3))
+- `S::Tuple`: Initial state definitions (default: (1, 0))
+- `insertstep::Tuple`: Insert step definitions (default: (1, 1))
+- `interval::Float64`: Time interval for transitions (default: 1.0)
+- `pattern::String`: Pattern to extract coupling information from filename (default: "gene")
+- `lags::Vector{Int}`: Time lags for correlation function computation (default: 0:10:1000)
+- `probfn`: Probability function for observation model (default: prob_Gaussian)
+- `ratetype::String`: Which row of rates to use from file (default: "ml" for maximum likelihood)
+
+# Returns
+- `Tuple` containing:
+  - `ac1, ac2`: Auto-correlation functions for intensity (unit1, unit2)
+  - `cc`: Cross-correlation function for intensity
+  - `ccON`: Cross-correlation function for ON states (unnormalized: E[xy] - E[x]E[y])
+  - `tau`: Time lags (with negative lags included)
+  - `m1, m2`: Mean intensities
+  - `v1, v2`: Variances
+  - `mON1, mON2`: Mean ON state probabilities
+  - `ac1ON, ac2ON`: Auto-correlation functions for ON states
+  - `ccReporters`: Cross-correlation function for reporter counts (unnormalized)
+  - `mR1, mR2`: Mean reporter counts
+  - `ac1Reporters, ac2Reporters`: Auto-correlation functions for reporter counts
+
+# Notes
+- Extracts coupling information from the filename using `pattern`
+- All cross-correlations and auto-correlations are unnormalized (E[xy] - E[x]E[y])
+- ON states are binary (1 if reporter count > 0, 0 otherwise)
+"""
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
+    println(file)
+    r = readrates(file, get_row(ratetype))
+    source, target = extract_source_target(pattern, file)
+    (source == "R") && (source = collect(G[1]+1:G[1]+R[1]))
+    coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+    correlation_functions(r, transitions, G, R, S, insertstep, interval, probfn, coupling, lags)
+end
+
+"""
+    write_correlation_functions(folder, transitions=..., G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+
+Compute theoretical correlation functions for all rate files in a folder and write results to CSV files.
+
+This is the main function for batch-processing rate parameter files to generate theoretical cross-correlation
+and auto-correlation predictions. It recursively searches a folder for files matching the pattern
+`*rates*tracejoint*`, computes theoretical correlation functions for each using the HMM framework,
+and writes comprehensive results to CSV files that can be used for model scoring against empirical data.
+
+# Arguments
+- `folder::String`: Path to folder containing rate files. The function recursively searches all subdirectories.
+- `transitions::Tuple`: Tuple of transition definitions for each unit. Each element specifies allowed
+  state transitions as a vector of pairs `[from, to]`. Default: `(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))`
+  for a 3-state model with forward/backward transitions for both units.
+- `G::Tuple{Int, Int}`: Number of gene states for each unit (default: `(3, 3)`).
+- `R::Tuple{Int, Int}`: Number of RNA states for each unit (default: `(3, 3)`).
+- `S::Tuple{Int, Int}`: Initial state definitions (default: `(0, 0)`).
+- `insertstep::Tuple{Int, Int}`: Insert step definitions (default: `(1, 1)`).
+- `interval::Float64`: Time interval for transitions in the same units as the rate parameters (default: `1.0`).
+- `pattern::String`: Pattern to extract coupling information from filename (default: `"gene"`). Used by
+  `extract_source_target` to determine which states are coupled.
+- `lags::Vector{Int}`: Time lags for correlation function computation. The function computes correlations at these
+  lags and also includes negative lags (symmetric). Default: `collect(0:1:200)` which gives lags from -200 to 200.
+- `probfn`: Probability function for the observation model (default: `prob_Gaussian`). Determines how
+  reporter counts are generated from hidden states.
+- `ratetype::String`: Which row of rates to use from the rate file (default: `"median"`). Other options
+  include `"ml"` (maximum likelihood), `"mean"`, etc. This selects which parameter estimate to use when
+  multiple estimates are stored in the file.
+
+# Output Files
+
+For each input file matching `*rates*tracejoint*.txt`, creates a corresponding output file
+`*crosscorrelation*tracejoint*.csv` in the same directory. The CSV file contains the following columns:
+
+## Time Lags
+- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
+
+## ON State Correlation Functions (Binary: 1 if reporter > 0, 0 otherwise)
+- `cc_ON::Vector{Float64}`: Cross-correlation function between enhancer and gene ON states (unnormalized: E[xy] - E[x]E[y]).
+  Positive τ means enhancer leads (E[enhancer(t) × gene(t+τ)] - E[enhancer] × E[gene]).
+- `ac1_ON::Vector{Float64}`: Auto-correlation function of enhancer ON states (unnormalized, symmetric: includes negative lags).
+- `ac2_ON::Vector{Float64}`: Auto-correlation function of gene ON states (unnormalized, symmetric: includes negative lags).
+- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag, scalar value).
+- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag, scalar value).
+
+## Reporter Count Correlation Functions (Raw integer counts)
+- `cc_Reporters::Vector{Float64}`: Cross-correlation function between enhancer and gene reporter counts (unnormalized).
+  Same convention as `cc_ON` (positive τ means enhancer leads).
+- `ac1_Reporters::Vector{Float64}`: Auto-correlation function of enhancer reporter counts (unnormalized, symmetric).
+- `ac2_Reporters::Vector{Float64}`: Auto-correlation function of gene reporter counts (unnormalized, symmetric).
+- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag, scalar value).
+- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag, scalar value).
+
+# Workflow
+
+1. **File Discovery**: Recursively walks through `folder` and identifies all files containing both
+   `"rates"` and `"tracejoint"` in the filename.
+
+2. **Rate Loading**: For each matching file, loads rate parameters using `readrates(file, get_row(ratetype))`.
+
+3. **Coupling Extraction**: Extracts coupling information from the filename using `extract_source_target(pattern, file)`
+   to determine which states are coupled (e.g., gene state 1 to gene state 3, or RNA states).
+
+4. **Correlation Function Computation**: Calls `correlation_functions` (via `write_correlation_functions_file`) to compute all theoretical
+   correlation functions using the HMM framework.
+
+5. **File Writing**: Writes results to CSV with filename pattern: `rates_*.txt` → `crosscorrelation_*.csv`.
+
+# Usage Example
+
+```julia
+# Process all rate files in a results folder
+write_correlation_functions(
+    "results/5Prime-coupled-2025-11-27/",
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3),
+    R=(3, 3),
+    lags=collect(0:1:200),  # Lags from -200 to 200
+    ratetype="median"
+)
+```
+
+# Notes
+
+- **Unnormalized Correlation Functions**: All correlation function values are unnormalized (E[xy] - E[x]E[y]). To normalize
+  by means, divide by (m1 × m2) for cross-correlations or by (m × m) for auto-correlations.
+
+- **Lag Convention**: Positive τ means the first unit (enhancer) leads the second unit (gene). This matches
+  the convention used in `StatsBase.crosscov(enhancer, gene, lags)`.
+
+- **Symmetric Auto-correlations**: Auto-correlation functions are symmetric (ac(τ) = ac(-τ)), so negative lags are
+  included by reversing the positive lag values.
+
+- **File Matching**: Only files containing both `"rates"` and `"tracejoint"` in the filename are processed.
+  This pattern identifies files containing joint trace fitting results.
+
+- **Batch Processing**: This function is designed for batch processing of multiple model fits. Each rate
+  file typically corresponds to a different coupling model (e.g., gene state 1→3 coupling vs. gene state 2→3).
+
+- **Model Scoring**: The output CSV files are designed to be read by `score_models_from_traces`, which
+  compares these theoretical predictions against empirical correlation functions computed from experimental
+  or simulated trace data.
+
+# See Also
+- `write_correlation_functions_file`: Processes a single rate file (called internally by this function)
+- `correlation_functions`: Core HMM function that computes theoretical correlation functions
+- `score_models_from_traces`: Scores theoretical predictions against empirical data
+- `readrates`: Loads rate parameters from text files
+"""
+function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), interval=1.0, pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+    for (root, dirs, files) in walkdir(folder)
+        for f in files
+            if occursin("rates", f) && occursin("tracejoint", f)
+                file = joinpath(root, f)
+                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_correlation_functions_file(file, transitions, G, R, S, insertstep, interval, pattern, lags, probfn, ratetype)
+                out = replace(file, "rates" => "crosscorrelation", ".txt" => ".csv")
+                n_lags = length(tau)
+
+                CSV.write(out, DataFrame(
+                    tau=tau,
+                    # ON state: unnormalized cc, ac1, ac2, m1, m2
+                    cc_ON=ccON,
+                    ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
+                    ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
+                    m_ON1=fill(mON1, n_lags),
+                    m_ON2=fill(mON2, n_lags),
+                    # Reporters: unnormalized cc, ac1, ac2, m1, m2
+                    cc_Reporters=ccReporters,
+                    ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
+                    ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
+                    m_Reporters1=fill(mReporters1, n_lags),
+                    mReporters2=fill(mReporters2, n_lags)
+                ))
+            end
+        end
+    end
+end
+
+"""
+    write_correlation_functions_empirical(trace_folder, unit1_filename, unit2_filename, output_file; intensity_labels=nothing, intensity_start=1, intensity_stop=-1, intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
+
+Compute empirical correlation functions from trace files and write results to CSV file.
+
+This function computes cross-correlation functions for:
+1. **Intensity**: From experimental intensity traces (if `intensity_datapath` and `intensity_labels` provided)
+2. **Predicted ON states**: From predicted trace files (binary: 1 if reporter > threshold, 0 otherwise)
+3. **Predicted reporter counts**: From predicted trace files (raw reporter counts)
+
+Then writes the results to a CSV file in the same format as `write_correlation_functions` output.
+
+# Arguments
+- `trace_folder::String`: Path to folder containing intensity trace files
+- `unit1_filename::String`: Path to predicted trace file for unit 1 (enhancer) (from uncoupled model)
+- `unit2_filename::String`: Path to predicted trace file for unit 2 (gene) (from uncoupled model)
+- `output_file::String`: Path to output CSV file
+- `intensity_labels::Union{Vector{String}, Nothing}=nothing`: Labels to match in filenames for joint traces (e.g., `["enhancer", "gene"]`). The function will find files containing each label in their filename and pair them (typically by numeric prefix, e.g., `001_enhancer.trk` pairs with `001_gene.trk`). Each pair becomes a joint trace matrix with columns `[enhancer, gene]`. If `nothing`, intensity traces are not loaded.
+- `traceinfo::Tuple=(1.0, 1.0, -1)`: Trace parameters tuple `(dt, start, stop)` where `dt` is the frame interval in minutes, `start` is the starting frame time in minutes, and `stop` is the ending frame time (-1 for last frame). Same format as used in `load_data_trace`.
+- `intensity_col::Int=3`: Column to read from intensity trace files (default: 3)
+- `lags::Vector{Int}=collect(0:1:200)`: Time lags for cross-correlation computation
+- `on_threshold::Real=0`: Threshold for converting reporter counts to ON/OFF states
+- `mON1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for enhancer (if provided, used for centered version)
+- `mON2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean ON state for gene (if provided, used for centered version)
+- `mR1_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for enhancer (if provided, used for centered version)
+- `mR2_theory::Union{Float64, Nothing}=nothing`: Theoretical mean reporter count for gene (if provided, used for centered version)
+- `bootstrap::Bool=false`: Whether to compute bootstrap confidence intervals
+- `n_bootstrap::Int=1000`: Number of bootstrap replicates (if bootstrap=true)
+
+# Output CSV Structure
+
+The CSV file contains the same structure as `write_correlation_functions` output:
+
+## Time Lags
+- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
+
+## ON State Correlation Functions (Binary: 1 if reporter > threshold, 0 otherwise)
+- `cc_ON::Vector{Float64}`: Empirical cross-correlation function between enhancer and gene ON states (unnormalized).
+- `ac1_ON::Vector{Float64}`: Empirical auto-correlation function of enhancer ON states (unnormalized, symmetric).
+- `ac2_ON::Vector{Float64}`: Empirical auto-correlation function of gene ON states (unnormalized, symmetric).
+- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag).
+- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag).
+
+## Reporter Count Correlation Functions (Raw integer counts)
+- `cc_Reporters::Vector{Float64}`: Empirical cross-correlation function between enhancer and gene reporter counts (unnormalized).
+- `ac1_Reporters::Vector{Float64}`: Empirical auto-correlation function of enhancer reporter counts (unnormalized, symmetric).
+- `ac2_Reporters::Vector{Float64}`: Empirical auto-correlation function of gene reporter counts (unnormalized, symmetric).
+- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag).
+- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag).
+
+## Intensity Correlation Functions (if intensity traces provided)
+- `cc::Vector{Float64}`: Empirical cross-correlation function between enhancer and gene intensity (unnormalized).
+- `ac1::Vector{Float64}`: Empirical auto-correlation function of enhancer intensity (unnormalized, symmetric).
+- `ac2::Vector{Float64}`: Empirical auto-correlation function of gene intensity (unnormalized, symmetric).
+- `m1::Vector{Float64}`: Mean intensity for enhancer (repeated for each lag).
+- `m2::Vector{Float64}`: Mean intensity for gene (repeated for each lag).
+
+If `bootstrap=true`, also includes confidence intervals (`_lower`, `_median`, `_upper`, `_se`) for all quantities.
+
+# Algorithm
+
+1. **Compute Cross-Correlations**: Calls `compute_correlation_functions` to compute empirical cross-correlation functions
+2. **Symmetrize Lags**: Adds negative lags for symmetric output (same as `write_correlation_functions`)
+3. **Write CSV**: Writes results to CSV file in the same format as `write_correlation_functions`
+
+# Notes
+
+- The output format matches `write_correlation_functions` exactly, ensuring direct comparability.
+- Uses the same lags as specified, with symmetric negative lags included.
+- All correlation functions are unnormalized (centered: E[xy] - E[x]E[y]).
+
+# Usage Example
+
+```julia
+# Compute empirical correlation functions from predicted trace files only (no intensity)
+write_correlation_functions_empirical(
+    "data/traces/",
+    "results/predicted_enhancer.csv",
+    "results/predicted_gene.csv",
+    "results/crosscovariance_empirical.csv",
+    lags=collect(0:1:200),
+    bootstrap=true,
+    n_bootstrap=1000
+)
+
+# With intensity traces from folder (files like 001_enhancer.trk, 001_gene.trk, etc.)
+write_xcorr_empirical(
+    "data/3Prime_gene_enhancer/including_background/short/",
+    "results/predicted_enhancer.csv",
+    "results/predicted_gene.csv",
+    "results/crosscovariance_empirical.csv",
+    intensity_labels=["enhancer", "gene"],  # Matches files: 001_enhancer.trk with 001_gene.trk, etc.
+    traceinfo=(1.0, 1.0, -1),  # (dt, start, stop) in minutes, -1 means last frame
+    intensity_col=3,
+    lags=collect(0:1:200),
+    bootstrap=true
+)
+```
+"""
+function write_correlation_functions_empirical(trace_folder::String, unit1_filename::String, unit2_filename::String, output_file::String; intensity_labels=nothing, traceinfo=(1.0, 1.0, -1), intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
+    # Load intensity traces if labels provided (following load_data_trace pattern)
+    intensity_traces = Vector{Matrix{Float64}}()
+    if !isnothing(intensity_labels)
+        if intensity_labels isa Vector{String}
+            # Joint traces: use read_tracefiles with traceinfo tuple format (like load_data_trace)
+            traces_raw = read_tracefiles(trace_folder, intensity_labels, traceinfo, intensity_col)
+            if length(traces_raw) == 0
+                throw("No traces found for intensity_labels=$intensity_labels in $trace_folder")
+            end
+            # Apply zero_median with zeromedian=true (following load_data_trace pattern)
+            traces_zeroed, _ = zero_median(traces_raw, true)
+            # Convert to Vector{Matrix{Float64}} to match expected type
+            intensity_traces = Vector{Matrix{Float64}}(map(t -> Matrix{Float64}(Float64.(t)), traces_zeroed))
+        else
+            error("intensity_labels must be a Vector{String} for joint traces (e.g., [\"enhancer\", \"gene\"])")
+        end
+    end
+
+    # Load predicted traces (from uncoupled models) - gives reporter counts and ON states
+    predicted_traces = prepare_traces_from_prediction(unit1_filename, unit2_filename; on_threshold=on_threshold)
+    reporter_traces = predicted_traces.reporter_traces
+    on_traces = predicted_traces.on_traces
+
+    # Construct symmetric lags (same as write_correlation_functions): tau = [-max_lag, ..., -1, 0, 1, ..., max_lag]
+    # Pass symmetric lags to compute_correlation_functions - correlation_function handles negative lags correctly
+    lags_symmetric = vcat(-reverse(lags[2:end]), lags)
+    tau = lags_symmetric
+    n_lags = length(tau)
+
+    # Compute empirical cross-correlation functions with symmetric lags
+    on_result_full = compute_correlation_functions(on_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mON1_theory, mean2_global=mON2_theory)
+    reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, mean1_global=mR1_theory, mean2_global=mR2_theory)
+
+    # Check if we have intensity results
+    has_intensity = !isnothing(intensity_labels) && !isempty(intensity_traces)
+
+    # Results already have both positive and negative lags from crosscorrelation_function
+    cc_ON_full = on_result_full.cc
+    cc_Reporters_full = reporter_result_full.cc
+
+    # Autocovariances ARE symmetric, but crosscorrelation_function already handles negative lags correctly
+    ac1_ON_sym = on_result_full.ac1
+    ac2_ON_sym = on_result_full.ac2
+    ac1_Reporters_sym = reporter_result_full.ac1
+    ac2_Reporters_sym = reporter_result_full.ac2
+
+    # Build output DataFrame with same column order as write_correlation_functions
+    # write_correlation_functions order: tau, cc_ON, ac1_ON, ac2_ON, mON1, mON2, cc_Reporters, ac1_Reporters, ac2_Reporters, mR1, mR2
+    # Use OrderedDict or construct DataFrame with columns in correct order
+    df = DataFrame(
+        tau=tau,
+        cc_ON=cc_ON_full,
+        ac1_ON=ac1_ON_sym,
+        ac2_ON=ac2_ON_sym,
+        mON1=fill(on_result_full.mean1, n_lags),
+        mON2=fill(on_result_full.mean2, n_lags),
+        cc_Reporters=cc_Reporters_full,
+        ac1_Reporters=ac1_Reporters_sym,
+        ac2_Reporters=ac2_Reporters_sym,
+        mR1=fill(reporter_result_full.mean1, n_lags),
+        mR2=fill(reporter_result_full.mean2, n_lags)
+    )
+
+    # Add intensity correlation functions if available (after base columns, same order as write_correlation_functions would if it had intensity)
+    if has_intensity
+        # Compute intensity with symmetric lags as well (already includes both positive and negative lags)
+        intensity_result_full = compute_correlation_functions(intensity_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap)
+        cc_intensity_full = intensity_result_full.cc
+        ac1_intensity_sym = intensity_result_full.ac1  # Already includes both positive and negative lags
+        ac2_intensity_sym = intensity_result_full.ac2  # Already includes both positive and negative lags
+        df.cc = cc_intensity_full
+        df.ac1 = ac1_intensity_sym
+        df.ac2 = ac2_intensity_sym
+        df.m1 = fill(intensity_result_full.mean1, n_lags)
+        df.m2 = fill(intensity_result_full.mean2, n_lags)
+    end
+
+    # Add bootstrap fields if available (after all base columns)
+    # Bootstrap results already include both positive and negative lags
+    if bootstrap && hasproperty(on_result_full, :cc_lower)
+        # ON state bootstrap fields
+        df.cc_ON_lower = on_result_full.cc_lower
+        df.cc_ON_median = on_result_full.cc_median
+        df.cc_ON_upper = on_result_full.cc_upper
+        df.cc_ON_se = on_result_full.cc_se
+        df.ac1_ON_lower = on_result_full.ac1_lower
+        df.ac1_ON_median = on_result_full.ac1_median
+        df.ac1_ON_upper = on_result_full.ac1_upper
+        df.ac1_ON_se = on_result_full.ac1_se
+        df.ac2_ON_lower = on_result_full.ac2_lower
+        df.ac2_ON_median = on_result_full.ac2_median
+        df.ac2_ON_upper = on_result_full.ac2_upper
+        df.ac2_ON_se = on_result_full.ac2_se
+
+        # Reporter bootstrap fields
+        df.cc_Reporters_lower = reporter_result_full.cc_lower
+        df.cc_Reporters_median = reporter_result_full.cc_median
+        df.cc_Reporters_upper = reporter_result_full.cc_upper
+        df.cc_Reporters_se = reporter_result_full.cc_se
+        df.ac1_Reporters_lower = reporter_result_full.ac1_lower
+        df.ac1_Reporters_median = reporter_result_full.ac1_median
+        df.ac1_Reporters_upper = reporter_result_full.ac1_upper
+        df.ac1_Reporters_se = reporter_result_full.ac1_se
+        df.ac2_Reporters_lower = reporter_result_full.ac2_lower
+        df.ac2_Reporters_median = reporter_result_full.ac2_median
+        df.ac2_Reporters_upper = reporter_result_full.ac2_upper
+        df.ac2_Reporters_se = reporter_result_full.ac2_se
+
+        # Add intensity bootstrap fields if available
+        if has_intensity && hasproperty(intensity_result_full, :cc_lower)
+            df.cc_lower = intensity_result_full.cc_lower
+            df.cc_median = intensity_result_full.cc_median
+            df.cc_upper = intensity_result_full.cc_upper
+            df.cc_se = intensity_result_full.cc_se
+            df.ac1_lower = intensity_result_full.ac1_lower
+            df.ac1_median = intensity_result_full.ac1_median
+            df.ac1_upper = intensity_result_full.ac1_upper
+            df.ac1_se = intensity_result_full.ac1_se
+            df.ac2_lower = intensity_result_full.ac2_lower
+            df.ac2_median = intensity_result_full.ac2_median
+            df.ac2_upper = intensity_result_full.ac2_upper
+            df.ac2_se = intensity_result_full.ac2_se
+        end
+    end
+
+    # Write to CSV (DataFrame constructor with kwargs preserves column order)
+    CSV.write(output_file, df)
+    println("Wrote empirical correlation functions to: $output_file")
+end
+
+
 # ============================================================================
-# CORE COVARIANCE COMPUTATION ENGINE
+# CORE CORRELATION FUNCTION COMPUTATION ENGINE
 # ============================================================================
-# Functions: compute_covariance (main engine, user-created, legacy)
-#            _validate_lags_for_traces, _per_trace_covariance_mats, 
-#            _aggregate_covariance_mats, bootstrap_tracewise (AI-created helpers)
-# Creation dates: compute_covariance - OLD (pre-2025), helpers - 2026-01-06
+# Functions: compute_correlation_functions (main engine)
+#            _validate_lags_for_traces, _compute_per_trace_correlation_functions, 
+#            bootstrap_tracewise (helpers)
+# Creation dates: compute_correlation_functions - refactored 2026-01-XX
 
 """
     _validate_lags_for_traces(traces, lags; label="traces")
@@ -3911,26 +3853,14 @@ function _validate_lags_for_traces(traces::Vector{<:AbstractMatrix}, lags::Vecto
 end
 
 """
-    _per_trace_covariance_mats(traces, lags; demean=false, mean1_global=nothing, mean2_global=nothing)
+    compute_correlation_functions(traces, lags; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap=false, n_bootstrap=1000, frame_interval=1.0)
 
-Compute per-trace cross-correlation functions R_XY(τ) and autocorrelation functions R_XX(τ), R_YY(τ).
+Compute cross-correlation and auto-correlation functions from a set of traces.
 
-Uses `crosscorrelation_function` which handles both positive and negative lags:
-    For τ >= 0: R_XY(τ) = (1/(T-τ)) * Σ_{t=1}^{T-τ} X(t)Y(t+τ)  (Y lags X)
-    For τ < 0: R_XY(τ) = (1/(T-|τ|)) * Σ_{t=1}^{T-|τ|} Y(t)X(t+|τ|)  (X lags Y, equivalent to R_YX(|τ|))
-
-If `mean1_global` and `mean2_global` are provided, data is centered using these theoretical means before
-computing cross-correlation. Otherwise, if `demean=true`, per-trace empirical means are used.
-If `demean=false`, uncentered cross-correlations are computed and overall means are subtracted later.
-
-Returns matrices `R_XY`, `R_XX`, `R_YY` with shape `(n_traces, n_lags)`, plus per-trace means
-and per-trace variances computed as `E[x^2] - E[x]^2` (population form).
-"""
-
-"""
-    compute_covariance(traces, lags; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap=false, n_bootstrap=1000, frame_interval=1.0)
-
-Compute cross-covariance and autocovariance functions from traces.
+Computes aggregate correlation functions (cc, ac1, ac2) by:
+1. Computing correlation functions for each trace individually
+2. Averaging across traces
+3. Applying normalization if specified
 
 # Arguments
 - `traces::Vector{Matrix{Float64}}`: Vector of trace matrices, each with 2 columns (x, y)
@@ -3946,21 +3876,64 @@ Compute cross-covariance and autocovariance functions from traces.
 
 # Returns
 NamedTuple with:
-- `cc`: Cross-covariance C_XY(τ) for all lags
-- `ac1`: Autocovariance C_XX(τ) for all lags
-- `ac2`: Autocovariance C_YY(τ) for all lags
+- `cc`: Cross-correlation function C_XY(τ) for all lags
+- `ac1`: Auto-correlation function C_XX(τ) for all lags
+- `ac2`: Auto-correlation function C_YY(τ) for all lags
 - `mean1`, `mean2`: Overall means
+- `v1`, `v2`: Overall variances
 - `lags`: The input lags vector
 - Bootstrap fields (`*_lower`, `*_median`, `*_upper`, `*_se`) if `bootstrap=true`
+
+# Notes
+- All correlation functions are computed over the specified lags
+- Centering and normalization are controlled by `correlation_algorithm`
+- Bootstrap resamples traces with replacement to estimate uncertainty
 """
-function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false, n_bootstrap::Int=1000, frame_interval::Float64=1.0)
-    # Compute per-trace covariance matrices
-    # Note: _per_trace_covariance_mats expects integer lags, but crosscorrelation_function
-    # will handle the conversion internally using frame_interval, so we pass the original lags
-    per_trace = _per_trace_covariance_mats(traces, lags; mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm, frame_interval=frame_interval)
+function compute_correlation_functions(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false, n_bootstrap::Int=1000, frame_interval::Float64=1.0)
+    # Compute per-trace correlation functions (internal helper)
+    per_trace = _compute_per_trace_correlation_functions(traces, lags; mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm, frame_interval=frame_interval)
     
-    # Aggregate to get overall covariance functions
-    result = _aggregate_covariance_mats(per_trace; mean1_global=mean1_global, mean2_global=mean2_global, correlation_algorithm=correlation_algorithm)
+    # Aggregate: average correlation functions across traces
+    n_traces = length(per_trace.mean1)
+    R_XY_mean = vec(sum(per_trace.R_XY, dims=1)) ./ n_traces
+    R_XX_mean = vec(sum(per_trace.R_XX, dims=1)) ./ n_traces
+    R_YY_mean = vec(sum(per_trace.R_YY, dims=1)) ./ n_traces
+    
+    # Use true global mean (computed from all data points)
+    mean1_empirical = per_trace.mean1_global_true
+    mean2_empirical = per_trace.mean2_global_true
+    
+    # Correlations are already centered in _compute_per_trace_correlation_functions via compute_correlation
+    # So we just average them - no centering needed here
+    C_XY = R_XY_mean
+    C_XX = R_XX_mean
+    C_YY = R_YY_mean
+
+    # Apply normalization if specified by the algorithm
+    if correlation_algorithm.normalization == :global_mean
+        # Normalize by empirical global means
+        norm_factor_xy = (mean1_empirical * mean2_empirical) > 0 ? (mean1_empirical * mean2_empirical) : 1.0
+        norm_factor_xx = mean1_empirical^2 > 0 ? mean1_empirical^2 : 1.0
+        norm_factor_yy = mean2_empirical^2 > 0 ? mean2_empirical^2 : 1.0
+        C_XY = C_XY ./ norm_factor_xy
+        C_XX = C_XX ./ norm_factor_xx
+        C_YY = C_YY ./ norm_factor_yy
+    elseif correlation_algorithm.normalization == :variance
+        # Normalize by variance (standard correlation coefficient)
+        var1_empirical = mean(per_trace.var1)
+        var2_empirical = mean(per_trace.var2)
+        norm_factor_xy = sqrt(var1_empirical * var2_empirical) > 0 ? sqrt(var1_empirical * var2_empirical) : 1.0
+        norm_factor_xx = var1_empirical > 0 ? var1_empirical : 1.0
+        norm_factor_yy = var2_empirical > 0 ? var2_empirical : 1.0
+        C_XY = C_XY ./ norm_factor_xy
+        C_XX = C_XX ./ norm_factor_xx
+        C_YY = C_YY ./ norm_factor_yy
+    end
+    
+    v1 = mean(per_trace.var1)
+    v2 = mean(per_trace.var2)
+    
+    result = (cc=C_XY, ac1=C_XX, ac2=C_YY, mean1=mean1_empirical, mean2=mean2_empirical, v1=v1, v2=v2, lags=per_trace.lags)
     
     # Bootstrap if requested
     if bootstrap
@@ -3971,7 +3944,15 @@ function compute_covariance(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real
     return result
 end
 
-function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), frame_interval::Float64=1.0)
+"""
+    _compute_per_trace_correlation_functions(traces, lags; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), frame_interval=1.0)
+
+Internal helper function: Compute per-trace correlation functions.
+
+Returns per-trace correlation matrices for use in aggregation and bootstrap.
+This is an internal function used by `compute_correlation_functions` and `bootstrap_tracewise`.
+"""
+function _compute_per_trace_correlation_functions(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation(), frame_interval::Float64=1.0)
     _validate_lags_for_traces(traces, lags; label="traces", frame_interval=frame_interval)
     n_traces = length(traces)
     n_lags = length(lags)
@@ -4040,96 +4021,34 @@ function _per_trace_covariance_mats(traces::Vector{<:AbstractMatrix}, lags::Vect
         # Compute correlation based on multi-tau trait
         if hastrait(correlation_algorithm, :multitau)
             # Multi-tau correlation function (can be centered or uncentered based on local_meanx/y)
-            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XY[i, :] = compute_correlation_function(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation_function(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation_function(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
         elseif centering_type == :windowed_mean
             # Windowed correlation function (already handles internal centering)
-            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; frame_interval=frame_interval, normalize_correlation=false)
+            R_XY[i, :] = compute_correlation_function(correlation_algorithm, x, y, lags; frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation_function(correlation_algorithm, x, x, lags; frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation_function(correlation_algorithm, y, y, lags; frame_interval=frame_interval, normalize_correlation=false)
         else
             # Standard correlation function (centered or uncentered based on local_meanx/y)
-            R_XY[i, :] = compute_correlation(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = compute_correlation(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = compute_correlation(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XY[i, :] = compute_correlation_function(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
+            R_XX[i, :] = compute_correlation_function(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
+            R_YY[i, :] = compute_correlation_function(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
         end
     end
 
     return (R_XY=R_XY, R_XX=R_XX, R_YY=R_YY, mean1=mean1, mean2=mean2, var1=var1, var2=var2, lags=lags, mean1_global_true=mean1_global_empirical_true, mean2_global_true=mean2_global_empirical_true)
 end
 
-"""
-    _aggregate_covariance_mats(per_trace; mean1_global=nothing, mean2_global=nothing)
-
-Aggregate per-trace cross-correlation functions to compute cross-covariance functions.
-
-The cross-covariance functions are defined as:
-    C_XY(τ) = (1/M) * Σ_{i=1}^{M} [ (1/(T-|τ|)) * Σ_{t} (X_i(t) - μ_X)(Y_i(t+|τ|) - μ_Y) ]
-
-If global means were used in `_per_trace_covariance_mats`, the cross-covariance is already computed
-(means already subtracted), so we just average R_XY values. Otherwise, we average uncentered
-cross-correlation values R_XY(τ) (which already include both positive and negative lags from
-`crosscorrelation_function`) and subtract overall empirical means.
-
-Returns:
-- `cc`: C_XY(τ) for all lags (both positive and negative, in the order of the input `lags` vector)
-- `ac1`: C_XX(τ) (autocovariance of first unit, symmetric)
-- `ac2`: C_YY(τ) (autocovariance of second unit, symmetric)
-"""
-function _aggregate_covariance_mats(per_trace; mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
-    n_traces = length(per_trace.mean1)
-    
-    # Average cross-correlation functions across traces (R_XY already includes both positive and negative lags)
-    R_XY_mean = vec(sum(per_trace.R_XY, dims=1)) ./ n_traces
-    R_XX_mean = vec(sum(per_trace.R_XX, dims=1)) ./ n_traces
-    R_YY_mean = vec(sum(per_trace.R_YY, dims=1)) ./ n_traces
-    
-    # Use true global mean (computed from all data points) instead of average of per-trace means
-    # per_trace now always includes mean1_global_true and mean2_global_true
-    mean1_empirical = per_trace.mean1_global_true
-    mean2_empirical = per_trace.mean2_global_true
-    
-    # Correlations are already centered in _per_trace_covariance_mats via compute_correlation
-    # So we just average them - no centering needed here
-    C_XY = R_XY_mean
-    C_XX = R_XX_mean
-    C_YY = R_YY_mean
-
-    # Apply normalization if specified by the algorithm
-    if correlation_algorithm.normalization == :global_mean
-        # Normalize by empirical global means
-        norm_factor_xy = (mean1_empirical * mean2_empirical) > 0 ? (mean1_empirical * mean2_empirical) : 1.0
-        norm_factor_xx = mean1_empirical^2 > 0 ? mean1_empirical^2 : 1.0
-        norm_factor_yy = mean2_empirical^2 > 0 ? mean2_empirical^2 : 1.0
-        C_XY = C_XY ./ norm_factor_xy
-        C_XX = C_XX ./ norm_factor_xx
-        C_YY = C_YY ./ norm_factor_yy
-    elseif correlation_algorithm.normalization == :variance
-        # Normalize by variance (standard correlation coefficient)
-        var1_empirical = mean(per_trace.var1)
-        var2_empirical = mean(per_trace.var2)
-        norm_factor_xy = sqrt(var1_empirical * var2_empirical) > 0 ? sqrt(var1_empirical * var2_empirical) : 1.0
-        norm_factor_xx = var1_empirical > 0 ? var1_empirical : 1.0
-        norm_factor_yy = var2_empirical > 0 ? var2_empirical : 1.0
-        C_XY = C_XY ./ norm_factor_xy
-        C_XX = C_XX ./ norm_factor_xx
-        C_YY = C_YY ./ norm_factor_yy
-    end
-    
-    v1 = mean(per_trace.var1)
-    v2 = mean(per_trace.var2)
-    return (cc=C_XY, ac1=C_XX, ac2=C_YY, mean1=mean1_empirical, mean2=mean2_empirical, v1=v1, v2=v2, lags=per_trace.lags)
-end
 
 """
     bootstrap_tracewise(per_trace; n_bootstrap=1000, mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
 
-Generic trace-wise bootstrap for cross-covariance functions.
+Generic trace-wise bootstrap for correlation functions.
 
-Bootstraps by resampling traces with replacement, aggregating by the same rule as
-`_aggregate_covariance_mats`: if windowed means or global means were used, just average; otherwise average
-uncentered cross-correlation functions R_XY(τ) then subtract overall means to get cross-covariance C_XY(τ).
+Bootstraps by resampling traces with replacement, then aggregating correlation functions.
+Uses the same aggregation logic as `compute_correlation_functions`: averages per-trace correlations
+and applies normalization if specified.
 """
 function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=nothing, mean2_global=nothing, correlation_algorithm=StandardCorrelation())
     n_traces, n_lags = size(per_trace.R_XY)
@@ -4165,7 +4084,7 @@ function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=noth
         end
         # Average correlation functions and means for this bootstrap sample
         # NOTE: per_trace.R_XY, R_XX, R_YY are already centered (if centering was requested)
-        # in _per_trace_covariance_mats via compute_correlation, so we should NOT center again here
+        # in _compute_per_trace_correlation_functions via compute_correlation, so we should NOT center again here
         R_XY_mean_b = s_R_XY ./ n_traces
         R_XX_mean_b = s_R_XX ./ n_traces
         R_YY_mean_b = s_R_YY ./ n_traces
@@ -4174,7 +4093,7 @@ function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1_global=noth
         var1_b = var1_b_raw / n_traces
         var2_b = var2_b_raw / n_traces
         
-        # Correlations are already centered in _per_trace_covariance_mats, so no centering needed here
+        # Correlations are already centered in _compute_per_trace_correlation_functions, so no centering needed here
         current_cc = R_XY_mean_b
         current_ac1 = R_XX_mean_b
         current_ac2 = R_YY_mean_b
@@ -4815,8 +4734,8 @@ end
 
 Score model predictions against empirical cross-covariance by reading precomputed results from CSV files.
 
-The crosscovariance files contain the theoretical predictions (precomputed by `write_cov`).
-The empirical file contains empirical results (precomputed by `write_cov_empirical`).
+The crosscovariance files contain the theoretical predictions (precomputed by `write_xcorr`).
+The empirical file contains empirical results (precomputed by `write_xcorr_empirical`).
 Workflow:
 1. Read empirical cross-covariance from CSV file (precomputed)
 2. Read theoretical cross-covariance from CSV files in crosscov_folder (includes tau/lags)
@@ -4826,8 +4745,8 @@ The coupling model is extracted from crosscovariance filenames (two characters a
 Lags are read from the `tau` column in the crosscovariance files.
 
 # Arguments
-- `empirical_file::String`: Path to empirical cross-covariance CSV file (from `write_cov_empirical`)
-- `crosscov_folder::String`: Folder containing crosscovariance CSV files (with theoretical predictions from `write_cov`)
+- `empirical_file::String`: Path to empirical cross-covariance CSV file (from `write_xcorr_empirical`)
+- `crosscov_folder::String`: Folder containing crosscovariance CSV files (with theoretical predictions from `write_xcorr`)
 - `crosscov_pattern::String`: Filename pattern for crosscovariance files
 
 # Returns
@@ -4864,7 +4783,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         error("No crosscovariance files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
     end
     
-    # Read empirical results from CSV file (precomputed by write_cov_empirical)
+    # Read empirical results from CSV file (precomputed by write_xcorr_empirical)
     df_empirical = CSV.read(empirical_file, DataFrame)
     if !("tau" in names(df_empirical))
         error("Empirical file missing 'tau' column")
@@ -4980,13 +4899,13 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             end
             
             # Read ON state theoretical predictions (unnormalized)
-            # Note: write_cov writes cc_ON as unnormalized (E[xy] - E[x]E[y])
+            # Note: write_xcorr writes cc_ON as unnormalized (E[xy] - E[x]E[y])
             if has_cc_ON_unnorm
                 cc_ON_theory_unnorm_all = df.cc_ON_unnormalized
                 mON1_theory = has_mON1 ? df.mON1[1] : nothing
                 mON2_theory = has_mON2 ? df.mON2[1] : nothing
             elseif has_cc_ON
-                # cc_ON from write_cov is already unnormalized, use it directly
+                # cc_ON from write_xcorr is already unnormalized, use it directly
                 cc_ON_theory_unnorm_all = df.cc_ON
                 mON1_theory = has_mON1 ? df.mON1[1] : nothing
                 mON2_theory = has_mON2 ? df.mON2[1] : nothing
@@ -5004,13 +4923,13 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             end
             
             # Read Reporter theoretical predictions (unnormalized)
-            # Note: write_cov writes cc_Reporters as unnormalized (E[xy] - E[x]E[y])
+            # Note: write_xcorr writes cc_Reporters as unnormalized (E[xy] - E[x]E[y])
             if has_cc_Reporters_unnorm
                 cc_Reporters_theory_unnorm_all = df.cc_Reporters_unnormalized
                 mR1_theory = has_mR1 ? df.mR1[1] : nothing
                 mR2_theory = has_mR2 ? df.mR2[1] : nothing
             elseif has_cc_Reporters
-                # cc_Reporters from write_cov is already unnormalized, use it directly
+                # cc_Reporters from write_xcorr is already unnormalized, use it directly
                 cc_Reporters_theory_unnorm_all = df.cc_Reporters
                 mR1_theory = has_mR1 ? df.mR1[1] : nothing
                 mR2_theory = has_mR2 ? df.mR2[1] : nothing

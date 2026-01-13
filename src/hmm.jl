@@ -2777,15 +2777,15 @@ end
 
 
 """
-    covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.0)
+    correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.0)
 
-Compute theoretical covariance functions for coupled HMM model.
+Compute theoretical centered correlation functions for coupled HMM model.
 
-Returns centered covariances (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
+Returns centered correlation functions (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
 See `correlation_functions` for detailed argument descriptions and return value structure.
 """
-function covariance_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.0)
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions_hmm(rin, transitions, G, R, S, insertstep, interval, probfn, coupling, lags; offset=offset)
+function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.0)
+    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, interval, probfn, coupling, lags; offset=offset)
     return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
