@@ -2063,9 +2063,68 @@ function replace_outlier!(x::AbstractArray{T}) where {T<:Number}
     return false
 end
 
+
+
+
+
+#####
+
+function prepare_means(traces::Vector{Matrix}, correlation_algorithm::CorrelationTrait; positive_lags::Vector{Int}=nothing)
+    if correlation_algorithm.centering == :global_mean
+        mean1 = mean(mean.([t[:, 1] for t in traces]))
+        mean2 = mean(mean.([t[:, 2] for t in traces]))
+        return mean1, mean2
+    elseif correlation_algorithm.centering == :per_trace_mean
+        mean1 = mean.([t[:, 1] for t in traces])
+        mean2 = mean.([t[:, 2] for t in traces])
+        return mean1, mean2
+    elseif correlation_algorithm.centering == :windowed_mean
+        mean1 = Vector{Float64}[]
+        mean2 = Vector{Float64}[]
+        for t in traces
+            mean1t = Float64[]
+            mean2t = Float64[]
+            for τ in positive_lags
+                mean1_τ = mean(t[:, 1][1:end-τ])
+                mean2_τ = mean(t[:, 2][1:end-τ])
+                push!(mean1t, mean1_τ)
+                push!(mean2t, mean2_τ)
+            end
+            push!(mean1, mean1t)
+            push!(mean2, mean2t)
+        end
+        return mean1, mean2
+    else
+        error("Centering type not supported: $(correlation_algorithm.centering)")
+    end
+end
+
+
+
+#######
+function correlation_functions(traces::Vector{Matrix}; lags::Vector{<:Real}, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false)
+    # Compute global means if needed (for :global_mean centering or normalization)
+
+    mean1, mean2 = prepare_means(traces, correlation_algorithm, positive_lags=lags)
+    C_XY = Vector{Float64}(undef, length(lags))
+    C_YX = Vector{Float64}(undef, length(lags))
+    C_XX = Vector{Float64}(undef, length(lags))
+    C_YY = Vector{Float64}(undef, length(lags))
+    for (i, t) in enumerate(traces)
+        C_XY[i] = correlation_function(t[:, 1], t[:, 2], lags; meanx=mean1[i], meany=mean2[i])
+        C_YX[i] = correlation_function(t[:, 2], t[:, 1], lags; meanx=mean2[i], meany=mean1[i])
+        C_XX[i] = correlation_function(t[:, 1], t[:, 1], lags; meanx=mean1[i], meany=mean1[i])
+        C_YY[i] = correlation_function(t[:, 2], t[:, 2], lags; meanx=mean2[i], meany=mean2[i])
+    end
+    return C_XY, C_YX, C_XX, C_YY
+end
+
+
+#####
+
 # Dispatch function for correlation algorithms (trait-based)
 """
-    compute_correlation_function(alg::CorrelationTrait, x, y, lags; kwargs...)
+    correlation_function(alg::CorrelationTrait, x, y, lags; kwargs...)
 
 Compute correlation function using the specified algorithm traits.
 
@@ -2092,7 +2151,7 @@ This function dispatches based on the features (traits) of the algorithm:
 This function dispatches to the appropriate correlation function in utilities.jl
 based on the algorithm's traits.
 """
-function compute_correlation_function(alg::CorrelationTrait, x, y, lags; 
+function correlation_function(alg::CorrelationTrait, x, y, lags; 
                              meanx::Float64=0.0, meany::Float64=0.0, 
                              frame_interval=nothing, 
                              normalize_correlation::Union{Bool, Nothing}=nothing,
@@ -2101,7 +2160,7 @@ function compute_correlation_function(alg::CorrelationTrait, x, y, lags;
     # Determine normalization: use explicit parameter if provided, otherwise use trait
     normalize = isnothing(normalize_correlation) ? (alg.normalization != :none) : normalize_correlation
     
-    # Dispatch based on multi-tau feature
+    # Dispatch based on multi-tau feature and centering type
     if hastrait(alg, :multitau)
         # Multi-tau algorithm: use correlation_function_multitau
         # For multi-tau, centering is handled internally (lag-dependent means)
@@ -2117,6 +2176,13 @@ function compute_correlation_function(alg::CorrelationTrait, x, y, lags;
         # Windowed correlation computes lag-dependent means internally
         # meanx/meany are ignored
         return correlation_function_windowed(x, y, lags; frame_interval=frame_interval)
+    elseif alg.centering == :per_trace_mean
+        # Per-trace mean centering: data should already be centered before calling this function
+        # Use meanx=0.0, meany=0.0 since data is pre-centered
+        return correlation_function(x, y, lags; 
+                                         meanx=0.0, 
+                                         meany=0.0, 
+                                         frame_interval=frame_interval)
     else
         # Standard correlation (uncentered or global mean centered)
         # Use meanx/meany if centering=:global_mean, otherwise use 0.0 (uncentered)
@@ -2727,7 +2793,3 @@ function correlation_function_multitau(x, y, lags; meanx::Float64=0.0, meany::Fl
     
     return result
 end
-
-
-
-

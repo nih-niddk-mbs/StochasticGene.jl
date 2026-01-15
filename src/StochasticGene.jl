@@ -225,7 +225,6 @@ export
     correlation_function,
     correlation_function_windowed,
     correlation_function_multitau,
-    compute_correlation_function,
     write_augmented,
     write_correlation_functions,
     write_correlation_functions_file,

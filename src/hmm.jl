@@ -2612,12 +2612,16 @@ function viterbi_grid(a, a_grid, b, p0)
 end
 
 """
-    correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.0)
+    correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset=0.0)
 
 Compute theoretical correlation functions for coupled HMM model.
 
 Computes uncentered cross-correlations and autocorrelations for intensity (with noise), ON states (binary),
 and reporter counts (deterministic per state). All correlations are uncentered (E[xy]).
+
+The lag interval is automatically inferred from the `lags` vector as the minimum spacing between consecutive lags.
+The transition matrix is constructed to represent transitions over this lag interval, allowing non-integer lags
+to be handled via eigendecomposition.
 
 # Arguments
 - `rin`: Input rate parameters
@@ -2626,10 +2630,13 @@ and reporter counts (deterministic per state). All correlations are uncentered (
 - `R`: Number of RNA states for each unit (Tuple for coupled models)
 - `S`: Number of splice sites for each unit (Tuple for coupled models)
 - `insertstep`: Reporter insertion step definitions (Tuple for coupled models)
-- `interval::Float64`: Time interval for transitions (same units as rate parameters)
 - `probfn`: Probability function for observation model (e.g., `prob_Gaussian`)
 - `coupling::Tuple`: Coupling structure between units
 - `lags::Vector{<:Real}`: Time lags for covariance calculation (positive lags only, monotonic increasing from 0)
+  - **Lags must be uniform or multiples of a minimal value** (e.g., [0, 5/3, 10/3, 15/3, ...])
+  - The lag interval is inferred as the first spacing: `lags[2] - lags[1]`
+  - Lags are converted to step indices (number of intervals): `step_indices = [0, 1, 2, ...]`
+  - The transition matrix `a` is constructed for one lag interval, then `a^step_indices[i]` is used
 - `offset::Float64=0.0`: Offset added to ON states and reporter counts (default: 0.0)
   - Applied as: ON = float(num_per_state .> 0.0) .+ offset
   - Added for compatibility with experimental data processing conventions
@@ -2677,7 +2684,7 @@ and reporter counts (deterministic per state). All correlations are uncentered (
 - **Lag convention**: Positive τ in input `lags` means first unit leads second unit
 - **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.0)
+function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     sourceStates = [c.sourceState for c in components.modelcomponents]
@@ -2699,29 +2706,51 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, int
         push!(reporters, Float64.(num_per_state[i]) .+ offset)
     end
 
+    # Infer lag interval from lags vector
+    # Lags must be uniform or multiples of a minimal value
+    if length(lags) < 2
+        lag_interval = lags[1] > 0 ? lags[1] : 1.0
+    else
+        # Use first spacing as the lag interval (assuming uniform or multiples)
+        lag_interval = lags[2] - lags[1]
+        if lag_interval <= 0
+            error("Lags must be strictly increasing and positive")
+        end
+        # Verify that all lags are multiples of the interval (within tolerance)
+        step_indices = lags ./ lag_interval
+        if !all(step -> isapprox(step, round(step), rtol=1e-10), step_indices)
+            error("Lags must be uniform or multiples of the lag interval. First spacing: $lag_interval, but found non-multiple lag")
+        end
+    end
+
+    # Convert lags to step indices (number of intervals)
+    # e.g., if lags = [0, 5/3, 10/3, ...] and lag_interval = 5/3, then step_indices = [0, 1, 2, ...]
+    step_indices = round.(Int, lags ./ lag_interval)
+
     # transition matrix a and steady state probabilities p0
-    a, p0 = make_ap(r, couplingStrength, interval, components)
+    # Construct a to represent transitions over one lag_interval
+    a, p0 = make_ap(r, couplingStrength, lag_interval, components)
 
     # Cross-correlations
-    cc12 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[2], lags) 
-    cc21 = crosscorfn_hmm(a, p0, mean_intensity[2], mean_intensity[1], lags)
+    cc12 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[2], step_indices) 
+    cc21 = crosscorfn_hmm(a, p0, mean_intensity[2], mean_intensity[1], step_indices)
     cc = vcat(reverse(cc21), cc12[2:end])
 
     # Need to account for intensity variance at lag 0 for autocovariance functions
-    ac1 = autocorfn_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], lags) 
-    ac2 = autocorfn_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], lags)
+    ac1 = autocorfn_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], step_indices) 
+    ac2 = autocorfn_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], step_indices)
     
     # ON state 
-    ccON = crosscorfn_hmm(a, p0, ON[2], ON[1], lags)
+    ccON = crosscorfn_hmm(a, p0, ON[2], ON[1], step_indices)
     ccON = vcat(reverse(ccON), ccON[2:end])
-    ac1ON = crosscorfn_hmm(a, p0, ON[1], ON[1], lags)
-    ac2ON = crosscorfn_hmm(a, p0, ON[2], ON[2], lags)
+    ac1ON = crosscorfn_hmm(a, p0, ON[1], ON[1], step_indices)
+    ac2ON = crosscorfn_hmm(a, p0, ON[2], ON[2], step_indices)
 
     # Reporter
-    ccReporters = crosscorfn_hmm(a, p0, reporters[2], reporters[1], lags)
+    ccReporters = crosscorfn_hmm(a, p0, reporters[2], reporters[1], step_indices)
     ccReporters = vcat(reverse(ccReporters), ccReporters[2:end])
-    ac1Reporters = crosscorfn_hmm(a, p0, reporters[1], reporters[1], lags)
-    ac2Reporters = crosscorfn_hmm(a, p0, reporters[2], reporters[2], lags)
+    ac1Reporters = crosscorfn_hmm(a, p0, reporters[1], reporters[1], step_indices)
+    ac2Reporters = crosscorfn_hmm(a, p0, reporters[2], reporters[2], step_indices)
 
     # Means
     m1 = mean_hmm(p0, mean_intensity[1])
@@ -2731,80 +2760,98 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, int
     m1Reporters = mean_hmm(p0, reporters[1])
     m2Reporters = mean_hmm(p0, reporters[2])
 
-    # Variances
-    zero_lag = findfirst(==(0.0), lags)
-    v1 = (ac1[zero_lag] - m1^2)
-    v2 = (ac2[zero_lag] - m2^2)
-    v1ON = (ac1ON[zero_lag] - m1ON^2)
-    v2ON = (ac2ON[zero_lag] - m2ON^2)
-    v1Reporters = (ac1Reporters[zero_lag] - m1Reporters^2)
-    v2Reporters = (ac2Reporters[zero_lag] - m2Reporters^2)
+    # Variances (at step index 0, which corresponds to lag 0)
+    zero_step_idx = findfirst(==(0), step_indices)
+    v1 = (ac1[zero_step_idx] - m1^2)
+    v2 = (ac2[zero_step_idx] - m2^2)
+    v1ON = (ac1ON[zero_step_idx] - m1ON^2)
+    v2ON = (ac2ON[zero_step_idx] - m2ON^2)
+    v1Reporters = (ac1Reporters[zero_step_idx] - m1Reporters^2)
+    v2Reporters = (ac2Reporters[zero_step_idx] - m2Reporters^2)
     
     return vcat(-reverse(lags), lags[2:end]), cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
 """
-    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, step_indices)
 
 Compute uncentered cross-correlation function E[X(t)Y(t+τ)] between two signals.
+
+The transition matrix `a` represents transitions over one lag interval. The `step_indices` vector
+contains the number of intervals for each lag (e.g., [0, 1, 2, ...] for uniform spacing).
+We compute `a^step_indices[i]` for each step index using integer matrix powers.
 """
-function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags)
-    cc = zeros(length(lags))
+function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, step_indices::Vector{Int})
+    cc = zeros(length(step_indices))
     m1 = meanintensity1 .* p0
-    al = a^lags[1]
-    as = a^(lags[2] - lags[1])
-    for l in eachindex(lags)
+    al = a^step_indices[1]
+    if length(step_indices) > 1
+        as = a^(step_indices[2] - step_indices[1])
+    else
+        as = I  # Identity if only one step
+    end
+    for l in eachindex(step_indices)
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
                 cc[l] += m1[i] * al[i, j] * meanintensity2[j]
             end
         end
-        al *= as
+        if l < length(step_indices)
+            # Compute step difference and multiply al by as raised to that power
+            delta = step_indices[l+1] - step_indices[l]
+            al *= as^delta
+        end
     end
     cc
 end
 """
-    autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+    autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, step_indices)
 
 Compute uncentered autocorrelation function E[X(t)X(t+τ)] for HMM model.
 Uses second moment at lag 0 to account for noise variance.
 """
-function autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
-    ac = crosscorfn_hmm(a, p0, meanintensity, meanintensity, lags)
-    ac[1] = sum(p0 .* second_moment_intensity)
+function autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, step_indices::Vector{Int})
+    ac = crosscorfn_hmm(a, p0, meanintensity, meanintensity, step_indices)
+    # Find step index 0 (should be first)
+    zero_idx = findfirst(==(0), step_indices)
+    if zero_idx !== nothing
+        ac[zero_idx] = sum(p0 .* second_moment_intensity)
+    else
+        ac[1] = sum(p0 .* second_moment_intensity)
+    end
     ac
 end
 
 
 """
-    correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset=0.0)
+    correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset=0.0)
 
 Compute theoretical centered correlation functions for coupled HMM model.
 
 Returns centered correlation functions (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
 See `correlation_functions` for detailed argument descriptions and return value structure.
 """
-function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, interval, probfn, coupling, lags::Vector; offset::Float64=0.0)
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, interval, probfn, coupling, lags; offset=offset)
+function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0)
+    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset)
     return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 
 """
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, step_indices, m1, m2)
 
 Compute cross-covariance function E[X(t)Y(t+τ)] - E[X]E[Y] between two signals.
 """
-function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, m1, m2)
-    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, lags) .- m1 .* m2
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, step_indices::Vector{Int}, m1, m2)
+    crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, step_indices) .- m1 .* m2
 end
 
 """
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, step_indices)
 
 Compute cross-covariance function (auto-computes means from p0).
 """
-function crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags)
-    crosscov_hmm(a, p0, meanintensity1, meanintensity2, lags, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
+function crosscov_hmm(a, p0, meanintensity1, meanintensity2, step_indices::Vector{Int})
+    crosscov_hmm(a, p0, meanintensity1, meanintensity2, step_indices, mean_hmm(p0, meanintensity1), mean_hmm(p0, meanintensity2))
 end
 
 """
@@ -2813,25 +2860,48 @@ end
 Compute autocovariance function E[X(t)X(t+τ)] - E[X]² for HMM model.
 Uses second moment at lag 0 to account for noise variance.
 """
-function autocov_hmm(a, p0, meanintensity, second_moment_intensity, lags)
-    ac = autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, lags)
+function autocov_hmm(a, p0, meanintensity, second_moment_intensity, step_indices::Vector{Int})
+    ac = autocorfn_hmm(a, p0, meanintensity, second_moment_intensity, step_indices)
     ac .- mean_hmm(p0, meanintensity) .^ 2
 end
 
 """
-    autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+    autocov_hmm(r, transitions, G, R, S, insertstep, probfn, lags::Vector)
 
 Compute autocovariance function from rate parameters and model structure.
+
+The lag interval is automatically inferred from the `lags` vector as the minimum spacing between consecutive lags.
 """
-function autocov_hmm(r, transitions, G, R, S, insertstep, interval, probfn, lags::Vector)
+function autocov_hmm(r, transitions, G, R, S, insertstep, probfn, lags::Vector)
     components = TComponents(transitions, G, R, S, insertstep, "")
     dists = probfn(r[end-3:end], num_reporters_per_state(G, R, S, insertstep), components.nT)
     mean_intensity = mean.(dists)
     vi = var.(dists)
     # Second moment: E[O^2|state] = Var(O|state) + E[O|state]^2
     second_moment_intensity = vi .+ mean_intensity.^2
-    a, p0 = make_ap(r, interval, components)
-    autocov_hmm(a, p0, mean_intensity, second_moment_intensity, lags)
+    
+    # Infer lag interval from lags vector
+    # Lags must be uniform or multiples of a minimal value
+    if length(lags) < 2
+        lag_interval = lags[1] > 0 ? lags[1] : 1.0
+    else
+        # Use first spacing as the lag interval (assuming uniform or multiples)
+        lag_interval = lags[2] - lags[1]
+        if lag_interval <= 0
+            error("Lags must be strictly increasing and positive")
+        end
+        # Verify that all lags are multiples of the interval (within tolerance)
+        step_indices = lags ./ lag_interval
+        if !all(step -> isapprox(step, round(step), rtol=1e-10), step_indices)
+            error("Lags must be uniform or multiples of the lag interval. First spacing: $lag_interval, but found non-multiple lag")
+        end
+    end
+    
+    # Convert lags to step indices (number of intervals)
+    step_indices = round.(Int, lags ./ lag_interval)
+    
+    a, p0 = make_ap(r, lag_interval, components)
+    autocov_hmm(a, p0, mean_intensity, second_moment_intensity, step_indices)
 end
 
 """

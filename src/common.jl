@@ -502,12 +502,12 @@ struct CorrelationTrait
     m::Int  # Points per level for multi-tau
     
     function CorrelationTrait(; centering::Symbol=:none, multitau::Symbol=:none, normalization::Symbol=:none, m::Int=16)
-        centering in (:none, :global_mean, :windowed_mean) || 
-            error("centering must be :none, :global_mean, or :windowed_mean")
+        centering in (:none, :global_mean, :windowed_mean, :per_trace_mean) || 
+            error("centering must be :none, :global_mean, :windowed_mean, or :per_trace_mean")
         multitau in (:none, :multitau) || 
             error("multitau must be :none or :multitau")
-        normalization in (:none, :global_mean, :windowed_mean, :variance) || 
-            error("normalization must be :none, :global_mean, :windowed_mean, or :variance")
+        normalization in (:none, :global_mean, :windowed_mean, :per_trace_mean, :variance) || 
+            error("normalization must be :none, :global_mean, :windowed_mean, :per_trace_mean, or :variance")
         new(centering, multitau, normalization, m)
     end
 end
