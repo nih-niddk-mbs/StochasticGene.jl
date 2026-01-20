@@ -2102,7 +2102,67 @@ function prepare_means(traces::Vector{Matrix}, centering_type::Symbol)
     end
 end
 
+########################################
+#### Correlation Function Utilities ####
+########################################
 
+"""
+    bin_width(lags)
+
+Compute the width of the bins for the lags.
+
+# Arguments
+- `lags`: Vector of lags.
+
+# Returns
+- `Float64`: Width of the bins (minimum difference between consecutive lags).
+"""
+function bin_width(lags)
+    if length(lags) == 1
+        return 1.0
+    else
+        diff = abs(lags[2] - lags[1])
+        for i in 3:length(lags)
+            difft = abs(lags[i] - lags[i-1])
+            if difft < diff
+                diff = difft
+            end
+        end
+    end
+    return diff
+end
+
+"""
+    normalize(corr::Vector{Float64}, denominator)
+
+Normalize correlation function by dividing by denominator.
+
+# Arguments
+- `corr::Vector{Float64}`: Correlation function
+- `denominator::Union{Float64, Vector{Float64}}`: Normalization factor(s)
+
+# Returns
+- `Vector{Float64}`: Normalized correlation function
+"""
+normalize(corr::Vector{Float64}, denominator::Float64) = corr ./ denominator
+normalize(corr::Vector{Float64}, denominator::Vector{Float64}) = corr ./ denominator
+
+"""
+    bootstrap_resample(data::Vector{T}, n_samples::Int) where T
+
+Resample data with replacement for bootstrap.
+
+# Arguments
+- `data::Vector{T}`: Data to resample
+- `n_samples::Int`: Number of samples to draw
+
+# Returns
+- `Vector{T}`: Resampled data
+"""
+function bootstrap_resample(data::Vector{T}, n_samples::Int) where T
+    idxs = StatsBase.sample(1:length(data), n_samples, replace=true)
+    return [data[i] for i in idxs]
+end
 
 #######
 function correlation_functions(traces::Vector{Matrix}; lags::Vector{<:Real}, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false)
@@ -2258,33 +2318,9 @@ function correlation_function(x, y, lags; meanx::Float64=0.0, meany::Float64=0.0
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
     end
     
-    # Use provided frame_interval, or infer from lags (difference between consecutive lags)
-    # If frame_interval is provided, use it. Otherwise, infer it from lag spacing.
-    # This handles non-integer lags (e.g., lags = collect(0:5/3:30) for 100s frame intervals)
-    # but frame_interval should be the trace sampling interval (e.g., 1.0 minute per frame),
-    # NOT the lag spacing (e.g., 10 minutes between lag samples)
+    # Use provided frame_interval, or infer from lags using bin_width
     if isnothing(frame_interval)
-        frame_interval = 1.0  # Default to 1 if only one lag or all lags are identical
-        if length(lags) > 1
-            # Find difference between any two consecutive lags (prefer positive differences)
-            for i in 2:length(lags)
-                diff = abs(lags[i] - lags[i-1])
-                if diff > 0.0
-                    frame_interval = diff
-                    break
-                end
-            end
-            # If no positive difference found, try difference from first lag
-            if frame_interval == 1.0
-                for i in 2:length(lags)
-                    diff = abs(lags[i] - lags[1])
-                    if diff > 0.0
-                        frame_interval = diff
-                        break
-                    end
-                end
-            end
-        end
+        frame_interval = bin_width(lags)
     end
     
     # Center the data using the provided means (always center, subtract means before computing correlation)
@@ -2357,27 +2393,9 @@ function correlation_function_windowed(x, y, lags; frame_interval=nothing, biase
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
     end
     
-    # Infer frame_interval if not provided (same logic as crosscorrelation_function)
+    # Infer frame_interval if not provided using bin_width
     if isnothing(frame_interval)
-        frame_interval = 1.0
-        if length(lags) > 1
-            for i in 2:length(lags)
-                diff = abs(lags[i] - lags[i-1])
-                if diff > 0.0
-                    frame_interval = diff
-                    break
-                end
-            end
-            if frame_interval == 1.0
-                for i in 2:length(lags)
-                    diff = abs(lags[i] - lags[1])
-                    if diff > 0.0
-                        frame_interval = diff
-                        break
-                    end
-                end
-            end
-        end
+        frame_interval = bin_width(lags)
     end
     
     # Pre-allocate result
@@ -2592,18 +2610,9 @@ function correlation_function_multitau(x, y, lags; meanx::Float64=0.0, meany::Fl
         error("x and y must have the same length. Got length(x)=$n, length(y)=$(length(y))")
     end
     
-    # Infer frame_interval if not provided
+    # Infer frame_interval if not provided using bin_width
     if isnothing(frame_interval)
-        frame_interval = 1.0
-        if length(lags) > 1
-            for i in 2:length(lags)
-                diff = abs(lags[i] - lags[i-1])
-                if diff > 0.0
-                    frame_interval = diff
-                    break
-                end
-            end
-        end
+        frame_interval = bin_width(lags)
     end
     
     # Determine number of levels needed based on max lag
