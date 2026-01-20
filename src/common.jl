@@ -500,15 +500,16 @@ struct CorrelationTrait
     multitau::Symbol
     normalization::Symbol
     m::Int  # Points per level for multi-tau
+    biased::Bool  # If true, use fixed divisor (N). If false, use unbiased divisor (N-τ).
     
-    function CorrelationTrait(; centering::Symbol=:none, multitau::Symbol=:none, normalization::Symbol=:none, m::Int=16)
+    function CorrelationTrait(; centering::Symbol=:none, multitau::Symbol=:none, normalization::Symbol=:none, m::Int=16, biased::Bool=false)
         centering in (:none, :global_mean, :windowed_mean, :per_trace_mean) || 
             error("centering must be :none, :global_mean, :windowed_mean, or :per_trace_mean")
         multitau in (:none, :multitau) || 
             error("multitau must be :none or :multitau")
         normalization in (:none, :global_mean, :windowed_mean, :per_trace_mean, :variance) || 
             error("normalization must be :none, :global_mean, :windowed_mean, :per_trace_mean, or :variance")
-        new(centering, multitau, normalization, m)
+        new(centering, multitau, normalization, m, biased)
     end
 end
 
