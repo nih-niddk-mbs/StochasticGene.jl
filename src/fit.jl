@@ -2619,6 +2619,8 @@ burstsize(r, model::AbstractGRSMmodel, ejectnumber=1) = burstsize(r, model.Gtran
 
 Calculate burst size from rate parameters for GRS models.
 
+Burst size = mean emission rate (while in state G) / k_off (rate of leaving state G)
+
 # Arguments
 - `r`: Rate parameters
 - `transitions`: Model transitions
@@ -2627,25 +2629,113 @@ Calculate burst size from rate parameters for GRS models.
 - `ejectnumber`: Number of mRNAs per burst (default: 1)
 
 # Returns
-- `Float64`: Burst size
+- `Float64`: Mean burst size (mean number of mRNA produced per burst)
 
 # Notes
-- Calculates burst size as ratio of initiation rate to gene inactivation rate
-- Handles different gene state configurations
-- Accounts for splicing and mRNA ejection processes
-- Used for GRS model burst size analysis
+- For classic telegraph models (GM, R=0), burst size = eject_rate / off_rate
+- For GRSM models (R>0), this function:
+  1. Computes k_off: sum of all transition rates from gene state G to other gene states
+  2. Computes steady-state distribution over R states while in gene state G
+  3. Computes mean emission rate = sum(P(R config) * emission_rate(R config))
+  4. Returns mean emission rate / k_off
+
+The lifetime of state G is exponential with rate k_off, so the mean number of mRNA
+produced during a burst is the mean emission rate divided by k_off.
 """
 function burstsize(r, transitions, G, R, S, insertstep, splicetype="", ejectnumber=1)
     ntransitions = num_rates(transitions, R, S, insertstep)
-    total = min(Int(div(r[ntransitions+1], r[ntransitions])) * 2, 400)
-    components = MComponents(transitions, G, R, total, r[num_rates(transitions, R, S, insertstep)], splicetype, ejectnumber)
-    M = make_mat_M(components, r)
+    
+    # Step 1: Compute k_off (rate of leaving gene state G)
+    # Find all transitions that start from gene state G
+    k_off = 0.0
+    nG_transitions = length(transitions)
+    for (i, trans) in enumerate(transitions)
+        if trans[1] == G  # Transition starts from state G
+            k_off += r[i]
+        end
+    end
+    
+    if k_off == 0.0
+        # If state G never transitions away, burst size is infinite
+        return Inf
+    end
+    
+    # Step 2: Compute mean emission rate while in state G
+    # For R=0: emission rate is just the ejection/initiation rate
+    if R == 0
+        # For R=0, ejection rate is at index ntransitions (before decay)
+        # Rate order: G transitions, then ejection, then decay
+        emission_rate = r[ntransitions] * ejectnumber
+        return emission_rate / k_off
+    end
+    
+    # For R>0: Need to compute steady-state distribution over R states while in gene state G
+    # Set up reduced master equation: only R state transitions, no gene state transitions, no mRNA
+    # State space: only R configurations with gene state = G
+    nR_configs = 2^R  # Number of R configurations
     nT = G * 2^R
-    L = nT * total
-    S0 = zeros(L)
-    S0[2] = 1.0
-    s = time_evolve_diff([1, 10 / minimum(r[ntransitions:ntransitions+R+1])], M, S0)
-    mean_histogram(s[2, collect(1:nT:L)])
+    
+    # Identify R configurations that correspond to gene state G
+    # For gene state G: config indices are G, 2*G, 3*G, ..., nR_configs*G
+    # But we need to map these to a reduced state space (just R configs)
+    R_configs_in_G = Int[]
+    for z in 1:nR_configs
+        config_idx = state_index(G, G, z)  # Gene state G, R config z
+        push!(R_configs_in_G, config_idx)
+    end
+    
+    # Build reduced transition matrix for R states only (within gene state G)
+    # This includes: R step transitions, S transitions, and ejection
+    # Need to extract relevant elements from the full TComponents
+    tcomponents = TComponents(transitions, G, R, S, insertstep, splicetype)
+    T_full = make_mat_T(tcomponents, r)
+    
+    # Extract submatrix for R states in gene state G
+    # Only include transitions within gene state G (R state transitions)
+    # Exclude transitions from gene state G to other gene states
+    nR = length(R_configs_in_G)
+    T_reduced = zeros(nR, nR)
+    for i in 1:nR
+        for j in 1:nR
+            if i != j
+                # Off-diagonal: transitions between R configs within gene state G
+                T_reduced[i, j] = T_full[R_configs_in_G[i], R_configs_in_G[j]]
+            end
+        end
+        # Diagonal: negative sum of all outgoing transitions within gene state G only
+        # (excludes transitions to other gene states, which we don't want in reduced matrix)
+        T_reduced[i, i] = -sum(T_reduced[i, :])
+    end
+    
+    # Compute steady-state distribution over R states
+    T_reduced_sparse = sparse(T_reduced)
+    pss_R = normalized_nullspace(T_reduced_sparse)
+    
+    # Step 3: Compute mean emission rate
+    # Emission occurs from R states where the final R step is occupied
+    # For each R config z, check if final R step is occupied and get emission rate
+    mean_emission_rate = 0.0
+    nG_rates = length(transitions)
+    # Rate order: G transitions (1 to nG_rates), initiation (nG_rates+1), 
+    # R transitions (nG_rates+2 to nG_rates+1+R), S transitions, ejection (ntransitions), decay (ntransitions+1)
+    # Ejection rate is at index ntransitions (before decay)
+    eject_rate_idx = ntransitions
+    eject_rate = r[eject_rate_idx] * ejectnumber
+    
+    for (i, config_idx) in enumerate(R_configs_in_G)
+        # Extract R config z from config_idx
+        z = div(config_idx - 1, G) + 1
+        
+        # Check if final R step is occupied in config z
+        # R config z is represented as binary: digits(z-1, base=2, pad=R)
+        R_binary = digits(z - 1, base=2, pad=R)
+        if R > 0 && R_binary[R] == 1  # Final R step is occupied
+            mean_emission_rate += pss_R[i] * eject_rate
+        end
+    end
+    
+    # Step 4: Burst size = mean emission rate / k_off
+    mean_emission_rate / k_off
 end
 
 """

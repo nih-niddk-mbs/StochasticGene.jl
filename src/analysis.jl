@@ -2275,22 +2275,29 @@ function write_trace_dataframe(file::String, datapath::String, interval::Float64
 end
 
 function write_traces(folder::String, datapath::String, interval::Float64, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
+    # Collect all files to process first
+    files_to_process = String[]
     for (root, dirs, files) in walkdir(folder)
         for f in files
-            if occursin("rates", f) 
-                write_trace_dataframe(joinpath(root, f), datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
+            if occursin("rates", f)
+                push!(files_to_process, joinpath(root, f))
             end
         end
+    end
+    
+    # Process files in parallel
+    Threads.@threads for file_path in files_to_process
+        write_trace_dataframe(file_path, datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
     end
 end
 
 
 
-"""
-    write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
+# """
+#     write_trace_dataframe(file, datapath::String, datacond, interval, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, coupling=tuple())
 
-TBW
-"""
+# TBW
+# """
 # function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
 #     traces = read_tracefiles(datapath, datacond, start, stop)
 #     traces, maxmedians = zero_median(traces, zeromedian)
@@ -2416,82 +2423,82 @@ TBW
 # end
 
 # Alternative implementation using Threads.@spawn for more dynamic scheduling
-"""
-    write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
-                               sources=1:3, targets=1:5, ratetype::String="median",
-                               start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
-                               splicetype=""; hlabel="-h", state=true, pattern="gene")
+# """
+#     write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+#                                sources=1:3, targets=1:5, ratetype::String="median",
+#                                start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+#                                splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-Parallelized version of write_traces_coupling using Julia's task-based parallelism with @spawn.
-This provides more dynamic scheduling which can be beneficial for workloads with varying execution times.
-"""
-function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
-    sources=1:3, targets=1:5, ratetype::String="median",
-    start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
-    splicetype=""; hlabel="-h", state=true, pattern="gene")
+# Parallelized version of write_traces_coupling using Julia's task-based parallelism with @spawn.
+# This provides more dynamic scheduling which can be beneficial for workloads with varying execution times.
+# """
+# function write_traces_coupling_spawn(folder, datapath, datacond, interval, G=(3, 3), R=(3, 3),
+#     sources=1:3, targets=1:5, ratetype::String="median",
+#     start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4,
+#     splicetype=""; hlabel="-h", state=true, pattern="gene")
 
-    # Collect all tasks that need to be executed
-    tasks = []
+#     # Collect all tasks that need to be executed
+#     tasks = []
 
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f)
-                # Tasks for pattern$source$target files
-                for target in targets
-                    for source in sources
-                        if occursin("$pattern$source$target", f)
-                            file_path = joinpath(root, f)
-                            coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+#     for (root, dirs, files) in walkdir(folder)
+#         for f in files
+#             if occursin("rates", f)
+#                 # Tasks for pattern$source$target files
+#                 for target in targets
+#                     for source in sources
+#                         if occursin("$pattern$source$target", f)
+#                             file_path = joinpath(root, f)
+#                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
 
-                            # Create a task for this file
-                            t = @spawn begin
-                                try
-                                    write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
-                                        start, stop, probfn, noiseparams, splicetype,
-                                        hlabel=hlabel, state=state, coupling=coupling)
-                                    @info "Successfully processed: $(basename(file_path))"
-                                catch e
-                                    @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
-                                end
-                            end
+#                             # Create a task for this file
+#                             t = @spawn begin
+#                                 try
+#                                     write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+#                                         start, stop, probfn, noiseparams, splicetype,
+#                                         hlabel=hlabel, state=state, coupling=coupling)
+#                                     @info "Successfully processed: $(basename(file_path))"
+#                                 catch e
+#                                     @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+#                                 end
+#                             end
 
-                            push!(tasks, t)
-                        end
-                    end
+#                             push!(tasks, t)
+#                         end
+#                     end
 
-                    # Tasks for R$target files
-                    if occursin("R$target", f)
-                        file_path = joinpath(root, f)
-                        coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                     # Tasks for R$target files
+#                     if occursin("R$target", f)
+#                         file_path = joinpath(root, f)
+#                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
 
-                        # Create a task for this file
-                        t = @spawn begin
-                            try
-                                write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
-                                    start, stop, probfn, noiseparams, splicetype,
-                                    hlabel=hlabel, state=state, coupling=coupling)
-                                @info "Successfully processed: $(basename(file_path))"
-                            catch e
-                                @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
-                            end
-                        end
+#                         # Create a task for this file
+#                         t = @spawn begin
+#                             try
+#                                 write_trace_dataframe(file_path, datapath, datacond, interval, ratetype,
+#                                     start, stop, probfn, noiseparams, splicetype,
+#                                     hlabel=hlabel, state=state, coupling=coupling)
+#                                 @info "Successfully processed: $(basename(file_path))"
+#                             catch e
+#                                 @error "Error processing file: $(basename(file_path))" exception = (e, catch_backtrace())
+#                             end
+#                         end
 
-                        push!(tasks, t)
-                    end
-                end
-            end
-        end
-    end
+#                         push!(tasks, t)
+#                     end
+#                 end
+#             end
+#         end
+#     end
 
-    @info "Scheduled $(length(tasks)) files for processing using $(Threads.nthreads()) threads"
+#     @info "Scheduled $(length(tasks)) files for processing using $(Threads.nthreads()) threads"
 
-    # Wait for all tasks to complete
-    for t in tasks
-        fetch(t)
-    end
+#     # Wait for all tasks to complete
+#     for t in tasks
+#         fetch(t)
+#     end
 
-    @info "All files processed"
-end
+#     @info "All files processed"
+# end
 
 # Usage example:
 # First set the number of threads via environment variable or command line:
@@ -5040,30 +5047,51 @@ results["31"].cc_theory
 ```
 """
 function score_models_from_traces(empirical_file::String, crosscov_folder::String;
-    crosscov_pattern="crosscovariance_tracejoint-HBEC-nstate_enhancer-gene")
+    crosscov_pattern="crosscorrelation_tracejoint-HBEC-nstate_enhancer-gene")
     
-    # Find all crosscovariance files (these contain the coupling model identifier)
+    # Find all crosscorrelation files (these contain the coupling model identifier)
     crosscov_files = filter(f -> startswith(f, crosscov_pattern) && endswith(f, ".csv"), readdir(crosscov_folder))
     
     if isempty(crosscov_files)
-        error("No crosscovariance files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
+        error("No crosscorrelation files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
     end
     
-    # Read empirical results from CSV file (precomputed by write_xcorr_empirical)
+    # Read empirical results from CSV file (precomputed by write_correlation_functions_empirical)
     df_empirical = CSV.read(empirical_file, DataFrame)
     if !("tau" in names(df_empirical))
         error("Empirical file missing 'tau' column")
     end
-    lags = Vector{Float64}(df_empirical.tau)
+    lags_empirical_full = Vector{Float64}(df_empirical.tau)
     
-    # Extract empirical ON state data
-    data_result = (
+    # Read CorrelationTrait metadata from empirical file (if present)
+    # Defaults to StandardCorrelation() if not found (backward compatibility)
+    if hasproperty(df_empirical, :centering) && hasproperty(df_empirical, :multitau) && hasproperty(df_empirical, :normalization)
+        empirical_centering = Symbol(df_empirical.centering[1])
+        empirical_multitau = Symbol(df_empirical.multitau[1])
+        empirical_normalization = Symbol(df_empirical.normalization[1])
+        empirical_biased = hasproperty(df_empirical, :biased) ? df_empirical.biased[1] : false  # Default to false if missing
+        empirical_m = hasproperty(df_empirical, :m) ? df_empirical.m[1] : 16
+        empirical_correlation_algorithm = CorrelationTrait(
+            centering=empirical_centering,
+            multitau=empirical_multitau,
+            normalization=empirical_normalization,
+            biased=empirical_biased,
+            m=empirical_m
+        )
+    else
+        # Backward compatibility: use StandardCorrelation() if metadata not present
+        @warn "Empirical file missing CorrelationTrait metadata. Using StandardCorrelation() as default. Consider regenerating empirical file with updated code."
+        empirical_correlation_algorithm = StandardCorrelation()
+    end
+    
+    # Extract empirical ON state data (will be filtered per file to match theory range)
+    data_result_full = (
         cc_unnormalized=df_empirical.cc_ON,
         ac1_unnormalized=df_empirical.ac1_ON,
         ac2_unnormalized=df_empirical.ac2_ON,
-        mean1=df_empirical.mON1[1],
-        mean2=df_empirical.mON2[1],
-        lags=lags,
+        mean1=df_empirical.m_ON1[1],
+        mean2=df_empirical.m_ON2[1],
+        lags=lags_empirical_full,
         cc_unnormalized_lower=hasproperty(df_empirical, :cc_ON_lower) ? df_empirical.cc_ON_lower : nothing,
         cc_unnormalized_median=hasproperty(df_empirical, :cc_ON_median) ? df_empirical.cc_ON_median : nothing,
         cc_unnormalized_upper=hasproperty(df_empirical, :cc_ON_upper) ? df_empirical.cc_ON_upper : nothing,
@@ -5078,14 +5106,14 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         ac2_unnormalized_se=hasproperty(df_empirical, :ac2_ON_se) ? df_empirical.ac2_ON_se : nothing
     )
 
-    # Extract empirical Reporter data
-    reporter_result = (
+    # Extract empirical Reporter data (will be filtered per file to match theory range)
+    reporter_result_full = (
         cc=hasproperty(df_empirical, :cc_Reporters) ? df_empirical.cc_Reporters : nothing,
         ac1=hasproperty(df_empirical, :ac1_Reporters) ? df_empirical.ac1_Reporters : nothing,
         ac2=hasproperty(df_empirical, :ac2_Reporters) ? df_empirical.ac2_Reporters : nothing,
-        mean1=hasproperty(df_empirical, :mR1) ? df_empirical.mR1[1] : nothing,
-        mean2=hasproperty(df_empirical, :mR2) ? df_empirical.mR2[1] : nothing,
-        lags=lags,
+        mean1=hasproperty(df_empirical, :m_Reporters1) ? df_empirical.m_Reporters1[1] : nothing,
+        mean2=hasproperty(df_empirical, :mReporters2) ? df_empirical.mReporters2[1] : nothing,
+        lags=lags_empirical_full,
         cc_lower=hasproperty(df_empirical, :cc_Reporters_lower) ? df_empirical.cc_Reporters_lower : nothing,
         cc_median=hasproperty(df_empirical, :cc_Reporters_median) ? df_empirical.cc_Reporters_median : nothing,
         cc_upper=hasproperty(df_empirical, :cc_Reporters_upper) ? df_empirical.cc_Reporters_upper : nothing,
@@ -5131,6 +5159,74 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             
             tau_data = Vector{Float64}(df.tau)
             
+            # Use shortest overlapping lag range (intersection of empirical and theory ranges)
+            # This ensures we compare theory and empirical on the same lags
+            tau_min_empirical = minimum(lags_empirical_full)
+            tau_max_empirical = maximum(lags_empirical_full)
+            tau_min_theory = minimum(tau_data)
+            tau_max_theory = maximum(tau_data)
+            
+            tau_min = max(tau_min_empirical, tau_min_theory)
+            tau_max = min(tau_max_empirical, tau_max_theory)
+            
+            if tau_min > tau_max
+                @warn "No overlapping lags between empirical (range: $tau_min_empirical to $tau_max_empirical) and theory (range: $tau_min_theory to $tau_max_theory) in file '$crosscov_file', skipping"
+                continue
+            end
+            
+            # Filter both empirical and theory lags to the overlapping range
+            lags_empirical_filtered = filter(lag -> tau_min <= lag <= tau_max, lags_empirical_full)
+            lags_theory_filtered = filter(lag -> tau_min <= lag <= tau_max, tau_data)
+            
+            # Use the empirical lags as the reference (they define the sampling)
+            lags = lags_empirical_filtered
+            
+            # Filter empirical data to match filtered lags
+            empirical_mask = [tau_min <= lag <= tau_max for lag in lags_empirical_full]
+            
+            # Create filtered empirical data structures for this theory file
+            data_result = (
+                cc_unnormalized=Vector{Float64}(data_result_full.cc_unnormalized[empirical_mask]),
+                ac1_unnormalized=Vector{Float64}(data_result_full.ac1_unnormalized[empirical_mask]),
+                ac2_unnormalized=Vector{Float64}(data_result_full.ac2_unnormalized[empirical_mask]),
+                mean1=data_result_full.mean1,
+                mean2=data_result_full.mean2,
+                lags=lags,
+                cc_unnormalized_lower=hasproperty(data_result_full, :cc_unnormalized_lower) && !isnothing(data_result_full.cc_unnormalized_lower) ? Vector{Float64}(data_result_full.cc_unnormalized_lower[empirical_mask]) : nothing,
+                cc_unnormalized_median=hasproperty(data_result_full, :cc_unnormalized_median) && !isnothing(data_result_full.cc_unnormalized_median) ? Vector{Float64}(data_result_full.cc_unnormalized_median[empirical_mask]) : nothing,
+                cc_unnormalized_upper=hasproperty(data_result_full, :cc_unnormalized_upper) && !isnothing(data_result_full.cc_unnormalized_upper) ? Vector{Float64}(data_result_full.cc_unnormalized_upper[empirical_mask]) : nothing,
+                cc_unnormalized_se=hasproperty(data_result_full, :cc_unnormalized_se) && !isnothing(data_result_full.cc_unnormalized_se) ? Vector{Float64}(data_result_full.cc_unnormalized_se[empirical_mask]) : nothing,
+                ac1_unnormalized_lower=hasproperty(data_result_full, :ac1_unnormalized_lower) && !isnothing(data_result_full.ac1_unnormalized_lower) ? Vector{Float64}(data_result_full.ac1_unnormalized_lower[empirical_mask]) : nothing,
+                ac1_unnormalized_median=hasproperty(data_result_full, :ac1_unnormalized_median) && !isnothing(data_result_full.ac1_unnormalized_median) ? Vector{Float64}(data_result_full.ac1_unnormalized_median[empirical_mask]) : nothing,
+                ac1_unnormalized_upper=hasproperty(data_result_full, :ac1_unnormalized_upper) && !isnothing(data_result_full.ac1_unnormalized_upper) ? Vector{Float64}(data_result_full.ac1_unnormalized_upper[empirical_mask]) : nothing,
+                ac1_unnormalized_se=hasproperty(data_result_full, :ac1_unnormalized_se) && !isnothing(data_result_full.ac1_unnormalized_se) ? Vector{Float64}(data_result_full.ac1_unnormalized_se[empirical_mask]) : nothing,
+                ac2_unnormalized_lower=hasproperty(data_result_full, :ac2_unnormalized_lower) && !isnothing(data_result_full.ac2_unnormalized_lower) ? Vector{Float64}(data_result_full.ac2_unnormalized_lower[empirical_mask]) : nothing,
+                ac2_unnormalized_median=hasproperty(data_result_full, :ac2_unnormalized_median) && !isnothing(data_result_full.ac2_unnormalized_median) ? Vector{Float64}(data_result_full.ac2_unnormalized_median[empirical_mask]) : nothing,
+                ac2_unnormalized_upper=hasproperty(data_result_full, :ac2_unnormalized_upper) && !isnothing(data_result_full.ac2_unnormalized_upper) ? Vector{Float64}(data_result_full.ac2_unnormalized_upper[empirical_mask]) : nothing,
+                ac2_unnormalized_se=hasproperty(data_result_full, :ac2_unnormalized_se) && !isnothing(data_result_full.ac2_unnormalized_se) ? Vector{Float64}(data_result_full.ac2_unnormalized_se[empirical_mask]) : nothing
+            )
+            
+            reporter_result = (
+                cc=!isnothing(reporter_result_full.cc) ? Vector{Float64}(reporter_result_full.cc[empirical_mask]) : nothing,
+                ac1=!isnothing(reporter_result_full.ac1) ? Vector{Float64}(reporter_result_full.ac1[empirical_mask]) : nothing,
+                ac2=!isnothing(reporter_result_full.ac2) ? Vector{Float64}(reporter_result_full.ac2[empirical_mask]) : nothing,
+                mean1=reporter_result_full.mean1,
+                mean2=reporter_result_full.mean2,
+                lags=lags,
+                cc_lower=!isnothing(reporter_result_full.cc_lower) ? Vector{Float64}(reporter_result_full.cc_lower[empirical_mask]) : nothing,
+                cc_median=!isnothing(reporter_result_full.cc_median) ? Vector{Float64}(reporter_result_full.cc_median[empirical_mask]) : nothing,
+                cc_upper=!isnothing(reporter_result_full.cc_upper) ? Vector{Float64}(reporter_result_full.cc_upper[empirical_mask]) : nothing,
+                cc_se=!isnothing(reporter_result_full.cc_se) ? Vector{Float64}(reporter_result_full.cc_se[empirical_mask]) : nothing,
+                ac1_lower=!isnothing(reporter_result_full.ac1_lower) ? Vector{Float64}(reporter_result_full.ac1_lower[empirical_mask]) : nothing,
+                ac1_median=!isnothing(reporter_result_full.ac1_median) ? Vector{Float64}(reporter_result_full.ac1_median[empirical_mask]) : nothing,
+                ac1_upper=!isnothing(reporter_result_full.ac1_upper) ? Vector{Float64}(reporter_result_full.ac1_upper[empirical_mask]) : nothing,
+                ac1_se=!isnothing(reporter_result_full.ac1_se) ? Vector{Float64}(reporter_result_full.ac1_se[empirical_mask]) : nothing,
+                ac2_lower=!isnothing(reporter_result_full.ac2_lower) ? Vector{Float64}(reporter_result_full.ac2_lower[empirical_mask]) : nothing,
+                ac2_median=!isnothing(reporter_result_full.ac2_median) ? Vector{Float64}(reporter_result_full.ac2_median[empirical_mask]) : nothing,
+                ac2_upper=!isnothing(reporter_result_full.ac2_upper) ? Vector{Float64}(reporter_result_full.ac2_upper[empirical_mask]) : nothing,
+                ac2_se=!isnothing(reporter_result_full.ac2_se) ? Vector{Float64}(reporter_result_full.ac2_se[empirical_mask]) : nothing
+            )
+            
             # Initialize all variables at the start to avoid scoping issues
             cc_ON_theory_unnorm_all = nothing
             mON1_theory = nothing
@@ -5145,16 +5241,16 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             
             # Check for ON state columns
             has_cc_ON_unnorm = "cc_ON_unnormalized" in df_names_str
-            has_mON1 = "mON1" in df_names_str
-            has_mON2 = "mON2" in df_names_str
+            has_m_ON1 = "m_ON1" in df_names_str
+            has_m_ON2 = "m_ON2" in df_names_str
             has_cc_ON = "cc_ON" in df_names_str
             has_ac1_ON = "ac1_ON" in df_names_str
             has_ac2_ON = "ac2_ON" in df_names_str
-            
+
             # Check for Reporter columns
             has_cc_Reporters_unnorm = "cc_Reporters_unnormalized" in df_names_str
-            has_mR1 = "mR1" in df_names_str
-            has_mR2 = "mR2" in df_names_str
+            has_m_Reporters1 = "m_Reporters1" in df_names_str
+            has_mReporters2 = "mReporters2" in df_names_str
             has_cc_Reporters = "cc_Reporters" in df_names_str
             has_ac1_Reporters = "ac1_Reporters" in df_names_str
             has_ac2_Reporters = "ac2_Reporters" in df_names_str
@@ -5165,16 +5261,16 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             end
             
             # Read ON state theoretical predictions (unnormalized)
-            # Note: write_xcorr writes cc_ON as unnormalized (E[xy] - E[x]E[y])
+            # Theory files contain raw uncentered unnormalized correlation functions (E[xy])
             if has_cc_ON_unnorm
                 cc_ON_theory_unnorm_all = df.cc_ON_unnormalized
-                mON1_theory = has_mON1 ? df.mON1[1] : nothing
-                mON2_theory = has_mON2 ? df.mON2[1] : nothing
+                mON1_theory = has_m_ON1 ? df.m_ON1[1] : nothing
+                mON2_theory = has_m_ON2 ? df.m_ON2[1] : nothing
             elseif has_cc_ON
-                # cc_ON from write_xcorr is already unnormalized, use it directly
+                # cc_ON from write_correlation_functions is raw uncentered (E[xy]), use it directly
                 cc_ON_theory_unnorm_all = df.cc_ON
-                mON1_theory = has_mON1 ? df.mON1[1] : nothing
-                mON2_theory = has_mON2 ? df.mON2[1] : nothing
+                mON1_theory = has_m_ON1 ? df.m_ON1[1] : nothing
+                mON2_theory = has_m_ON2 ? df.m_ON2[1] : nothing
             else
                 @warn "File '$crosscov_file' missing required ON state columns ('cc_ON' or 'cc_ON_unnormalized'), skipping"
                 continue
@@ -5189,16 +5285,16 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             end
             
             # Read Reporter theoretical predictions (unnormalized)
-            # Note: write_xcorr writes cc_Reporters as unnormalized (E[xy] - E[x]E[y])
+            # Theory files contain raw uncentered unnormalized correlation functions (E[xy])
             if has_cc_Reporters_unnorm
                 cc_Reporters_theory_unnorm_all = df.cc_Reporters_unnormalized
-                mR1_theory = has_mR1 ? df.mR1[1] : nothing
-                mR2_theory = has_mR2 ? df.mR2[1] : nothing
+                mR1_theory = has_m_Reporters1 ? df.m_Reporters1[1] : nothing
+                mR2_theory = has_mReporters2 ? df.mReporters2[1] : nothing
             elseif has_cc_Reporters
-                # cc_Reporters from write_xcorr is already unnormalized, use it directly
+                # cc_Reporters from write_correlation_functions is raw uncentered (E[xy]), use it directly
                 cc_Reporters_theory_unnorm_all = df.cc_Reporters
-                mR1_theory = has_mR1 ? df.mR1[1] : nothing
-                mR2_theory = has_mR2 ? df.mR2[1] : nothing
+                mR1_theory = has_m_Reporters1 ? df.m_Reporters1[1] : nothing
+                mR2_theory = has_mReporters2 ? df.mReporters2[1] : nothing
             end
             
             # Read Reporter autocovariances if available
@@ -5243,18 +5339,36 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 continue
             end
             
-            # Center and normalize theory using global means (assume global_mean centering and normalization)
-            # Theory is uncentered correlation: E[XY]
-            # Center: E[XY] - E[X]E[Y] = E[XY] - m1*m2
-            # Normalize: (E[XY] - m1*m2) / (m1*m2)
+            # Transform theory to match empirical CorrelationTrait
+            # Theory is raw uncentered unnormalized: E[XY]
+            # Apply the same transformations that were applied to empirical data
             if isnothing(mON1_theory) || isnothing(mON2_theory)
-                @warn "Missing theoretical means (mON1_theory or mON2_theory), cannot center and normalize theory. Skipping."
+                @warn "Missing theoretical means (mON1_theory or mON2_theory), cannot transform theory. Skipping."
                 continue
             end
-            norm_factor_ON = (mON1_theory * mON2_theory) > 0 ? (mON1_theory * mON2_theory) : 1.0
-            cc_ON_theory = (cc_ON_theory_unnorm .- norm_factor_ON) ./ norm_factor_ON
             
-            # Empirical is already centered and normalized (from CorrelationTrait with global_mean)
+            # Apply centering and normalization based on empirical CorrelationTrait
+            needs_centering = empirical_correlation_algorithm.centering != :none
+            needs_normalization = empirical_correlation_algorithm.normalization != :none
+            
+            # Compute normalization factor using global means (for global_mean normalization)
+            # For windowed_mean or per_trace_mean normalization, this would need windowed/per-trace means
+            # but for scoring we use global means as approximation
+            norm_factor_ON = (mON1_theory * mON2_theory) > 0 ? (mON1_theory * mON2_theory) : 1.0
+            
+            if needs_centering
+                cc_ON_theory_centered = cc_ON_theory_unnorm .- norm_factor_ON
+            else
+                cc_ON_theory_centered = cc_ON_theory_unnorm
+            end
+            
+            if needs_normalization
+                cc_ON_theory = cc_ON_theory_centered ./ norm_factor_ON
+            else
+                cc_ON_theory = cc_ON_theory_centered
+            end
+
+            # Empirical is already transformed according to CorrelationTrait
             cc_ON_empirical = Vector{Float64}(data_result.cc_unnormalized)
             
             # Verify all lengths match (they should by design)
@@ -5280,15 +5394,21 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if !isnothing(ac1_ON_theory_all) && hasproperty(data_result, :ac1_unnormalized)
                 ac1_ON_theory_unnorm = interpolate_theory(ac1_ON_theory_all, tau_data, lags)
                 if !isnothing(ac1_ON_theory_unnorm) && length(ac1_ON_theory_unnorm) == length(lags)
-                    # Center and normalize theory using global mean
-                    # Theory is uncentered: E[X²]
-                    # Center: E[X²] - E[X]² = E[X²] - m²
-                    # Normalize: (E[X²] - m²) / m²
+                    # Transform theory using empirical CorrelationTrait
                     if isnothing(mON1_theory)
-                        @warn "Missing mON1_theory, cannot center and normalize ac1_ON theory. Skipping."
+                        @warn "Missing mON1_theory, cannot transform ac1_ON theory. Skipping."
                     else
                         norm_factor_ac1 = mON1_theory^2 > 0 ? mON1_theory^2 : 1.0
-                        ac1_ON_theory = (ac1_ON_theory_unnorm .- norm_factor_ac1) ./ norm_factor_ac1
+                        if needs_centering
+                            ac1_ON_theory_centered = ac1_ON_theory_unnorm .- norm_factor_ac1
+                        else
+                            ac1_ON_theory_centered = ac1_ON_theory_unnorm
+                        end
+                        if needs_normalization
+                            ac1_ON_theory = ac1_ON_theory_centered ./ norm_factor_ac1
+                        else
+                            ac1_ON_theory = ac1_ON_theory_centered
+                        end
                         ac1_ON_empirical = Vector{Float64}(data_result.ac1_unnormalized)
                         ac1_ON_se = hasproperty(data_result, :ac1_unnormalized_se) && !isnothing(data_result.ac1_unnormalized_se) ? Vector{Float64}(data_result.ac1_unnormalized_se) : nothing
                         scores_ac1_ON = compute_score_metrics(Vector{Float64}(ac1_ON_theory), ac1_ON_empirical, ac1_ON_se)
@@ -5298,15 +5418,21 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if !isnothing(ac2_ON_theory_all) && hasproperty(data_result, :ac2_unnormalized)
                 ac2_ON_theory_unnorm = interpolate_theory(ac2_ON_theory_all, tau_data, lags)
                 if !isnothing(ac2_ON_theory_unnorm) && length(ac2_ON_theory_unnorm) == length(lags)
-                    # Center and normalize theory using global mean
-                    # Theory is uncentered: E[X²]
-                    # Center: E[X²] - E[X]² = E[X²] - m²
-                    # Normalize: (E[X²] - m²) / m²
+                    # Transform theory using empirical CorrelationTrait
                     if isnothing(mON2_theory)
-                        @warn "Missing mON2_theory, cannot center and normalize ac2_ON theory. Skipping."
+                        @warn "Missing mON2_theory, cannot transform ac2_ON theory. Skipping."
                     else
                         norm_factor_ac2 = mON2_theory^2 > 0 ? mON2_theory^2 : 1.0
-                        ac2_ON_theory = (ac2_ON_theory_unnorm .- norm_factor_ac2) ./ norm_factor_ac2
+                        if needs_centering
+                            ac2_ON_theory_centered = ac2_ON_theory_unnorm .- norm_factor_ac2
+                        else
+                            ac2_ON_theory_centered = ac2_ON_theory_unnorm
+                        end
+                        if needs_normalization
+                            ac2_ON_theory = ac2_ON_theory_centered ./ norm_factor_ac2
+                        else
+                            ac2_ON_theory = ac2_ON_theory_centered
+                        end
                         ac2_ON_empirical = Vector{Float64}(data_result.ac2_unnormalized)
                         ac2_ON_se = hasproperty(data_result, :ac2_unnormalized_se) && !isnothing(data_result.ac2_unnormalized_se) ? Vector{Float64}(data_result.ac2_unnormalized_se) : nothing
                         scores_ac2_ON = compute_score_metrics(Vector{Float64}(ac2_ON_theory), ac2_ON_empirical, ac2_ON_se)
@@ -5321,15 +5447,21 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if !isnothing(cc_Reporters_theory_unnorm_all)
                 cc_Reporters_theory_unnorm = interpolate_theory(cc_Reporters_theory_unnorm_all, tau_data, lags)
                 if !isnothing(cc_Reporters_theory_unnorm)
-                    # Center and normalize theory using global means
-                    # Theory is uncentered correlation: E[XY]
-                    # Center: E[XY] - E[X]E[Y] = E[XY] - m1*m2
-                    # Normalize: (E[XY] - m1*m2) / (m1*m2)
+                    # Transform theory using empirical CorrelationTrait
                     if isnothing(mR1_theory) || isnothing(mR2_theory)
-                        @warn "Missing theoretical reporter means (mR1_theory or mR2_theory), cannot center and normalize theory. Skipping Reporter scores."
+                        @warn "Missing theoretical reporter means (mR1_theory or mR2_theory), cannot transform theory. Skipping Reporter scores."
                     else
                         norm_factor_Reporters = (mR1_theory * mR2_theory) > 0 ? (mR1_theory * mR2_theory) : 1.0
-                        cc_Reporters_theory = (cc_Reporters_theory_unnorm .- norm_factor_Reporters) ./ norm_factor_Reporters
+                        if needs_centering
+                            cc_Reporters_theory_centered = cc_Reporters_theory_unnorm .- norm_factor_Reporters
+                        else
+                            cc_Reporters_theory_centered = cc_Reporters_theory_unnorm
+                        end
+                        if needs_normalization
+                            cc_Reporters_theory = cc_Reporters_theory_centered ./ norm_factor_Reporters
+                        else
+                            cc_Reporters_theory = cc_Reporters_theory_centered
+                        end
                         
                         # Empirical is already centered and normalized
                         cc_Reporters_empirical = Vector{Float64}(reporter_result.cc)
@@ -5359,15 +5491,21 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if !isnothing(ac1_Reporters_theory_all) && hasproperty(reporter_result, :ac1)
                 ac1_Reporters_theory_unnorm = interpolate_theory(ac1_Reporters_theory_all, tau_data, lags)
                 if !isnothing(ac1_Reporters_theory_unnorm) && length(ac1_Reporters_theory_unnorm) == length(lags)
-                    # Center and normalize theory using global mean
-                    # Theory is uncentered: E[X²]
-                    # Center: E[X²] - E[X]² = E[X²] - m²
-                    # Normalize: (E[X²] - m²) / m²
+                    # Transform theory using empirical CorrelationTrait
                     if isnothing(mR1_theory)
-                        @warn "Missing mR1_theory, cannot center and normalize ac1_Reporters theory. Skipping."
+                        @warn "Missing mR1_theory, cannot transform ac1_Reporters theory. Skipping."
                     else
                         norm_factor_ac1R = mR1_theory^2 > 0 ? mR1_theory^2 : 1.0
-                        ac1_Reporters_theory = (ac1_Reporters_theory_unnorm .- norm_factor_ac1R) ./ norm_factor_ac1R
+                        if needs_centering
+                            ac1_Reporters_theory_centered = ac1_Reporters_theory_unnorm .- norm_factor_ac1R
+                        else
+                            ac1_Reporters_theory_centered = ac1_Reporters_theory_unnorm
+                        end
+                        if needs_normalization
+                            ac1_Reporters_theory = ac1_Reporters_theory_centered ./ norm_factor_ac1R
+                        else
+                            ac1_Reporters_theory = ac1_Reporters_theory_centered
+                        end
                         ac1_Reporters_empirical = Vector{Float64}(reporter_result.ac1)
                         ac1_Reporters_se = hasproperty(reporter_result, :ac1_se) && !isnothing(reporter_result.ac1_se) ? Vector{Float64}(reporter_result.ac1_se) : nothing
                         scores_ac1_Reporters = compute_score_metrics(Vector{Float64}(ac1_Reporters_theory), ac1_Reporters_empirical, ac1_Reporters_se)
@@ -5377,15 +5515,21 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if !isnothing(ac2_Reporters_theory_all) && hasproperty(reporter_result, :ac2)
                 ac2_Reporters_theory_unnorm = interpolate_theory(ac2_Reporters_theory_all, tau_data, lags)
                 if !isnothing(ac2_Reporters_theory_unnorm) && length(ac2_Reporters_theory_unnorm) == length(lags)
-                    # Center and normalize theory using global mean
-                    # Theory is uncentered: E[X²]
-                    # Center: E[X²] - E[X]² = E[X²] - m²
-                    # Normalize: (E[X²] - m²) / m²
+                    # Transform theory using empirical CorrelationTrait
                     if isnothing(mR2_theory)
-                        @warn "Missing mR2_theory, cannot center and normalize ac2_Reporters theory. Skipping."
+                        @warn "Missing mR2_theory, cannot transform ac2_Reporters theory. Skipping."
                     else
                         norm_factor_ac2R = mR2_theory^2 > 0 ? mR2_theory^2 : 1.0
-                        ac2_Reporters_theory = (ac2_Reporters_theory_unnorm .- norm_factor_ac2R) ./ norm_factor_ac2R
+                        if needs_centering
+                            ac2_Reporters_theory_centered = ac2_Reporters_theory_unnorm .- norm_factor_ac2R
+                        else
+                            ac2_Reporters_theory_centered = ac2_Reporters_theory_unnorm
+                        end
+                        if needs_normalization
+                            ac2_Reporters_theory = ac2_Reporters_theory_centered ./ norm_factor_ac2R
+                        else
+                            ac2_Reporters_theory = ac2_Reporters_theory_centered
+                        end
                         ac2_Reporters_empirical = Vector{Float64}(reporter_result.ac2)
                         ac2_Reporters_se = hasproperty(reporter_result, :ac2_se) && !isnothing(reporter_result.ac2_se) ? Vector{Float64}(reporter_result.ac2_se) : nothing
                         scores_ac2_Reporters = compute_score_metrics(Vector{Float64}(ac2_Reporters_theory), ac2_Reporters_empirical, ac2_Reporters_se)
