@@ -2582,7 +2582,7 @@ Compute gene state residence probabilities for all genes in a rate file and writ
 - Reads all rate parameters from the input file
 - Computes residence probabilities for each gene
 - Writes results to the output file
-""" 
+"""
 function write_residency_G_allgenes(fileout::String, filein::String, G, header)
     rates = read_all_rates_csv(filein, header)
     n = G - 1
@@ -2944,9 +2944,13 @@ split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond
 
 
 """
-    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lag=60, stride=1, probfn=prob_Gaussian)
+    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lags=collect(0:60), probfn=prob_Gaussian, correlation_algorithm=StandardCorrelation(), warmupsteps=1000)
 
-Simulate multiple trials and compute empirical cross-covariance from simulated traces, comparing to theoretical predictions.
+Simulate multiple trials and compute empirical correlation functions from simulated traces, comparing to theoretical predictions.
+
+The empirical correlation functions are computed using the specified `correlation_algorithm` (CorrelationTrait), which determines
+centering, normalization, multi-tau binning, and biased/unbiased divisors. The theory is raw uncentered unnormalized correlation
+functions (E[xy]) from the HMM, which are then transformed to match the empirical CorrelationTrait for comparison.
 
 This function integrates simulation with empirical covariance computation:
 1. Computes theoretical cross-covariances from model parameters
@@ -3079,7 +3083,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
 
     Threads.@threads for i in 1:ntrials
         # Warmup is handled by simulator's warmupsteps parameter (converted from warmup_time)
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=[2,3],warmupsteps=warmupsteps)
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=[2, 3], warmupsteps=warmupsteps)
         # Warmup is already handled by simulator, so use all the trace data
         trace_data = t[1]
         # trace_data columns: [intensity1, reporters1, intensity2, reporters2]
@@ -3096,7 +3100,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
     on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
     reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=1.0)
-    
+
     # Extract results
     empirical = (
         cc=isnothing(intensity_result) ? Float64[] : intensity_result.cc,
@@ -3155,10 +3159,10 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     # Transform theory to match empirical based on CorrelationTrait
     # Theory: cc = E[XY] (raw uncentered correlation from covariance_functions)
     # Empirical: Uses CorrelationTrait directly - no transformations needed
-    
+
     needs_centering = correlation_algorithm.centering != :none
     needs_normalization = correlation_algorithm.normalization != :none
-    
+
     # Compute normalization factors (theoretical means)
     norm_cc = (m1 * m2) != 0 ? (m1 * m2) : 1.0
     norm_ac1 = m1^2 != 0 ? m1^2 : 1.0
@@ -3169,7 +3173,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     norm_ccReporters = isnothing(m1Reporters) || isnothing(m2Reporters) || (m1Reporters * m2Reporters) != 0 ? (m1Reporters * m2Reporters) : 1.0
     norm_ac1Reporters = isnothing(m1Reporters) || m1Reporters^2 != 0 ? m1Reporters^2 : 1.0
     norm_ac2Reporters = isnothing(m2Reporters) || m2Reporters^2 != 0 ? m2Reporters^2 : 1.0
-    
+
     # Step 1: Center (if centering is enabled)
     if needs_centering
         cc_centered = cc .- norm_cc
@@ -3192,7 +3196,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         ac1Reporters_centered = ac1Reporters
         ac2Reporters_centered = ac2Reporters
     end
-    
+
     # Step 2: Normalize (if normalization is enabled)
     if needs_normalization
         cc_normalized = cc_centered ./ norm_cc
@@ -3215,7 +3219,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         ac1Reporters_normalized = ac1Reporters_centered
         ac2Reporters_normalized = ac2Reporters_centered
     end
-    
+
     # Theory autocovariances from `covariance_functions` are on positive lags only;
     # symmetrize to compare with empirical (which has symmetric lags from compute_covariance).
     # Note: cc, ccON, and ccReporters are already symmetrized in covariance_functions (lines 2717-2719),
@@ -3235,11 +3239,11 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     # ============================================================================
     # FULL AUDIT: Validate theory vs empirical alignment
     # ============================================================================
-    
+
     # Check lag alignment: theory uses full_lags (symmetric), empirical uses lags (should also be symmetric)
     n_lags_theory = length(lags)  # full_lags from covariance_functions
     n_lags_empirical = length(empirical.cc)
-    
+
     # Verify that empirical lags match theory lags (they should be identical)
     # Check using on_result since it's always computed
     if hasproperty(on_result, :lags) && !isnothing(on_result.lags)
@@ -3253,7 +3257,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
             """)
         end
     end
-    
+
     if n_lags_theory != n_lags_empirical
         error("""
         LAG LENGTH MISMATCH:
@@ -3262,7 +3266,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         Check that lags passed to compute_correlation_functions match full_lags from correlation_functions.
         """)
     end
-    
+
     # Validate that lags are symmetric (theory should have symmetric lags)
     if length(lags) > 1
         mid_idx = div(length(lags), 2) + 1
@@ -3280,7 +3284,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
             end
         end
     end
-    
+
     # Validate all theory quantities have correct lengths
     @assert length(cc) == n_lags_theory "cc theory length mismatch: $(length(cc)) != $n_lags_theory"
     @assert length(ccON) == n_lags_theory "ccON theory length mismatch: $(length(ccON)) != $n_lags_theory"
@@ -3288,7 +3292,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     @assert length(ac2_theory_full) == n_lags_theory "ac2_theory_full length mismatch: $(length(ac2_theory_full)) != $n_lags_theory"
     @assert length(ac1ON_theory_full) == n_lags_theory "ac1ON_theory_full length mismatch: $(length(ac1ON_theory_full)) != $n_lags_theory"
     @assert length(ac2ON_theory_full) == n_lags_theory "ac2ON_theory_full length mismatch: $(length(ac2ON_theory_full)) != $n_lags_theory"
-    
+
     # Validate all empirical quantities have correct lengths
     @assert length(empirical.cc) == n_lags_empirical "empirical.cc length mismatch"
     @assert length(empirical.ac1) == n_lags_empirical "empirical.ac1 length mismatch"
@@ -3299,14 +3303,14 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     @assert length(empirical.ccReporters) == n_lags_empirical "empirical.ccReporters length mismatch"
     @assert length(empirical.ac1Reporters) == n_lags_empirical "empirical.ac1Reporters length mismatch"
     @assert length(empirical.ac2Reporters) == n_lags_empirical "empirical.ac2Reporters length mismatch"
-    
+
     # Validate reporter theory lengths if provided
     if !isnothing(ccReporters)
         @assert length(ccReporters) == n_lags_theory "ccReporters theory length mismatch: $(length(ccReporters)) != $n_lags_theory"
         @assert length(ac1Reporters_theory_full) == n_lags_theory "ac1Reporters_theory_full length mismatch: $(length(ac1Reporters_theory_full)) != $n_lags_theory"
         @assert length(ac2Reporters_theory_full) == n_lags_theory "ac2Reporters_theory_full length mismatch: $(length(ac2Reporters_theory_full)) != $n_lags_theory"
     end
-    
+
     # Check autocovariance symmetry: ac1, ac2, ac1ON, ac2ON should be symmetric (ac(τ) = ac(-τ))
     # Theory autocovariances after symmetrization
     mid_idx = div(n_lags_theory, 2) + 1
@@ -3319,11 +3323,11 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
             @warn "ac1_theory_full is not symmetric around zero lag"
         end
     end
-    
+
     # Compute norms comparing theory and empirical (both should have same length: symmetric lags)
     linf_norm = [maximum(abs.(cc .- empirical.cc))]
     l2_norm = [sqrt(sum((cc .- empirical.cc) .^ 2))]
-    
+
     # Diagnostic: Print summary statistics for theory vs empirical comparison
     # Check zero-lag values for ON state autocovariance (should match if uncentered)
     # Theory returns uncentered R_ON_ON(0) = E[ON²], empirical returns uncentered R_ON_ON(0) = E[ON²]
@@ -3334,7 +3338,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     Lag range: [$(lags[1]), ..., $(lags[end])] ($(n_lags_theory) lags)
     Number of trials: $(ntrials)
     Trace lengths: $(minimum([size(t, 1) for t in intensity_traces])) - $(maximum([size(t, 1) for t in intensity_traces])) frames
-    
+
     ON state means (theory vs empirical):
       Theory mON1: $(m1ON), mON2: $(m2ON)
       Empirical mON1: $(empirical.mON1), mON2: $(empirical.mON2)
@@ -3344,19 +3348,19 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
       Expected zero-lag for ac1ON (empirical): $(empirical.mON1) (since ON is binary, E[ON²] = E[ON])
       Expected zero-lag for ac2ON (theory): $(m2ON) (since ON is binary, E[ON²] = E[ON] = mON)
       Expected zero-lag for ac2ON (empirical): $(empirical.mON2) (since ON is binary, E[ON²] = E[ON])
-    
+
     Intensity cross-covariance (cc):
       Theory zero-lag: $(cc[mid_idx])
       Empirical zero-lag (mean): $(empirical.cc[mid_idx])
       L∞ norm: $(linf_norm[1])
       L² norm: $(l2_norm[1])
-    
+
     ON state cross-covariance (ccON):
       Theory zero-lag: $(ccON[mid_idx])
       Empirical zero-lag (mean): $(empirical.ccON[mid_idx])
       Theory max: $(maximum(ccON)) at lag $(lags[argmax(ccON)])
       Empirical max: $(maximum(empirical.ccON)) at lag $(lags[argmax(empirical.ccON)])
-    
+
     ON state autocovariance unit 1 (ac1ON):
       Theory zero-lag: $(ac1ON_theory_full[mid_idx])
       Empirical zero-lag: $(empirical.ac1ON[mid_idx])
@@ -3364,7 +3368,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
       Relative difference at zero-lag: $((ac1ON_theory_full[mid_idx] - empirical.ac1ON[mid_idx]) / ac1ON_theory_full[mid_idx] * 100)%
       Theory max: $(maximum(ac1ON_theory_full)) at lag $(lags[argmax(ac1ON_theory_full)])
       Empirical max: $(maximum(empirical.ac1ON)) at lag $(lags[argmax(empirical.ac1ON)])
-    
+
     ON state autocovariance unit 2 (ac2ON):
       Theory zero-lag: $(ac2ON_theory_full[mid_idx])
       Empirical zero-lag (mean): $(empirical.ac2ON[mid_idx])
@@ -3373,7 +3377,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
       Theory max: $(maximum(ac2ON_theory_full)) at lag $(lags[argmax(ac2ON_theory_full)])
       Empirical max: $(maximum(empirical.ac2ON)) at lag $(lags[argmax(empirical.ac2ON)])
     """
-    
+
     return (
         # Intensity correlations (unnormalized)
         cc_theory=cc, cc_mean=empirical.cc,
@@ -3406,7 +3410,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         ac2Reporters_mean=empirical.ac2Reporters, ac2Reporters_theory=ac2Reporters_theory_full,
         ac2Reporters_lower=empirical.ac2Reporters_lower, ac2Reporters_median=empirical.ac2Reporters_median, ac2Reporters_upper=empirical.ac2Reporters_upper, ac2Reporters_se=empirical.ac2Reporters_se,
         # Other statistics
-        linf_norm=linf_norm, l2_norm=l2_norm, 
+        linf_norm=linf_norm, l2_norm=l2_norm,
         lags=lags,  # Symmetric lags (full_lags from covariance_functions) - same for theory and empirical
         mean1=empirical.mON1, mean2=empirical.mON2,
         m1=m1, m2=m2, v1=v1, v2=v2, v1_empirical=empirical.v1_empirical, v2_empirical=empirical.v2_empirical,
@@ -3707,21 +3711,26 @@ write_correlation_functions_empirical(
 function write_correlation_functions_empirical(trace_folder::String, unit1_filename::String, unit2_filename::String, output_file::String; intensity_labels=nothing, traceinfo=(1.0, 1.0, -1), intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000, correlation_algorithm=StandardCorrelation())
     # Load intensity traces if labels provided (following load_data_trace pattern)
     intensity_traces = Vector{Matrix{Float64}}()
-    if !isnothing(intensity_labels)
-        if intensity_labels isa Vector{String}
-            # Joint traces: use read_tracefiles with traceinfo tuple format (like load_data_trace)
-            traces_raw = read_tracefiles(trace_folder, intensity_labels, traceinfo, intensity_col)
-            if length(traces_raw) == 0
-                throw("No traces found for intensity_labels=$intensity_labels in $trace_folder")
+    if !isempty(trace_folder)
+        if !isnothing(intensity_labels)
+            if intensity_labels isa Vector{String}
+                # Joint traces: use read_tracefiles with traceinfo tuple format (like load_data_trace)
+                traces_raw = read_tracefiles(trace_folder, intensity_labels, traceinfo, intensity_col)
+                if length(traces_raw) == 0
+                    throw("No traces found for intensity_labels=$intensity_labels in $trace_folder")
+                end
+                # Apply zero_median with zeromedian=true (following load_data_trace pattern)
+                traces_zeroed, _ = zero_median(traces_raw, true)
+                # Convert to Vector{Matrix{Float64}} to match expected type
+                intensity_traces = Vector{Matrix{Float64}}(map(t -> Matrix{Float64}(Float64.(t)), traces_zeroed))
+            else
+                error("intensity_labels must be a Vector{String} for joint traces (e.g., [\"enhancer\", \"gene\"])")
             end
-            # Apply zero_median with zeromedian=true (following load_data_trace pattern)
-            traces_zeroed, _ = zero_median(traces_raw, true)
-            # Convert to Vector{Matrix{Float64}} to match expected type
-            intensity_traces = Vector{Matrix{Float64}}(map(t -> Matrix{Float64}(Float64.(t)), traces_zeroed))
-        else
-            error("intensity_labels must be a Vector{String} for joint traces (e.g., [\"enhancer\", \"gene\"])")
+        end
     end
-end
+
+    # Check if we have intensity results
+    has_intensity = !isnothing(intensity_labels) && !isempty(intensity_traces)
 
     # Load predicted traces (from uncoupled models) - gives reporter counts and ON states
     predicted_traces = prepare_traces_from_prediction(unit1_filename, unit2_filename; on_threshold=on_threshold)
@@ -3747,9 +3756,6 @@ end
         reporter_result_full = compute_correlation_functions(reporter_traces, lags_symmetric; bootstrap=bootstrap, n_bootstrap=n_bootstrap, correlation_algorithm=correlation_algorithm)
     end
 
-    # Check if we have intensity results
-    has_intensity = !isnothing(intensity_labels) && !isempty(intensity_traces)
-
     # Results already have both positive and negative lags from crosscorrelation_function
     cc_ON_full = on_result_full.cc
     cc_Reporters_full = reporter_result_full.cc
@@ -3761,20 +3767,20 @@ end
     ac2_Reporters_sym = reporter_result_full.ac2
 
     # Build output DataFrame with same column order as write_correlation_functions
-    # write_correlation_functions order: tau, cc_ON, ac1_ON, ac2_ON, mON1, mON2, cc_Reporters, ac1_Reporters, ac2_Reporters, mR1, mR2
+    # write_correlation_functions order: tau, cc_ON, ac1_ON, ac2_ON, m_ON1, m_ON2, cc_Reporters, ac1_Reporters, ac2_Reporters, m_Reporters1, mReporters2
     # Use OrderedDict or construct DataFrame with columns in correct order
     df = DataFrame(
         tau=tau,
         cc_ON=cc_ON_full,
         ac1_ON=ac1_ON_sym,
         ac2_ON=ac2_ON_sym,
-        mON1=fill(on_result_full.mean1, n_lags),
-        mON2=fill(on_result_full.mean2, n_lags),
+        m_ON1=fill(on_result_full.mean1, n_lags),
+        m_ON2=fill(on_result_full.mean2, n_lags),
         cc_Reporters=cc_Reporters_full,
         ac1_Reporters=ac1_Reporters_sym,
         ac2_Reporters=ac2_Reporters_sym,
-        mR1=fill(reporter_result_full.mean1, n_lags),
-        mR2=fill(reporter_result_full.mean2, n_lags)
+        m_Reporters1=fill(reporter_result_full.mean1, n_lags),
+        mReporters2=fill(reporter_result_full.mean2, n_lags)
     )
 
     # Add intensity correlation functions if available (after base columns, same order as write_correlation_functions would if it had intensity)
@@ -3839,6 +3845,16 @@ end
         end
     end
 
+    # Add CorrelationTrait metadata columns (as scalars, repeated for each lag for CSV compatibility)
+    # These specify how the empirical correlation functions were computed
+    df.centering = fill(string(correlation_algorithm.centering), n_lags)
+    df.multitau = fill(string(correlation_algorithm.multitau), n_lags)
+    df.normalization = fill(string(correlation_algorithm.normalization), n_lags)
+    df.biased = fill(correlation_algorithm.biased, n_lags)
+    if correlation_algorithm.multitau == :multitau
+        df.m = fill(correlation_algorithm.m, n_lags)
+    end
+    
     # Write to CSV (DataFrame constructor with kwargs preserves column order)
     CSV.write(output_file, df)
     println("Wrote empirical correlation functions to: $output_file")
@@ -3853,22 +3869,7 @@ end
 #            bootstrap_tracewise (helpers)
 # Creation dates: compute_correlation_functions - refactored 2026-01-XX
 
-"""
-    _validate_lags_for_traces(traces, lags; label="traces")
-
-Validate that all lags are feasible for every trace, for use with `crosscorrelation_function`.
-
-Requirement: `abs(lag) <= min_trace_length - 1`.
-"""
-function _validate_lags_for_traces(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; label::String="traces", frame_interval::Float64=1.0)
-    isempty(traces) && error("No $label provided")
-    minlen = minimum(size(t, 1) for t in traces)
-    maxlag_frames = maximum(round(Int, abs(τ) / frame_interval) for τ in lags)
-    if maxlag_frames > minlen - 1
-        error("Invalid lags for $label: max |lag| in frames=$maxlag_frames but min trace length is $minlen (need abs(lag_frames) <= $(minlen - 1))")
-    end
-    return nothing
-end
+# _validate_lags_for_traces moved to utilities.jl
 
 """
     compute_correlation_functions(traces, lags; mean1=nothing, mean2=nothing, correlation_algorithm=StandardCorrelation(), bootstrap=false, n_bootstrap=1000, frame_interval=1.0)
@@ -3902,535 +3903,25 @@ NamedTuple with:
 - Otherwise, means are computed from the traces
 """
 function compute_correlation_functions(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; mean1=nothing, mean2=nothing, correlation_algorithm=StandardCorrelation(), bootstrap::Bool=false, n_bootstrap::Int=1000, frame_interval::Float64=1.0)
-    # Compute global means if needed (for :global_mean centering or normalization)
-    need_global_means = (correlation_algorithm.centering == :global_mean) || (correlation_algorithm.normalization == :global_mean)
-    if need_global_means && (isnothing(mean1) || isnothing(mean2))
-        sum1_total = 0.0
-        sum2_total = 0.0
-        n_total = 0
-        for i in 1:length(traces)
-            t = traces[i]
-            x_col = Float64.(t[:, 1])
-            y_col = Float64.(t[:, 2])
-            sum1_total += sum(x_col)
-            sum2_total += sum(y_col)
-            n_total += length(x_col)
-        end
-        mean1 = sum1_total / n_total
-        mean2 = sum2_total / n_total
-    elseif !need_global_means
-        # For per-trace centering, global means are not needed - use dummy values
-        mean1 = 0.0
-        mean2 = 0.0
-    end
-    # Compute per-trace correlation functions (internal helper)
-    per_trace = _compute_per_trace_correlation_functions(traces, lags; mean1=mean1, mean2=mean2, correlation_algorithm=correlation_algorithm, frame_interval=frame_interval)
-    
-    # Use means directly (computed above if not provided)
-    mean1_empirical = mean1
-    mean2_empirical = mean2
-    
-    # Apply normalization if specified by the algorithm
-    # For windowed_mean and per_trace_mean normalization, we need to normalize per-trace before averaging
-    if correlation_algorithm.normalization == :windowed_mean
-        if isnothing(per_trace.mean1_windowed) || isnothing(per_trace.mean2_windowed)
-            error("Windowed means not computed. This should not happen if normalization=:windowed_mean.")
-        end
-        n_traces = length(traces)
-        n_lags = length(per_trace.lags)
-        
-        # Normalize each trace's correlation function by its windowed means at each lag
-        R_XY_normalized = similar(per_trace.R_XY)
-        R_XX_normalized = similar(per_trace.R_XX)
-        R_YY_normalized = similar(per_trace.R_YY)
-        
-        for i in 1:n_traces
-            for j in 1:n_lags
-                # Normalize cross-correlation by product of windowed means
-                norm_factor_xy = (per_trace.mean1_windowed[i, j] * per_trace.mean2_windowed[i, j]) > 0 ? 
-                    (per_trace.mean1_windowed[i, j] * per_trace.mean2_windowed[i, j]) : 1.0
-                R_XY_normalized[i, j] = per_trace.R_XY[i, j] / norm_factor_xy
-                
-                # Normalize autocorrelations by square of windowed means
-                norm_factor_xx = per_trace.mean1_windowed[i, j]^2 > 0 ? per_trace.mean1_windowed[i, j]^2 : 1.0
-                norm_factor_yy = per_trace.mean2_windowed[i, j]^2 > 0 ? per_trace.mean2_windowed[i, j]^2 : 1.0
-                R_XX_normalized[i, j] = per_trace.R_XX[i, j] / norm_factor_xx
-                R_YY_normalized[i, j] = per_trace.R_YY[i, j] / norm_factor_yy
-            end
-        end
-        
-        # Average normalized correlation functions
-        C_XY = vec(sum(R_XY_normalized, dims=1)) ./ n_traces
-        C_XX = vec(sum(R_XX_normalized, dims=1)) ./ n_traces
-        C_YY = vec(sum(R_YY_normalized, dims=1)) ./ n_traces
-    elseif correlation_algorithm.normalization == :per_trace_mean
-        if isnothing(per_trace.mean1_per_trace) || isnothing(per_trace.mean2_per_trace)
-            error("Per-trace means not computed. This should not happen if normalization=:per_trace_mean.")
-        end
-        n_traces = length(traces)
-        n_lags = length(per_trace.lags)
-        
-        # Normalize each trace's correlation function by its per-trace means
-        R_XY_normalized = similar(per_trace.R_XY)
-        R_XX_normalized = similar(per_trace.R_XX)
-        R_YY_normalized = similar(per_trace.R_YY)
-        
-        for i in 1:n_traces
-            # Normalize by per-trace means (same for all lags)
-            norm_factor_xy = (per_trace.mean1_per_trace[i] * per_trace.mean2_per_trace[i]) > 0 ? 
-                (per_trace.mean1_per_trace[i] * per_trace.mean2_per_trace[i]) : 1.0
-            norm_factor_xx = per_trace.mean1_per_trace[i]^2 > 0 ? per_trace.mean1_per_trace[i]^2 : 1.0
-            norm_factor_yy = per_trace.mean2_per_trace[i]^2 > 0 ? per_trace.mean2_per_trace[i]^2 : 1.0
-            
-            for j in 1:n_lags
-                R_XY_normalized[i, j] = per_trace.R_XY[i, j] / norm_factor_xy
-                R_XX_normalized[i, j] = per_trace.R_XX[i, j] / norm_factor_xx
-                R_YY_normalized[i, j] = per_trace.R_YY[i, j] / norm_factor_yy
-            end
-        end
-        
-        # Average normalized correlation functions
-        C_XY = vec(sum(R_XY_normalized, dims=1)) ./ n_traces
-        C_XX = vec(sum(R_XX_normalized, dims=1)) ./ n_traces
-        C_YY = vec(sum(R_YY_normalized, dims=1)) ./ n_traces
-    else
-        # Aggregate: average correlation functions across traces (before normalization)
-        n_traces = length(traces)
-        R_XY_mean = vec(sum(per_trace.R_XY, dims=1)) ./ n_traces
-        R_XX_mean = vec(sum(per_trace.R_XX, dims=1)) ./ n_traces
-        R_YY_mean = vec(sum(per_trace.R_YY, dims=1)) ./ n_traces
-        
-        # Correlations are already centered in _compute_per_trace_correlation_functions via compute_correlation
-        # So we just average them - no centering needed here
-        C_XY = R_XY_mean
-        C_XX = R_XX_mean
-        C_YY = R_YY_mean
-        
-        # Apply normalization if specified by the algorithm
-        if correlation_algorithm.normalization == :global_mean
-            # Normalize by empirical global means
-            norm_factor_xy = (mean1_empirical * mean2_empirical) > 0 ? (mean1_empirical * mean2_empirical) : 1.0
-            norm_factor_xx = mean1_empirical^2 > 0 ? mean1_empirical^2 : 1.0
-            norm_factor_yy = mean2_empirical^2 > 0 ? mean2_empirical^2 : 1.0
-            C_XY = C_XY ./ norm_factor_xy
-            C_XX = C_XX ./ norm_factor_xx
-            C_YY = C_YY ./ norm_factor_yy
-        elseif correlation_algorithm.normalization == :variance
-            # Normalize by variance (standard correlation coefficient)
-            var1_empirical = mean(per_trace.var1)
-            var2_empirical = mean(per_trace.var2)
-            norm_factor_xy = sqrt(var1_empirical * var2_empirical) > 0 ? sqrt(var1_empirical * var2_empirical) : 1.0
-            norm_factor_xx = var1_empirical > 0 ? var1_empirical : 1.0
-            norm_factor_yy = var2_empirical > 0 ? var2_empirical : 1.0
-            C_XY = C_XY ./ norm_factor_xy
-            C_XX = C_XX ./ norm_factor_xx
-            C_YY = C_YY ./ norm_factor_yy
-        end
-    end
-
-    v1 = mean(per_trace.var1)
-    v2 = mean(per_trace.var2)
-    
-    result = (cc=C_XY, ac1=C_XX, ac2=C_YY, mean1=mean1_empirical, mean2=mean2_empirical, v1=v1, v2=v2, lags=per_trace.lags)
-    
-    # Bootstrap if requested
-    if bootstrap
-        bootstrap_result = bootstrap_tracewise(per_trace; n_bootstrap=n_bootstrap, mean1=mean1, mean2=mean2, correlation_algorithm=correlation_algorithm)
-        return merge(result, bootstrap_result)
-    end
-    
-    return result
+    # Thin wrapper: dispatch to utilities.jl for all computation
+    return compute_correlation_functions_traces(traces, lags; mean1=mean1, mean2=mean2, correlation_algorithm=correlation_algorithm, bootstrap=bootstrap, n_bootstrap=n_bootstrap, frame_interval=frame_interval)
 end
 
-"""
-    _prepare_centering_means(centering_type, trace_idx, x, y, lags, mean1_global, mean2_global, frame_interval)
-
-Prepare means for centering based on centering type.
-
-# Arguments
-- `centering_type::Symbol`: Type of centering (`:none`, `:global_mean`, `:windowed_mean`, `:per_trace_mean`)
-- `trace_idx::Int`: Index of current trace (for per-trace means)
-- `x, y::Vector{Float64}`: Trace data
-- `lags::Vector{<:Real}`: Lags vector
-- `mean1_global, mean2_global`: Global means (used for `:global_mean`)
-- `frame_interval::Float64`: Sampling interval
-
-# Returns
-- For `:none`: Returns `(meanx=0.0, meany=0.0)`
-- For `:global_mean`: Returns `(meanx=mean1_global, meany=mean2_global)`
-- For `:per_trace_mean`: Returns `(meanx=mean(x), meany=mean(y))`
-- For `:windowed_mean`: Returns `nothing` (handled internally by correlation function)
-"""
-function _prepare_centering_means(centering_type::Symbol, trace_idx::Int, x::Vector{Float64}, y::Vector{Float64}, lags::Vector{<:Real}, mean1_global::Union{Float64, Nothing}, mean2_global::Union{Float64, Nothing}, frame_interval::Float64=1.0)
-    if centering_type == :none
-        return (meanx=0.0, meany=0.0, use_windowed=false)
-    elseif centering_type == :global_mean
-        if isnothing(mean1_global) || isnothing(mean2_global)
-            error("Global means must be provided for :global_mean centering")
-        end
-        return (meanx=mean1_global, meany=mean2_global, use_windowed=false)
-    elseif centering_type == :per_trace_mean
-        meanx_trace = mean(x)
-        meany_trace = mean(y)
-        return (meanx=meanx_trace, meany=meany_trace, use_windowed=false)
-    elseif centering_type == :windowed_mean
-        # Windowed means are handled internally by correlation_function_windowed
-        return (meanx=0.0, meany=0.0, use_windowed=true)
-    else
-        error("Unknown centering type: $centering_type")
-    end
-end
-
-"""
-    _compute_windowed_means(x, y, lags; frame_interval=1.0)
-
-Helper function to compute windowed means for each lag.
-Returns matrices of windowed means: mean_x[lag_idx] and mean_y[lag_idx] for each lag.
-"""
-function _compute_windowed_means(x::Vector{Float64}, y::Vector{Float64}, lags::Vector{<:Real}; frame_interval::Float64=1.0)
-    n = length(x)
-    if length(y) != n
-        error("x and y must have the same length")
-    end
-    n_lags = length(lags)
-    mean_x_windowed = Vector{Float64}(undef, n_lags)
-    mean_y_windowed = Vector{Float64}(undef, n_lags)
-    
-    for (i, τ) in enumerate(lags)
-        τ_frames = round(Int, abs(τ) / frame_interval)
-        n_valid = n - τ_frames
-        
-        if n_valid <= 0
-            mean_x_windowed[i] = 0.0
-            mean_y_windowed[i] = 0.0
-            continue
-        end
-        
-        if τ >= 0
-            # Positive lag: x window is [1, n_valid], y window is [1+τ_frames, n]
-            sum_x = 0.0
-            sum_y = 0.0
-            for t in 1:n_valid
-                sum_x += x[t]
-                sum_y += y[t + τ_frames]
-            end
-            mean_x_windowed[i] = sum_x / n_valid
-            mean_y_windowed[i] = sum_y / n_valid
-        else
-            # Negative lag: x window is [1+τ_frames, n], y window is [1, n_valid]
-            sum_x = 0.0
-            sum_y = 0.0
-            for t in 1:n_valid
-                sum_x += x[t + τ_frames]
-                sum_y += y[t]
-            end
-            mean_x_windowed[i] = sum_x / n_valid
-            mean_y_windowed[i] = sum_y / n_valid
-        end
-    end
-    
-    return (mean_x=mean_x_windowed, mean_y=mean_y_windowed)
-end
-
-"""
-    _compute_per_trace_correlation_functions(traces, lags; mean1, mean2, correlation_algorithm=StandardCorrelation(), frame_interval=1.0)
-
-Internal helper function: Compute per-trace correlation functions.
-
-Returns per-trace correlation matrices for use in aggregation and bootstrap.
-This is an internal function used by `compute_correlation_functions` and `bootstrap_tracewise`.
-
-Means must be provided - this function uses them directly without recomputing.
-"""
-function _compute_per_trace_correlation_functions(traces::Vector{<:AbstractMatrix}, lags::Vector{<:Real}; mean1::Float64, mean2::Float64, correlation_algorithm=StandardCorrelation(), frame_interval::Float64=1.0)
-    _validate_lags_for_traces(traces, lags; label="traces", frame_interval=frame_interval)
-    n_traces = length(traces)
-    n_lags = length(lags)
-    R_XY = Matrix{Float64}(undef, n_traces, n_lags)
-    R_XX = Matrix{Float64}(undef, n_traces, n_lags)
-    R_YY = Matrix{Float64}(undef, n_traces, n_lags)
-    mean1 = Vector{Float64}(undef, n_traces)
-    mean2 = Vector{Float64}(undef, n_traces)
-    var1 = Vector{Float64}(undef, n_traces)
-    var2 = Vector{Float64}(undef, n_traces)
-    
-    # If normalization is windowed_mean or per_trace_mean, we need to compute means for each trace
-    need_windowed_means = correlation_algorithm.normalization == :windowed_mean
-    need_per_trace_means = correlation_algorithm.normalization == :per_trace_mean
-    if need_windowed_means
-        mean1_windowed = Matrix{Float64}(undef, n_traces, n_lags)
-        mean2_windowed = Matrix{Float64}(undef, n_traces, n_lags)
-    else
-        mean1_windowed = nothing
-        mean2_windowed = nothing
-    end
-    if need_per_trace_means
-        mean1_per_trace = Vector{Float64}(undef, n_traces)
-        mean2_per_trace = Vector{Float64}(undef, n_traces)
-    else
-        mean1_per_trace = nothing
-        mean2_per_trace = nothing
-    end
-
-    # Determine centering strategy from CorrelationTrait
-    centering_type = correlation_algorithm.centering
-    
-    # Use provided means (this function is only called when means are provided)
-    mean1_global_empirical_true = mean1
-    mean2_global_empirical_true = mean2    
-    # For centering, use the global means if centering=:global_mean
-    if centering_type == :global_mean
-        mean1_global_empirical = mean1_global_empirical_true
-        mean2_global_empirical = mean2_global_empirical_true
-    else
-        mean1_global_empirical = nothing
-        mean2_global_empirical = nothing
-    end
-
-    # Parallelize correlation computation across traces
-    Threads.@threads for i in 1:n_traces
-        t = traces[i]
-        x = Float64.(t[:, 1])
-        y = Float64.(t[:, 2])
-        mean1[i] = mean(x)
-        mean2[i] = mean(y)
-        var1[i] = mean(x .^ 2) - mean1[i]^2
-        var2[i] = mean(y .^ 2) - mean2[i]^2
-        
-        # Compute windowed means if needed for normalization
-        if need_windowed_means
-            # Compute windowed means for x and y (used for all correlation functions)
-            windowed_means_xy = _compute_windowed_means(x, y, lags; frame_interval=frame_interval)
-            mean1_windowed[i, :] = windowed_means_xy.mean_x
-            mean2_windowed[i, :] = windowed_means_xy.mean_y
-        end
-        
-        # Prepare means for centering using helper function
-        centering_means = _prepare_centering_means(centering_type, i, x, y, lags, mean1_global_empirical, mean2_global_empirical, frame_interval)
-        local_meanx = centering_means.meanx
-        local_meany = centering_means.meany
-        use_windowed_centering = centering_means.use_windowed
-        
-        # Store per-trace means if needed for normalization
-        if need_per_trace_means
-            mean1_per_trace[i] = mean(x)
-            mean2_per_trace[i] = mean(y)
-        end
-        
-        # Compute correlation based on multi-tau trait and centering type
-        # For per-trace centering, center the data FIRST, then compute correlation
-        if centering_type == :per_trace_mean
-            # Center data by per-trace means before computing correlation
-            x_centered = x .- local_meanx
-            y_centered = y .- local_meany
-            # Use centered data with zero means (data already centered)
-            if hastrait(correlation_algorithm, :multitau)
-                R_XY[i, :] = correlation_function(correlation_algorithm, x_centered, y_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-                R_XX[i, :] = correlation_function(correlation_algorithm, x_centered, x_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-                R_YY[i, :] = correlation_function(correlation_algorithm, y_centered, y_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-            else
-                # Standard correlation with already-centered data
-                R_XY[i, :] = correlation_function(correlation_algorithm, x_centered, y_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-                R_XX[i, :] = correlation_function(correlation_algorithm, x_centered, x_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-                R_YY[i, :] = correlation_function(correlation_algorithm, y_centered, y_centered, lags; meanx=0.0, meany=0.0, frame_interval=frame_interval, normalize_correlation=false)
-            end
-        elseif hastrait(correlation_algorithm, :multitau)
-            # Multi-tau correlation function (can be centered or uncentered based on local_meanx/y)
-            R_XY[i, :] = correlation_function(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = correlation_function(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = correlation_function(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-        elseif use_windowed_centering
-            # Windowed correlation function (already handles internal centering)
-            R_XY[i, :] = correlation_function(correlation_algorithm, x, y, lags; frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = correlation_function(correlation_algorithm, x, x, lags; frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = correlation_function(correlation_algorithm, y, y, lags; frame_interval=frame_interval, normalize_correlation=false)
-        else
-            # Standard correlation function (centered or uncentered based on local_meanx/y)
-            R_XY[i, :] = correlation_function(correlation_algorithm, x, y, lags; meanx=local_meanx, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-            R_XX[i, :] = correlation_function(correlation_algorithm, x, x, lags; meanx=local_meanx, meany=local_meanx, frame_interval=frame_interval, normalize_correlation=false)
-            R_YY[i, :] = correlation_function(correlation_algorithm, y, y, lags; meanx=local_meany, meany=local_meany, frame_interval=frame_interval, normalize_correlation=false)
-        end
-    end
-
-    return (R_XY=R_XY, R_XX=R_XX, R_YY=R_YY, mean1=mean1, mean2=mean2, var1=var1, var2=var2, lags=lags, mean1_global_true=mean1_global_empirical_true, mean2_global_true=mean2_global_empirical_true, mean1_windowed=mean1_windowed, mean2_windowed=mean2_windowed, mean1_per_trace=mean1_per_trace, mean2_per_trace=mean2_per_trace)
-end
+# Helper functions moved to utilities.jl:
+# - _validate_lags_for_traces
+# - _prepare_centering_means  
+# - _compute_windowed_means (replaced by compute_windowed_means)
+# - _compute_per_trace_correlation_functions
 
 
-"""
-    bootstrap_tracewise(per_trace; n_bootstrap=1000, mean1=nothing, mean2=nothing, correlation_algorithm=StandardCorrelation())
-
-Generic trace-wise bootstrap for correlation functions.
-
-Bootstraps by resampling traces with replacement, then aggregating correlation functions.
-Uses the same aggregation logic as `compute_correlation_functions`: averages per-trace correlations
-and applies normalization if specified.
-"""
-function bootstrap_tracewise(per_trace; n_bootstrap::Int=1000, mean1=nothing, mean2=nothing, correlation_algorithm=StandardCorrelation())
-    n_traces, n_lags = size(per_trace.R_XY)
-
-    cc_bs = Matrix{Float64}(undef, n_bootstrap, n_lags)
-    ac1_bs = Matrix{Float64}(undef, n_bootstrap, n_lags)
-    ac2_bs = Matrix{Float64}(undef, n_bootstrap, n_lags)
-    mean1_bs = Vector{Float64}(undef, n_bootstrap)
-    mean2_bs = Vector{Float64}(undef, n_bootstrap)
-
-    # Determine centering and normalization strategy from CorrelationTrait
-    centering_type = correlation_algorithm.centering
-    normalization_type = correlation_algorithm.normalization
-
-    # bootstrap by resampling trace indices (parallelize across bootstrap iterations)
-    Threads.@threads for b in 1:n_bootstrap
-        idxs = StatsBase.sample(1:n_traces, n_traces, replace=true)
-        s_R_XY = zeros(n_lags)
-        s_R_XX = zeros(n_lags)
-        s_R_YY = zeros(n_lags)
-        m1_b_raw = 0.0
-        m2_b_raw = 0.0
-        var1_b_raw = 0.0
-        var2_b_raw = 0.0
-        @inbounds for idx in idxs
-            s_R_XY .+= view(per_trace.R_XY, idx, :)
-            s_R_XX .+= view(per_trace.R_XX, idx, :)
-            s_R_YY .+= view(per_trace.R_YY, idx, :)
-            m1_b_raw += per_trace.mean1[idx]
-            m2_b_raw += per_trace.mean2[idx]
-            var1_b_raw += per_trace.var1[idx]
-            var2_b_raw += per_trace.var2[idx]
-        end
-        # Apply normalization for this bootstrap sample
-        if normalization_type == :windowed_mean
-            # For windowed_mean normalization, normalize each trace by its windowed means before averaging
-            if isnothing(per_trace.mean1_windowed) || isnothing(per_trace.mean2_windowed)
-                error("Windowed means not computed. This should not happen if normalization=:windowed_mean.")
-            end
-            s_R_XY_normalized = zeros(n_lags)
-            s_R_XX_normalized = zeros(n_lags)
-            s_R_YY_normalized = zeros(n_lags)
-            @inbounds for idx in idxs
-                for j in 1:n_lags
-                    # Normalize cross-correlation by product of windowed means
-                    norm_factor_xy = (per_trace.mean1_windowed[idx, j] * per_trace.mean2_windowed[idx, j]) > 0 ? 
-                        (per_trace.mean1_windowed[idx, j] * per_trace.mean2_windowed[idx, j]) : 1.0
-                    s_R_XY_normalized[j] += per_trace.R_XY[idx, j] / norm_factor_xy
-                    
-                    # Normalize autocorrelations by square of windowed means
-                    norm_factor_xx = per_trace.mean1_windowed[idx, j]^2 > 0 ? per_trace.mean1_windowed[idx, j]^2 : 1.0
-                    norm_factor_yy = per_trace.mean2_windowed[idx, j]^2 > 0 ? per_trace.mean2_windowed[idx, j]^2 : 1.0
-                    s_R_XX_normalized[j] += per_trace.R_XX[idx, j] / norm_factor_xx
-                    s_R_YY_normalized[j] += per_trace.R_YY[idx, j] / norm_factor_yy
-        end
-    end
-            # Average normalized correlation functions
-            current_cc = s_R_XY_normalized ./ n_traces
-            current_ac1 = s_R_XX_normalized ./ n_traces
-            current_ac2 = s_R_YY_normalized ./ n_traces
-            mean1_b = m1_b_raw / n_traces
-            mean2_b = m2_b_raw / n_traces
-        elseif normalization_type == :per_trace_mean
-            # For per_trace_mean normalization, normalize each trace by its per-trace means before averaging
-            if isnothing(per_trace.mean1_per_trace) || isnothing(per_trace.mean2_per_trace)
-                error("Per-trace means not computed. This should not happen if normalization=:per_trace_mean.")
-            end
-            s_R_XY_normalized = zeros(n_lags)
-            s_R_XX_normalized = zeros(n_lags)
-            s_R_YY_normalized = zeros(n_lags)
-            @inbounds for idx in idxs
-                # Normalize by per-trace means (same for all lags)
-                norm_factor_xy = (per_trace.mean1_per_trace[idx] * per_trace.mean2_per_trace[idx]) > 0 ? 
-                    (per_trace.mean1_per_trace[idx] * per_trace.mean2_per_trace[idx]) : 1.0
-                norm_factor_xx = per_trace.mean1_per_trace[idx]^2 > 0 ? per_trace.mean1_per_trace[idx]^2 : 1.0
-                norm_factor_yy = per_trace.mean2_per_trace[idx]^2 > 0 ? per_trace.mean2_per_trace[idx]^2 : 1.0
-                
-                for j in 1:n_lags
-                    s_R_XY_normalized[j] += per_trace.R_XY[idx, j] / norm_factor_xy
-                    s_R_XX_normalized[j] += per_trace.R_XX[idx, j] / norm_factor_xx
-                    s_R_YY_normalized[j] += per_trace.R_YY[idx, j] / norm_factor_yy
-                end
-            end
-            # Average normalized correlation functions
-            current_cc = s_R_XY_normalized ./ n_traces
-            current_ac1 = s_R_XX_normalized ./ n_traces
-            current_ac2 = s_R_YY_normalized ./ n_traces
-            mean1_b = m1_b_raw / n_traces
-            mean2_b = m2_b_raw / n_traces
-        else
-            # Average correlation functions and means for this bootstrap sample
-            # NOTE: per_trace.R_XY, R_XX, R_YY are already centered (if centering was requested)
-            # in _compute_per_trace_correlation_functions via compute_correlation, so we should NOT center again here
-            R_XY_mean_b = s_R_XY ./ n_traces
-            R_XX_mean_b = s_R_XX ./ n_traces
-            R_YY_mean_b = s_R_YY ./ n_traces
-            mean1_b = m1_b_raw / n_traces
-            mean2_b = m2_b_raw / n_traces
-            var1_b = var1_b_raw / n_traces
-            var2_b = var2_b_raw / n_traces
-            
-            # Correlations are already centered in _compute_per_trace_correlation_functions, so no centering needed here
-            current_cc = R_XY_mean_b
-            current_ac1 = R_XX_mean_b
-            current_ac2 = R_YY_mean_b
-            
-            # Apply normalization for this bootstrap sample
-            if normalization_type == :global_mean
-                norm_factor_xy = (mean1_b * mean2_b) > 0 ? (mean1_b * mean2_b) : 1.0
-                norm_factor_xx = mean1_b^2 > 0 ? mean1_b^2 : 1.0
-                norm_factor_yy = mean2_b^2 > 0 ? mean2_b^2 : 1.0
-                current_cc = current_cc ./ norm_factor_xy
-                current_ac1 = current_ac1 ./ norm_factor_xx
-                current_ac2 = current_ac2 ./ norm_factor_yy
-            elseif normalization_type == :variance
-                norm_factor_xy = sqrt(var1_b * var2_b) > 0 ? sqrt(var1_b * var2_b) : 1.0
-                norm_factor_xx = var1_b > 0 ? var1_b : 1.0
-                norm_factor_yy = var2_b > 0 ? var2_b : 1.0
-                current_cc = current_cc ./ norm_factor_xy
-                current_ac1 = current_ac1 ./ norm_factor_xx
-                current_ac2 = current_ac2 ./ norm_factor_yy
-            end
-        end
-        
-        cc_bs[b, :] = current_cc
-        ac1_bs[b, :] = current_ac1
-        ac2_bs[b, :] = current_ac2
-        mean1_bs[b] = mean1_b
-        mean2_bs[b] = mean2_b
-    end
-    
-    # summarize bootstrap samples column-wise (now normalized)
-    # This should show higher variance (wider confidence intervals) at larger lags
-    # due to fewer valid pairs per trace at larger lags
-    function summarize_matrix(bs::Matrix{Float64})
-        lower = Vector{Float64}(undef, n_lags)
-        median_v = Vector{Float64}(undef, n_lags)
-        upper = Vector{Float64}(undef, n_lags)
-        se = Vector{Float64}(undef, n_lags)
-        for j in 1:n_lags
-            col = view(bs, :, j)
-            lower[j] = quantile(col, 0.025)
-            median_v[j] = median(col)
-            upper[j] = quantile(col, 0.975)
-            se[j] = std(col)
-        end
-        return (lower=lower, median=median_v, upper=upper, se=se)
-    end
-
-    cc_s = summarize_matrix(cc_bs)
-    ac1_s = summarize_matrix(ac1_bs)
-    ac2_s = summarize_matrix(ac2_bs)
-    
-    return (
-        cc_lower=cc_s.lower, cc_median=cc_s.median, cc_upper=cc_s.upper, cc_se=cc_s.se,
-        ac1_lower=ac1_s.lower, ac1_median=ac1_s.median, ac1_upper=ac1_s.upper, ac1_se=ac1_s.se,
-        ac2_lower=ac2_s.lower, ac2_median=ac2_s.median, ac2_upper=ac2_s.upper, ac2_se=ac2_s.se,
-        mean1_lower=quantile(mean1_bs, 0.025), mean1_median=median(mean1_bs), mean1_upper=quantile(mean1_bs, 0.975), mean1_se=std(mean1_bs),
-        mean2_lower=quantile(mean2_bs, 0.025), mean2_median=median(mean2_bs), mean2_upper=quantile(mean2_bs, 0.975), mean2_se=std(mean2_bs)
-    )
-end
+# bootstrap_tracewise removed - use bootstrap_correlation_functions from utilities.jl instead
+# This function has been replaced by bootstrap_correlation_function and bootstrap_correlation_functions in utilities.jl
 
 # ############
 # function compute_conditional_prob(traces::Vector{Matrix{Float64}}, lags::Vector{<:Real}; frame_interval=1.0)
 #     n_traces = length(traces)
 #     n_lags = length(lags)
-    
+
 #     # Numerator: Sum of X(t)Y(t+tau) across all traces
 #     # Denominator: Sum of X(t) across all traces (weighted by available window T-tau)
 #     numerator = zeros(n_lags)
@@ -4440,10 +3931,10 @@ end
 #         x = t_mat[:, 1]
 #         y = t_mat[:, 2]
 #         T = length(x)
-        
+
 #         for (li, lag) in enumerate(lags)
 #             lag_frames = round(Int, lag / frame_interval)
-            
+
 #             # For a specific lag, find valid indices
 #             if lag_frames >= 0
 #                 idx_x = 1:(T - lag_frames)
@@ -4452,7 +3943,7 @@ end
 #                 idx_x = (1 - lag_frames):T
 #                 idx_y = 1:(T + lag_frames)
 #             end
-            
+
 #             # Increment the conditional counts
 #             # Numerator: total times both were ON
 #             numerator[li] += sum(x[idx_x] .* y[idx_y])
@@ -4754,65 +4245,65 @@ function load_predicted_traces_csv(unit1_filename, unit2_filename; reporters_col
     # unit2_filename: file for gene (unit 2)
     df1 = CSV.read(unit1_filename, DataFrame)
     df2 = CSV.read(unit2_filename, DataFrame)
-    
+
     # Auto-detect reporter columns if not specified
     if isnothing(reporters_col)
         # Look for columns matching pattern "Reporters_1", "Reporters_2", etc.
         reporters_cols1 = filter(n -> startswith(string(n), "Reporters_"), names(df1))
         reporters_cols2 = filter(n -> startswith(string(n), "Reporters_"), names(df2))
-        
+
         if isempty(reporters_cols1) || isempty(reporters_cols2)
             error("Could not find 'Reporters_n' columns in files. Found columns: unit1=$(names(df1)), unit2=$(names(df2))")
         end
-        
+
         # Sort to ensure matching order (Reporters_1, Reporters_2, ...)
         reporters_cols1 = sort(reporters_cols1)
         reporters_cols2 = sort(reporters_cols2)
-        
+
         if length(reporters_cols1) != length(reporters_cols2)
             error("Different number of reporter columns: unit1 has $(length(reporters_cols1)), unit2 has $(length(reporters_cols2))")
         end
-        
+
         # Extract all traces
         traces = Matrix{Float64}[]
         for i in 1:length(reporters_cols1)
             unit1_counts = df1[:, reporters_cols1[i]]
             unit2_counts = df2[:, reporters_cols2[i]]
-            
+
             # Handle missing values: replace with 0 (OFF state)
             unit1_counts = coalesce.(unit1_counts, 0.0)
             unit2_counts = coalesce.(unit2_counts, 0.0)
-            
+
             # Convert to binary ON/OFF: > 0 = ON (1), <= 0 = OFF (0)
             # Match experimentalist convention: reporter > 0
             unit1_onoff = Float64.(unit1_counts .> 0)
             unit2_onoff = Float64.(unit2_counts .> 0)
-            
+
             # Ensure same length
             if length(unit1_onoff) != length(unit2_onoff)
                 error("Trace $i has different lengths: unit1=$(length(unit1_onoff)), unit2=$(length(unit2_onoff))")
             end
-            
+
             trace_matrix = hcat(unit1_onoff, unit2_onoff)
             push!(traces, trace_matrix)
         end
-        
+
         return traces
     end
-    
+
     # Original behavior: single reporter column specified
     unit1_counts = df1[:, reporters_col]
     unit2_counts = df2[:, reporters_col]
-    
+
     # Handle missing values: replace with 0 (OFF state)
     unit1_counts = coalesce.(unit1_counts, 0.0)
     unit2_counts = coalesce.(unit2_counts, 0.0)
-    
+
     # Convert to binary ON/OFF: > 0 = ON (1), <= 0 = OFF (0)
     # Match experimentalist convention: reporter > 0
     unit1_onoff = Float64.(unit1_counts .> 0)
     unit2_onoff = Float64.(unit2_counts .> 0)
-    
+
     # Group by trace if trace_id_col is provided
     if !isnothing(trace_id_col)
         # Check if trace_id_col exists in both dataframes
@@ -4821,12 +4312,12 @@ function load_predicted_traces_csv(unit1_filename, unit2_filename; reporters_col
             trace_ids2 = df2[:, trace_id_col]
             unique_traces1 = unique(trace_ids1)
             unique_traces2 = unique(trace_ids2)
-            
+
             # Ensure both files have the same trace IDs
             if unique_traces1 != unique_traces2
                 error("Trace IDs in unit1 and unit2 files do not match")
             end
-            
+
             traces = Matrix{Float64}[]
             for trace_id in unique_traces1
                 idx1 = trace_ids1 .== trace_id
@@ -4838,7 +4329,7 @@ function load_predicted_traces_csv(unit1_filename, unit2_filename; reporters_col
                 trace_matrix = hcat(unit1_onoff[idx1], unit2_onoff[idx2])
                 push!(traces, trace_matrix)
             end
-            
+
             return traces
         else
             error("trace_id_col '$trace_id_col' not found in one or both dataframes")
@@ -4870,52 +4361,52 @@ Load raw reporter counts from CSV files (without converting to binary ON/OFF).
 function load_raw_reporters_csv(unit1_filename, unit2_filename; reporters_col=nothing, trace_id_col=nothing)
     df1 = CSV.read(unit1_filename, DataFrame)
     df2 = CSV.read(unit2_filename, DataFrame)
-    
+
     # Auto-detect reporter columns if not specified
     if isnothing(reporters_col)
         reporters_cols1 = filter(n -> startswith(string(n), "Reporters_"), names(df1))
         reporters_cols2 = filter(n -> startswith(string(n), "Reporters_"), names(df2))
-        
+
         if isempty(reporters_cols1) || isempty(reporters_cols2)
             error("Could not find 'Reporters_' columns in files. Found columns: unit1=$(names(df1)), unit2=$(names(df2))")
         end
-        
+
         reporters_cols1 = sort(reporters_cols1)
         reporters_cols2 = sort(reporters_cols2)
-        
+
         if length(reporters_cols1) != length(reporters_cols2)
             error("Different number of reporter columns: unit1 has $(length(reporters_cols1)), unit2 has $(length(reporters_cols2))")
         end
-        
+
         traces = Matrix{Float64}[]
         for i in 1:length(reporters_cols1)
             unit1_counts = df1[:, reporters_cols1[i]]
             unit2_counts = df2[:, reporters_cols2[i]]
-            
+
             # Handle missing values: replace with 0
             unit1_counts = coalesce.(unit1_counts, 0.0)
             unit2_counts = coalesce.(unit2_counts, 0.0)
-            
+
             # Keep as raw counts (don't convert to binary)
             if length(unit1_counts) != length(unit2_counts)
                 error("Trace $i has different lengths: unit1=$(length(unit1_counts)), unit2=$(length(unit2_counts))")
             end
-            
+
             trace_matrix = hcat(unit1_counts, unit2_counts)
             push!(traces, trace_matrix)
         end
-        
+
         return traces
     end
-    
+
     # Single reporter column specified
     unit1_counts = df1[:, reporters_col]
     unit2_counts = df2[:, reporters_col]
-    
+
     # Handle missing values
     unit1_counts = coalesce.(unit1_counts, 0.0)
     unit2_counts = coalesce.(unit2_counts, 0.0)
-    
+
     # Group by trace if trace_id_col is provided
     if !isnothing(trace_id_col)
         if trace_id_col in names(df1) && trace_id_col in names(df2)
@@ -4923,11 +4414,11 @@ function load_raw_reporters_csv(unit1_filename, unit2_filename; reporters_col=no
             trace_ids2 = df2[:, trace_id_col]
             unique_traces1 = unique(trace_ids1)
             unique_traces2 = unique(trace_ids2)
-            
+
             if unique_traces1 != unique_traces2
                 error("Trace IDs in unit1 and unit2 files do not match")
             end
-            
+
             traces = Matrix{Float64}[]
             for trace_id in unique_traces1
                 idx1 = trace_ids1 .== trace_id
@@ -4938,7 +4429,7 @@ function load_raw_reporters_csv(unit1_filename, unit2_filename; reporters_col=no
                 trace_matrix = hcat(unit1_counts[idx1], unit2_counts[idx2])
                 push!(traces, trace_matrix)
             end
-            
+
             return traces
         else
             error("trace_id_col '$trace_id_col' not found in one or both dataframes")
@@ -5048,14 +4539,14 @@ results["31"].cc_theory
 """
 function score_models_from_traces(empirical_file::String, crosscov_folder::String;
     crosscov_pattern="crosscorrelation_tracejoint-HBEC-nstate_enhancer-gene")
-    
+
     # Find all crosscorrelation files (these contain the coupling model identifier)
     crosscov_files = filter(f -> startswith(f, crosscov_pattern) && endswith(f, ".csv"), readdir(crosscov_folder))
-    
+
     if isempty(crosscov_files)
         error("No crosscorrelation files matching pattern '$crosscov_pattern*.csv' found in folder '$crosscov_folder'")
     end
-    
+
     # Read empirical results from CSV file (precomputed by write_correlation_functions_empirical)
     df_empirical = CSV.read(empirical_file, DataFrame)
     if !("tau" in names(df_empirical))
@@ -5065,11 +4556,11 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
     
     # Read CorrelationTrait metadata from empirical file (if present)
     # Defaults to StandardCorrelation() if not found (backward compatibility)
-    if hasproperty(df_empirical, :centering) && hasproperty(df_empirical, :multitau) && hasproperty(df_empirical, :normalization)
+    if hasproperty(df_empirical, :centering) && hasproperty(df_empirical, :multitau) && hasproperty(df_empirical, :normalization) && hasproperty(df_empirical, :biased)
         empirical_centering = Symbol(df_empirical.centering[1])
         empirical_multitau = Symbol(df_empirical.multitau[1])
         empirical_normalization = Symbol(df_empirical.normalization[1])
-        empirical_biased = hasproperty(df_empirical, :biased) ? df_empirical.biased[1] : false  # Default to false if missing
+        empirical_biased = df_empirical.biased[1]
         empirical_m = hasproperty(df_empirical, :m) ? df_empirical.m[1] : 16
         empirical_correlation_algorithm = CorrelationTrait(
             centering=empirical_centering,
@@ -5083,7 +4574,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         @warn "Empirical file missing CorrelationTrait metadata. Using StandardCorrelation() as default. Consider regenerating empirical file with updated code."
         empirical_correlation_algorithm = StandardCorrelation()
     end
-    
+
     # Extract empirical ON state data (will be filtered per file to match theory range)
     data_result_full = (
         cc_unnormalized=df_empirical.cc_ON,
@@ -5127,9 +4618,9 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         ac2_upper=hasproperty(df_empirical, :ac2_Reporters_upper) ? df_empirical.ac2_Reporters_upper : nothing,
         ac2_se=hasproperty(df_empirical, :ac2_Reporters_se) ? df_empirical.ac2_Reporters_se : nothing
     )
-    
-    results = Dict{String, NamedTuple}()
-    
+
+    results = Dict{String,NamedTuple}()
+
     for crosscov_file in crosscov_files
         # Extract coupling model from crosscovariance filename
         gene_pos = findfirst("gene", crosscov_file)
@@ -5137,26 +4628,26 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             @warn "Could not find 'gene' in filename '$crosscov_file', skipping"
             continue
         end
-        
+
         coupling_start = gene_pos.stop + 1
         if coupling_start + 1 > length(crosscov_file)
             @warn "Filename '$crosscov_file' too short to extract coupling model, skipping"
             continue
         end
-        
+
         coupling_model_str = crosscov_file[coupling_start:coupling_start+1]
         crosscov_filepath = joinpath(crosscov_folder, crosscov_file)
-        
+
         # 2. Read crosscovariance from file
         try
             df = CSV.read(crosscov_filepath, DataFrame)
             df_names_str = string.(names(df))
-            
+
             if !("tau" in df_names_str)
                 @warn "File '$crosscov_file' missing required column 'tau', skipping"
                 continue
             end
-            
+
             tau_data = Vector{Float64}(df.tau)
             
             # Use shortest overlapping lag range (intersection of empirical and theory ranges)
@@ -5238,7 +4729,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             mR2_theory = nothing
             ac1_Reporters_theory_all = nothing
             ac2_Reporters_theory_all = nothing
-            
+
             # Check for ON state columns
             has_cc_ON_unnorm = "cc_ON_unnormalized" in df_names_str
             has_m_ON1 = "m_ON1" in df_names_str
@@ -5254,12 +4745,12 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             has_cc_Reporters = "cc_Reporters" in df_names_str
             has_ac1_Reporters = "ac1_Reporters" in df_names_str
             has_ac2_Reporters = "ac2_Reporters" in df_names_str
-            
+
             if !has_cc_ON && !has_cc_ON_unnorm
                 @warn "File '$crosscov_file' missing required columns for ON state ('cc_ON' or 'cc_ON_unnormalized'), skipping"
                 continue
             end
-            
+
             # Read ON state theoretical predictions (unnormalized)
             # Theory files contain raw uncentered unnormalized correlation functions (E[xy])
             if has_cc_ON_unnorm
@@ -5275,7 +4766,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 @warn "File '$crosscov_file' missing required ON state columns ('cc_ON' or 'cc_ON_unnormalized'), skipping"
                 continue
             end
-            
+
             # Read ON state autocovariances if available
             if has_ac1_ON
                 ac1_ON_theory_all = df.ac1_ON
@@ -5283,7 +4774,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if has_ac2_ON
                 ac2_ON_theory_all = df.ac2_ON
             end
-            
+
             # Read Reporter theoretical predictions (unnormalized)
             # Theory files contain raw uncentered unnormalized correlation functions (E[xy])
             if has_cc_Reporters_unnorm
@@ -5296,7 +4787,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 mR1_theory = has_m_Reporters1 ? df.m_Reporters1[1] : nothing
                 mR2_theory = has_mReporters2 ? df.mReporters2[1] : nothing
             end
-            
+
             # Read Reporter autocovariances if available
             if has_ac1_Reporters
                 ac1_Reporters_theory_all = df.ac1_Reporters
@@ -5304,7 +4795,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if has_ac2_Reporters
                 ac2_Reporters_theory_all = df.ac2_Reporters
             end
-            
+
             # Interpolate theoretical values to match empirical lags
             function interpolate_theory(theory_all, tau_data, lags)
                 theory_interp = Float64[]
@@ -5331,14 +4822,14 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 end
                 return length(theory_interp) == length(lags) ? Vector{Float64}(theory_interp) : nothing
             end
-            
+
             # Interpolate uncentered theory to match the filtered lags (same lags used for empirical)
             cc_ON_theory_unnorm = interpolate_theory(cc_ON_theory_unnorm_all, tau_data, lags)
             if isnothing(cc_ON_theory_unnorm)
                 @warn "Could not interpolate ON state theory to match lags, skipping"
                 continue
             end
-            
+
             # Transform theory to match empirical CorrelationTrait
             # Theory is raw uncentered unnormalized: E[XY]
             # Apply the same transformations that were applied to empirical data
@@ -5370,7 +4861,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
 
             # Empirical is already transformed according to CorrelationTrait
             cc_ON_empirical = Vector{Float64}(data_result.cc_unnormalized)
-            
+
             # Verify all lengths match (they should by design)
             if length(cc_ON_theory) != length(lags)
                 error("ON state theory length mismatch: theory=$(length(cc_ON_theory)), lags=$(length(lags))")
@@ -5378,12 +4869,12 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             if length(cc_ON_empirical) != length(lags)
                 error("ON state empirical length mismatch: empirical=$(length(cc_ON_empirical)), lags=$(length(lags))")
             end
-            
+
             # Compute ON state scores (comparing normalized values)
             # Get standard error if available (convert to Vector{Float64} if not nothing)
             cc_ON_se = hasproperty(data_result, :cc_unnormalized_se) && !isnothing(data_result.cc_unnormalized_se) ? Vector{Float64}(data_result.cc_unnormalized_se) : nothing
             scores_ON = compute_score_metrics(Vector{Float64}(cc_ON_theory), Vector{Float64}(cc_ON_empirical), cc_ON_se)
-            
+
             # Compute ON state autocovariance scores if available
             scores_ac1_ON = nothing
             scores_ac2_ON = nothing
@@ -5439,7 +4930,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                     end
                 end
             end
-            
+
             # Reporter scores (if available) - use same lags
             scores_Reporters = nothing
             cc_Reporters_theory = nothing
@@ -5458,14 +4949,14 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                             cc_Reporters_theory_centered = cc_Reporters_theory_unnorm
                         end
                         if needs_normalization
-                            cc_Reporters_theory = cc_Reporters_theory_centered ./ norm_factor_Reporters
-                        else
-                            cc_Reporters_theory = cc_Reporters_theory_centered
-                        end
-                        
+                        cc_Reporters_theory = cc_Reporters_theory_centered ./ norm_factor_Reporters
+                    else
+                        cc_Reporters_theory = cc_Reporters_theory_centered
+                    end
+
                         # Empirical is already centered and normalized
                         cc_Reporters_empirical = Vector{Float64}(reporter_result.cc)
-                        
+
                         # Verify all lengths match (they should by design)
                         if length(cc_Reporters_empirical) != length(lags)
                             @warn "Reporter empirical length mismatch: empirical=$(length(cc_Reporters_empirical)), lags=$(length(lags)). Skipping Reporter scores."
@@ -5480,7 +4971,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                     end
                 end
             end
-            
+
             # Compute Reporter autocovariance scores if available
             scores_ac1_Reporters = nothing
             scores_ac2_Reporters = nothing
@@ -5536,7 +5027,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                     end
                 end
             end
-            
+
             # Store results (all unnormalized)
             result_dict = Dict(
                 :coupling_model => coupling_model_str,
@@ -5550,7 +5041,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 :mON2_theory => mON2_theory,
                 :lags => lags
             )
-            
+
             # Add weighted scores and chi-squared if available
             if hasproperty(scores_ON, :weighted_l2_norm)
                 result_dict[:cc_ON_weighted_l2_norm] = scores_ON.weighted_l2_norm
@@ -5558,7 +5049,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 result_dict[:cc_ON_chi_squared] = scores_ON.chi_squared
                 result_dict[:cc_ON_reduced_chi_squared] = scores_ON.reduced_chi_squared
             end
-            
+
             # Add ON state autocovariance results if available
             if !isnothing(scores_ac1_ON)
                 result_dict[:ac1_ON_empirical] = ac1_ON_empirical
@@ -5584,7 +5075,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                     result_dict[:ac2_ON_reduced_chi_squared] = scores_ac2_ON.reduced_chi_squared
                 end
             end
-            
+
             # Add Reporter results if available (all unnormalized)
             if !isnothing(scores_Reporters) && !isnothing(cc_Reporters_theory) && !isnothing(cc_Reporters_empirical)
                 result_dict[:cc_Reporters_empirical] = cc_Reporters_empirical
@@ -5602,7 +5093,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 result_dict[:mR1_theory] = mR1_theory
                 result_dict[:mR2_theory] = mR2_theory
             end
-            
+
             # Add Reporter autocovariance results if available
             if !isnothing(scores_ac1_Reporters)
                 result_dict[:ac1_Reporters_empirical] = ac1_Reporters_empirical
@@ -5628,15 +5119,15 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                     result_dict[:ac2_Reporters_reduced_chi_squared] = scores_ac2_Reporters.reduced_chi_squared
                 end
             end
-            
+
             results[coupling_model_str] = NamedTuple(result_dict)
-            
+
         catch e
             @warn "Error reading crosscovariance file '$crosscov_file': $e, skipping"
             continue
         end
     end
-    
+
     return results
 end
 
@@ -5659,34 +5150,34 @@ Compute scoring metrics comparing theoretical and empirical cross-covariances.
   - `chi_squared`: Chi-squared statistic (if SE provided)
   - `reduced_chi_squared`: Reduced chi-squared (chi²/dof, if SE provided)
 """
-function compute_score_metrics(theory::Vector{Float64}, empirical::Vector{Float64}, se::Union{Vector{Float64}, Nothing}=nothing)
+function compute_score_metrics(theory::Vector{Float64}, empirical::Vector{Float64}, se::Union{Vector{Float64},Nothing}=nothing)
     diff = theory .- empirical
-    
+
     # Standard L² and L∞ norms (unweighted)
     l2_norm = sqrt(sum(diff .^ 2) / length(diff))
     linf_norm = maximum(abs.(diff))
-    
+
     result = (l2_norm=l2_norm, linf_norm=linf_norm)
-    
+
     # If uncertainty (standard error) is provided, compute weighted scores
     if !isnothing(se) && length(se) == length(diff)
         # Avoid division by zero: use a minimum SE threshold
         se_safe = max.(se, 1e-10)
-        
+
         # Weighted L² norm: sqrt(sum((diff ./ se_safe) .^ 2) / length(diff))
         # This is like the square root of the mean chi-squared per data point
         weighted_l2_norm = sqrt(sum((diff ./ se_safe) .^ 2) / length(diff))
-        
+
         # Weighted L∞ norm: max(|theory - empirical| / se)
         # This is the maximum z-score
         weighted_linf_norm = maximum(abs.(diff ./ se_safe))
-        
+
         # Chi-squared statistic: sum((diff ./ se_safe) .^ 2)
         chi_squared = sum((diff ./ se_safe) .^ 2)
-        
+
         # Reduced chi-squared (chi-squared per degree of freedom)
         reduced_chi_squared = chi_squared / length(diff)
-        
+
         return merge(result, (
             weighted_l2_norm=weighted_l2_norm,
             weighted_linf_norm=weighted_linf_norm,
@@ -5694,7 +5185,7 @@ function compute_score_metrics(theory::Vector{Float64}, empirical::Vector{Float6
             reduced_chi_squared=reduced_chi_squared
         ))
     end
-    
+
     return result
 end
 
@@ -5703,14 +5194,14 @@ end
 
 Print a summary table of model scores sorted by L² norm (best fit first).
 """
-function summarize_model_scores(results::Dict{String, NamedTuple}; sort_by::Symbol=:cc_ON_l2_norm, use_reporters::Bool=false, csv_file::Union{String, Nothing}=nothing)
+function summarize_model_scores(results::Dict{String,NamedTuple}; sort_by::Symbol=:cc_ON_l2_norm, use_reporters::Bool=false, csv_file::Union{String,Nothing}=nothing)
     # Check what types of scores are available
     first_result = first(values(results))
     has_ON = hasproperty(first_result, :cc_ON_l2_norm)
     has_Reporters = hasproperty(first_result, :cc_Reporters_l2_norm)
     has_ON_weighted = hasproperty(first_result, :cc_ON_weighted_l2_norm)
     has_Reporters_weighted = hasproperty(first_result, :cc_Reporters_weighted_l2_norm)
-    
+
     # Determine sort key
     sort_key = if sort_by == :cc_ON_l2_norm && has_ON
         k -> get(results[k], :cc_ON_l2_norm, Inf)
@@ -5727,49 +5218,49 @@ function summarize_model_scores(results::Dict{String, NamedTuple}; sort_by::Symb
     else
         k -> Inf
     end
-    
+
     println("\nModel Scoring Summary (sorted by $sort_by, best fit first):")
-    println("=" ^ 100)
-    
+    println("="^100)
+
     # Build header
     header_cols = ["Model"]
     if has_ON
-        append!(header_cols, ["ON_L²", "ON_L∞"])
+        append!(header_cols, ["ON_L2", "ON_Linf"])
         if has_ON_weighted
-            append!(header_cols, ["ON_wL²", "ON_wL∞", "ON_χ²", "ON_χ²/dof"])
+            append!(header_cols, ["ON_wL2", "ON_wLinf", "ON_chi2", "ON_chi2_dof"])
         end
         append!(header_cols, ["ON_m1", "ON_m2"])
     end
     if has_Reporters
-        append!(header_cols, ["Rep_L²", "Rep_L∞"])
+        append!(header_cols, ["Rep_L2", "Rep_Linf"])
         if has_Reporters_weighted
-            append!(header_cols, ["Rep_wL²", "Rep_wL∞", "Rep_χ²", "Rep_χ²/dof"])
+            append!(header_cols, ["Rep_wL2", "Rep_wLinf", "Rep_chi2", "Rep_chi2_dof"])
         end
         append!(header_cols, ["Rep_m1", "Rep_m2"])
     end
-    
+
     header_str = @sprintf("%-10s", header_cols[1])
     for i in 2:length(header_cols)
         header_str *= @sprintf(" %12s", header_cols[i])
     end
     println(header_str)
-    println("-" ^ 100)
-    
+    println("-"^100)
+
     sorted_models = sort(collect(keys(results)), by=sort_key)
-    
+
     # Prepare CSV data if requested
-    csv_data = Dict{String, Vector{Any}}()
+    csv_data = Dict{String,Vector{Any}}()
     if !isnothing(csv_file)
         csv_data["Model"] = String[]
         for col in header_cols[2:end]
             csv_data[col] = Float64[]
         end
     end
-    
+
     for model in sorted_models
         r = results[model]
         row_values = Any[model]
-        
+
         if has_ON
             push!(row_values, get(r, :cc_ON_l2_norm, NaN))
             push!(row_values, get(r, :cc_ON_linf_norm, NaN))
@@ -5782,7 +5273,7 @@ function summarize_model_scores(results::Dict{String, NamedTuple}; sort_by::Symb
             push!(row_values, get(r, :mON1_empirical, NaN))
             push!(row_values, get(r, :mON2_empirical, NaN))
         end
-        
+
         if has_Reporters
             push!(row_values, get(r, :cc_Reporters_l2_norm, NaN))
             push!(row_values, get(r, :cc_Reporters_linf_norm, NaN))
@@ -5795,14 +5286,14 @@ function summarize_model_scores(results::Dict{String, NamedTuple}; sort_by::Symb
             push!(row_values, get(r, :mR1_empirical, NaN))
             push!(row_values, get(r, :mR2_empirical, NaN))
         end
-        
+
         # Print formatted row
         row_str = @sprintf("%-10s", row_values[1])
         for i in 2:length(row_values)
             row_str *= @sprintf(" %12.6f", row_values[i])
         end
         println(row_str)
-        
+
         # Populate CSV data
         if !isnothing(csv_file)
             push!(csv_data["Model"], string(row_values[1]))
@@ -5811,19 +5302,19 @@ function summarize_model_scores(results::Dict{String, NamedTuple}; sort_by::Symb
             end
         end
     end
-    
-    println("=" ^ 100)
+
+    println("="^100)
     println("\nNote: Empirical values are the same for all models (computed from data).")
     println("      Differences are in theoretical predictions, which determine the norms.")
     println()
-    
+
     # Write to CSV if requested
     if !isnothing(csv_file)
         df = DataFrame(csv_data)
         CSV.write(csv_file, df)
         println("Scoring summary saved to '$csv_file'")
     end
-    
+
     return nothing
 end
 
@@ -5917,9 +5408,9 @@ end
 
 #     plot_histogram()
 #     plot_histogram(ratefile::String,datapath;fish=false,root=".",row=2)
-    
+
 #     functions to plot data and model predicted histograms
-    
+
 # """
 # function plot_histogram(ratefile::String, datapath; root=".", row=2)
 #     fish = false
