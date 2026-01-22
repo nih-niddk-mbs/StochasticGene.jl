@@ -428,6 +428,54 @@ function threshold_noise(mhist, noise, yieldfactor, nhist)
 end
 
 """
+    make_loss_matrix(nRNA::Int, yieldfactor::Float64)
+
+Create a loss matrix L where L[i+1, j+1] = P(observe i | true count j)
+using binomial coefficients.
+
+# Arguments
+- `nRNA::Int`: Size of histogram (number of mRNA count bins)
+- `yieldfactor::Float64`: Probability of observing each mRNA (0-1). 
+  This is the detection efficiency or yield factor.
+
+# Returns
+- `Matrix{Float64}`: Loss matrix of size (nRNA × nRNA)
+  - Rows (i+1): observed mRNA count i
+  - Columns (j+1): true mRNA count j
+  - L[i+1, j+1] = P(observe i | true count j) = Binomial(j, yieldfactor).pdf(i)
+
+# Notes
+- The loss matrix accounts for observation noise where each mRNA has probability
+  `yieldfactor` of being detected.
+- Columns are normalized to sum to 1 (accounting for truncation at nRNA).
+- If yieldfactor = 1.0, the matrix is identity (no loss).
+- If yieldfactor < 1.0, the matrix spreads probability from higher true counts
+  to lower observed counts.
+
+# Example
+```julia
+# 5% loss (95% detection efficiency)
+L = make_loss_matrix(20, 0.95)
+# Apply to predicted histogram: p_observed = L * p_true
+```
+"""
+function make_loss_matrix(nRNA::Int, yieldfactor::Float64)
+    L = zeros(nRNA, nRNA)
+    for j in 0:nRNA-1  # true count (column)
+        for i in 0:min(j, nRNA-1)  # observed count (row, can't observe more than true)
+            d = Binomial(j, clamp(yieldfactor, 0.0, 1.0))
+            L[i+1, j+1] = pdf(d, i)
+        end
+        # Normalize column to account for truncation (probabilities for i > nRNA-1 are lost)
+        col_sum = sum(L[:, j+1])
+        if col_sum > 0
+            L[:, j+1] ./= col_sum
+        end
+    end
+    return L
+end
+
+"""
 solve_vector(A::Matrix,b::vector)
 solve A x = b
 If matrix divide has error higher than tol

@@ -64,6 +64,8 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     gene::String
     nRNA::nType
     histRNA::hType
+    yieldfactor::Float64
+    RNAData(label::String, gene::String, nRNA::nType, histRNA::hType, yieldfactor::Float64=1.0) = new{nType,hType}(label, gene, nRNA, histRNA, yieldfactor)
 end
 
 struct RNACountData <: AbstractRNAData{Vector{Int}}
@@ -104,6 +106,8 @@ struct RNAOnOffData <: AbstractHistogramData
     bins::Vector
     ON::Vector
     OFF::Vector
+    yieldfactor::Float64
+    RNAOnOffData(label::String, gene::String, nRNA::Int, histRNA::Vector, bins::Vector, ON::Vector, OFF::Vector, yieldfactor::Float64=1.0) = new(label, gene, nRNA, histRNA, bins, ON, OFF, yieldfactor)
 end
 """
     RNADwellTimeData
@@ -127,6 +131,8 @@ struct RNADwellTimeData <: AbstractHistogramData
     bins::Vector{Vector}
     DwellTimes::Vector{Vector}
     DTtypes::Vector
+    yieldfactor::Float64
+    RNADwellTimeData(label::String, gene::String, nRNA::Int, histRNA::Array, bins::Vector{Vector}, DwellTimes::Vector{Vector}, DTtypes::Vector, yieldfactor::Float64=1.0) = new(label, gene, nRNA, histRNA, bins, DwellTimes, DTtypes, yieldfactor)
 end
 """
     TraceData{labelType,geneType,traceType}
@@ -160,6 +166,8 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     trace::traceType
     nRNA::Int
     histRNA::hType
+    yieldfactor::Float64
+    TraceRNAData(label::String, gene::String, interval::Float64, trace::traceType, nRNA::Int, histRNA::hType, yieldfactor::Float64=1.0) = new{typeof(trace),typeof(histRNA)}(label, gene, interval, trace, nRNA, histRNA, yieldfactor)
 end
 
 # Model structures

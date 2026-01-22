@@ -482,7 +482,8 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     predictions = predictedfn(param, data, model)
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
-        p = technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA)
+        # Use per-cell yieldfactor (BUG FIX: was hardcoded to 1.0)
+        p = technical_loss_at_k(data.countsRNA[k], predictions, data.yieldfactor[k], data.nRNA)
         logpredictions[k] = log(max(p, eps()))
     end
     return sum(logpredictions), logpredictions  # Convention: return log-likelihoods
@@ -492,7 +493,7 @@ end
 function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransitionModel)
     predictions = predictedfn(param, data, model)
     logpredictions = [
-        log(max(technical_loss_at_k(data.countsRNA[k], predictions, 1., data.nRNA), eps()))
+        log(max(technical_loss_at_k(data.countsRNA[k], predictions, data.yieldfactor[k], data.nRNA), eps()))
         for k in eachindex(data.countsRNA)
     ]
     return sum(logpredictions), logpredictions
@@ -520,7 +521,17 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     llg, llgp = ll_hmm_trace(param, data, model)
     r = get_rates(param, model)
-    predictions = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
+    
+    # Apply loss matrix if yieldfactor < 1.0 (observation noise for RNA histogram)
+    yieldfactor = data.yieldfactor
+    if yieldfactor < 1.0
+        L = make_loss_matrix(data.nRNA, yieldfactor)
+        predictions = L * p_true
+    else
+        predictions = p_true
+    end
+    
     logpredictions = log.(max.(predictions, eps()))
     hist = datahistogram(data)
     return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
@@ -551,7 +562,25 @@ Calculates the likelihood for a single RNA histogram.
 function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    steady_state(M, model.components.nT, model.nalleles, data.nRNA)
+    p_true = steady_state(M, model.components.nT, model.nalleles, data.nRNA)
+    
+    # Apply loss matrix if yieldfactor < 1.0 (observation noise)
+    # Note: RNACountData has per-cell yieldfactors (Vector), handled separately in loglikelihood()
+    # For histogram data (RNAData, RNAOnOffData, etc.), use global yieldfactor (Float64)
+    if typeof(data) <: RNACountData
+        # RNACountData uses per-cell yieldfactors in loglikelihood(), no loss matrix here
+        return p_true
+    else
+        # Extract scalar yieldfactor from data structure
+        yieldfactor = data.yieldfactor
+        if yieldfactor < 1.0
+            L = make_loss_matrix(data.nRNA, yieldfactor)
+            p_observed = L * p_true
+            return p_observed
+        else
+            return p_true
+        end
+    end
 end
 
 
