@@ -29,9 +29,9 @@ Abstract type for intensity time series data
 abstract type AbstractTraceData <: AbstractExperimentalData end
 
 """
-  AbstractRNAData{hType}
+    AbstractRNAData{hType}
 
-Abstract type for steady state RNA histogram data
+Abstract type for steady state RNA histogram data.
 """
 abstract type AbstractRNAData{hType} <: AbstractHistogramData end
 
@@ -54,18 +54,18 @@ abstract type AbstractTraceHistogramData <: AbstractTraceData end
 Structure for storing RNA histogram data.
 
 # Fields
-- `label::String`: Label for the data set.
-- `gene::String`: Gene name (case sensitive).
-- `nRNA::nType`: Length of the histogram.
-- `histRNA::hType`: RNA histograms.
+- `label`: Label for the data set.
+- `gene`: Gene name (case sensitive).
+- `nRNA`: Length of the histogram (type varies).
+- `histRNA`: RNA histograms (type varies).
+- `yield`: Detection efficiency (Float64 when = 1.0) or (yield, nRNA_true) tuple when < 1.0.
 """
 struct RNAData{nType,hType} <: AbstractRNAData{hType}
     label::String
     gene::String
     nRNA::nType
     histRNA::hType
-    yieldfactor::Float64
-    RNAData(label::String, gene::String, nRNA::nType, histRNA::hType, yieldfactor::Float64=1.0) = new{nType,hType}(label, gene, nRNA, histRNA, yieldfactor)
+    yield::Union{Float64, Tuple{Float64, Int}}
 end
 
 struct RNACountData <: AbstractRNAData{Vector{Int}}
@@ -106,8 +106,7 @@ struct RNAOnOffData <: AbstractHistogramData
     bins::Vector
     ON::Vector
     OFF::Vector
-    yieldfactor::Float64
-    RNAOnOffData(label::String, gene::String, nRNA::Int, histRNA::Vector, bins::Vector, ON::Vector, OFF::Vector, yieldfactor::Float64=1.0) = new(label, gene, nRNA, histRNA, bins, ON, OFF, yieldfactor)
+    yield::Union{Float64, Tuple{Float64, Int}}
 end
 """
     RNADwellTimeData
@@ -131,8 +130,7 @@ struct RNADwellTimeData <: AbstractHistogramData
     bins::Vector{Vector}
     DwellTimes::Vector{Vector}
     DTtypes::Vector
-    yieldfactor::Float64
-    RNADwellTimeData(label::String, gene::String, nRNA::Int, histRNA::Array, bins::Vector{Vector}, DwellTimes::Vector{Vector}, DTtypes::Vector, yieldfactor::Float64=1.0) = new(label, gene, nRNA, histRNA, bins, DwellTimes, DTtypes, yieldfactor)
+    yield::Union{Float64, Tuple{Float64, Int}}
 end
 """
     TraceData{labelType,geneType,traceType}
@@ -157,7 +155,13 @@ end
 Structure for storing trace RNA histogram data.
 
 # Fields
-- `label::String`: Label for the data set.
+- `label`: Label for the data set.
+- `gene`: Gene name.
+- `interval`: Time between trace points.
+- `trace`: Trace data (type varies).
+- `nRNA`: Histogram length.
+- `histRNA`: RNA histogram (type varies).
+- `yieldfactor`: Detection efficiency (default 1.0).
 """
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
@@ -166,9 +170,25 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     trace::traceType
     nRNA::Int
     histRNA::hType
-    yieldfactor::Float64
-    TraceRNAData(label::String, gene::String, interval::Float64, trace::traceType, nRNA::Int, histRNA::hType, yieldfactor::Float64=1.0) = new{typeof(trace),typeof(histRNA)}(label, gene, interval, trace, nRNA, histRNA, yieldfactor)
+    yield::Union{Float64, Tuple{Float64, Int}}
 end
+
+# Helper functions for yield Union type
+"""
+    get_yield_value(yield::Union{Float64, Tuple{Float64, Int}})
+
+Extract the yield factor value from yield (either Float64 or tuple).
+"""
+get_yield_value(yield::Float64) = yield
+get_yield_value(yield::Tuple{Float64, Int}) = yield[1]
+
+"""
+    get_nRNA_true(yield::Union{Float64, Tuple{Float64, Int}}, nRNA_observed::Int)
+
+Get the true nRNA size. Returns nRNA_true from tuple if available, otherwise nRNA_observed.
+"""
+get_nRNA_true(yield::Float64, nRNA_observed::Int) = nRNA_observed
+get_nRNA_true(yield::Tuple{Float64, Int}, nRNA_observed::Int) = yield[2]
 
 # Model structures
 

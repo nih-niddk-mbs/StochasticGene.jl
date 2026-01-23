@@ -521,12 +521,15 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     llg, llgp = ll_hmm_trace(param, data, model)
     r = get_rates(param, model)
-    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, data.nRNA)
     
-    # Apply loss matrix if yieldfactor < 1.0 (observation noise for RNA histogram)
-    yieldfactor = data.yieldfactor
-    if yieldfactor < 1.0
-        L = make_loss_matrix(data.nRNA, yieldfactor)
+    # Get nRNA_true from data structure (extract from yield tuple)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true)
+    
+    # Apply loss matrix if yield < 1.0 (observation noise for RNA histogram)
+    yield_val = get_yield_value(data.yield)
+    if yield_val < 1.0
+        L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
         predictions = L * p_true
     else
         predictions = p_true
@@ -562,23 +565,35 @@ Calculates the likelihood for a single RNA histogram.
 function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    p_true = steady_state(M, model.components.nT, model.nalleles, data.nRNA)
     
-    # Apply loss matrix if yieldfactor < 1.0 (observation noise)
-    # Note: RNACountData has per-cell yieldfactors (Vector), handled separately in loglikelihood()
-    # For histogram data (RNAData, RNAOnOffData, etc.), use global yieldfactor (Float64)
+    # Get nRNA_true from data structure (already computed in load_data)
+    # For RNACountData: data.nRNA is already nRNA_true
+    # For other types: extract from yield tuple using get_nRNA_true
     if typeof(data) <: RNACountData
-        # RNACountData uses per-cell yieldfactors in loglikelihood(), no loss matrix here
+        nRNA_true = data.nRNA
+    else
+        nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    end
+    p_true = steady_state(M, model.components.nT, model.nalleles, nRNA_true)
+    
+    # Apply loss matrix if yield < 1.0 (observation noise)
+    # Note: RNACountData has per-cell yields (Vector), handled separately in loglikelihood()
+    # For histogram data (RNAData, RNAOnOffData, etc.), use global yield (Union{Float64, Tuple})
+    if typeof(data) <: RNACountData
+        # RNACountData uses per-cell yields in loglikelihood(), no loss matrix here
+        # Return full distribution at nRNA_true (used by technical_loss_at_k)
         return p_true
     else
-        # Extract scalar yieldfactor from data structure
-        yieldfactor = data.yieldfactor
-        if yieldfactor < 1.0
-            L = make_loss_matrix(data.nRNA, yieldfactor)
+        # Extract yield value from data structure
+        yield_val = get_yield_value(data.yield)
+        if yield_val < 1.0
+            # Apply loss matrix: observed = L * true
+            L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
             p_observed = L * p_true
             return p_observed
         else
-            return p_true
+            # No loss: return distribution at observed size (truncate if needed)
+            return p_true[1:data.nRNA]
         end
     end
 end

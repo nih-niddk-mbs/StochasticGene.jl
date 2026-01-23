@@ -2577,7 +2577,7 @@ function write_info(file::String, fits, data, model, labels)
         writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait.hierarchical.fittedpriors])'], ',')
     else
         writedlm(f, [" " labels[1:1, model.fittedparam]], ',')  # labels
-        writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])'], ',')
+        # writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])'], ',')
     end
 
     writedlm(f, ["transformed prior mean" reshape(mean.(model.rateprior), 1, :)], ',')
@@ -2755,9 +2755,9 @@ function read_rnacount(gene, cond, datapath)
     # c = readfile(gene, cond, datapath)
     c = readfile(t)
     countsRNA = round.(Int, c[:, 1])
-    yieldfactor = c[:, 2]
+    yield = c[:, 2]  # Renamed from yieldfactor to yield
     nhist = round(Int, max(quantile(countsRNA, 0.99), 1) + 1)
-    return countsRNA, yieldfactor, nhist
+    return countsRNA, yield, nhist
 end
 
 """
