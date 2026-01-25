@@ -110,7 +110,7 @@ end
 
 function test_fit_simrna_compare(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000, nchains=1, ejectnumber=1)
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles, ejectnumber=ejectnumber)[1]
-    data = RNAData("", "", nRNA, h)
+    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0)  # yield=1.0 (Float64, no inflation needed)
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
@@ -165,7 +165,7 @@ Fit a simulated RNA histogram using the provided parameters and compare to the t
 """
 function test_fit_simrna(; rtarget=[0.33, 0.19, 2.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000, nchains=1)
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
-    data = RNAData("", "", nRNA, h)
+    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0)  # yield=1.0 (Float64, no inflation needed)
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)

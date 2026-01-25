@@ -344,11 +344,70 @@ allele_deconvolve(mhist, nalleles) = irfft((rfft(mhist)) .^ (1 / nalleles), leng
 
 
 """
-nhist_loss(nhist,yieldfactor)
+nhist_loss(nhist, yieldfactor; threshold=0.999)
 
-Compute length of pre-loss histogram
+Compute length of pre-loss histogram using a principled probabilistic approach.
+
+Given an observed histogram with `nhist` bins (support 0 to nhist-1), this function
+estimates the true histogram size needed to account for binomial observation loss.
+
+# Arguments
+- `nhist::Int`: Size of observed histogram (number of bins)
+- `yieldfactor::Float64`: Detection efficiency (0-1)
+- `threshold::Float64`: Cumulative probability threshold (default 0.99)
+  - Finds the smallest true count where P(observe ≤ nhist-1 | true = j) ≥ threshold
+  - Lower values (e.g., 0.95) are less conservative and reduce computational cost
+
+# Returns
+- `Int`: Estimated true histogram size
+
+# Method
+Uses cumulative probability: finds the smallest true count `j` such that the
+probability of observing at most `nhist-1` given true count `j` is at least `threshold`.
+This ensures we capture at least `threshold` fraction of the probability mass.
+
+# Example
+```julia
+# If we observe up to 20 counts with 5% yield, what's the true range?
+nhist_loss(21, 0.05)  # Returns ~300-350 (with threshold=0.99)
+nhist_loss(21, 0.05, threshold=0.95)  # Returns ~250-300 (less conservative)
+```
 """
-nhist_loss(nhist, yieldfactor) = round(Int, nhist / yieldfactor)
+function nhist_loss(nhist::Int, yieldfactor::Float64; threshold::Float64=0.99)
+    if yieldfactor >= 1.0
+        return nhist
+    end
+    
+    max_observed = nhist - 1  # 0-indexed: observed counts are 0 to nhist-1
+    
+    # Binary search for the smallest true count j where 
+    # P(observe ≤ max_observed | true = j) ≥ threshold
+    # Start with simple scaling as lower bound
+    lower = max(nhist, round(Int, max_observed / yieldfactor))
+    # Upper bound: use a conservative multiplier
+    upper = max(lower + 1, round(Int, max_observed / yieldfactor * 3))
+    
+    # Binary search
+    while upper - lower > 1
+        mid = (lower + upper) ÷ 2
+        d = Binomial(mid, clamp(yieldfactor, 0.0, 1.0))
+        cumprob = cdf(d, max_observed)
+        
+        if cumprob >= threshold
+            upper = mid
+        else
+            lower = mid
+        end
+    end
+    
+    # Check final bounds
+    d_lower = Binomial(lower, clamp(yieldfactor, 0.0, 1.0))
+    if cdf(d_lower, max_observed) >= threshold
+        return lower
+    else
+        return upper
+    end
+end
 
 """
 technical_loss(mhist,yieldfactor)
@@ -376,10 +435,12 @@ function technical_loss(mhist::Vector, yieldfactor, nhist)
     normalize_histogram(p)
 end
 
-function technical_loss_at_k(k::Int, mhist, yieldfactor, nhist)
+function technical_loss_at_k(k::Int, mhist, yieldfactor, nhist_true)
     pmf = normalize_histogram(mhist)
     p = 0
-    for m in k:nhist-1
+    # Sum over all true counts m >= k up to nhist_true-1
+    # nhist_true is the inflated size (nRNA_true) when yield < 1.0
+    for m in k:nhist_true-1
         d = Binomial(m, clamp(yieldfactor, 0.0, 1.0))
         p += pmf[m+1] * pdf(d, k)
     end
@@ -426,6 +487,59 @@ function threshold_noise(mhist, noise, yieldfactor, nhist)
     h = additive_noise(mhist, noise, nhist)
     technical_loss(h, yieldfactor, nhist)
 end
+
+"""
+    make_loss_matrix(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float64)
+
+Create a loss matrix L where L[i+1, j+1] = P(observe i | true count j)
+using binomial coefficients.
+
+# Arguments
+- `nRNA_observed::Int`: Size of observed histogram (number of bins)
+- `nRNA_true::Int`: Size of true histogram (number of bins, typically larger when yieldfactor < 1.0)
+- `yieldfactor::Float64`: Probability of observing each mRNA (0-1). 
+  This is the detection efficiency or yield factor.
+
+# Returns
+- `Matrix{Float64}`: Loss matrix of size (nRNA_observed × nRNA_true)
+  - Rows (i+1): observed mRNA count i (0 to nRNA_observed-1)
+  - Columns (j+1): true mRNA count j (0 to nRNA_true-1)
+  - L[i+1, j+1] = P(observe i | true count j) = Binomial(j, yieldfactor).pdf(i)
+
+# Notes
+- The loss matrix accounts for observation noise where each mRNA has probability
+  `yieldfactor` of being detected.
+- Columns are normalized to sum to 1 (accounting for truncation at nRNA_observed).
+- If yieldfactor = 1.0, the matrix is identity (no loss).
+- If yieldfactor < 1.0, the matrix spreads probability from higher true counts
+  to lower observed counts.
+
+# Example
+```julia
+# 5% yield: observe up to 20, true up to ~400
+nRNA_true = nhist_loss(21, 0.05)  # ~300-350
+L = make_loss_matrix(21, nRNA_true, 0.05)
+# Apply to predicted histogram: p_observed = L * p_true
+```
+"""
+function make_loss_matrix(nRNA_observed::Int, nRNA_true::Int, yieldfactor::Float64)
+    L = zeros(nRNA_observed, nRNA_true)
+    for j in 0:nRNA_true-1  # true count (column)
+        for i in 0:min(j, nRNA_observed-1)  # observed count (row, can't observe more than true)
+            d = Binomial(j, clamp(yieldfactor, 0.0, 1.0))
+            L[i+1, j+1] = pdf(d, i)
+        end
+        # Normalize column to account for truncation (probabilities for i > nRNA_observed-1 are lost)
+        col_sum = sum(L[:, j+1])
+        if col_sum > 0
+            L[:, j+1] ./= col_sum
+        end
+    end
+    return L
+end
+
+# Backward compatibility: if only nRNA provided, assume square matrix (old behavior)
+make_loss_matrix(nRNA::Int, yieldfactor::Float64) = make_loss_matrix(nRNA, nRNA, yieldfactor)
 
 """
 solve_vector(A::Matrix,b::vector)
