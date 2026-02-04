@@ -3585,7 +3585,9 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
                 tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
-                out = replace(file, "rates" => "crosscorrelation", ".txt" => ".csv")
+                parts = fields(basename(file))
+                new_model = create_modelstring(G, R, S, insertstep)
+                out = joinpath(root, "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
                 n_lags = length(tau)
 
                 CSV.write(out, DataFrame(
@@ -4636,6 +4638,11 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         end
 
         coupling_model_str = crosscov_file[coupling_start:coupling_start+1]
+        # Parse model string (G,R,S,insertstep) from filename: ..._gene_MYC_model_nalleles.csv
+        base_no_ext = endswith(crosscov_file, ".csv") ? crosscov_file[1:end-4] : crosscov_file
+        v = split(base_no_ext, "_")
+        model_str = length(v) >= 6 ? v[5] : ""
+        results_key = isempty(model_str) ? coupling_model_str : coupling_model_str * "_" * model_str
         crosscov_filepath = joinpath(crosscov_folder, crosscov_file)
 
         # 2. Read crosscovariance from file
@@ -5031,6 +5038,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
             # Store results (all unnormalized)
             result_dict = Dict(
                 :coupling_model => coupling_model_str,
+                :model => model_str,
                 :cc_ON_empirical => cc_ON_empirical,
                 :cc_ON_theory => cc_ON_theory,
                 :cc_ON_l2_norm => scores_ON.l2_norm,
@@ -5120,7 +5128,7 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
                 end
             end
 
-            results[coupling_model_str] = NamedTuple(result_dict)
+            results[results_key] = NamedTuple(result_dict)
 
         catch e
             @warn "Error reading crosscovariance file '$crosscov_file': $e, skipping"
