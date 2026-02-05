@@ -2516,32 +2516,28 @@ end
 """
     extract_source_target(pattern::String, filepath::String)
 
-Extract source and target information from a filepath based on a pattern.
+Extract coupling field from a filepath based on a pattern.
 
 # Arguments
-- `pattern::String`: Pattern to search for in filename
+- `pattern::String`: Pattern to search for in filename (e.g. "gene")
 - `filepath::String`: Path to file
 
 # Returns
-- `Union{Tuple{Union{String,Int},Int}, Nothing}`: (source, target) or nothing if not found
+- `Union{String, Nothing}`: Coupling field string (2-char unidirectional or 4-char reciprocal), or nothing if not found
 
 # Notes
-- Searches for pattern followed by digits in filename
-- Handles both numeric sources and "R" (RNA) sources
-- Returns source as integer or "R" string, target as integer
-- Uses regex matching to find pattern## format
-- Returns nothing if pattern is not found
-- Useful for parsing coupling information from filenames
+- Searches for pattern followed by coupling digits in filename
+- 2-char = unidirectional (e.g. "31", "R5")
+- 4-char = reciprocal (e.g. "3131", "31R5")
+- Use `make_coupling(coupling_field, G, R)` to build coupling structure
 
 # Examples
 ```julia
-# Extract source and target from filename
-source, target = extract_source_target("gene", "rates_gene12_condition.txt")
-# Returns: (1, 2)
+# Unidirectional coupling
+extract_source_target("gene", "rates_gene31_condition.txt")  # Returns: "31"
 
-# Extract RNA target
-source, target = extract_source_target("gene", "rates_geneR3_condition.txt")
-# Returns: ("R", 3)
+# Reciprocal coupling
+extract_source_target("gene", "rates_gene3131_condition.txt")  # Returns: "3131"
 ```
 """
 function extract_source_target(pattern::String, filepath::String)
@@ -2550,14 +2546,17 @@ function extract_source_target(pattern::String, filepath::String)
 
     # Escape special characters in pattern and build regex
     escaped_pattern = replace(pattern, r"([.*+?^\$()[]{}|\\])" => s"\\\1")
-    regex = Regex("$(escaped_pattern)(\\d|R)(\\d)")
+    # Try 4-char reciprocal first (s1t1s2t2), then 2-char unidirectional (st)
+    regex_4 = Regex("$(escaped_pattern)(\\d|R)(\\d)(\\d|R)(\\d)")
+    regex_2 = Regex("$(escaped_pattern)(\\d|R)(\\d)")
 
-    # Find pattern## in filename
-    m = match(regex, filename)
+    m = match(regex_4, filename)
     if m !== nothing
-        source = m[1] == "R" ? "R" : parse(Int, m[1])
-        target = parse(Int, m[2])
-        return source, target
+        return join(m.captures)
+    end
+    m = match(regex_2, filename)
+    if m !== nothing
+        return join(m.captures)
     end
     return nothing
 end
@@ -3463,9 +3462,8 @@ Compute theoretical correlation functions for a single rate file and return the 
 function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
     println(file)
     r = readrates(file, get_row(ratetype))
-    source, target = extract_source_target(pattern, file)
-    (source == "R") && (source = collect(G[1]+1:G[1]+R[1]))
-    coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+    coupling_field = extract_source_target(pattern, file)
+    coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
     correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
 end
 
@@ -4632,12 +4630,14 @@ function score_models_from_traces(empirical_file::String, crosscov_folder::Strin
         end
 
         coupling_start = gene_pos.stop + 1
-        if coupling_start + 1 > length(crosscov_file)
+        if coupling_start > length(crosscov_file)
             @warn "Filename '$crosscov_file' too short to extract coupling model, skipping"
             continue
         end
-
-        coupling_model_str = crosscov_file[coupling_start:coupling_start+1]
+        # Extract coupling: 2-char unidirectional or 4-char reciprocal, until next '_'
+        after_gene = crosscov_file[coupling_start:end]
+        underscore_idx = findfirst('_', after_gene)
+        coupling_model_str = underscore_idx === nothing ? after_gene : after_gene[1:prevind(after_gene, underscore_idx)]
         # Parse model string (G,R,S,insertstep) from filename: ..._gene_MYC_model_nalleles.csv
         base_no_ext = endswith(crosscov_file, ".csv") ? crosscov_file[1:end-4] : crosscov_file
         v = split(base_no_ext, "_")

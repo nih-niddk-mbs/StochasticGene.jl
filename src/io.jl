@@ -167,7 +167,7 @@ datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field =
 
 # Notes
 - Automatically detects hierarchical models from "-h" in label
-- Extracts coupling field from last 2 characters of condition for tracejoint models
+- Extracts coupling field from condition for tracejoint models (2-char unidirectional or 4-char reciprocal)
 - Uses decompose_cond to process the condition field
 - Handles both uncoupled and coupled/forced model types
 """
@@ -177,8 +177,15 @@ function parse_filename(filename::String; hlabel="-h")
     G, R, S, insertstep = decompose_model(parts.model)
     transitions = get_transitions(G, parts.label)
     if occursin("tracejoint", parts.label)
-        coupling_field = parts.cond[end-1:end]
-        datacond = decompose_cond(parts.cond[1:end-2])
+        # Coupling suffix: 2-char = unidirectional (e.g. "31"), 4-char = reciprocal (e.g. "3131")
+        gene_pos = findfirst("gene", parts.cond)
+        if gene_pos !== nothing
+            coupling_field = parts.cond[gene_pos.stop+1:end]
+            datacond = decompose_cond(parts.cond[1:gene_pos.stop])
+        else
+            coupling_field = length(parts.cond) >= 4 ? parts.cond[end-3:end] : (length(parts.cond) >= 2 ? parts.cond[end-1:end] : "")
+            datacond = decompose_cond(length(parts.cond) >= 4 ? parts.cond[1:end-4] : (length(parts.cond) >= 2 ? parts.cond[1:end-2] : parts.cond))
+        end
     else
         coupling_field = ""
         datacond = decompose_cond(parts.cond)
@@ -217,6 +224,11 @@ make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
 function make_coupling(coupling_field::String, G, R)
     if isempty(coupling_field)
         return tuple()
+    elseif length(coupling_field) == 4
+        # Reciprocal: 4-char s1t1s2t2 format
+        Gt = G isa Tuple ? G : (G, G)
+        Rt = R isa Tuple ? R : (R, R)
+        return make_coupling_reciprocal(coupling_field, Gt, Rt)
     else
         if startswith(coupling_field, "R")
             source = collect(G[1]+1:G[1]+R[1])  # All R states
@@ -226,6 +238,47 @@ function make_coupling(coupling_field::String, G, R)
         target = parse(Int, coupling_field[2:end])
         return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
     end
+end
+
+"""
+    make_coupling_reciprocal(coupling_field::String, G, R)
+
+Construct reciprocal (bidirectional) coupling structure from 4-character coupling field.
+
+# Arguments
+- `coupling_field::String`: 4-character string "s1t1s2t2" where:
+  - s1, t1: unit 1→2 direction (enhancer state s1 affects gene transition t1)
+  - s2, t2: unit 2→1 direction (gene state s2 affects enhancer transition t2)
+  - Source chars (s1, s2) can be "R" for all R states; target chars (t1, t2) are digits
+- `G`: Tuple of gene states per unit
+- `R`: Tuple of RNA states per unit
+
+# Returns
+- `Tuple`: Reciprocal coupling structure ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+
+# Examples
+```julia
+# Symmetric: both units in state 3 affect the other's transition 1
+make_coupling_reciprocal("3131", (3, 3), (3, 3))
+
+# Asymmetric: enhancer state 3→gene transition 1, gene R states→enhancer transition 5
+make_coupling_reciprocal("31R5", (3, 3), (3, 3))
+```
+"""
+function make_coupling_reciprocal(coupling_field::String, G, R)
+    if length(coupling_field) != 4
+        throw(ArgumentError("coupling_field for reciprocal must be 4 characters (s1t1s2t2), got \"$coupling_field\""))
+    end
+    # Parse unit 1→2: s1 (char1), t1 (char2)
+    s1_char, t1_char = coupling_field[1], coupling_field[2]
+    s1 = s1_char == 'R' ? collect(G[1]+1:G[1]+R[1]) : parse(Int, string(s1_char))
+    t1 = parse(Int, string(t1_char))
+    # Parse unit 2→1: s2 (char3), t2 (char4)
+    s2_char, t2_char = coupling_field[3], coupling_field[4]
+    s2 = s2_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s2_char))
+    t2 = parse(Int, string(t2_char))
+    # coupling: sources=(tuple(2), tuple(1)), source_state=(s2, s1), target_transition=(t2, t1)
+    return ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
