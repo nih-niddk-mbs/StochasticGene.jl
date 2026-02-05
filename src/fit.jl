@@ -335,14 +335,12 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 4-tuple where elements are 
-    1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
-    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
-    3. source states: tuple of vectors of strings, e.g. (["G3","R1"], []) means that model 1 influences other units whenever it is in G state 3 or R step 1 (if a number is not included (e.g. (R,0)) then all the Gstates or R steps are included), 
-        while model 2 does not influence any other unit
-    4. target transitions:tuple, e.g. ([], 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at transition 4. Transitions
-        are number consecutively by order of the transition rates. So for a G=2 model, transition 1 is the G1 to G2 transition and transition 3 is the initiation transition
-    5. Int indicating number of coupling parameters
+- `coupling=tuple()`: if nonempty, a 5-tuple `(unit_model, sources, source_state, target_transition, ncoupling)` where:
+    1. `unit_model`: tuple of unit indices, e.g. (1, 2) for two coupled units
+    2. `sources`: tuple indicating which unit(s) influence each unit, e.g. (tuple(), tuple(1)) means unit 2 is influenced by unit 1, unit 1 has no sources
+    3. `source_state`: tuple specifying which state(s) in the source unit trigger coupling. Use (state, 0) for a single G state, or (collect(G+1:G+R), 0) for all R states. E.g. (3, 0) = G state 3; ([4,5,6], 0) = R states
+    4. `target_transition`: tuple specifying which transition in the target unit is modulated, e.g. (0, target) where target is the transition index (transitions numbered consecutively: G transitions, then initiation, etc.)
+    5. `ncoupling`: Int, number of coupling strength parameters (appended to the rate vector). Use `make_coupling("31", G, R)` in io.jl to build from a coupling field string (e.g. "31" = state 3→transition 1, "R5" = all R states→transition 5)
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
