@@ -492,8 +492,9 @@ Prepare parameters for coupled model simulation.
 - `Tuple`: (coupling, nalleles, noiseparams, r_prepared) where r_prepared contains separated rate vectors for each gene
 """
 function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-    if r[end] < -1.0
-        throw(ArgumentError("coupling strength is not > -1.0"))
+    ncoupling = coupling[5]
+    if length(r) >= ncoupling && any(r[end-ncoupling+1:end] .< -1.0)
+        throw(ArgumentError("all coupling strengths must be > -1.0"))
     end
     if noiseparams isa Number
         noiseparams = fill(noiseparams, length(G))
@@ -530,13 +531,12 @@ function prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noi
         push!(r, rates[j:j+n-1])
         j += n
     end
-    for i in eachindex(R)
-        s = coupling[3][i]
-        if (s isa Integer && s > 0) || (s isa Vector && !isempty(s))
+    # Canonical order: [(β, α) for α in 1:n for β in sources[α]], one param per (source, target) pair
+    sources = coupling[2]
+    for α in eachindex(coupling[1])
+        for β in sources[α]
             push!(couplingStrength, rates[j])
             j += 1
-        else
-            push!(couplingStrength, 0.0)
         end
     end
     push!(r, couplingStrength)
@@ -1069,8 +1069,9 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     sstate = coupling[3]
     ttrans = coupling[4]
     targets = coupling[6][unit]
-
-    # oldstate = findall(!iszero, vec(initialstate[unit, 1]))
+    # Canonical (β, α) order: same as transition_rate_make and prepare_rates_sim
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in eachindex(coupling[1]) for β in coupling[2][α]]
+    coupling_strength = r[end]  # Vector of length ncoupling
 
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
@@ -1078,27 +1079,29 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
-    # unit as source
-    # new state moves into or out of a primed source state
+    # unit as source: for each target, use coupling param for (unit, target)
     for target in targets
         verbose && println(isdisjoint(oldstate, sstate[unit]), " : ", !isdisjoint(newstate, sstate[unit]))
         if isfinite(tau[target][ttrans[target], 1])
+            idx = findfirst(isequal((unit, target)), coupling_pairs)
+            γc = idx === nothing ? 0.0 : coupling_strength[idx]
             if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
-                tau[target][ttrans[target], 1] = 1 / (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
+                tau[target][ttrans[target], 1] = 1 / (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
             elseif !isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
-                tau[target][ttrans[target], 1] = (1 + r[end][unit]) * (tau[target][ttrans[target], 1] - t) + t
+                tau[target][ttrans[target], 1] = (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
     end
 
-    # unit as target
-    # new state enables a target transition
+    # unit as target: for each source, use coupling param for (source, unit)
     for source in sources
         verbose && println(ttrans[unit] ∈ enabled, ": ", tau[unit][ttrans[unit], 1])
         if ttrans[unit] ∈ enabled
             verbose && println(sstate[source], " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source]))
             if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source])
-                tau[unit][ttrans[unit], 1] = 1 / (1 + r[end][source]) * (tau[unit][ttrans[unit], 1] - t) + t
+                idx = findfirst(isequal((source, unit)), coupling_pairs)
+                γc = idx === nothing ? 0.0 : coupling_strength[idx]
+                tau[unit][ttrans[unit], 1] = 1 / (1 + γc) * (tau[unit][ttrans[unit], 1] - t) + t
             end
         end
     end
