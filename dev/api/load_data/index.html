@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Data Loading · StochasticGene.jl</title><meta name="title" content="Data Loading · StochasticGene.jl"/><meta property="og:title" content="Data Loading · StochasticGene.jl"/><meta property="twitter:title" content="Data Loading · StochasticGene.jl"/><meta name="description" content="Documentation for StochasticGene.jl."/><meta property="og:description" content="Documentation for StochasticGene.jl."/><meta property="twitter:description" content="Documentation for StochasticGene.jl."/><meta property="og:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/load_data/"/><meta property="twitter:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/load_data/"/><link rel="canonical" href="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/load_data/"/><script async src="https://www.googletagmanager.com/gtag/js?id=UA-XXXXXXXXX-X"></script><script>  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'UA-XXXXXXXXX-X', {'page_path': location.pathname + location.search + location.hash});
+</script><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">StochasticGene.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../installation/">Installation</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/">Overview</a></li><li><input class="collapse-toggle" id="menuitem-4-2" type="checkbox"/><label class="tocitem" for="menuitem-4-2"><span class="docs-label">Basic Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../examples/basic_telegraph/">Basic Telegraph Model</a></li><li><a class="tocitem" href="../../examples/multi_state_rna/">Multi-State Model</a></li><li><a class="tocitem" href="../../examples/rna_histogram/">RNA Histogram Analysis</a></li><li><a class="tocitem" href="../../examples/ms2_analysis/">MS2 Reporter Analysis</a></li><li><a class="tocitem" href="../../examples/dual_reporter/">Dual Reporter System</a></li><li><a class="tocitem" href="../../examples/trace_analysis/">Trace Analysis</a></li><li><a class="tocitem" href="../../examples/dwell_time_analysis/">Basic Dwell Times</a></li><li><a class="tocitem" href="../../examples/rna_dwell_time/">RNA Dwell Time Analysis</a></li><li><a class="tocitem" href="../../examples/rna_onoff/">RNA On-Off Analysis</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-4-3" type="checkbox"/><label class="tocitem" for="menuitem-4-3"><span class="docs-label">Advanced Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../examples/parallel_processing/">Parallel Processing</a></li><li><a class="tocitem" href="../../examples/hierarchical_trace/">Hierarchical Trace Analysis</a></li><li><a class="tocitem" href="../../examples/joint_trace/">Joint Trace Analysis</a></li><li><a class="tocitem" href="../../examples/coupled_models/">Coupled Model Analysis</a></li></ul></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../">API Reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox" checked/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Core Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../fit/">Model Fitting</a></li><li><a class="tocitem" href="../simulator/">Model Simulation</a></li><li class="is-active"><a class="tocitem" href>Data Loading</a><ul class="internal"><li><a class="tocitem" href="#Syntax"><span>Syntax</span></a></li><li><a class="tocitem" href="#Arguments"><span>Arguments</span></a></li><li><a class="tocitem" href="#Supported-Data-Types"><span>Supported Data Types</span></a></li><li><a class="tocitem" href="#Trace-Parameters-(traceinfo)"><span>Trace Parameters (traceinfo)</span></a></li><li><a class="tocitem" href="#File-Formats"><span>File Formats</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li><li><a class="tocitem" href="#Error-Handling"><span>Error Handling</span></a></li><li><a class="tocitem" href="#Performance-Considerations"><span>Performance Considerations</span></a></li><li><a class="tocitem" href="#Data-Validation"><span>Data Validation</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li></ul></li><li><input class="collapse-toggle" id="menuitem-5-3" type="checkbox"/><label class="tocitem" for="menuitem-5-3"><span class="docs-label">Function Libraries</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../utilities/">Utility Functions</a></li><li><a class="tocitem" href="../analysis/">Analysis Functions</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-5-4" type="checkbox"/><label class="tocitem" for="menuitem-5-4"><span class="docs-label">Output Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../write_traces/">Write Traces</a></li><li><a class="tocitem" href="../write_ONOFFhistograms/">Write ON/OFF Histograms</a></li><li><a class="tocitem" href="../write_residency_G_folder/">Write G State Residency</a></li></ul></li></ul></li><li><a class="tocitem" href="../../contributing/">Contributing</a></li></ul><div class="docs-version-selector field has-addons visible"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"><option value="#" selected="selected">1.6.0</option></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">API</a></li><li><a class="is-disabled">Core Functions</a></li><li class="is-active"><a href>Data Loading</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Data Loading</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl/blob/main/docs/src/api/load_data.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="load_data-Function"><a class="docs-heading-anchor" href="#load_data-Function">load_data Function</a><a id="load_data-Function-1"></a><a class="docs-heading-anchor-permalink" href="#load_data-Function" title="Permalink"></a></h1><p>Load experimental data from files into StochasticGene.jl data structures.</p><h2 id="Syntax"><a class="docs-heading-anchor" href="#Syntax">Syntax</a><a id="Syntax-1"></a><a class="docs-heading-anchor-permalink" href="#Syntax" title="Permalink"></a></h2><pre><code class="language-julia hljs">load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)</code></pre><h2 id="Arguments"><a class="docs-heading-anchor" href="#Arguments">Arguments</a><a id="Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Arguments" title="Permalink"></a></h2><h3 id="Required-Arguments"><a class="docs-heading-anchor" href="#Required-Arguments">Required Arguments</a><a id="Required-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Required-Arguments" title="Permalink"></a></h3><ul><li><code>datatype::String</code>: Type of data to load</li><li><code>dttype::Vector</code>: Dwell time types (for dwell time data)</li><li><code>datapath::String</code>: Path to data file(s)</li><li><code>label::String</code>: Label for the dataset</li><li><code>gene::String</code>: Gene name</li><li><code>datacond::String</code>: Experimental condition</li><li><code>traceinfo::Tuple</code>: Trace parameters (for trace data)</li><li><code>temprna::Int</code>: Temperature scaling factor for RNA data</li></ul><h3 id="Optional-Arguments"><a class="docs-heading-anchor" href="#Optional-Arguments">Optional Arguments</a><a id="Optional-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Optional-Arguments" title="Permalink"></a></h3><ul><li><code>datacol::Int = 3</code>: Column index for trace data</li><li><code>zeromedian::Bool = false</code>: Whether to zero-center traces</li></ul><h2 id="Supported-Data-Types"><a class="docs-heading-anchor" href="#Supported-Data-Types">Supported Data Types</a><a id="Supported-Data-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Supported-Data-Types" title="Permalink"></a></h2><h3 id="RNA-Data-Types"><a class="docs-heading-anchor" href="#RNA-Data-Types">RNA Data Types</a><a id="RNA-Data-Types-1"></a><a class="docs-heading-anchor-permalink" href="#RNA-Data-Types" title="Permalink"></a></h3><h4 id="&quot;rna&quot;-RNA-Count-Histograms"><a class="docs-heading-anchor" href="#&quot;rna&quot;-RNA-Count-Histograms">&quot;rna&quot; - RNA Count Histograms</a><a id="&quot;rna&quot;-RNA-Count-Histograms-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;rna&quot;-RNA-Count-Histograms" title="Permalink"></a></h4><p>Load steady-state RNA count distributions from smFISH or scRNA-seq data.</p><p><strong>File Format</strong>: Text files with RNA count histograms <strong>Returns</strong>: <code>RNAData</code> structure</p><pre><code class="language-julia hljs"># Load RNA histogram data
+data = load_data(
+    &quot;rna&quot;,                    # datatype
+    String[],                 # dttype (unused for RNA)
+    &quot;data/smFISH/&quot;,          # datapath
+    &quot;control&quot;,               # label
+    &quot;MYC&quot;,                   # gene
+    &quot;MOCK&quot;,                  # datacond
+    (),                      # traceinfo (unused for RNA)
+    1                        # temprna
+)</code></pre><h4 id="&quot;rnacount&quot;-Individual-RNA-Counts"><a class="docs-heading-anchor" href="#&quot;rnacount&quot;-Individual-RNA-Counts">&quot;rnacount&quot; - Individual RNA Counts</a><a id="&quot;rnacount&quot;-Individual-RNA-Counts-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;rnacount&quot;-Individual-RNA-Counts" title="Permalink"></a></h4><p>Load individual RNA count measurements with yield factors.</p><p><strong>File Format</strong>: Text files with individual counts and yield factors <strong>Returns</strong>: <code>RNACountData</code> structure</p><pre><code class="language-julia hljs"># Load individual RNA counts
+data = load_data(
+    &quot;rnacount&quot;,
+    String[],
+    &quot;data/single_cell/&quot;,
+    &quot;experiment1&quot;,
+    &quot;ACTB&quot;,
+    &quot;treated&quot;,
+    (),
+    1
+)</code></pre><h4 id="&quot;rnaonoff&quot;-RNA-ON/OFF-Times"><a class="docs-heading-anchor" href="#&quot;rnaonoff&quot;-RNA-ON/OFF-Times">&quot;rnaonoff&quot; - RNA + ON/OFF Times</a><a id="&quot;rnaonoff&quot;-RNA-ON/OFF-Times-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;rnaonoff&quot;-RNA-ON/OFF-Times" title="Permalink"></a></h4><p>Load combined RNA counts and ON/OFF state duration data.</p><p><strong>File Format</strong>: Two files - RNA histogram and ON/OFF times <strong>Returns</strong>: <code>RNAOnOffData</code> structure</p><pre><code class="language-julia hljs"># Load RNA + ON/OFF data
+data = load_data(
+    &quot;rnaonoff&quot;,
+    String[],
+    [&quot;data/rna_hist.txt&quot;, &quot;data/onoff_times.txt&quot;],  # Multiple files
+    &quot;live_cell&quot;,
+    &quot;SOX2&quot;,
+    &quot;control&quot;,
+    (),
+    2  # Divide histogram by 2
+)</code></pre><h4 id="&quot;rnadwelltime&quot;-RNA-Dwell-Times"><a class="docs-heading-anchor" href="#&quot;rnadwelltime&quot;-RNA-Dwell-Times">&quot;rnadwelltime&quot; - RNA + Dwell Times</a><a id="&quot;rnadwelltime&quot;-RNA-Dwell-Times-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;rnadwelltime&quot;-RNA-Dwell-Times" title="Permalink"></a></h4><p>Load RNA counts with dwell time distributions.</p><p><strong>File Format</strong>: Multiple files - RNA histogram and dwell time data <strong>Returns</strong>: <code>RNADwellTimeData</code> structure</p><pre><code class="language-julia hljs"># Load RNA + dwell time data
+data = load_data(
+    &quot;rnadwelltime&quot;,
+    [&quot;ON&quot;, &quot;OFF&quot;],           # Dwell time types
+    [&quot;data/rna.txt&quot;, &quot;data/dwellON.txt&quot;, &quot;data/dwellOFF.txt&quot;],
+    &quot;combined&quot;,
+    &quot;GENE1&quot;,
+    &quot;condition1&quot;,
+    (),
+    1
+)</code></pre><h3 id="Trace-Data-Types"><a class="docs-heading-anchor" href="#Trace-Data-Types">Trace Data Types</a><a id="Trace-Data-Types-1"></a><a class="docs-heading-anchor-permalink" href="#Trace-Data-Types" title="Permalink"></a></h3><h4 id="&quot;trace&quot;-Intensity-Traces"><a class="docs-heading-anchor" href="#&quot;trace&quot;-Intensity-Traces">&quot;trace&quot; - Intensity Traces</a><a id="&quot;trace&quot;-Intensity-Traces-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;trace&quot;-Intensity-Traces" title="Permalink"></a></h4><p>Load fluorescence intensity time series data.</p><p><strong>File Format</strong>: Text files with intensity traces <strong>Returns</strong>: <code>TraceData</code> structure</p><pre><code class="language-julia hljs"># Load intensity traces
+data = load_data(
+    &quot;trace&quot;,
+    String[],
+    &quot;data/traces/&quot;,
+    &quot;live_imaging&quot;,
+    &quot;MYC&quot;,
+    &quot;control&quot;,
+    (1.0, 1.0, -1, 1.0),    # traceinfo: (interval, start, end, weight)
+    1,
+    3,                       # datacol: use column 3
+    false                    # zeromedian: don&#39;t zero-center
+)</code></pre><h4 id="&quot;tracerna&quot;-Traces-RNA-Histogram"><a class="docs-heading-anchor" href="#&quot;tracerna&quot;-Traces-RNA-Histogram">&quot;tracerna&quot; - Traces + RNA Histogram</a><a id="&quot;tracerna&quot;-Traces-RNA-Histogram-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;tracerna&quot;-Traces-RNA-Histogram" title="Permalink"></a></h4><p>Load both intensity traces and RNA histogram data.</p><p><strong>File Format</strong>: Two directories - trace files and RNA histogram <strong>Returns</strong>: <code>TraceRNAData</code> structure</p><pre><code class="language-julia hljs"># Load traces + RNA data
+data = load_data(
+    &quot;tracerna&quot;,
+    String[],
+    [&quot;data/traces/&quot;, &quot;data/rna/&quot;],  # Two data paths
+    &quot;combined_exp&quot;,
+    &quot;GENE2&quot;,
+    &quot;treated&quot;,
+    (0.5, 0.0, 100.0, 0.8),        # 0.5 min intervals, 0-100 min, 80% weight
+    1,
+    3,
+    true                            # Zero-center traces
+)</code></pre><h4 id="&quot;tracejoint&quot;-Simultaneous-Traces"><a class="docs-heading-anchor" href="#&quot;tracejoint&quot;-Simultaneous-Traces">&quot;tracejoint&quot; - Simultaneous Traces</a><a id="&quot;tracejoint&quot;-Simultaneous-Traces-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;tracejoint&quot;-Simultaneous-Traces" title="Permalink"></a></h4><p>Load traces recorded simultaneously (e.g., different fluorescent channels).</p><p><strong>File Format</strong>: Multi-column trace files <strong>Returns</strong>: <code>TraceData</code> structure</p><pre><code class="language-julia hljs"># Load joint traces
+data = load_data(
+    &quot;tracejoint&quot;,
+    String[],
+    &quot;data/joint_traces/&quot;,
+    &quot;dual_channel&quot;,
+    &quot;GENE_TF&quot;,
+    &quot;stimulus&quot;,
+    (2.0, 0.0, -1, [0.9, 0.85]),   # Different weights per channel
+    1,
+    [3, 4],                        # Use columns 3 and 4
+    [true, false]                  # Zero-center first channel only
+)</code></pre><h4 id="&quot;tracegrid&quot;-Grid-Based-Traces"><a class="docs-heading-anchor" href="#&quot;tracegrid&quot;-Grid-Based-Traces">&quot;tracegrid&quot; - Grid-Based Traces</a><a id="&quot;tracegrid&quot;-Grid-Based-Traces-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;tracegrid&quot;-Grid-Based-Traces" title="Permalink"></a></h4><p>Load traces for grid-based parameter exploration.</p><p><strong>File Format</strong>: Structured trace files <strong>Returns</strong>: <code>TraceData</code> structure</p><pre><code class="language-julia hljs"># Load grid traces
+data = load_data(
+    &quot;tracegrid&quot;,
+    String[],
+    &quot;data/grid_traces/&quot;,
+    &quot;parameter_grid&quot;,
+    &quot;TARGET&quot;,
+    &quot;sweep&quot;,
+    (1.0, 0.0, 50.0, 1.0),
+    1
+)</code></pre><h3 id="Dwell-Time-Data"><a class="docs-heading-anchor" href="#Dwell-Time-Data">Dwell Time Data</a><a id="Dwell-Time-Data-1"></a><a class="docs-heading-anchor-permalink" href="#Dwell-Time-Data" title="Permalink"></a></h3><h4 id="&quot;dwelltime&quot;-Dwell-Time-Distributions-Only"><a class="docs-heading-anchor" href="#&quot;dwelltime&quot;-Dwell-Time-Distributions-Only">&quot;dwelltime&quot; - Dwell Time Distributions Only</a><a id="&quot;dwelltime&quot;-Dwell-Time-Distributions-Only-1"></a><a class="docs-heading-anchor-permalink" href="#&quot;dwelltime&quot;-Dwell-Time-Distributions-Only" title="Permalink"></a></h4><p>Load dwell time distributions without RNA data.</p><p><strong>File Format</strong>: Text files with dwell time histograms <strong>Returns</strong>: <code>DwellTimeData</code> structure</p><pre><code class="language-julia hljs"># Load dwell time data
+data = load_data(
+    &quot;dwelltime&quot;,
+    [&quot;ON&quot;, &quot;OFF&quot;, &quot;BURST&quot;],
+    [&quot;data/dwell_ON.txt&quot;, &quot;data/dwell_OFF.txt&quot;, &quot;data/dwell_BURST.txt&quot;],
+    &quot;dwell_analysis&quot;,
+    &quot;GENE3&quot;,
+    &quot;control&quot;,
+    (),
+    1
+)</code></pre><h2 id="Trace-Parameters-(traceinfo)"><a class="docs-heading-anchor" href="#Trace-Parameters-(traceinfo)">Trace Parameters (traceinfo)</a><a id="Trace-Parameters-(traceinfo)-1"></a><a class="docs-heading-anchor-permalink" href="#Trace-Parameters-(traceinfo)" title="Permalink"></a></h2><p>For trace data types, the <code>traceinfo</code> tuple contains:</p><ol><li><strong>interval</strong> (<code>Float64</code>): Time interval between frames (minutes)</li><li><strong>start</strong> (<code>Float64</code>): Start time or frame number</li><li><strong>end</strong> (<code>Float64</code>): End time or frame number (-1 for last frame)</li><li><strong>weight</strong> (<code>Float64</code> or <code>Vector{Float64}</code>): Fraction of active traces or per-channel weights</li><li><strong>background</strong> (<code>Vector</code> or <code>Vector{Vector}</code>, optional): Background values per trace</li></ol><pre><code class="language-julia hljs"># Basic trace info
+traceinfo = (1.0, 1.0, -1, 1.0)  # 1 min intervals, frame 1 to end, 100% weight
+
+# Multi-channel with backgrounds
+traceinfo = (
+    0.5,                    # 30 second intervals
+    0.0,                    # Start at time 0
+    100.0,                  # End at 100 minutes
+    [0.8, 0.9],            # 80% weight channel 1, 90% channel 2
+    [[10.0, 15.0], [5.0, 8.0]]  # Background per channel per trace
+)</code></pre><h2 id="File-Formats"><a class="docs-heading-anchor" href="#File-Formats">File Formats</a><a id="File-Formats-1"></a><a class="docs-heading-anchor-permalink" href="#File-Formats" title="Permalink"></a></h2><h3 id="RNA-Histogram-Files"><a class="docs-heading-anchor" href="#RNA-Histogram-Files">RNA Histogram Files</a><a id="RNA-Histogram-Files-1"></a><a class="docs-heading-anchor-permalink" href="#RNA-Histogram-Files" title="Permalink"></a></h3><pre><code class="nohighlight hljs"># RNA count histogram
+# Count  Frequency
+0       150
+1       200
+2       180
+3       120
+4       80
+...</code></pre><h3 id="Trace-Files"><a class="docs-heading-anchor" href="#Trace-Files">Trace Files</a><a id="Trace-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Trace-Files" title="Permalink"></a></h3><pre><code class="nohighlight hljs"># Intensity trace data
+# Time   Background   Intensity   State
+0.0     10.0         25.3        1
+1.0     10.2         28.1        1
+2.0     9.8          24.5        1
+3.0     10.1         45.2        2
+...</code></pre><h3 id="Dwell-Time-Files"><a class="docs-heading-anchor" href="#Dwell-Time-Files">Dwell Time Files</a><a id="Dwell-Time-Files-1"></a><a class="docs-heading-anchor-permalink" href="#Dwell-Time-Files" title="Permalink"></a></h3><pre><code class="nohighlight hljs"># Dwell time histogram
+# Time_bin   Count
+0.5         25
+1.0         40
+1.5         35
+2.0         30
+...</code></pre><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><h3 id="Complete-RNA-Analysis-Workflow"><a class="docs-heading-anchor" href="#Complete-RNA-Analysis-Workflow">Complete RNA Analysis Workflow</a><a id="Complete-RNA-Analysis-Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Complete-RNA-Analysis-Workflow" title="Permalink"></a></h3><pre><code class="language-julia hljs">using StochasticGene
+
+# Load RNA data
+rna_data = load_data(
+    &quot;rna&quot;,
+    String[],
+    &quot;data/HCT116_smFISH/&quot;,
+    &quot;HCT116_control&quot;,
+    &quot;MYC&quot;,
+    &quot;MOCK&quot;,
+    (),
+    1
+)
+
+# Display data properties
+println(&quot;Gene: &quot;, rna_data.gene)
+println(&quot;RNA range: &quot;, length(rna_data.histRNA))
+println(&quot;Total counts: &quot;, sum(rna_data.histRNA))</code></pre><h3 id="Multi-Modal-Data-Loading"><a class="docs-heading-anchor" href="#Multi-Modal-Data-Loading">Multi-Modal Data Loading</a><a id="Multi-Modal-Data-Loading-1"></a><a class="docs-heading-anchor-permalink" href="#Multi-Modal-Data-Loading" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Load combined RNA and trace data
+combined_data = load_data(
+    &quot;tracerna&quot;,
+    String[],
+    [&quot;data/traces/MYC_traces/&quot;, &quot;data/rna/MYC_histogram.txt&quot;],
+    &quot;multimodal&quot;,
+    &quot;MYC&quot;,
+    &quot;control&quot;,
+    (1.0, 0.0, 120.0, 0.85),
+    1,
+    3,
+    true
+)
+
+# Access both data types
+traces = combined_data.trace
+rna_hist = combined_data.histRNA</code></pre><h3 id="Hierarchical-Data-Loading"><a class="docs-heading-anchor" href="#Hierarchical-Data-Loading">Hierarchical Data Loading</a><a id="Hierarchical-Data-Loading-1"></a><a class="docs-heading-anchor-permalink" href="#Hierarchical-Data-Loading" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Load multiple conditions for hierarchical analysis
+conditions = [&quot;control&quot;, &quot;treated1&quot;, &quot;treated2&quot;]
+all_data = []
+
+for cond in conditions
+    data = load_data(
+        &quot;trace&quot;,
+        String[],
+        &quot;data/traces/&quot;,
+        &quot;hierarchical_$cond&quot;,
+        &quot;SOX2&quot;,
+        cond,
+        (0.5, 0.0, 60.0, 0.9),
+        1,
+        3,
+        true
+    )
+    push!(all_data, data)
+end</code></pre><h3 id="Custom-Data-Processing"><a class="docs-heading-anchor" href="#Custom-Data-Processing">Custom Data Processing</a><a id="Custom-Data-Processing-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-Data-Processing" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Load with custom processing
+function custom_load_processing(datapath, gene, condition)
+    # Custom preprocessing logic
+    raw_data = load_data(
+        &quot;trace&quot;,
+        String[],
+        datapath,
+        &quot;custom_$condition&quot;,
+        gene,
+        condition,
+        (2.0, 5.0, 100.0, 0.95),
+        1,
+        3,
+        true
+    )
+    
+    # Additional processing
+    processed_traces = []
+    for trace in raw_data.trace[1]
+        # Apply custom filtering, normalization, etc.
+        filtered_trace = smooth_trace(trace)
+        push!(processed_traces, filtered_trace)
+    end
+    
+    return raw_data, processed_traces
+end</code></pre><h2 id="Error-Handling"><a class="docs-heading-anchor" href="#Error-Handling">Error Handling</a><a id="Error-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Error-Handling" title="Permalink"></a></h2><p>The function includes comprehensive error checking:</p><pre><code class="language-julia hljs"># Invalid data type
+try
+    data = load_data(&quot;invalid_type&quot;, ...)
+catch ArgumentError as e
+    println(&quot;Error: &quot;, e.msg)
+end
+
+# Missing files
+try
+    data = load_data(&quot;rna&quot;, String[], &quot;nonexistent/path/&quot;, ...)
+catch SystemError as e
+    println(&quot;File error: &quot;, e.msg)
+end
+
+# Inconsistent trace info
+try
+    data = load_data(&quot;trace&quot;, String[], path, label, gene, cond, 
+                    (1.0, 100.0, 50.0, 1.0), ...)  # end &lt; start
+catch ArgumentError as e
+    println(&quot;Invalid trace parameters: &quot;, e.msg)
+end</code></pre><h2 id="Performance-Considerations"><a class="docs-heading-anchor" href="#Performance-Considerations">Performance Considerations</a><a id="Performance-Considerations-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Considerations" title="Permalink"></a></h2><ol><li><strong>Large Files</strong>: Use appropriate data types for memory efficiency</li><li><strong>Multiple Files</strong>: Consider loading in batches for very large datasets</li><li><strong>Trace Data</strong>: Zero-centering can reduce memory usage for fitting</li><li><strong>File Formats</strong>: CSV files are slower than tab-delimited files</li></ol><h2 id="Data-Validation"><a class="docs-heading-anchor" href="#Data-Validation">Data Validation</a><a id="Data-Validation-1"></a><a class="docs-heading-anchor-permalink" href="#Data-Validation" title="Permalink"></a></h2><p>The function validates:</p><ul><li>File existence and readability</li><li>Data format consistency</li><li>Parameter compatibility</li><li>Trace parameter validity</li><li>Column specifications for trace data</li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="../#RNAData"><code>RNAData</code></a>: RNA data structure</li><li><a href="../#TraceData"><code>TraceData</code></a>: Trace data structure</li><li><a href="@ref"><code>fit</code></a>: Model fitting function</li><li><a href="@ref"><code>simulator</code></a>: Data simulation function</li><li><a href="@ref"><code>write_dataframes</code></a>: Write data to files</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../simulator/">« Model Simulation</a><a class="docs-footer-nextpage" href="../utilities/">Utility Functions »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.11.4 on <span class="colophon-date" title="Friday 6 February 2026 16:21">Friday 6 February 2026</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

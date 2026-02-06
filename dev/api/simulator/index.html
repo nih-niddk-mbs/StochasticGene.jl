@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Model Simulation · StochasticGene.jl</title><meta name="title" content="Model Simulation · StochasticGene.jl"/><meta property="og:title" content="Model Simulation · StochasticGene.jl"/><meta property="twitter:title" content="Model Simulation · StochasticGene.jl"/><meta name="description" content="Documentation for StochasticGene.jl."/><meta property="og:description" content="Documentation for StochasticGene.jl."/><meta property="twitter:description" content="Documentation for StochasticGene.jl."/><meta property="og:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/simulator/"/><meta property="twitter:url" content="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/simulator/"/><link rel="canonical" href="https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/api/simulator/"/><script async src="https://www.googletagmanager.com/gtag/js?id=UA-XXXXXXXXX-X"></script><script>  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'UA-XXXXXXXXX-X', {'page_path': location.pathname + location.search + location.hash});
+</script><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script><link href="../../assets/custom.css" rel="stylesheet" type="text/css"/></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">StochasticGene.jl</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><a class="tocitem" href="../../installation/">Installation</a></li><li><a class="tocitem" href="../../getting_started/">Getting Started</a></li><li><span class="tocitem">Examples</span><ul><li><a class="tocitem" href="../../examples/">Overview</a></li><li><input class="collapse-toggle" id="menuitem-4-2" type="checkbox"/><label class="tocitem" for="menuitem-4-2"><span class="docs-label">Basic Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../examples/basic_telegraph/">Basic Telegraph Model</a></li><li><a class="tocitem" href="../../examples/multi_state_rna/">Multi-State Model</a></li><li><a class="tocitem" href="../../examples/rna_histogram/">RNA Histogram Analysis</a></li><li><a class="tocitem" href="../../examples/ms2_analysis/">MS2 Reporter Analysis</a></li><li><a class="tocitem" href="../../examples/dual_reporter/">Dual Reporter System</a></li><li><a class="tocitem" href="../../examples/trace_analysis/">Trace Analysis</a></li><li><a class="tocitem" href="../../examples/dwell_time_analysis/">Basic Dwell Times</a></li><li><a class="tocitem" href="../../examples/rna_dwell_time/">RNA Dwell Time Analysis</a></li><li><a class="tocitem" href="../../examples/rna_onoff/">RNA On-Off Analysis</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-4-3" type="checkbox"/><label class="tocitem" for="menuitem-4-3"><span class="docs-label">Advanced Examples</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../../examples/parallel_processing/">Parallel Processing</a></li><li><a class="tocitem" href="../../examples/hierarchical_trace/">Hierarchical Trace Analysis</a></li><li><a class="tocitem" href="../../examples/joint_trace/">Joint Trace Analysis</a></li><li><a class="tocitem" href="../../examples/coupled_models/">Coupled Model Analysis</a></li></ul></li></ul></li><li><span class="tocitem">API</span><ul><li><a class="tocitem" href="../">API Reference</a></li><li><input class="collapse-toggle" id="menuitem-5-2" type="checkbox" checked/><label class="tocitem" for="menuitem-5-2"><span class="docs-label">Core Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../fit/">Model Fitting</a></li><li class="is-active"><a class="tocitem" href>Model Simulation</a><ul class="internal"><li><a class="tocitem" href="#Syntax"><span>Syntax</span></a></li><li><a class="tocitem" href="#Arguments"><span>Arguments</span></a></li><li><a class="tocitem" href="#Returns"><span>Returns</span></a></li><li><a class="tocitem" href="#Examples"><span>Examples</span></a></li><li><a class="tocitem" href="#Rate-Ordering"><span>Rate Ordering</span></a></li><li><a class="tocitem" href="#Performance-Notes"><span>Performance Notes</span></a></li><li><a class="tocitem" href="#Common-Use-Cases"><span>Common Use Cases</span></a></li><li><a class="tocitem" href="#Error-Handling"><span>Error Handling</span></a></li><li><a class="tocitem" href="#See-Also"><span>See Also</span></a></li></ul></li><li><a class="tocitem" href="../load_data/">Data Loading</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-5-3" type="checkbox"/><label class="tocitem" for="menuitem-5-3"><span class="docs-label">Function Libraries</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../utilities/">Utility Functions</a></li><li><a class="tocitem" href="../analysis/">Analysis Functions</a></li></ul></li><li><input class="collapse-toggle" id="menuitem-5-4" type="checkbox"/><label class="tocitem" for="menuitem-5-4"><span class="docs-label">Output Functions</span><i class="docs-chevron"></i></label><ul class="collapsed"><li><a class="tocitem" href="../write_traces/">Write Traces</a></li><li><a class="tocitem" href="../write_ONOFFhistograms/">Write ON/OFF Histograms</a></li><li><a class="tocitem" href="../write_residency_G_folder/">Write G State Residency</a></li></ul></li></ul></li><li><a class="tocitem" href="../../contributing/">Contributing</a></li></ul><div class="docs-version-selector field has-addons visible"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"><option value="#" selected="selected">1.6.0</option></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">API</a></li><li><a class="is-disabled">Core Functions</a></li><li class="is-active"><a href>Model Simulation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Model Simulation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/nih-niddk-mbs/StochasticGene.jl/blob/main/docs/src/api/simulator.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="simulator-Function"><a class="docs-heading-anchor" href="#simulator-Function">simulator Function</a><a id="simulator-Function-1"></a><a class="docs-heading-anchor-permalink" href="#simulator-Function" title="Permalink"></a></h1><p>Simulate stochastic gene expression models using the Gillespie algorithm.</p><h2 id="Syntax"><a class="docs-heading-anchor" href="#Syntax">Syntax</a><a id="Syntax-1"></a><a class="docs-heading-anchor-permalink" href="#Syntax" title="Permalink"></a></h2><pre><code class="language-julia hljs">simulator(rin, transitions, G, R, S, insertstep; kwargs...)</code></pre><h2 id="Arguments"><a class="docs-heading-anchor" href="#Arguments">Arguments</a><a id="Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Arguments" title="Permalink"></a></h2><h3 id="Required-Arguments"><a class="docs-heading-anchor" href="#Required-Arguments">Required Arguments</a><a id="Required-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Required-Arguments" title="Permalink"></a></h3><ul><li><code>rin::Vector{Float64}</code>: Initial transition rates</li><li><code>transitions::Tuple</code>: Tuple of vectors specifying state transitions</li><li><code>G::Int</code>: Number of gene states</li><li><code>R::Int</code>: Number of pre-RNA steps</li><li><code>S::Int</code>: Number of splice sites (must be ≤ R - insertstep + 1)</li><li><code>insertstep::Int</code>: Step where reporter becomes visible</li></ul><h3 id="Optional-Keyword-Arguments"><a class="docs-heading-anchor" href="#Optional-Keyword-Arguments">Optional Keyword Arguments</a><a id="Optional-Keyword-Arguments-1"></a><a class="docs-heading-anchor-permalink" href="#Optional-Keyword-Arguments" title="Permalink"></a></h3><h4 id="Simulation-Parameters"><a class="docs-heading-anchor" href="#Simulation-Parameters">Simulation Parameters</a><a id="Simulation-Parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Simulation-Parameters" title="Permalink"></a></h4><ul><li><code>warmupsteps::Int = 0</code>: Number of warmup steps before recording</li><li><code>nalleles::Int = 1</code>: Number of alleles</li><li><code>nhist::Int = 20</code>: Number of histogram bins</li><li><code>bins::Vector{Float64} = Float64[]</code>: Custom histogram bins</li><li><code>traceinterval::Float64 = 0.0</code>: Time interval for trace recording (0 = no traces)</li></ul><h4 id="Model-Configuration"><a class="docs-heading-anchor" href="#Model-Configuration">Model Configuration</a><a id="Model-Configuration-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Configuration" title="Permalink"></a></h4><ul><li><code>coupling::Tuple = tuple()</code>: Coupling parameters for multi-unit models</li><li><code>onstates::Vector{Int} = Int[]</code>: States where transcription is active</li><li><code>splicetype::String = &quot;&quot;</code>: Splicing configuration (&quot;&quot;, &quot;offeject&quot;, &quot;offdecay&quot;)</li></ul><h4 id="Observation-Model"><a class="docs-heading-anchor" href="#Observation-Model">Observation Model</a><a id="Observation-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Observation-Model" title="Permalink"></a></h4><ul><li><code>probfn::Function = prob_Gaussian</code>: Probability function for observations</li><li><code>noise::Vector{Float64} = Float64[]</code>: Noise parameters</li><li><code>reportersteps::Vector{Int} = Int[]</code>: Steps where reporter is visible</li></ul><h4 id="Output-Control"><a class="docs-heading-anchor" href="#Output-Control">Output Control</a><a id="Output-Control-1"></a><a class="docs-heading-anchor-permalink" href="#Output-Control" title="Permalink"></a></h4><ul><li><code>tspan::Tuple{Float64, Float64} = (0., 1000.)</code>: Time span for simulation</li><li><code>ntrials::Int = 1</code>: Number of simulation trials</li><li><code>resultfolder::String = &quot;&quot;</code>: Output folder for results</li></ul><h2 id="Returns"><a class="docs-heading-anchor" href="#Returns">Returns</a><a id="Returns-1"></a><a class="docs-heading-anchor-permalink" href="#Returns" title="Permalink"></a></h2><ul><li><code>histogram::Vector{Float64}</code>: Steady-state RNA count distribution</li><li><code>traces::Vector{Vector{Float64}}</code>: Intensity traces (if <code>traceinterval &gt; 0</code>)</li><li><code>dtimes::Vector{Float64}</code>: Dwell times (if applicable)</li></ul><h2 id="Examples"><a class="docs-heading-anchor" href="#Examples">Examples</a><a id="Examples-1"></a><a class="docs-heading-anchor-permalink" href="#Examples" title="Permalink"></a></h2><h3 id="Basic-Two-State-Model"><a class="docs-heading-anchor" href="#Basic-Two-State-Model">Basic Two-State Model</a><a id="Basic-Two-State-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Basic-Two-State-Model" title="Permalink"></a></h3><pre><code class="language-julia hljs">using StochasticGene
+
+# Simple two-state telegraph model
+rates = [0.1, 0.2]  # G1-&gt;G2, G2-&gt;G1
+transitions = ([1,2], [2,1])
+G, R, S = 2, 0, 0
+insertstep = 1
+
+# Simulate RNA histogram
+histogram = simulator(
+    rates, transitions, G, R, S, insertstep,
+    nhist = 50,
+    ntrials = 1000
+)</code></pre><h3 id="GRS-Model-with-Traces"><a class="docs-heading-anchor" href="#GRS-Model-with-Traces">GRS Model with Traces</a><a id="GRS-Model-with-Traces-1"></a><a class="docs-heading-anchor-permalink" href="#GRS-Model-with-Traces" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Gene-Reporter-Splice model
+rates = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+transitions = ([1,2], [2,1])
+G, R, S = 2, 3, 2
+insertstep = 1
+
+# Simulate with intensity traces
+histogram, traces = simulator(
+    rates, transitions, G, R, S, insertstep,
+    traceinterval = 1.0,    # 1 minute intervals
+    tspan = (0., 500.),     # 500 minute simulation
+    noise = [10.0, 5.0],    # Gaussian noise parameters
+    probfn = prob_Gaussian
+)</code></pre><h3 id="Coupled-Model"><a class="docs-heading-anchor" href="#Coupled-Model">Coupled Model</a><a id="Coupled-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Coupled-Model" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Two coupled transcriptional units
+rates1 = [0.1, 0.2, 0.3]
+rates2 = [0.15, 0.25, 0.35]
+transitions1 = ([1,2], [2,1])
+transitions2 = ([1,2], [2,1])
+
+# Coupling: units share some transition rates
+coupling = (2, 2, [1,2], [3,4], 2)  # Coupling specification
+
+histogram = simulator(
+    [rates1; rates2], 
+    (transitions1, transitions2),
+    (2, 2),        # G states for each unit
+    (1, 1),        # R steps for each unit
+    (0, 0),        # S sites for each unit
+    (1, 1),        # Insert steps
+    coupling = coupling,
+    nalleles = 2
+)</code></pre><h3 id="Hierarchical-Model"><a class="docs-heading-anchor" href="#Hierarchical-Model">Hierarchical Model</a><a id="Hierarchical-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Hierarchical-Model" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Simulate data for hierarchical fitting
+rates = [0.1, 0.2, 0.3]
+transitions = ([1,2], [2,1])
+G, R, S = 2, 1, 0
+insertstep = 1
+
+# Generate multiple traces for hierarchical analysis
+ntraces = 10
+all_traces = Vector{Vector{Float64}}()
+
+for i in 1:ntraces
+    # Add noise to rates for each trace
+    noisy_rates = rates .* (1 .+ 0.1 * randn(length(rates)))
+    
+    histogram, traces = simulator(
+        noisy_rates, transitions, G, R, S, insertstep,
+        traceinterval = 0.5,
+        tspan = (0., 200.),
+        noise = [20.0, 10.0]
+    )
+    
+    append!(all_traces, traces)
+end</code></pre><h3 id="Custom-Observation-Model"><a class="docs-heading-anchor" href="#Custom-Observation-Model">Custom Observation Model</a><a id="Custom-Observation-Model-1"></a><a class="docs-heading-anchor-permalink" href="#Custom-Observation-Model" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Define custom observation function
+function prob_Poisson(y, μ, σ)
+    return pdf(Poisson(μ), round(Int, y))
+end
+
+# Simulate with Poisson observation noise
+histogram = simulator(
+    rates, transitions, G, R, S, insertstep,
+    probfn = prob_Poisson,
+    noise = [15.0],  # Poisson rate parameter
+    nhist = 30
+)</code></pre><h2 id="Rate-Ordering"><a class="docs-heading-anchor" href="#Rate-Ordering">Rate Ordering</a><a id="Rate-Ordering-1"></a><a class="docs-heading-anchor-permalink" href="#Rate-Ordering" title="Permalink"></a></h2><p>The rate vector <code>rin</code> must follow this specific ordering:</p><ol><li><strong>G transitions</strong>: Rates between gene states</li><li><strong>R transitions</strong>: Rates between pre-RNA steps</li><li><strong>S transitions</strong>: Splicing rates</li><li><strong>Decay rates</strong>: mRNA decay rates</li><li><strong>Noise parameters</strong>: Observation noise parameters</li></ol><h3 id="Example-Rate-Ordering"><a class="docs-heading-anchor" href="#Example-Rate-Ordering">Example Rate Ordering</a><a id="Example-Rate-Ordering-1"></a><a class="docs-heading-anchor-permalink" href="#Example-Rate-Ordering" title="Permalink"></a></h3><p>For a model with G=2, R=3, S=2:</p><pre><code class="language-julia hljs">rates = [
+    # G transitions
+    0.1,    # G1 -&gt; G2
+    0.2,    # G2 -&gt; G1
+    
+    # R transitions
+    0.3,    # R1 -&gt; R2
+    0.4,    # R2 -&gt; R3
+    0.5,    # R3 -&gt; eject
+    
+    # S transitions
+    0.6,    # Splice site 1
+    0.7,    # Splice site 2
+    
+    # Decay
+    0.05    # mRNA decay
+]</code></pre><h2 id="Performance-Notes"><a class="docs-heading-anchor" href="#Performance-Notes">Performance Notes</a><a id="Performance-Notes-1"></a><a class="docs-heading-anchor-permalink" href="#Performance-Notes" title="Permalink"></a></h2><ol><li><strong>Memory Usage</strong>: Large <code>nhist</code> values require more memory</li><li><strong>Simulation Time</strong>: Longer <code>tspan</code> and smaller rates increase runtime</li><li><strong>Trace Recording</strong>: <code>traceinterval &gt; 0</code> significantly increases memory usage</li><li><strong>Parallel Processing</strong>: Use multiple calls for embarrassingly parallel simulations</li></ol><h2 id="Common-Use-Cases"><a class="docs-heading-anchor" href="#Common-Use-Cases">Common Use Cases</a><a id="Common-Use-Cases-1"></a><a class="docs-heading-anchor-permalink" href="#Common-Use-Cases" title="Permalink"></a></h2><h3 id="Parameter-Estimation-Validation"><a class="docs-heading-anchor" href="#Parameter-Estimation-Validation">Parameter Estimation Validation</a><a id="Parameter-Estimation-Validation-1"></a><a class="docs-heading-anchor-permalink" href="#Parameter-Estimation-Validation" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Generate synthetic data for testing parameter estimation
+true_rates = [0.1, 0.2, 0.3]
+synthetic_data = simulator(
+    true_rates, transitions, G, R, S, insertstep,
+    nhist = 100,
+    ntrials = 5000
+)
+
+# Use synthetic_data to validate fitting algorithms</code></pre><h3 id="Model-Comparison"><a class="docs-heading-anchor" href="#Model-Comparison">Model Comparison</a><a id="Model-Comparison-1"></a><a class="docs-heading-anchor-permalink" href="#Model-Comparison" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Compare different model structures
+models = [
+    (2, 0, 0),  # Simple telegraph
+    (2, 1, 0),  # With pre-RNA
+    (3, 1, 0),  # Three gene states
+]
+
+for (G, R, S) in models
+    histogram = simulator(rates, transitions, G, R, S, insertstep)
+    # Analyze and compare histograms
+end</code></pre><h3 id="Burst-Analysis"><a class="docs-heading-anchor" href="#Burst-Analysis">Burst Analysis</a><a id="Burst-Analysis-1"></a><a class="docs-heading-anchor-permalink" href="#Burst-Analysis" title="Permalink"></a></h3><pre><code class="language-julia hljs"># Simulate for burst size analysis
+histogram, traces = simulator(
+    rates, transitions, G, R, S, insertstep,
+    traceinterval = 0.1,    # High temporal resolution
+    tspan = (0., 1000.),
+    onstates = [2]          # State 2 is transcriptionally active
+)
+
+# Analyze burst properties from traces</code></pre><h2 id="Error-Handling"><a class="docs-heading-anchor" href="#Error-Handling">Error Handling</a><a id="Error-Handling-1"></a><a class="docs-heading-anchor-permalink" href="#Error-Handling" title="Permalink"></a></h2><p>The function includes validation for:</p><ul><li>Rate vector length consistency</li><li>Valid state transitions</li><li>Proper model dimensions (G, R, S relationships)</li><li>Positive rate values</li><li>Valid time spans</li></ul><h2 id="See-Also"><a class="docs-heading-anchor" href="#See-Also">See Also</a><a id="See-Also-1"></a><a class="docs-heading-anchor-permalink" href="#See-Also" title="Permalink"></a></h2><ul><li><a href="@ref"><code>simulate_trace</code></a>: Generate traces only</li><li><a href="@ref"><code>simulate_trials</code></a>: Multiple simulation runs</li><li><a href="@ref"><code>fit</code></a>: Fit models to data</li><li><a href="../utilities/#prob_Gaussian"><code>prob_Gaussian</code></a>: Gaussian observation model</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../fit/">« Model Fitting</a><a class="docs-footer-nextpage" href="../load_data/">Data Loading »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.11.4 on <span class="colophon-date" title="Friday 6 February 2026 16:21">Friday 6 February 2026</span>. Using Julia version 1.11.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
