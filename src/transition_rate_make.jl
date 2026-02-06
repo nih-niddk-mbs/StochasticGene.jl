@@ -934,6 +934,8 @@ the full coupled system dynamics.
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
     N = prod(size.(IT, 2))
+    # Canonical order of (source, target) pairs: same as coupling_strength vector order
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in 1:n for β in sources[α]]
     Tc = spzeros(N, N)
     for α in 1:n
         Tα = T[unit_model[α]]
@@ -946,17 +948,20 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
                 Vβ = kron_left(Vβ, IT, unit_model, α - 1, β + 1)
                 Vβ = kron(U[unit_model[β]], Vβ)
                 Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
-                Tα += coupling_strength[sources[α][β]] * Vβ
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Tα += coupling_strength[idx] * Vβ
             end
         end
         for β in α+1:n
             if β ∈ sources[α]
+                # Coupling term must have same state order (1..n) as Tα. Build V[α]⊗I⊗..⊗U[β]⊗I..
+                # (Original order kron_left(V[α],..,β-1,1); kron(U[β],Vβ) gave (β,α,α) → size n_β·n_α² ≠ N when n_α≠1.)
                 Vβ = V[unit_model[α]]
-                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
                 Vβ = kron_right(Vβ, IT, unit_model, α + 1, β - 1)
-                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron(Vβ, U[unit_model[β]])
                 Vβ = kron_right(Vβ, IT, unit_model, β + 1, n)
-                Tα += coupling_strength[sources[α][β]] * Vβ
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Tα += coupling_strength[idx] * Vβ
             end
         end
         Tc += Tα
@@ -967,22 +972,23 @@ end
 function make_mat_TC_with_self_coupling(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
     N = prod(size.(IT, 2))
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in 1:n for β in sources[α]]
     Tc = spzeros(N, N)
     for α in 1:n
         Tα = T[unit_model[α]]
         Tα = kron_left(Tα, IT, unit_model, α - 1, 1)
         Tα = kron_right(Tα, IT, unit_model, α + 1, n)
         
-        # Add self-coupling case
+        # Add self-coupling case: (U[α]*V[α]) in α slot, same state order (1..n) as Tα
         if α ∈ sources[α]  # Check if unit α can couple to itself
-            Vα = V[unit_model[α]]
-            Vα = kron_right(Vα, IT, unit_model, α + 1, n)
+            Vα = U[unit_model[α]] * V[unit_model[α]]  # matrix product, n_α×n_α
             Vα = kron_left(Vα, IT, unit_model, α - 1, 1)
-            Vα = kron(U[unit_model[α]], Vα)  # Use U matrix of same unit
-            Tα += coupling_strength[sources[α][findfirst(isequal(α), sources[α])]] * Vα
+            Vα = kron_right(Vα, IT, unit_model, α + 1, n)
+            idx = findfirst(isequal((α, α)), coupling_pairs)
+            Tα += coupling_strength[idx] * Vα
         end
         
-        # Original code for coupling from previous units
+        # Coupling from previous units
         for β in 1:α-1
             if β ∈ sources[α]
                 Vβ = V[unit_model[α]]
@@ -990,22 +996,23 @@ function make_mat_TC_with_self_coupling(coupling_strength, T, U, V, IT, sources,
                 Vβ = kron_left(Vβ, IT, unit_model, α - 1, β + 1)
                 Vβ = kron(U[unit_model[β]], Vβ)
                 Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
-                Tα += coupling_strength[sources[α][findfirst(isequal(β), sources[α])]] * Vβ
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Tα += coupling_strength[idx] * Vβ
             end
         end
         
-        # Original code for coupling from later units
+        # Coupling from later units
         for β in α+1:n
             if β ∈ sources[α]
                 Vβ = V[unit_model[α]]
-                Vβ = kron_left(Vβ, IT, unit_model, β - 1, 1)
                 Vβ = kron_right(Vβ, IT, unit_model, α + 1, β - 1)
-                Vβ = kron(U[unit_model[β]], Vβ)
+                Vβ = kron(Vβ, U[unit_model[β]])
                 Vβ = kron_right(Vβ, IT, unit_model, β + 1, n)
-                Tα += coupling_strength[sources[α][findfirst(isequal(β), sources[α])]] * Vβ
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Tα += coupling_strength[idx] * Vβ
             end
         end
-        
+
         Tc += Tα
     end
     return Tc
