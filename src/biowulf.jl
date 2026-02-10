@@ -32,6 +32,14 @@ struct ModelArgs
     fixedeffects::String
 end
 
+"""
+    sanitize_for_filename(s::AbstractString)
+
+Replace characters that are unsafe in shell filenames (e.g. `,` and `|`) with `-`.
+Underscore is reserved for preset filename fields (see io.jl).
+Use when building swarm/.jl filenames from label or coupling spec (e.g. "24,35|35").
+"""
+sanitize_for_filename(s::AbstractString) = replace(replace(string(s), "," => "-"), "|" => "-")
 
 """
     makeswarm(;<keyword arguments>)
@@ -67,9 +75,10 @@ function makeswarm(; gene::String="", nchains::Int=2, nthreads=1, swarmfile::Str
     
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
-    juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
-    sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
-    
+    label_safe = sanitize_for_filename(label)
+    model_safe = sanitize_for_filename(modelstring)
+    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
+    sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
     write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, project, sysimage)
     write_fitfile(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -108,18 +117,19 @@ function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile:
     
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+    label_safe = sanitize_for_filename(label)
+    model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
     println("number of genes: ", ngenes)
-    juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
-    
+    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
     if ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * label * "_" * "$modelstring" * "_" * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
             write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, batches[batch], project)
         end
     else
-        sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
+        sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
         write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, genes, project)
     end
     write_fitfile_genes(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
@@ -471,8 +481,10 @@ function makeswarmcoupled_reciprocal(; gene::String="", nchains::Int=2, nthreads
     end
     modelstring = create_modelstring_coupled(G, R, S, insertstep, coupling_field)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
-    juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
-    sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
+    label_safe = sanitize_for_filename(label)
+    model_safe = sanitize_for_filename(modelstring)
+    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
+    sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
     write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, project, sysimage)
     write_fitfile(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
@@ -496,16 +508,18 @@ function makeswarmcoupled_reciprocal(genes::Vector{String}; nchains::Int=2, nthr
     end
     modelstring = create_modelstring_coupled(G, R, S, insertstep, coupling_field)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
+    label_safe = sanitize_for_filename(label)
+    model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
-    juliafile = juliafile * "_" * label * "_" * "$modelstring" * ".jl"
+    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
     if ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * label * "_" * "$modelstring" * "_" * "$batch" * ".swarm"
+            sfile = swarmfile * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
             write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, batches[batch], project)
         end
     else
-        sfile = swarmfile * "_" * label * "_" * "$modelstring" * ".swarm"
+        sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
         write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, genes, project)
     end
     coupling = make_coupling(coupling_field, G, R)
