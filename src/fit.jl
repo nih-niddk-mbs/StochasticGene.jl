@@ -1828,7 +1828,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 end
 
 """
-    checklength(r, transitions, R, S, insertstep, reporter)
+    checklength(r, transitions, R, S, insertstep, reporter, coupling=tuple(), grid=nothing)
 
 Check if parameter vector has correct length for the model.
 
@@ -1836,24 +1836,20 @@ Check if parameter vector has correct length for the model.
 - `r`: Parameter vector
 - `transitions`: Model transitions
 - `R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure
+- `reporter`: Reporter structure (single reporter or Vector for coupled)
+- `coupling`: Coupling structure (default: empty)
+- `grid`: Grid parameter (default: nothing)
 
 # Returns
 - Nothing
 
 # Notes
-- Validates parameter vector length against expected model parameters
-- Includes rate parameters and noise parameters if HMMReporter
-- Throws error if parameter vector has wrong length
-- Used for parameter validation before model fitting
+- Validates parameter vector length against num_all_parameters (rates + noise + coupling + grid)
+- Throws ArgumentError if length does not match
 """
-function checklength(r, transitions, R, S, insertstep, reporter)
-    n = num_rates(transitions, R, S, insertstep)
-    if typeof(reporter) <: HMMReporter
-        (length(r) != n + reporter.n) && throw("r has wrong length")
-    else
-        (length(r) != n) && throw("r has wrong length")
-    end
+function checklength(r, transitions, R, S, insertstep, reporter, coupling=tuple(), grid=nothing)
+    n_expected = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
+    length(r) != n_expected && throw(ArgumentError("r has wrong length: got $(length(r)), expected $n_expected (rates + noise + coupling + grid)"))
     nothing
 end
 
@@ -2335,10 +2331,12 @@ Set initial rate parameters to prior if empty or invalid.
 function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     if isempty(r)
         println("No rate file, set rate to prior")
-        r = priormean
+        r = copy(priormean)
     elseif any(isnan.(r)) || any(isinf.(r))
         println("r out of bounds: ", r)
-        r = priormean
+        r = copy(priormean)
+    elseif length(r) != length(priormean)
+        throw(ArgumentError("Rate file length $(length(r)) != model length $(length(priormean)); rate file must match current model (e.g. same coupling)"))
     end
     println("initial: ", r)
     r

@@ -295,6 +295,8 @@ function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, prerun=0.)
     s = '"'
+    # Written script must receive Tuple (transitions is tuple of tuples of vectors, or tuple of vectors)
+    transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
@@ -321,7 +323,8 @@ function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber)
     s = '"'
-    # s3 = s * s * s
+    # Written script must receive Tuple (transitions is tuple of tuples of vectors, or tuple of vectors)
+    transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")

@@ -1405,6 +1405,14 @@ function num_all_parameters(model::AbstractGeneTransitionModel)
     num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
 end
 
+# GRSM models: include coupling and grid from trait so total param count matches length(model.rates)
+function num_all_parameters(model::AbstractGRSMmodel)
+    n = num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter)
+    c = hastrait(model, :coupling) ? model.trait.coupling.ncoupling : 0
+    g = hastrait(model, :grid) ? 1 : 0
+    n + c + g
+end
+
 function num_fitted_core_params(model::AbstractGeneTransitionModel)
-    count(x -> x <= num_all_parameters(model.Gtransitions, model.R, model.S, model.insertstep, model.reporter), model.fittedparam)
+    count(x -> x <= num_all_parameters(model), model.fittedparam)
 end
