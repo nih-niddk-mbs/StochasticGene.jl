@@ -335,12 +335,13 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 5-tuple `(unit_model, sources, source_state, target_transition, ncoupling)` where:
+- `coupling=tuple()`: if nonempty, a 5-tuple or 6-tuple. First five elements: `(unit_model, sources, source_state, target_transition, ncoupling)` where:
     1. `unit_model`: tuple of unit indices, e.g. (1, 2) for two coupled units
     2. `sources`: tuple indicating which unit(s) influence each unit, e.g. (tuple(), tuple(1)) means unit 2 is influenced by unit 1, unit 1 has no sources
     3. `source_state`: tuple specifying which state(s) in the source unit trigger coupling. Use (state, 0) for a single G state, or (collect(G+1:G+R), 0) for all R states. E.g. (3, 0) = G state 3; ([4,5,6], 0) = R states
     4. `target_transition`: tuple specifying which transition in the target unit is modulated, e.g. (0, target) where target is the transition index (transitions numbered consecutively: G transitions, then initiation, etc.)
     5. `ncoupling`: Int, number of coupling strength parameters (appended to the rate vector). Use `make_coupling("31", G, R)` in io.jl to build from a coupling field string (e.g. "31" = state 3→transition 1, "R5" = all R states→transition 5)
+    Optional 6th element `coupling_ranges`: constraint per coupling constant — a single `Symbol` applied to all (`:free`, `:activate`, or `:inhibit`) or a tuple/vector of length `ncoupling`. Use `make_coupling(field, G, R; coupling_ranges=:inhibit)` or `coupling_ranges=(:activate, :inhibit)` for per-connection signs.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -390,6 +391,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
+- `yieldfactor=1.0`: detection efficiency (0–1) for RNA and trace data. When < 1, the likelihood accounts for binomial observation loss (e.g. scRNA-seq or incomplete detection). Passed through to `load_data` and used for `datatype` "rna", "rnaonoff", "rnadwelltime", and trace types. Important for scRNA fits.
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
 
 # Returns
@@ -585,7 +587,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     else
@@ -1674,14 +1676,25 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
     end
 
-    # rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
-
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        modes = coupling_ranges(coupling)
         for i in eachindex(couplingindices)
-            push!(ftransforms, log_shift1)
-            push!(invtransforms, invlog_shift1)
-            push!(sigmatransforms, sigmalognormal)
+            mode = i <= length(modes) ? modes[i] : :free
+            if mode == :activate
+                push!(ftransforms, log)
+                push!(invtransforms, exp)
+                push!(sigmatransforms, sigmalognormal)
+            elseif mode == :inhibit
+                push!(ftransforms, coupling_inhibitory_fwd)
+                push!(invtransforms, coupling_inhibitory_inv)
+                push!(sigmatransforms, sigmanormal)
+            else
+                # :free — γ ∈ (-1, ∞)
+                push!(ftransforms, log_shift1)
+                push!(invtransforms, invlog_shift1)
+                push!(sigmatransforms, sigmalognormal)
+            end
         end
     end
     if !isnothing(grid)
@@ -2047,15 +2060,26 @@ Generate default prior means for coupled models.
 
 # Notes
 - Processes each unit in coupled model separately
-- Appends coupling parameter prior means (0.0)
+- Appends coupling parameter prior means (mode-dependent: :activate → 0.1, :inhibit → -0.1, :free → 0.0; weak coupling)
 - Used for coupled model initialization
 """
+function default_coupling_prior_mean(mode::Symbol)
+    mode == :activate && return 0.1
+    mode == :inhibit && return -0.1   # weak coupling, interior of (-1, 0)
+    return 0.0  # :free
+end
+
+function default_coupling_prior_means(coupling)
+    isempty(coupling) && return Float64[]
+    [default_coupling_prior_mean(m) for m in coupling_ranges(coupling)]
+end
+
 function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
     end
-    [rm; fill(0.0, coupling[5])]
+    [rm; default_coupling_prior_means(coupling)]
 end
 
 """

@@ -195,16 +195,16 @@ end
  	TCoupledComponents
 
 fields:
-    N::Int: total number of states
-    model::Tuple: model index for each trace
-    sources::Tuple: source model for each
-    modelcomponents::ModelType}
+    N, model, sources, modelcomponents: as before.
+    build_spec: optional (transitions, G, R, S, insertstep, splicetype) used to build per-connection U,V from (s,t) lists.
+    Per-unit (s,t) are stored in modelcomponents[α].sourceState and .targetTransition (scalar or list).
 """
 struct TCoupledComponents{ModelType} <: AbstractComponents
     N::Int
     model::Tuple
     sources::Tuple
     modelcomponents::ModelType
+    build_spec::Union{Nothing,Tuple}  # (transitions, G, R, S, insertstep, splicetype) for per-connection build
 end
 
 struct TForcedComponents <: AbstractTComponents

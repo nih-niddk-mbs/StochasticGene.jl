@@ -814,8 +814,11 @@ end
 
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
-    elementsSource = set_elements_Source(source_state, G, R, S)
-    elementsTarget = set_elements_Target(target_transition, transitions, G, R, S, insertstep, indices, nT, splicetype)
+    # Use first (s,t) when stored as list so one set of elements per unit; per-connection U,V built at make_matvec_C time
+    s_in = (source_state isa Tuple || source_state isa AbstractVector) ? first(source_state) : source_state
+    t_in = (target_transition isa Tuple || target_transition isa AbstractVector) ? first(target_transition) : target_transition
+    elementsSource = set_elements_Source(s_in, G, R, S)
+    elementsTarget = set_elements_Target(t_in, transitions, G, R, S, insertstep, indices, nT, splicetype)
     return elementsT, elementsSource, elementsTarget, nT
 end
 

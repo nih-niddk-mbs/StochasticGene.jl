@@ -2687,8 +2687,7 @@ to be handled via eigendecomposition.
 function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0)
     components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    sourceStates = [c.sourceState for c in components.modelcomponents]
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, sourceStates, transitions, R, S, insertstep, [4, 4])
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
     second_moment_intensity = Vector[]  # E[O^2|state] for each state
@@ -2728,7 +2727,6 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
     step_indices = round.(Int, lags ./ lag_interval)
 
     # transition matrix a and steady state probabilities p0
-    # Construct a to represent transitions over one lag_interval
     a, p0 = make_ap(r, couplingStrength, lag_interval, components)
 
     # Cross-correlations
@@ -3029,9 +3027,7 @@ end
 
 
 function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
-    sourceStates = coupling[3]
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, sourceStates, transitions, R, S, insertstep, n_noise)
-    # r, couplingStrength, noiseparams = prepare_rates_coupled(rates, nrates, reporter, couplingindices)
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rates, coupling, transitions, R, S, insertstep, n_noise)
     nT = components.N
     a, p0 = make_ap(r, couplingStrength, interval, components)
     states = Array[]

@@ -1804,6 +1804,28 @@ invlogit(x::Float64) = 1 / (1 + exp(-x))
 invlogit(x::Array) = 1 ./ (1 .+ exp.(-x))
 
 """
+    logit_range(x, a, b)
+    invlogit_range(y, a, b)
+
+Map (a, b) ↔ ℝ via logit on (0, 1): forward maps x ∈ (a, b) to y = logit((x - a) / (b - a)); inverse maps y to a + (b - a) * invlogit(y).
+"""
+logit_range(x::Float64, a::Float64, b::Float64) = logit((x - a) / (b - a))
+logit_range(x::Array, a::Float64, b::Float64) = logit.((x .- a) ./ (b - a))
+invlogit_range(y::Float64, a::Float64, b::Float64) = a + (b - a) * invlogit(y)
+invlogit_range(y::Array, a::Float64, b::Float64) = a .+ (b - a) .* invlogit.(y)
+
+"""
+    coupling_inhibitory_fwd(x)
+    coupling_inhibitory_inv(y)
+
+Transform for inhibitory coupling γ ∈ (-1, 0): forward = logit(γ + 1), inverse = invlogit(y) - 1.
+"""
+coupling_inhibitory_fwd(x::Float64) = logit(x + 1.0)
+coupling_inhibitory_fwd(x::Array) = logit.(x .+ 1.0)
+coupling_inhibitory_inv(y::Float64) = invlogit(y) - 1.0
+coupling_inhibitory_inv(y::Array) = invlogit.(y) .- 1.0
+
+"""
     logsumexp(u::Array, v::Array)
     logsumexp(u::Float64, v::Float64)
     logsumexp(v::Array)

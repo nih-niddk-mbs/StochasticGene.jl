@@ -2266,7 +2266,9 @@ function write_trace_dataframe(file::String, datapath::String, interval::Float64
     datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field = parse_filename(file, hlabel=hlabel)
     coupling = make_coupling(coupling_field, G, R)
     if G isa Int && !isempty(coupling)
-        datapath = joinpath(datapath, string(coupling_field[1]))
+        # Extended format (e.g. "24,33|33") use full coupling_field as subpath; legacy use first char
+        subpath = (occursin(',', coupling_field) || occursin('|', coupling_field)) ? coupling_field : string(coupling_field[1])
+        datapath = joinpath(datapath, subpath)
     end
     println(datapath)
     r = readrates(file, get_row(ratetype))
@@ -2523,12 +2525,13 @@ Extract coupling field from a filepath based on a pattern.
 - `filepath::String`: Path to file
 
 # Returns
-- `Union{String, Nothing}`: Coupling field string (2-char unidirectional or 4-char reciprocal), or nothing if not found
+- `Union{String, Nothing}`: Coupling field string (2-char unidirectional, 4-char reciprocal, or extended multi-connection), or nothing if not found
 
 # Notes
 - Searches for pattern followed by coupling digits in filename
 - 2-char = unidirectional (e.g. "31", "R5")
 - 4-char = reciprocal (e.g. "3131", "31R5")
+- Extended (models 9–12): contains comma or pipe, e.g. "24,33|33" (multiple (s,t) per direction)
 - Use `make_coupling(coupling_field, G, R)` to build coupling structure
 
 # Examples
@@ -2538,18 +2541,31 @@ extract_source_target("gene", "rates_gene31_condition.txt")  # Returns: "31"
 
 # Reciprocal coupling
 extract_source_target("gene", "rates_gene3131_condition.txt")  # Returns: "3131"
+
+# Extended multi-connection (models 9–12)
+extract_source_target("gene", "rates_gene24,33|33_condition.txt")  # Returns: "24,33|33"
 ```
 """
 function extract_source_target(pattern::String, filepath::String)
-    # Get filename from path
     filename = basename(filepath)
+    idx = findfirst(pattern, filename)
+    idx === nothing && return nothing
 
-    # Escape special characters in pattern and build regex
+    # Segment after pattern until next '_' or end
+    start_pos = idx.stop + 1
+    rest = start_pos <= ncodeunits(filename) ? filename[start_pos:end] : ""
+    underscore_pos = findfirst('_', rest)
+    segment = underscore_pos === nothing ? rest : rest[1:prevind(rest, first(underscore_pos))]
+
+    # Extended format (models 9–12): contains ',' or '|' → return full segment
+    if !isempty(segment) && (occursin(',', segment) || occursin('|', segment))
+        return segment
+    end
+
+    # Legacy: 4-char reciprocal then 2-char unidirectional
     escaped_pattern = replace(pattern, r"([.*+?^\$()[]{}|\\])" => s"\\\1")
-    # Try 4-char reciprocal first (s1t1s2t2), then 2-char unidirectional (st)
     regex_4 = Regex("$(escaped_pattern)(\\d|R)(\\d)(\\d|R)(\\d)")
     regex_2 = Regex("$(escaped_pattern)(\\d|R)(\\d)")
-
     m = match(regex_4, filename)
     if m !== nothing
         return join(m.captures)

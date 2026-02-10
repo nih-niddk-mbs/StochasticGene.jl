@@ -308,6 +308,25 @@ function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, in
     return r, couplingStrength, noiseparams
 end
 
+# Overload using full coupling for canonical to_connections order (legacy and extended).
+function prepare_rates_coupled(rates, coupling::Tuple, transitions, R::Tuple, S, insertstep, n_noise)
+    r = Vector{Float64}[]
+    couplingStrength = Float64[]
+    j = 1
+    for i in eachindex(R)
+        n = num_rates(transitions[i], R[i], S[i], insertstep[i]) + n_noise[i]
+        push!(r, rates[j:j+n-1])
+        j += n
+    end
+    conns = to_connections(coupling)
+    for k in 1:length(conns)
+        push!(couplingStrength, rates[j])
+        j += 1
+    end
+    noiseparams = [r[i][end-n_noise[i]+1:end] for i in eachindex(r)]
+    return r, couplingStrength, noiseparams
+end
+
 """
     prepare_rates_hierarchical(r, param, nrates, hierarchy, reporter)
 """

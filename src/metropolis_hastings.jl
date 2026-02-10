@@ -648,11 +648,14 @@ This is a unified implementation that works for all data types.
 - The standard error returned is for the **total WAIC** (not per observation), and is scaled by the square root of the number of observations (n_obs).
 """
 function compute_waic(lppd::Array{T}, pwaic::Array{T}, data) where {T}
-    # Calculate total WAIC
-    waic = -2 * sum(lppd - pwaic)
-    # Calculate standard error for total WAIC
-    n_obs = length(pwaic)  # number of observations
-    se = 2 * sqrt(max(sum(pwaic), 0.0)) * sqrt(n_obs)  # scale by sqrt(n_obs)
+    # Pointwise WAIC contributions: waic_i = -2 * (lppd_i - pwaic_i)
+    waic_i = -2 .* (lppd .- pwaic)
+    # Total WAIC
+    waic = sum(waic_i)
+    # Standard error following Gelman et al.: sqrt(n_obs * Var_i(waic_i))
+    n_obs = length(waic_i)
+    v = n_obs > 1 ? var(waic_i) : zero(eltype(waic_i))
+    se = sqrt(n_obs * max(v, zero(v)))
     return waic, se
 end
 

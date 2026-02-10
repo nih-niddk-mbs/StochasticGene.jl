@@ -220,24 +220,141 @@ make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
 - Otherwise: single source state → target state
 - Target state is always the last character of coupling_field
 - Source state is first character for non-R couplings
+- Extended format (models 9–12): contains ',' or '|', e.g. "24,33|33" for multiple (s,t) per direction
 """
-function make_coupling(coupling_field::String, G, R)
+function make_coupling(coupling_field::String, G, R; coupling_ranges=nothing)
     if isempty(coupling_field)
         return tuple()
-    elseif length(coupling_field) == 4
-        # Reciprocal: 4-char s1t1s2t2 format
-        Gt = G isa Tuple ? G : (G, G)
-        Rt = R isa Tuple ? R : (R, R)
-        return make_coupling_reciprocal(coupling_field, Gt, Rt)
-    else
-        if startswith(coupling_field, "R")
-            source = collect(G[1]+1:G[1]+R[1])  # All R states
-        else
-            source = parse(Int, coupling_field[1])
-        end
-        target = parse(Int, coupling_field[2:end])
-        return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
     end
+    Gt = G isa Tuple ? G : (G, G)
+    Rt = R isa Tuple ? R : (R, R)
+    # Extended multi-connection format (models 9–12)
+    if occursin(',', coupling_field) || occursin('|', coupling_field)
+        c = make_coupling_extended(coupling_field, Gt, Rt; coupling_ranges=coupling_ranges)
+        return c
+    end
+    if length(coupling_field) == 4
+        c = make_coupling_reciprocal(coupling_field, Gt, Rt; coupling_ranges=coupling_ranges)
+        return c
+    end
+    # Unidirectional (2-char or "R" + digit)
+    if startswith(coupling_field, "R")
+        source = collect(Gt[1]+1:Gt[1]+Rt[1])
+    else
+        source = parse(Int, coupling_field[1])
+    end
+    target = parse(Int, coupling_field[2:end])
+    base = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
+end
+
+"""
+    make_coupling_extended(coupling_field::String, G, R)
+
+Construct coupling structure from extended coupling field (models 9–12).
+Format: "[dir1]|[dir2]" where each dir is comma-separated "st" pairs (s = digit or R, t = digit).
+E.g. "24,33|33" = (1→2): (2,4),(3,3); (2→1): (3,3).
+"""
+function make_coupling_extended(coupling_field::String, G::Tuple, R::Tuple; coupling_ranges=nothing)
+    parts = split(coupling_field, '|'; limit=2)
+    # Parse direction 1→2 (target 2): first part
+    dir_12 = strip(parts[1])
+    sources_2 = Int[]
+    source_state_2 = Union{Int,Vector{Int}}[]
+    target_transition_2 = Int[]
+    for st in split(dir_12, ',')
+        st = strip(st)
+        isempty(st) && continue
+        s_char, t_char = st[1], st[2]
+        s = s_char == 'R' ? collect(G[1]+1:G[1]+R[1]) : parse(Int, string(s_char))
+        t = parse(Int, string(t_char))
+        push!(sources_2, 1)
+        push!(source_state_2, s)
+        push!(target_transition_2, t)
+    end
+    # Parse direction 2→1 (target 1): second part if present
+    sources_1 = Int[]
+    source_state_1 = Union{Int,Vector{Int}}[]
+    target_transition_1 = Int[]
+    if length(parts) >= 2
+        dir_21 = strip(parts[2])
+        for st in split(dir_21, ',')
+            st = strip(st)
+            isempty(st) && continue
+            s_char, t_char = st[1], st[2]
+            s = s_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s_char))
+            t = parse(Int, string(t_char))
+            push!(sources_1, 2)
+            push!(source_state_1, s)
+            push!(target_transition_1, t)
+        end
+    end
+    ncoupling = length(sources_1) + length(sources_2)
+    sources = (tuple(sources_1...), tuple(sources_2...))
+    source_state = (tuple(source_state_1...), tuple(source_state_2...))
+    target_transition = (tuple(target_transition_1...), tuple(target_transition_2...))
+    base = ((1, 2), sources, source_state, target_transition, ncoupling)
+    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
+end
+
+"""
+    to_connections(coupling)
+
+Normalize coupling 5-tuple to a flat list of connections in canonical order.
+
+# Arguments
+- `coupling`: 5-tuple (unit_model, sources, source_state, target_transition, ncoupling).
+  Empty tuple returns empty list.
+
+# Returns
+- `Vector{Tuple}`: List of (β, α, s, t) with β = source unit, α = target unit,
+  s = source state (Int or Vector{Int} for R states), t = target transition index.
+  Order: for α in 1:n for k in 1:length(sources[α]) with β=sources[α][k], s=source_state[α][k], t=target_transition[α][k].
+
+# Notes
+- Use this order everywhere for γ (fit, simulator, make_mat_TC).
+- Handles legacy (scalar source_state/target_transition per unit) and extended (tuples).
+"""
+function to_connections(coupling)
+    isempty(coupling) && return Tuple{Int,Int,Union{Int,Vector{Int}},Int}[]
+    unit_model, sources, source_state, target_transition, _ncoupling = coupling[1], coupling[2], coupling[3], coupling[4], coupling[5]
+    n = length(unit_model)
+    conns = Tuple{Int,Int,Union{Int,Vector{Int}},Int}[]
+    for α in 1:n
+        sα = sources[α]
+        nconn = length(sα)
+        nconn == 0 && continue
+        ss = source_state[α]
+        tt = target_transition[α]
+        for k in 1:nconn
+            β = sα[k]
+            s = (ss isa Tuple || ss isa AbstractVector) ? ss[k] : ss
+            t = (tt isa Tuple || tt isa AbstractVector) ? tt[k] : tt
+            push!(conns, (β, α, s, t))
+        end
+    end
+    conns
+end
+
+"""
+    coupling_ranges(coupling) -> Vector{Symbol}
+
+Return the range constraint for each coupling constant (:free, :activate, or :inhibit).
+If coupling is a 5-tuple, returns fill(:free, ncoupling).
+If coupling has a 6th element, it may be a single Symbol (apply to all) or a tuple/vector of length ncoupling.
+"""
+function coupling_ranges(coupling)
+    isempty(coupling) && return Symbol[]
+    ncoupling = coupling[5]
+    if length(coupling) >= 6
+        r = coupling[6]
+        if r isa Symbol
+            return fill(r, ncoupling)
+        else
+            return collect(r)
+        end
+    end
+    return fill(:free, ncoupling)
 end
 
 """
@@ -265,7 +382,7 @@ make_coupling_reciprocal("3131", (3, 3), (3, 3))
 make_coupling_reciprocal("31R5", (3, 3), (3, 3))
 ```
 """
-function make_coupling_reciprocal(coupling_field::String, G, R)
+function make_coupling_reciprocal(coupling_field::String, G, R; coupling_ranges=nothing)
     if length(coupling_field) != 4
         throw(ArgumentError("coupling_field for reciprocal must be 4 characters (s1t1s2t2), got \"$coupling_field\""))
     end
@@ -278,7 +395,8 @@ function make_coupling_reciprocal(coupling_field::String, G, R)
     s2 = s2_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s2_char))
     t2 = parse(Int, string(t2_char))
     # coupling: sources=(tuple(2), tuple(1)), source_state=(s2, s1), target_transition=(t2, t1)
-    return ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+    base = ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
