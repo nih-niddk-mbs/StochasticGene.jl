@@ -220,6 +220,8 @@ export
     default_coupling_prior_mean,
     default_coupling_prior_means,
     to_connections,
+    connection_name,
+    coupling_connection_names,
     TComponents,
     T_dimension,
     TraceData,

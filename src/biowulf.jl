@@ -588,7 +588,16 @@ function create_combined_files(resultfolder::String, filepattern::String, coupli
     files = String[]
     for (root, _, fnames) in walkdir(resultfolder)
         for f in fnames
-            occursin(filepattern, f) && (isempty(coupling_field) || occursin(coupling_field, f)) && push!(files, joinpath(root, f))
+            # Match either the raw coupling_field or its sanitized filename form
+            if occursin(filepattern, f)
+                if isempty(coupling_field)
+                    push!(files, joinpath(root, f))
+                else
+                    coupling_field_safe = sanitize_for_filename(coupling_field)
+                    (occursin(coupling_field, f) || occursin(coupling_field_safe, f)) &&
+                        push!(files, joinpath(root, f))
+                end
+            end
         end
     end
     if !isempty(outfile)

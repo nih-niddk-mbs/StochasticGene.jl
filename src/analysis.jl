@@ -2557,6 +2557,13 @@ function extract_source_target(pattern::String, filepath::String)
     underscore_pos = findfirst('_', rest)
     segment = underscore_pos === nothing ? rest : rest[1:prevind(rest, first(underscore_pos))]
 
+    # Sanitized extended form in filenames: digits/'R' plus '-' only (no ',' or '|')
+    # e.g. "gene24-33-33" for logical coupling "24,33|33".
+    if !isempty(segment) && occursin('-', segment) &&
+       !occursin(',', segment) && !occursin('|', segment)
+        return segment
+    end
+
     # Extended format (models 9–12): contains ',' or '|' → return full segment
     if !isempty(segment) && (occursin(',', segment) || occursin('|', segment))
         return segment

@@ -194,25 +194,72 @@ function parse_filename(filename::String; hlabel="-h")
 end
 
 """
+    normalize_coupling_field(coupling_field::String)
+
+Normalize a coupling-field string read from filenames or labels.
+
+- **Legacy specs** (`"31"`, `"3131"`, `"R5"`) are returned unchanged.
+- **Extended specs** that already contain `','` or `'|'` are returned unchanged.
+- **Sanitized extended specs** (where `','` and `'|'` were replaced by `'-'` for filenames,
+  e.g. `"24-33-33"` for `"24,33|33"`) are mapped back to a canonical extended form by
+  treating all but the last `'-'` as `','` and the last `'-'` as `'|'`.
+
+This keeps filenames shell-safe while letting the rest of the code work with the
+intended coupling syntax.
+"""
+function normalize_coupling_field(coupling_field::String)
+    # Empty / trivial
+    isempty(coupling_field) && return coupling_field
+
+    # Already extended: contains ',' or '|'
+    (occursin(',', coupling_field) || occursin('|', coupling_field)) && return coupling_field
+
+    # Legacy 2- or 4-character specs: digits and/or 'R' only
+    if all(c -> (isdigit(c) || c == 'R'), coupling_field) &&
+       (length(coupling_field) == 2 || length(coupling_field) == 4)
+        return coupling_field
+    end
+
+    # Heuristic for sanitized extended specs: contains '-' but no ',' or '|'
+    if occursin('-', coupling_field)
+        chars = collect(coupling_field)
+        dash_idxs = findall(==('-'), chars)
+        nd = length(dash_idxs)
+        if nd > 0
+            for (i, idx) in enumerate(dash_idxs)
+                chars[idx] = (i == nd) ? '|' : ','
+            end
+            return String(chars)
+        end
+    end
+
+    # Fallback: return as-is
+    return coupling_field
+end
+
+"""
     make_coupling(coupling_field::String, G, R)
 
 Construct coupling structure from coupling field and model parameters.
 
 # Arguments
-- `coupling_field::String`: Coupling field (e.g., "31", "R5")
-- `G`: Number of gene states (Int)
-- `R`: Number of RNA states (Int)
+- `coupling_field::String`: Coupling field (e.g., "31", "R5", "24,33|33")
+- `G`: Number of gene states (Int or Tuple)
+- `R`: Number of RNA states (Int or Tuple)
 
 # Returns
-- `Tuple`: Coupling structure in format ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+- `Tuple`: Coupling structure in format ((1, 2), (sources...), (source_state...), (target_transition...), ncoupling[, coupling_ranges])
 
 # Examples
 ```julia
 # State 3 → State 1 coupling
 make_coupling("31", 3, 4)  # returns coupling from state 3 to state 1
 
-# All R states → State 5 coupling  
+# All R states → State 5 coupling
 make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
+
+# Extended multi-connection (models 9–12)
+make_coupling("24,33|33", (3, 3), (0, 0))
 ```
 
 # Notes
@@ -220,9 +267,11 @@ make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
 - Otherwise: single source state → target state
 - Target state is always the last character of coupling_field
 - Source state is first character for non-R couplings
-- Extended format (models 9–12): contains ',' or '|', e.g. "24,33|33" for multiple (s,t) per direction
+- Extended format (models 9–12): contains ',' or '|', e.g. "24,33|33" for multiple (s,t) per direction.
+  Sanitized filename forms like "24-33-33" are normalized back to this format internally.
 """
 function make_coupling(coupling_field::String, G, R; coupling_ranges=nothing)
+    coupling_field = normalize_coupling_field(coupling_field)
     if isempty(coupling_field)
         return tuple()
     end
@@ -334,6 +383,84 @@ function to_connections(coupling)
         end
     end
     conns
+end
+
+"""
+    _connection_source_label(s)
+
+Format source state `s` (Int or Vector{Int} for R states) for use in connection names.
+"""
+function _connection_source_label(s)
+    if s isa Vector || s isa Tuple
+        return "R"  # All R states (or multi-state block)
+    end
+    return "s" * string(s)
+end
+
+"""
+    connection_name(β, α, s, t; unit_labels=nothing)
+
+Return a short human-readable name for one coupling connection (β→α, state s, transition t).
+
+# Arguments
+- `β`: Source unit index (whose state is read).
+- `α`: Target unit index (whose transition rate is modulated).
+- `s`: Source state: `Int` (e.g. 3) or `Vector{Int}` for R states.
+- `t`: Target transition index.
+- `unit_labels::Union{Nothing,AbstractVector{String}}`: Optional labels for units (e.g. `["enhancer", "gene"]`).
+  If provided, names use labels instead of indices for the "β→α" part.
+
+# Returns
+- `String`: e.g. `"2→1_s3t5"` (unit 2 state 3 → unit 1 transition 5) or `"gene→enhancer_s3t5"` if `unit_labels` given.
+
+# Examples
+```julia
+connection_name(2, 1, 3, 5)                    # "2→1_s3t5"
+connection_name(2, 1, 3, 5; unit_labels=["enhancer", "gene"])  # "gene→enhancer_s3t5"
+connection_name(1, 2, [4,5,6], 5)              # "1→2_Rt5"
+```
+"""
+function connection_name(β::Int, α::Int, s, t::Int; unit_labels=nothing)
+    src = _connection_source_label(s)
+    dir = if unit_labels !== nothing && length(unit_labels) >= max(β, α)
+        string(unit_labels[β], "→", unit_labels[α])
+    else
+        string(β, "→", α)
+    end
+    return dir * "_" * src * "t" * string(t)
+end
+
+"""
+    coupling_connection_names(coupling; unit_labels=nothing)
+
+Return a vector of names for each coupling constant, in the same order as the rate vector
+(i.e. `to_connections(coupling)` and the γ order in combined rate files).
+
+Use these names when labeling columns, writing summaries, or plotting so that "first γ"
+is unambiguously tied to the actual connection (e.g. 2→1_s3t5) instead of the 4-char
+spec order (s1t1s2t2).
+
+# Arguments
+- `coupling`: 5-tuple (or 6-tuple with coupling_ranges) from `make_coupling` / `make_coupling_reciprocal`.
+- `unit_labels::Union{Nothing,AbstractVector{String}}`: Optional (e.g. `["enhancer", "gene"]`) to use
+  semantic names in the "β→α" part.
+
+# Returns
+- `Vector{String}`: One name per coupling parameter, e.g. `["2→1_s3t5", "1→2_s2t3"]` for a "2335" model
+  (first γ = gene→enhancer, second γ = enhancer→gene).
+
+# Examples
+```julia
+c = make_coupling_reciprocal("2335", (3, 3), (0, 0))
+coupling_connection_names(c)   # ["2→1_s3t5", "1→2_s2t3"]
+coupling_connection_names(c; unit_labels=["enhancer", "gene"])
+# ["gene→enhancer_s3t5", "enhancer→gene_s2t3"]
+```
+"""
+function coupling_connection_names(coupling; unit_labels=nothing)
+    isempty(coupling) && return String[]
+    conns = to_connections(coupling)
+    return [connection_name(β, α, s, t; unit_labels=unit_labels) for (β, α, s, t) in conns]
 end
 
 """
