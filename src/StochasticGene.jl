@@ -222,6 +222,7 @@ export
     to_connections,
     connection_name,
     coupling_connection_names,
+    coupling_parameter_labels,
     TComponents,
     T_dimension,
     TraceData,

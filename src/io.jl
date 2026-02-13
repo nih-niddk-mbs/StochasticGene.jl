@@ -464,6 +464,23 @@ function coupling_connection_names(coupling; unit_labels=nothing)
 end
 
 """
+    coupling_parameter_labels(coupling; unit_labels=nothing)
+
+Canonical names for coupling parameters, in the same order as the rate vector (and `to_connections`).
+
+Use these for file headers and column labels (e.g. in combined rate files) instead of generic
+"γ_1", "γ_2". Returns the same as `coupling_connection_names(coupling; unit_labels=unit_labels)`.
+
+# Arguments
+- `coupling`: 5-tuple (or 6-tuple with coupling_ranges) from `make_coupling` / `make_coupling_reciprocal`.
+- `unit_labels`: Optional (e.g. `["enhancer", "gene"]`) for semantic unit names in labels.
+
+# Returns
+- `Vector{String}`: One name per coupling parameter, e.g. `["2→1_s3t5", "1→2_s2t3"]`.
+"""
+coupling_parameter_labels(coupling; unit_labels=nothing) = coupling_connection_names(coupling; unit_labels=unit_labels)
+
+"""
     coupling_ranges(coupling) -> Vector{Symbol}
 
 Return the range constraint for each coupling constant (:free, :activate, or :inhibit).
@@ -3243,74 +3260,74 @@ function validate_dwelltime_compat(dttype::Vector, onstates, dwellpath; datatype
 end
 
 """
-    read_dwelltimes(datapath)
-    read_dwelltimes(datapath, dttype)
+    read_dwelltimes(datapath::String)
+    read_dwelltimes(datapath::Vector{String})
 
-Read dwell-time files and return (bins, DT) as vectors of length equal to the number of dwell types.
+Read dwell-time file(s) and return (bins, DT) as vectors.
 
-- **One file per type**: If `length(datapath) == length(dttype)` (or dttype not given), each file is
-  two-column (bins, values) and yields one (bins, DT) pair in order.
-- **4 types, 2 files (HJ-style)**: If `length(dttype)==4` and `length(datapath)==2`, then:
-  - **First file**: multi-column; column 1 = bins, column 2 = first R-step type (ON), column 3 = second (OFF).
-    Order follows `dttype`: the two types without \"G\" (e.g. \"ON\", \"OFF\") are assigned from cols 2 and 3.
-  - **Second file**: two-column (bins, values); that single series is used for both G-step types (ONG, OFFG).
+Column convention: first column is always bins; remaining columns are histograms in order.
+- 2 columns: one (bins, DT) pair.
+- 3 columns: two pairs (same bins for both; col 2 and col 3 are the two histograms).
+- More than 3 columns: throws `ArgumentError`.
 
 # Arguments
-- `datapath`: Vector of file paths (dwell-time files only; RNA path is separate in callers).
-- `dttype`: Optional vector of dwell-type strings, e.g. `[\"ON\", \"OFF\", \"ONG\", \"OFFG\"]`. Used to
-  decide layout when file count differs from type count.
+- `datapath`: Single file path (string) or vector of file paths.
 
 # Returns
-- `bins::Vector{Vector}`: One bin vector per dwell type, in `dttype` order.
-- `DT::Vector{Vector}`: One dwell-time histogram per type, in `dttype` order.
+- `bins::Vector{Vector}`: One bin vector per histogram, in order.
+- `DT::Vector{Vector}`: One dwell-time histogram per entry, in order.
 """
-function read_dwelltimes(datapath)
+function read_dwelltimes(datapath::String)
+    bins = Vector{Vector}(undef, 0)
+    DT = Vector{Vector}(undef, 0)
+    read_dwelltimes!(bins, DT, datapath)
+    return bins, DT
+end
+
+function read_dwelltimes(datapath::Vector{String})
     bins = Vector{Vector}(undef, 0)
     DT = Vector{Vector}(undef, 0)
     for i in eachindex(datapath)
-        c = readfile(datapath[i])
-        push!(bins, c[:, 1])
-        push!(DT, c[:, 2])
+        read_dwelltimes!(bins, DT, datapath[i])
     end
-    bins, DT
+    return bins, DT
 end
 
-function read_dwelltimes(datapath, dttype::Vector)
-    ntypes = length(dttype)
-    nfiles = length(datapath)
-    if nfiles == ntypes
-        # One file per type: existing behavior
-        return read_dwelltimes(datapath)
-    elseif ntypes == 4 && nfiles == 2
-        # HJ-style: first file = ON, OFF (R-step); second file = ONG, OFFG (G-step, same series twice)
-        rstep = findall(!occursin.("G", dttype))   # e.g. [1, 2] for ON, OFF
-        gstep = findall(occursin("G", dttype))      # e.g. [3, 4] for ONG, OFFG
-        length(rstep) == 2 && length(gstep) == 2 || throw(ArgumentError("dttype must contain two R-step (ON, OFF) and two G-step (ONG, OFFG) types"))
-        bins = Vector{Vector}(undef, 4)
-        DT = Vector{Vector}(undef, 4)
-        # First file: bins = col 1, two series = col 2 (ON), col 3 (OFF)
-        c1 = readfile(datapath[1])
-        size(c1, 2) >= 3 || throw(ArgumentError("First dwell-time file must have at least 3 columns (bins, ON, OFF)"))
-        bins1 = c1[:, 1]
-        on_col = c1[:, 2]
-        off_col = c1[:, 3]
-        bins[rstep[1]] = bins1
-        bins[rstep[2]] = bins1
-        DT[rstep[1]] = on_col
-        DT[rstep[2]] = off_col
-        # Second file: bins = col 1, one series = col 2, used for both ONG and OFFG
-        c2 = readfile(datapath[2])
-        size(c2, 2) >= 2 || throw(ArgumentError("Second dwell-time file must have at least 2 columns (bins, values)"))
-        bins2 = c2[:, 1]
-        g_col = c2[:, 2]
-        bins[gstep[1]] = bins2
-        bins[gstep[2]] = bins2
-        DT[gstep[1]] = g_col
-        DT[gstep[2]] = g_col
-        return bins, DT
-    else
-        throw(ArgumentError("read_dwelltimes(datapath, dttype): unsupported layout (ntypes=$ntypes, nfiles=$nfiles). Use 1 file per type, or 4 types with 2 files."))
+"""
+    read_dwelltimes!(bins, DT, datapath::String)
+
+In-place: read dwell-time file(s) and append (bins, DT) entries onto `bins` and `DT`.
+
+Loops over `datapath` (vector of file paths). Per file: first column is bins; remaining
+columns are histograms. 2 columns → append one (bins, DT) pair; 3 columns → append same
+bins twice and the two histogram columns to DT; more than 3 columns → `ArgumentError`.
+
+# Arguments
+- `bins`: Vector to append bin vectors to.
+- `DT`: Vector to append dwell-time histogram vectors to.
+- `datapath`: Vector of file paths.
+
+# Returns
+- `(bins, DT)` (mutates the input vectors).
+"""
+function read_dwelltimes!(bins, DT, datapath::String)
+    for i in eachindex(datapath)
+        c = readfile(datapath[i])
+        ncol = size(c, 2)
+        if ncol == 2
+            push!(bins, c[:, 1])
+            push!(DT, c[:, 2])
+        elseif ncol == 3
+            bins_col = c[:, 1]
+            push!(bins, bins_col)
+            push!(bins, bins_col)
+            push!(DT, c[:, 2])
+            push!(DT, c[:, 3])
+        else
+            throw(ArgumentError("Dwell-time file must have 2 or 3 columns (bins + histogram(s)), got $ncol"))
+        end
     end
+    return bins, DT
 end
 
 """

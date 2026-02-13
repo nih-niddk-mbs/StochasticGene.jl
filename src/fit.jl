@@ -950,13 +950,13 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
     elseif dt == :rnadwelltime
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
-        bins, DT = read_dwelltimes(datapath[2:end], dttype)
+        bins, DT = read_dwelltimes(datapath[2:end])
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield)
 
     elseif dt == :dwelltime
-        bins, DT = read_dwelltimes(datapath, dttype)
+        bins, DT = read_dwelltimes(datapath)
         return DwellTimeData(label, gene, bins, DT, dttype)
 
     elseif dt ∈ TRACE_DATATYPES
