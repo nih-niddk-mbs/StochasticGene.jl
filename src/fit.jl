@@ -951,6 +951,9 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
+        if length(bins) != length(dttype)
+            throw(ArgumentError("rnadwelltime: number of dwell-time histograms ($(length(bins))) must match number of dttypes ($(length(dttype))). Use one file per dttype (2 columns each) or fewer files with 3 columns to get multiple histograms per file."))
+        end
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield)
@@ -1768,7 +1771,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         ncoupling = coupling[5]
-        couplingtrait = CouplingTrait(ncoupling, couplingindices)
+        couplingtrait = CouplingTrait(ncoupling, couplingindices, coupling_parameter_labels(coupling))
     else
         couplingindices = nothing
     end

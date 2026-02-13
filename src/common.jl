@@ -358,11 +358,14 @@ Structure for coupled model traits.
 # Fields
 - `ncoupling::Int`: Number of coupling parameters
 - `couplingindices::Vector`: Indices for coupling parameters
+- `labels::Union{Vector{String}, Nothing}`: Optional canonical labels (e.g. from `coupling_parameter_labels`) for rate file headers
 """
 struct CouplingTrait
     ncoupling::Int
     couplingindices::Vector
+    labels::Union{Vector{String}, Nothing}
 end
+CouplingTrait(ncoupling::Int, couplingindices::Vector) = CouplingTrait(ncoupling, couplingindices, nothing)
 
 """
     hastrait(model, trait)

@@ -2132,8 +2132,13 @@ function rlabels_GRSM(model::AbstractGRSMmodel)
         else
             labels = hcat(labels, rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter))
         end
-        for i in 1:model.trait.coupling.ncoupling
-            labels = hcat(labels, ["Coupling_$i"])
+        cplabels = model.trait.coupling.labels
+        if !isnothing(cplabels) && length(cplabels) == model.trait.coupling.ncoupling
+            labels = hcat(labels, reshape(cplabels, 1, :))
+        else
+            for i in 1:model.trait.coupling.ncoupling
+                labels = hcat(labels, ["Coupling_$i"])
+            end
         end
     else
         labels = rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
@@ -3296,36 +3301,34 @@ end
 """
     read_dwelltimes!(bins, DT, datapath::String)
 
-In-place: read dwell-time file(s) and append (bins, DT) entries onto `bins` and `DT`.
+In-place: read a single dwell-time file and append (bins, DT) onto `bins` and `DT`.
 
-Loops over `datapath` (vector of file paths). Per file: first column is bins; remaining
-columns are histograms. 2 columns → append one (bins, DT) pair; 3 columns → append same
-bins twice and the two histogram columns to DT; more than 3 columns → `ArgumentError`.
+First column is bins; remaining columns are histograms. 2 columns → append one (bins, DT)
+pair; 3 columns → append same bins twice and the two histogram columns to DT; more than
+3 columns → `ArgumentError`.
 
 # Arguments
 - `bins`: Vector to append bin vectors to.
 - `DT`: Vector to append dwell-time histogram vectors to.
-- `datapath`: Vector of file paths.
+- `datapath`: Path to a single dwell-time file.
 
 # Returns
 - `(bins, DT)` (mutates the input vectors).
 """
 function read_dwelltimes!(bins, DT, datapath::String)
-    for i in eachindex(datapath)
-        c = readfile(datapath[i])
-        ncol = size(c, 2)
-        if ncol == 2
-            push!(bins, c[:, 1])
-            push!(DT, c[:, 2])
-        elseif ncol == 3
-            bins_col = c[:, 1]
-            push!(bins, bins_col)
-            push!(bins, bins_col)
-            push!(DT, c[:, 2])
-            push!(DT, c[:, 3])
-        else
-            throw(ArgumentError("Dwell-time file must have 2 or 3 columns (bins + histogram(s)), got $ncol"))
-        end
+    c = readfile(datapath)
+    ncol = size(c, 2)
+    if ncol == 2
+        push!(bins, c[:, 1])
+        push!(DT, c[:, 2])
+    elseif ncol == 3
+        bins_col = c[:, 1]
+        push!(bins, bins_col)
+        push!(bins, bins_col)
+        push!(DT, c[:, 2])
+        push!(DT, c[:, 3])
+    else
+        throw(ArgumentError("Dwell-time file must have 2 or 3 columns (bins + histogram(s)), got $ncol"))
     end
     return bins, DT
 end
