@@ -582,12 +582,6 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
-    dt = normalize_datatype(datatype)
-    if dt == :rnadwelltime
-        StochasticGene.validate_dwelltime_compat(dttype, onstates, datapath[2:end]; datatype=datatype)
-    elseif dt == :dwelltime
-        StochasticGene.validate_dwelltime_compat(dttype, onstates, datapath; datatype=datatype)
-    end
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
