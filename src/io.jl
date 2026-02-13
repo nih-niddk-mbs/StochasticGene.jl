@@ -2990,41 +2990,50 @@ function occursin_file(a, b, file::String)
 end
 
 """
-    read_rna(gene, cond, datapath)
+    read_rna(filepath::String)
 
-Read RNA histogram data from a file.
+Read RNA count histogram from a file (first column = counts).
 
 # Arguments
-- `gene`: Gene name
-- `cond`: Condition identifier
-- `datapath`: Path to data directory
+- `filepath`: Path to the histogram file
 
 # Returns
 - `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
 
 # Notes
-- Constructs filename as "{gene}_{cond}.txt"
-- Reads first column of data file
-- Truncates histogram if longer than 300 elements (keeps 99th percentile, max 1000)
-- Pads with zeros if histogram has fewer than 4 elements
-- Prints total histogram count for debugging
-- Used for reading RNA count histogram data
+- Truncates if longer than 300 elements (keeps 99th percentile, max 1000); pads with zeros if fewer than 4.
 """
-function read_rna(gene, cond, datapath)
-    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
-    h = readfile(t)[:, 1]
-    # h = readfile(gene, cond, datapath)[:, 1]
-    # Only truncate if histogram has more than 400 elements
+function read_rna(filepath::String)
+    h = readfile(filepath)[:, 1]
     if length(h) > 300
         h = truncate_histogram(h, 0.99, 1000)
     end
-    # Ensure h has at least 10 elements by padding with zeros if needed
     if length(h) < 4
         h = vcat(h, zeros(4 - length(h)))
     end
     println("Histogram count: ", sum(h))
-    nhist = length(h)
-    return nhist, h
+    return length(h), h
+end
+
+"""
+    read_rna(gene, cond, datapath)
+
+Read RNA histogram from a file `{gene}_{cond}.txt` in the given directory.
+
+# Arguments
+- `gene`: Gene name
+- `cond`: Condition identifier (e.g. `""` for files like CANX_.txt)
+- `datapath`: Path to directory containing the file
+
+# Returns
+- `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
+
+# Notes
+- Constructs path as `joinpath(datapath, "{gene}_{cond}.txt")` and calls `read_rna(filepath)`.
+"""
+function read_rna(gene, cond, datapath)
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
+    read_rna(t)
 end
 
 """
