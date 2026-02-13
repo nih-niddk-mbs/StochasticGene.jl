@@ -582,6 +582,12 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
+    dt = normalize_datatype(datatype)
+    if dt == :rnadwelltime
+        StochasticGene.validate_dwelltime_compat(dttype, onstates, datapath[2:end]; datatype=datatype)
+    elseif dt == :dwelltime
+        StochasticGene.validate_dwelltime_compat(dttype, onstates, datapath; datatype=datatype)
+    end
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
@@ -950,13 +956,13 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
     elseif dt == :rnadwelltime
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
-        bins, DT = read_dwelltimes(datapath[2:end])
+        bins, DT = read_dwelltimes(datapath[2:end], dttype)
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield)
 
     elseif dt == :dwelltime
-        bins, DT = read_dwelltimes(datapath)
+        bins, DT = read_dwelltimes(datapath, dttype)
         return DwellTimeData(label, gene, bins, DT, dttype)
 
     elseif dt ∈ TRACE_DATATYPES

@@ -3210,9 +3210,59 @@ function read_cell_counts(file)
 end
 
 """
-    read_dwelltimes(datapath)
+    validate_dwelltime_compat(dttype, onstates, dwellpath; datatype="rnadwelltime")
 
-read in a set of dwelltime files and return vector of time bins and values
+Check that dttype, onstates, and the dwell-time file path(s) are compatible.
+
+- `length(onstates) == length(dttype)` (one onstate set per dwell type).
+- Either one file per type (`length(dwellpath) == length(dttype)`), or the HJ-style layout:
+  `length(dttype)==4`, `length(dwellpath)==2`, and dttype contains exactly two R-step types
+  (no \"G\") and two G-step types (contain \"G\").
+
+# Throws
+- `ArgumentError` if any check fails.
+"""
+function validate_dwelltime_compat(dttype::Vector, onstates, dwellpath; datatype="rnadwelltime")
+    ntypes = length(dttype)
+    nfiles = length(dwellpath)
+    if length(onstates) != ntypes
+        throw(ArgumentError("dttype and onstates length mismatch: dttype has $ntypes entries, onstates has $(length(onstates)). Each dwell type (e.g. ON, OFF, ONG, OFFG) must have one onstate set."))
+    end
+    if nfiles == ntypes
+        return nothing
+    end
+    if ntypes == 4 && nfiles == 2
+        rstep = count(x -> !occursin("G", x), dttype)
+        gstep = count(x -> occursin("G", x), dttype)
+        if rstep != 2 || gstep != 2
+            throw(ArgumentError("For 4 dttypes and 2 files, dttype must contain exactly two R-step types (e.g. ON, OFF) and two G-step types (e.g. ONG, OFFG). Got $rstep without 'G' and $gstep with 'G'."))
+        end
+        return nothing
+    end
+    throw(ArgumentError("dwellpath and dttype are incompatible: $nfiles file(s) for $ntypes dwell type(s). Use either one file per type, or 4 types with 2 files (first file = ON, OFF; second = ONG, OFFG)."))
+end
+
+"""
+    read_dwelltimes(datapath)
+    read_dwelltimes(datapath, dttype)
+
+Read dwell-time files and return (bins, DT) as vectors of length equal to the number of dwell types.
+
+- **One file per type**: If `length(datapath) == length(dttype)` (or dttype not given), each file is
+  two-column (bins, values) and yields one (bins, DT) pair in order.
+- **4 types, 2 files (HJ-style)**: If `length(dttype)==4` and `length(datapath)==2`, then:
+  - **First file**: multi-column; column 1 = bins, column 2 = first R-step type (ON), column 3 = second (OFF).
+    Order follows `dttype`: the two types without \"G\" (e.g. \"ON\", \"OFF\") are assigned from cols 2 and 3.
+  - **Second file**: two-column (bins, values); that single series is used for both G-step types (ONG, OFFG).
+
+# Arguments
+- `datapath`: Vector of file paths (dwell-time files only; RNA path is separate in callers).
+- `dttype`: Optional vector of dwell-type strings, e.g. `[\"ON\", \"OFF\", \"ONG\", \"OFFG\"]`. Used to
+  decide layout when file count differs from type count.
+
+# Returns
+- `bins::Vector{Vector}`: One bin vector per dwell type, in `dttype` order.
+- `DT::Vector{Vector}`: One dwell-time histogram per type, in `dttype` order.
 """
 function read_dwelltimes(datapath)
     bins = Vector{Vector}(undef, 0)
@@ -3223,6 +3273,44 @@ function read_dwelltimes(datapath)
         push!(DT, c[:, 2])
     end
     bins, DT
+end
+
+function read_dwelltimes(datapath, dttype::Vector)
+    ntypes = length(dttype)
+    nfiles = length(datapath)
+    if nfiles == ntypes
+        # One file per type: existing behavior
+        return read_dwelltimes(datapath)
+    elseif ntypes == 4 && nfiles == 2
+        # HJ-style: first file = ON, OFF (R-step); second file = ONG, OFFG (G-step, same series twice)
+        rstep = findall(!occursin.("G", dttype))   # e.g. [1, 2] for ON, OFF
+        gstep = findall(occursin("G", dttype))      # e.g. [3, 4] for ONG, OFFG
+        length(rstep) == 2 && length(gstep) == 2 || throw(ArgumentError("dttype must contain two R-step (ON, OFF) and two G-step (ONG, OFFG) types"))
+        bins = Vector{Vector}(undef, 4)
+        DT = Vector{Vector}(undef, 4)
+        # First file: bins = col 1, two series = col 2 (ON), col 3 (OFF)
+        c1 = readfile(datapath[1])
+        size(c1, 2) >= 3 || throw(ArgumentError("First dwell-time file must have at least 3 columns (bins, ON, OFF)"))
+        bins1 = c1[:, 1]
+        on_col = c1[:, 2]
+        off_col = c1[:, 3]
+        bins[rstep[1]] = bins1
+        bins[rstep[2]] = bins1
+        DT[rstep[1]] = on_col
+        DT[rstep[2]] = off_col
+        # Second file: bins = col 1, one series = col 2, used for both ONG and OFFG
+        c2 = readfile(datapath[2])
+        size(c2, 2) >= 2 || throw(ArgumentError("Second dwell-time file must have at least 2 columns (bins, values)"))
+        bins2 = c2[:, 1]
+        g_col = c2[:, 2]
+        bins[gstep[1]] = bins2
+        bins[gstep[2]] = bins2
+        DT[gstep[1]] = g_col
+        DT[gstep[2]] = g_col
+        return bins, DT
+    else
+        throw(ArgumentError("read_dwelltimes(datapath, dttype): unsupported layout (ntypes=$ntypes, nfiles=$nfiles). Use 1 file per type, or 4 types with 2 files."))
+    end
 end
 
 """
