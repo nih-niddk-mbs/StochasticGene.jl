@@ -2712,7 +2712,8 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
     f = open(file, "w")
     # Calculate n_obs based on data type
     if is_histogram_compatible(data)
-        n_obs = sum(datahistogram(data))
+        h = datahistogram(data)
+        n_obs = sum(round.(Int, h))
     elseif typeof(data) <: RNACountData
         n_obs = length(data.countsRNA)
     elseif typeof(data) <: AbstractTraceData
