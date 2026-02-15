@@ -587,6 +587,20 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    if propcv isa AbstractVector && length(propcv) != length(fittedparam)
+        throw(ArgumentError("propcv vector length ($(length(propcv))) must match number of fitted parameters ($(length(fittedparam)))"))
+    end
+    if propcv isa Tuple
+        n = size(propcv[1], 1)
+        if n != length(fittedparam)
+            throw(ArgumentError("propcv covariance matrix from file has size $n but number of fitted parameters is $(length(fittedparam))"))
+        end
+    elseif propcv isa AbstractMatrix
+        n = size(propcv, 1)
+        if n != length(fittedparam)
+            throw(ArgumentError("propcv covariance matrix has size $n but number of fitted parameters is $(length(fittedparam))"))
+        end
+    end
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
@@ -2924,7 +2938,7 @@ end
 Get proposal coefficient of variation from file or use default.
 
 # Arguments
-- `propcv`: Proposal coefficient of variation (if negative, will be read from file)
+- `propcv`: Proposal coefficient of variation: scalar (if negative, read from file), or vector of length(fittedparam) for per-parameter CVs
 - `infolder`: Input folder path
 - `label`: Label for the dataset
 - `gene`: Gene name
@@ -2932,16 +2946,21 @@ Get proposal coefficient of variation from file or use default.
 - `nalleles`: Number of alleles
 
 # Returns
-- Proposal coefficient of variation (scalar or matrix)
+- Proposal coefficient of variation (scalar, vector of per-parameter CVs, or matrix)
 
 # Notes
-- If propcv < 0, reads covariance matrix from param-stats file
+- If propcv is a scalar and propcv < 0, reads covariance matrix from param-stats file
 - Scales covariance by 2.38^2 / n for optimal MCMC acceptance rate
 - Returns absolute value of propcv if file doesn't exist or matrix is not positive definite
+- If propcv is already a vector (per-parameter CVs), it is returned as-is
 - Used for MCMC proposal distribution setup
 """
 function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
-    if propcv < 0.0
+    # Return vector/matrix/tuple as-is; never compare to 0 (avoids isless(::Vector, ::Float64))
+    if propcv isa AbstractVector || propcv isa AbstractMatrix || propcv isa Tuple
+        return propcv
+    end
+    if propcv isa Real && propcv < 0.0
         file = get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles)
         if !isfile(file)
             println(file, " does not exist")

@@ -403,11 +403,13 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         parout[:, step] = param
         accepttotal += accept
     end
-    # Compute and scale covariance for proposal adaptation
+    # Compute and scale covariance for proposal adaptation only when initial proposal
+    # is scalar or vector; preserve user-provided full covariance (Tuple or Matrix).
+    keep_user_cov = (proposalcv isa Tuple) || (proposalcv isa AbstractMatrix)
     d_param = length(param)
     covparam = cov(parout[:,1:step]')
     scaling = (2.38^2) / d_param
-    if step > 1000 && accepttotal/step > .15
+    if !keep_user_cov && step > 1000 && accepttotal/step > .15
         if isposdef(covparam)
             proposalcv = covparam * scaling
             d = proposal_dist(param, proposalcv, model)
@@ -746,6 +748,10 @@ function proposal_dist(param::Vector, cv::Matrix, model, indiv=0.001)
     else
         return MvNormal(param, cv)
     end
+end
+
+function proposal_dist(param::Vector, cv::Diagonal, model, indiv=0.001)
+    proposal_dist(param, Matrix(cv), model, indiv)
 end
 
 function proposal_dist(param::Vector, cv::Tuple, model)
