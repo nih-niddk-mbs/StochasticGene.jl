@@ -180,7 +180,6 @@ export
     prob_Gaussian_grid,
     CorrelationAlgorithm,
     CorrelationTrait,
-    CorrelationAlgorithm,
     StandardCorrelation,
     WindowedCorrelation,
     MultiTauCorrelation,
