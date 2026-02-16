@@ -1,1 +1,4 @@
 src/macros.jl
+
+# optional local scripts (not part of package)
+scripts/
