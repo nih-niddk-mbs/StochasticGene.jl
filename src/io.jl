@@ -3678,7 +3678,7 @@ row
 3       median
 4       last value of previous run
 """
-readrates(file::String, row::Int) = Float64.(readrow(file, row))
+readrates(file::String, row::Int) = readrow(file, row)
 
 readrates(file::String) = readrates(file, 3)
 
@@ -3703,6 +3703,19 @@ function get_row(ratetype)
     row
 end
 
+function _row_to_float64(raw)
+    out = Float64[]
+    for x in raw
+        if x isa Number
+            push!(out, Float64(x))
+        elseif x isa AbstractString
+            v = tryparse(Float64, x)
+            v !== nothing && push!(out, v)
+        end
+    end
+    return out
+end
+
 function readrow(file::String, row, delim=',')
     if isfile(file) && ~isempty(read(file))
         contents = readdlm(file, delim, header=false)
@@ -3711,10 +3724,11 @@ function readrow(file::String, row, delim=',')
         end
         if row <= size(contents, 1)
             m = contents[row, :]
-            return m[.~isempty.(m)]
+            raw = m[.~isempty.(m)]
+            return _row_to_float64(raw)
         else
             println("Row $row too large for file $file, returning median")
-            return contents[3, :]
+            return _row_to_float64(contents[3, :])
         end
     else
         println("File $file does not exist")
