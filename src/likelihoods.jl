@@ -230,8 +230,6 @@ function prepare_coupling(rates::Vector{Float64}, couplingindices)
     rates[couplingindices]
 end
 
-
-
 function prepare_coupling_inplace(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
     coupling = Vector{Float64}[]
     for i in eachindex(rates)

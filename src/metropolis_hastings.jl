@@ -405,21 +405,28 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     end
     # Compute and scale covariance for proposal adaptation only when initial proposal
     # is scalar or vector; preserve user-provided full covariance (Tuple or Matrix).
+    # Minimum accepts = 2*n so cov is not rank-deficient; isposdef + cond() reject degenerate cov.
     keep_user_cov = (proposalcv isa Tuple) || (proposalcv isa AbstractMatrix)
     d_param = length(param)
+    min_accepts = 2 * d_param
     covparam = cov(parout[:,1:step]')
     scaling = (2.38^2) / d_param
-    if !keep_user_cov && step > 1000 && accepttotal/step > .15
+    if !keep_user_cov && step > 1000 && accepttotal >= min_accepts && accepttotal/step > .15
         if isposdef(covparam)
-            proposalcv = covparam * scaling
-            d = proposal_dist(param, proposalcv, model)
+            # Skip adapt if covariance is ill-conditioned (would give bad proposals)
+            cond_ok = (cond(covparam) < 1e10)
+            if cond_ok
+                proposalcv = covparam * scaling
+                d = proposal_dist(param, proposalcv, model)
+                @info "Updated proposal covariance (scaled)" proposalcv
+            end
         else
             # Fallback: use scaled diagonal covariance
             diag_cov = Diagonal(diag(covparam) * scaling)
             proposalcv = diag_cov
             d = proposal_dist(param, diag_cov, model)
+            @info "Updated proposal covariance (scaled diagonal)" proposalcv
         end
-        @info "Updated proposal covariance (scaled)" proposalcv
     end
     return param, parml, ll, llml, d, proposalcv, logpredictions
 end
@@ -456,9 +463,23 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     accepttotal = 0
     prior = logprior(param, model)
     step = 0
+    diag_done = false
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
+
+        # One-time diagnostic when acceptance is near zero after first 5000 steps
+        if !diag_done && step >= 5000 && accepttotal <= max(1, step ÷ 50000)
+            diag_done = true
+            paramt_d, _ = proposal(d, proposalcv, model)
+            if !instant_reject(paramt_d, model)
+                priort_d = logprior(paramt_d, model)
+                llt_d, _ = loglikelihood(paramt_d, data, model)
+                log_ratio_d = (llt_d + priort_d - ll - prior) / temp
+                Δ = isempty(param) ? 0.0 : maximum(abs.(paramt_d .- param))
+                @warn "Low acceptance diagnostic (step=$step, accept=$accepttotal): current ll=$ll, prior=$prior; proposed ll=$llt_d, prior=$priort_d; log_accept_ratio=$log_ratio_d; max|Δparam|=$Δ. If log_ratio is very negative or -Inf, proposals are far from posterior support (try smaller propcv or check prior/likelihood)."
+            end
+        end
 
         if step > length(llout)
             parout = hcat(parout, Matrix{Float64}(undef, length(param), SLAB))
@@ -552,6 +573,10 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
     end
     priort = logprior(paramt, model)
     llt, logpredictionst = loglikelihood(paramt, data, model)
+    # Reject immediately if proposed point has invalid posterior (avoids NaN in acceptance ratio)
+    if !isfinite(llt) || !isfinite(priort)
+        return 0, logpredictions, param, ll, prior, d
+    end
     mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
 end
 
@@ -578,13 +603,12 @@ Metropolis-Hastings acceptance/rejection step for a proposed parameter update.
 """
 function mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)
     # mhfactor not needed for symmetric proposal distribution
-    # if rand() < exp((llt + priort - ll - prior + mhfactor(param,d,paramt,dt))/temp)
-    
-    # println(mhfactor(param,d,paramt,dt))
-    # println(llt + priort - ll - prior)
-
-    # Accept if new log-likelihood is higher (or by probability if lower)
-    if log(rand()) < (llt + priort - ll - prior) / temp
+    log_ratio = (llt + priort - ll - prior) / temp
+    # Guard against NaN/Inf (e.g. from -Inf prior or likelihood)
+    if !isfinite(log_ratio)
+        return 0, logpredictions, param, ll, prior, d
+    end
+    if log(rand()) < log_ratio
         return 1, logpredictionst, paramt, llt, priort, dt
     else
         return 0, logpredictions, param, ll, prior, d

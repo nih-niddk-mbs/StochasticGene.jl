@@ -3678,7 +3678,7 @@ row
 3       median
 4       last value of previous run
 """
-readrates(file::String, row::Int) = readrow(file, row)
+readrates(file::String, row::Int) = Float64.(readrow(file, row))
 
 readrates(file::String) = readrates(file, 3)
 

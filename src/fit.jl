@@ -586,6 +586,10 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
+    # Ensure rates are Vector{Float64} so downstream (e.g. prepare_coupling) never sees Vector{Any}
+    if rinit isa AbstractVector && !(rinit isa Vector{Float64})
+        rinit = Float64.(rinit)
+    end
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     if propcv isa AbstractVector && length(propcv) != length(fittedparam)
         throw(ArgumentError("propcv vector length ($(length(propcv))) must match number of fitted parameters ($(length(fittedparam)))"))
