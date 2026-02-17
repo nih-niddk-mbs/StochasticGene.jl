@@ -6,6 +6,8 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
+**Version:** 1.7
+
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
 
@@ -46,7 +48,7 @@ StochasticGene.jl is a comprehensive Julia package for simulating and fitting st
 - **Gene States (G)**: Arbitrary number of states
 - **Pre-RNA Steps (R)**: Multiple elongation steps
 - **Splice Sites (S)**: Support for splicing dynamics
-- **Coupled Models**: Multiple interacting alleles/genes
+- **Coupled Models**: Multiple interacting alleles/genes; multi-connection coupling support
 - **Hierarchical Models**: Share information across conditions
 
 ## Inference Methods
@@ -105,6 +107,7 @@ fits = fit(
 # Documentation
 
 For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
+Stable docs correspond to the current release (v1.7).
 """
 module StochasticGene
 # __precompile__(true)

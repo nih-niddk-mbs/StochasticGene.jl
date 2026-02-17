@@ -1109,13 +1109,13 @@ end
 """
     get_param(model::AbstractGeneTransitionModel)
 
-Get fitted parameters from model.
+Return the fitted parameters in the same (transformed) space used for MCMC (e.g. log-scale for positive rates, logit for probabilities).
 
 # Arguments
-- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
+- `model`: The model (e.g. `GMmodel`, `GRSMmodel`).
 
 # Returns
-- Log-transformed fitted parameters.
+- `Vector{Float64}`: Transformed fitted parameters. For simple models, log.(rates); for GRSM, model-specific transforms (e.g. log, logit) are applied.
 """
 get_param(model::AbstractGeneTransitionModel) = log.(model.rates[model.fittedparam])
 
@@ -1124,16 +1124,17 @@ function get_param(model::AbstractGRSMmodel)
 end
 
 """
-    get_rates(param, model::AbstractGeneTransitionModel)
+    get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
 
-Get rates from parameters.
+Map (transformed) parameters back to rate space and return the full rate vector.
 
 # Arguments
-- `param`: Vector of parameters.
-- `model`: The model, which can be of various types (e.g., `AbstractGeneTransitionModel`, `AbstractGRSMmodel`, `GRSMcoupledmodel`).
+- `param`: Vector of parameters in transformed space (e.g. from `get_param(model)` or MCMC samples).
+- `model`: The model defining the transform and fitted indices.
+- `inverse`: If `true` (default), apply inverse transform to `param`; if `false`, treat `param` as already in rate space for the fitted indices.
 
 # Returns
-- Updated rates.
+- Full rate vector (or vector of vectors for coupled/hierarchical) with fitted indices set from `param` and fixed effects applied.
 """
 
 function get_rates!(r, param, model, inverse)
@@ -1159,6 +1160,20 @@ function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, in
 end
 
 
+"""
+    get_rates(fits, stats, model, ratetype)
+
+Return rate vector from MCMC results using the requested summary type.
+
+# Arguments
+- `fits`: `Fit` struct from a completed MCMC run.
+- `stats`: `Stats` struct from the same run.
+- `model`: The model used for the fit.
+- `ratetype`: One of `"ml"` (maximum likelihood), `"median"` (posterior median), or `"mean"` (posterior mean).
+
+# Returns
+- `Vector` or `Vector{Vector}` of rates in rate space (not transformed). For single-unit models, a single vector; for coupled/hierarchical, may be a vector of vectors.
+"""
 function get_rates(fits, stats, model, ratetype)
     if ratetype == "ml"
         return get_rates(fits.parml, model)

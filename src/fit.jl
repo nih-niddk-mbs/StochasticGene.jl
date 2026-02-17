@@ -931,12 +931,13 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 - `gene`: Gene name
 - `datacond`: Experimental condition
 - `traceinfo`: Tuple of trace metadata
-- `temprna`: Integer divisor for histogram normalization
+- `temprna`: Divisor for RNA histogram counts (`h = div.(h, temprna)`). Use > 1 to downweight RNA relative to dwell times (e.g. to improve MCMC acceptance when RNA curvature is very high).
 - `datacol`: Column of trace data to extract (default = 3)
 - `zeromedian`: If true, zero-center each trace before fitting (default = false)
+- `yieldfactor`: Detection efficiency in (0, 1] for RNA/trace (default = 1.0). When < 1, likelihood accounts for binomial observation loss.
 
 # Returns
-- A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`)
+- A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`, `RNADwellTimeData`)
 
 # Throws
 - `ArgumentError` if `datatype` is unsupported
@@ -3051,10 +3052,21 @@ end
 get_decay(a::Float64) = log(2) / a / 60.0
 
 """
-    alleles(gene::String,cell::String,root::String,col::Int=3)
-    alleles(gene::String,path::String,col::Int=3)
+    alleles(gene, cell, root; nalleles=2, col=3)
+    alleles(gene, path; nalleles=2, col=3)
 
-    Get allele number for gene and cell
+Return the number of alleles for a gene (e.g. for ploidy). If no alleles file exists under `root/data/alleles`, returns the default `nalleles`.
+
+# Arguments
+- `gene`: Gene name (must match a row in the alleles file).
+- `cell`: Cell type (e.g. `"HBEC"`); used to find the alleles file when `root` is used.
+- `root`: Root directory; `data/alleles` is sought under `root`.
+- `path`: Full path to a CSV alleles file (alternative to root/cell).
+- `nalleles`: Default value when no file is found or gene is missing (default 2).
+- `col`: Column index in the CSV for the allele count (default 3).
+
+# Returns
+- `Int`: Allele count for the gene.
 """
 function alleles(gene::String, cell::String, root::String; nalleles::Int=2, col::Int=3)
     path = get_file(root, "data/alleles", cell, "csv")

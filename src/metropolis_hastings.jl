@@ -112,17 +112,19 @@ end
 
 
 """
-run_mh(data,model,options)
+    run_mh(data, model, options)
 
-returns fits, stats, measures
+Run a single Metropolis-Hastings MCMC chain and compute statistics (R-hat, ESS, WAIC, etc.).
 
-Run Metropolis-Hastings MCMC algorithm and compute statistics of results
+# Arguments
+- `data`: Experimental data structure (e.g. `RNADwellTimeData`, `TraceData`).
+- `model`: Model with `logprior` and compatible with `loglikelihood(param, data, model)`.
+- `options`: `MHOptions` (samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal).
 
--`data`: AbstractExperimentalData structure
--`model`: AbstractGeneTransitionModel structure with a logprior function
--`options`: MHOptions structure
-
-model and data must have a likelihoodfn function
+# Returns
+- `fits`: `Fit` struct (samples, ll, parml, llml, accept, total, etc.).
+- `stats`: `Stats` struct (mean, std, median, quantiles, covariance) or 0 if samplesteps == 0.
+- `measures`: `Measures` (WAIC, rhat, ess, geweke, mcse) or 0 if samplesteps == 0.
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions)
     fits, waic = metropolis_hastings(data, model, options)
@@ -138,9 +140,16 @@ function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionMod
     return fits, stats, measures
 end
 """
-run_mh(data,model,options,nchains)
+    run_mh(data, model, options, nchains)
 
-Run Metropolis-Hastings MCMC algorithm with multiple chains
+Run Metropolis-Hastings MCMC with multiple chains in parallel, then merge chains and compute pooled statistics (R-hat, ESS, etc.).
+
+# Arguments
+- `data`, `model`, `options`: As in `run_mh(data, model, options)`.
+- `nchains`: Number of chains (e.g. number of workers). If 1, delegates to single-chain `run_mh`.
+
+# Returns
+- `fits`, `stats`, `measures`: Merged fit and diagnostics across chains.
 """
 function run_mh(data::AbstractExperimentalData, model::AbstractGeneTransitionModel, options::MHOptions, nchains)
     if false && CUDA.functional()

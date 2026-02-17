@@ -618,8 +618,8 @@ Returns the full path for a given folder, optionally creating the path if it doe
 # Arguments
 - `folder`: A folder name.
 - `root`: The root directory.
-- `foldertype`: The type of folder (optional, default is an empty string).
-- `make`: A boolean flag indicating whether to create the path if it does not exist (optional, default is `false`).
+- `folderatetype`: Optional subfolder type (e.g. `"results"`); used to form `joinpath(root, folderatetype, folder)` when needed (default `""`).
+- `make`: If `true`, create the path if it does not exist (default `false`).
 
 # Returns
 - `String`: The full path for the given folder.

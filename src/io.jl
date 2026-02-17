@@ -3669,14 +3669,24 @@ end
 
 
 """
-readrates(file::String,row::Int)
-readrates(file::String)
+    readrates(file::String, row::Int)
+    readrates(file::String)
 
-row
-1       maximum likelihood
-2       mean
-3       median
-4       last value of previous run
+Read rate (or parameter) values from a rates or param-stats file. The file is expected to have
+one or more rows of numeric values; `row` selects which row to return.
+
+# Arguments
+- `file`: Path to the file (e.g. `rates_*_*.txt` or `param-stats_*_*.txt`).
+- `row`: Row index (1-based). Convention: 1 = maximum likelihood, 2 = mean, 3 = median, 4 = last value of previous run.
+
+# Returns
+- `Vector{Float64}`: The selected row as Float64 values. A leading label column (if present) is skipped.
+
+# Example
+```julia
+rates = readrates("results/rates_gt_CANX_3331_2.txt", 3)  # median row
+rates = readrates("results/rates_gt_CANX_3331_2.txt")     # same as row 3 (median)
+```
 """
 readrates(file::String, row::Int) = readrow(file, row)
 
@@ -3687,6 +3697,13 @@ readrates(file::String) = readrates(file, 3)
 """
     get_row(ratetype)
 
+Map a ratetype string to the 1-based row index used in rates/param-stats files.
+
+# Arguments
+- `ratetype`: One of `"ml"` (→ 1), `"mean"` (→ 2), `"median"` (→ 3), `"last"` (→ 4). Any other value returns 3 (median).
+
+# Returns
+- `Int`: Row index for use with `readrates(file, row)`.
 """
 function get_row(ratetype)
     if ratetype == "ml"
