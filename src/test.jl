@@ -1242,6 +1242,145 @@ function dwelltime_matrices(rate_file::String, bins=[collect(1:100), collect(0:1
     return TI, TA
 end
 
+"""
+    finite_diff_loglikelihood_1d(data, model, i; param=get_param(model), h=1e-3)
+
+Central finite-difference approximation of the first and second derivative of the
+log-likelihood with respect to the i-th parameter, in the transformed parameter space.
+
+# Arguments
+- `data`: Data structure used in the likelihood.
+- `model`: Model structure (with parameterization implied by `get_param(model)`).
+- `i`: Index of the parameter to differentiate with respect to.
+
+# Keywords
+- `param`: Parameter vector in transformed space (defaults to `get_param(model)`).
+- `h`: Step size for the finite difference (default `1e-3`).
+
+# Returns
+- `(ll0, d1, d2)`:
+  - `ll0`: log-likelihood at `param`.
+  - `d1`: First derivative estimate at `param[i]`.
+  - `d2`: Second derivative (curvature) estimate at `param[i]`.
+"""
+function finite_diff_loglikelihood_1d(data, model, i; param=get_param(model), h=1e-3)
+    θ0 = copy(param)
+    θm = copy(θ0); θm[i] -= h
+    θp = copy(θ0); θp[i] += h
+
+    ll0, _ = loglikelihood(θ0, data, model)
+    llm, _ = loglikelihood(θm, data, model)
+    llp, _ = loglikelihood(θp, data, model)
+
+    d1 = (llp - llm) / (2h)
+    d2 = (llp - 2ll0 + llm) / (h^2)
+    return ll0, d1, d2
+end
+
+"""
+    finite_diff_loglikelihood_diag(data, model; param=get_param(model), h=1e-3)
+
+Approximate the diagonal of the Hessian (curvature) of the log-likelihood in the
+transformed parameter space using central finite differences.
+
+# Arguments
+- `data`: Data structure used in the likelihood.
+- `model`: Model structure.
+
+# Keywords
+- `param`: Parameter vector in transformed space (defaults to `get_param(model)`).
+- `h`: Step size for the finite difference (same step used for all parameters).
+
+# Returns
+- `curv`: Vector of second-derivative estimates, one per parameter.
+"""
+function finite_diff_loglikelihood_diag(data, model; param=get_param(model), h=1e-3)
+    n = length(param)
+    curv = zeros(n)
+    for i in 1:n
+        θ0 = copy(param)
+        θm = copy(θ0); θm[i] -= h
+        θp = copy(θ0); θp[i] += h
+
+        ll0, _ = loglikelihood(θ0, data, model)
+        llm, _ = loglikelihood(θm, data, model)
+        llp, _ = loglikelihood(θp, data, model)
+
+        curv[i] = (llp - 2ll0 + llm) / (h^2)
+    end
+    return curv
+end
+
+# --- RNADwellTimeData: per-dataset log-likelihood and curvature ---
+
+"""
+    rnadwelltime_component_bounds(data::RNADwellTimeData)
+
+Return segment boundaries so that the concatenated histogram is split as [RNA, dwell1, dwell2, ...].
+Returns (starts, ends) where starts[j], ends[j] are the 1-based indices for component j (1=RNA, 2=first dwell type, ...).
+"""
+function rnadwelltime_component_bounds(data::RNADwellTimeData)
+    starts = Int[1]
+    L = length(data.histRNA)
+    push!(starts, L + 1)
+    for d in data.DwellTimes
+        push!(starts, starts[end] + length(d))
+    end
+    ends = starts[2:end] .- 1
+    starts = starts[1:end-1]
+    return starts, ends
+end
+
+"""
+    loglikelihood_by_component(param, data::RNADwellTimeData, model)
+
+Log-likelihood broken down by data source: RNA histogram, then each dwell-time type (ON, OFF, ONG, OFFG).
+Returns (ll_by_component, names) where ll_by_component is a vector of log-likelihoods and names is ["RNA", "ON", "OFF", ...].
+"""
+function loglikelihood_by_component(param, data::RNADwellTimeData, model)
+    predictions = predictedfn(param, data, model)
+    hist = datahistogram(data)
+    logp = log.(max.(predictions, eps()))
+    contrib = hist .* logp
+    starts, ends = rnadwelltime_component_bounds(data)
+    ll_by = [sum(contrib[s:e]) for (s, e) in zip(starts, ends)]
+    names = ["RNA"; data.DTtypes]
+    return ll_by, names
+end
+
+"""
+    finite_diff_loglikelihood_diag_by_component(data::RNADwellTimeData, model; param=get_param(model), h=1e-3)
+
+Curvature (diagonal of Hessian) of the log-likelihood with respect to each parameter, computed
+separately for each data component (RNA, ON, OFF, ONG, OFFG). So the total curvature is the sum
+over components; this shows which dataset is driving the steep curvature.
+
+# Returns
+- `curv_matrix`: size (n_params × n_components), curv_matrix[i, j] = ∂²(ll_component_j) / ∂θᵢ².
+- `component_names`: ["RNA", "ON", "OFF", "ONG", "OFFG"] (or as in data.DTtypes).
+"""
+function finite_diff_loglikelihood_diag_by_component(data::RNADwellTimeData, model; param=get_param(model), h=1e-3)
+    starts, ends = rnadwelltime_component_bounds(data)
+    names = ["RNA"; data.DTtypes]
+    n_comp = length(names)
+    n_param = length(param)
+    curv = zeros(n_param, n_comp)
+
+    for j in 1:n_comp
+        s, e = starts[j], ends[j]
+        ll_j(θ) = begin
+            pred = predictedfn(θ, data, model)
+            hist = datahistogram(data)
+            sum(hist[s:e] .* log.(max.(pred[s:e], eps())))
+        end
+        for i in 1:n_param
+            θ0 = copy(param); θm = copy(θ0); θm[i] -= h; θp = copy(θ0); θp[i] += h
+            curv[i, j] = (ll_j(θp) - 2 * ll_j(θ0) + ll_j(θm)) / (h^2)
+        end
+    end
+    return curv, names
+end
+
 
 # using StatsBase # For creating histograms later, if needed
 
