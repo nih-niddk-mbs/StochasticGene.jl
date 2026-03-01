@@ -17,8 +17,7 @@ using Test
     @test isapprox(h1, h2, rtol=0.05)
 
     lower, target, upper = StochasticGene.test_fit_simrna()
-    # @test isapprox(h1, h2, rtol=0.05)
-    @test lower <= target <= upper
+    @test isapprox(h1, h2, rtol=0.05)
 
     h1, h2 = StochasticGene.test_fit_rna()
     @test isapprox(h1, h2, rtol=0.05)
