@@ -262,7 +262,7 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.
     data = RNADwellTimeData("test", "test", nRNA, h[1], bins, h[2:end], dttype, yield)
     rinit = StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], [], mean_elongationtime(rtarget, transitions, R))
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], [], mean_elongationtime(rtarget, transitions, R)), fittedparam, tuple(), transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, rtarget[end], propcv, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
-    options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
+    options = StochasticGene.MHOptions(nsamples, 10000, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     h = predictedfn(fits.parml, data, model)
     h, StochasticGene.datapdf(data)
@@ -305,9 +305,9 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     fits, stats, measures = run_mh(data, model, options, nchains)
     # return fits, stats, measures, data, model, options
     nrates = num_rates(model)
-    lower = stats.qparam[1, fittedparam]
-    upper = stats.qparam[3, fittedparam]
-    return lower, stats.medparam[1:nrates-1], upper
+    lower = stats.qparam[1, model.fittedparam]
+    upper = stats.qparam[3, model.fittedparam]
+    return lower, rtarget[model.fittedparam], upper
 end
 
 function test_fit_trace_compare(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.2, 0.9, 0.1], nchains=1, zeromedian=true, maxtime=100.0, initprior=0.1)
@@ -376,7 +376,7 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     # h2 = [rtarget[fittedparam]; [50.0; 10 / 50.0]; rh]
     lower = stats.qparam[1, fittedparam]
     upper = stats.qparam[3, fittedparam]
-    return lower, h1, upper
+    return lower, rtarget[fittedparam], upper
 end
 
 """
@@ -405,7 +405,7 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     rfit = StochasticGene.get_rates(fits.parml, model)
     lower = stats.qparam[1, fittedparam]
     upper = stats.qparam[3, fittedparam]
-    return lower, rfit[1:length(rtarget)], upper
+    return lower, rtarget[fittedparam], upper
 end
 
 
