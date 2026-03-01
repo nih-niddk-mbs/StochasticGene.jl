@@ -166,8 +166,12 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         # Therefore after shifting, tau[e] - t > 0 (proposed next absolute time is positive)
         # Note: for taui in tau iterates over each Matrix in Vector{Matrix}, and
         # taui .-= t modifies each matrix in place (taui is a reference, not a copy)
-        for taui in tau
-            taui .-= t
+        if tau isa AbstractMatrix
+            tau .-= t
+        else
+            for taui in tau
+                taui .-= t
+            end
         end
         # Reset simulation time to match t0 initialization from initialize_sim
         t = 0.0
