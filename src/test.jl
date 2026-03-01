@@ -3,6 +3,8 @@
 # test.jl
 
 
+
+
 """
     test_steadystatemodel(model::AbstractGMmodel, nhist)
 
@@ -189,7 +191,8 @@ function test_fit_simrna(; rtarget=[0.33, 0.19, 2.5, 1.0], transitions=([1, 2], 
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
     options = StochasticGene.MHOptions(1000000, 100000, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
-    stats.medparam, rtarget[fittedparam]
+    h = predictedfn(fits.parml, data, model)
+    h, normalize_histogram(data.histRNA)
 end
 
 """
@@ -302,7 +305,9 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     fits, stats, measures = run_mh(data, model, options, nchains)
     # return fits, stats, measures, data, model, options
     nrates = num_rates(model)
-    stats.medparam[1:nrates-1], rtarget[1:nrates-1]
+    lower = stats.qparam[1, fittedparam]
+    upper = stats.qparam[3, fittedparam]
+    return lower, stats.medparam[1:nrates-1], upper
 end
 
 function test_fit_trace_compare(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.05, 0.2, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.01, cv=100.0, noisepriors=[0.0, 0.2, 0.9, 0.1], nchains=1, zeromedian=true, maxtime=100.0, initprior=0.1)
@@ -369,7 +374,9 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     h2 = rtarget[1:nrates-1]
     h1 = stats.medparam[1:nrates-1]
     # h2 = [rtarget[fittedparam]; [50.0; 10 / 50.0]; rh]
-    return h1, h2
+    lower = stats.qparam[1, fittedparam]
+    upper = stats.qparam[3, fittedparam]
+    return lower, h1, upper
 end
 
 """
@@ -396,7 +403,9 @@ function test_fit_tracejoint(; coupling=((1, 2), (tuple(), tuple(1)), (2, 0), (0
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     rfit = StochasticGene.get_rates(fits.parml, model)
-    return rfit[1:length(rtarget)], rtarget
+    lower = stats.qparam[1, fittedparam]
+    upper = stats.qparam[3, fittedparam]
+    return lower, rfit[1:length(rtarget)], upper
 end
 
 

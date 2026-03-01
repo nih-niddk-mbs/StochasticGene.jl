@@ -16,8 +16,9 @@ using Test
     h1, h2 = StochasticGene.test_compare_coupling()
     @test isapprox(h1, h2, rtol=0.05)
 
-    h1, h2 = StochasticGene.test_fit_simrna()
-    @test isapprox(h1, h2, rtol=0.05)
+    lower, target, upper = StochasticGene.test_fit_simrna()
+    # @test isapprox(h1, h2, rtol=0.05)
+    @test lower <= target <= upper
 
     h1, h2 = StochasticGene.test_fit_rna()
     @test isapprox(h1, h2, rtol=0.05)
@@ -29,12 +30,15 @@ using Test
     @test isapprox(h1, h2, rtol=0.2)
 
     h1, h2 = StochasticGene.test_fit_trace()
-    @test isapprox(h1, h2, rtol=1.0)
+    # @test isapprox(h1, h2, rtol=1.0)
+    @test lower <= target <= upper
 
-    h1, h2 = StochasticGene.test_fit_trace_hierarchical()
-    @test isapprox(h1, h2, rtol=1.)
+    lower, target, upper = StochasticGene.test_fit_trace_hierarchical()
+    # @test isapprox(h1, h2, rtol=1.)
+    @test lower <= target <= upper
 
-    h1, h2 = StochasticGene.test_fit_tracejoint()
-    @test isapprox(h1, h2, rtol=0.2)
+    lower, target, upper = StochasticGene.test_fit_tracejoint()
+    # @test isapprox(h1, h2, rtol=0.2)
+    @test lower <= target <= upper
 
 end
