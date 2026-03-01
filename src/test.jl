@@ -187,9 +187,9 @@ function test_fit_simrna(; rtarget=[0.33, 0.19, 2.5, 1.0], transitions=([1, 2], 
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
     data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0)  # yield=1.0 (Float64, no inflation needed)
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
-    options = StochasticGene.MHOptions(1000000, 0, 0, 20.0, 1.0, 1.0)
+    options = StochasticGene.MHOptions(1000000, 100000, 0, 20.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
-    StochasticGene.get_rates(fits.parml, model), rtarget
+    stats.medparam, rtarget[fittedparam]
 end
 
 """
@@ -209,7 +209,7 @@ Fit a real RNA histogram using the provided parameters and compare to the data.
 function test_fit_rna(; gene="CENPL", G=2, nalleles=2, propcv=0.05, fittedparam=[1, 2, 3], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), rinit=[0.01, 0.1, 1.0, 0.01006327034802035], datacond="MOCK", datapath="data/HCT116_testdata", label="scRNA_test", root=".", nchains=1)
     data = load_data("rna", [], folder_path(datapath, root, "data"), label, gene, datacond, (), 1.0)
     model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, 1.0, [], 1.0), fittedparam, fixedeffects, transitions, 2, 0, 0, 1, "", nalleles, 10.0, Int[], rinit[end], propcv, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
-    options = StochasticGene.MHOptions(100000, 0, 0, 60.0, 1.0, 1.0)
+    options = StochasticGene.MHOptions(100000, 100000, 0, 60.0, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     h = predictedfn(fits.parml, data, model)
     h, normalize_histogram(data.histRNA)
