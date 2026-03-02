@@ -80,7 +80,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 
 #Named arguments
 - `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
-- `coupling=tuple()`: if nonempty, `(unit_model, connections)` where `unit_model` is a tuple of model indices per unit (e.g. (1, 2)) and `connections` is a vector of `(β, s, α, t)` (source unit, source state, target unit, target transition). Use `make_coupling` / `make_coupling_reciprocal` in io.jl to build from a coupling field string.
+- `coupling=tuple()`: if nonempty, `(unit_model, connections)` where `unit_model` is a tuple of model indices per unit (e.g. (1, 2)) and `connections` is a vector of `(β, s, α, t)` (source unit, source state, target unit, target transition). Use `make_coupling` / `make_coupling_reciprocal` in io.jl to build from a coupling field string. Empty `connections` is valid (no interaction terms).
 - `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
 - `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
@@ -450,8 +450,7 @@ end
 Find coupled targets for each unit in a coupled model.
 
 # Arguments
-- `coupling::Tuple`: Internal 6-tuple (unit_model, sources, connections, target_transition, ncoupling, targets)
-  or 2-tuple (unit_model, sources) for deriving targets.
+- `coupling::Tuple`: Public API is `(unit_model, connections)`. Internally converted to 6-tuple (unit_model, sources, connections, target_transition, ncoupling, targets) for simulation.
 
 # Returns
 - `Vector{Vector{Int}}`: Vector where targets[i] contains indices of units that are influenced by unit i
@@ -492,7 +491,7 @@ end
 """
     prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
 
-Prepare parameters for coupled model simulation. Coupling is (unit_model, connections::Vector{ConnectionSpec}).
+Prepare parameters for coupled model simulation. Coupling is (unit_model, connections::Vector{ConnectionSpec}). Empty `connections` is valid.
 
 # Arguments
 - `r::Vector{Float64}`: Vector of rates including coupling parameters

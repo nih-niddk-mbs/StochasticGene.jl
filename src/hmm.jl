@@ -2631,7 +2631,7 @@ to be handled via eigendecomposition.
 - `S`: Number of splice sites for each unit (Tuple for coupled models)
 - `insertstep`: Reporter insertion step definitions (Tuple for coupled models)
 - `probfn`: Probability function for observation model (e.g., `prob_Gaussian`)
-- `coupling::Tuple`: Coupling structure between units
+- `coupling::Tuple`: Coupling structure `(unit_model, connections::Vector{ConnectionSpec})`; see `make_coupling` in io.jl.
 - `lags::Vector{<:Real}`: Time lags for covariance calculation (positive lags only, monotonic increasing from 0)
   - **Lags must be uniform or multiples of a minimal value** (e.g., [0, 5/3, 10/3, 15/3, ...])
   - The lag interval is inferred as the first spacing: `lags[2] - lags[1]`

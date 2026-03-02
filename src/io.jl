@@ -219,6 +219,7 @@ make_coupling("R5", 3, 4)  # returns ((1, 2), [(1, 4, 2, 5), (1, 5, 2, 5), ...])
 # Notes
 - If coupling_field starts with "R": all RNA states (G+1 to G+R) → target transition
 - Otherwise: single source state → target transition (target from last character)
+- Empty connections is valid when building manually: use `(unit_model, ConnectionSpec[])`.
 """
 function make_coupling(coupling_field::String, G, R)
     if isempty(coupling_field)

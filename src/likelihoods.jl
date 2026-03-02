@@ -306,7 +306,7 @@ function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, in
     return r, couplingStrength, noiseparams
 end
 
-# Overload using full coupling for canonical to_connections order (legacy and extended).
+# Overload using full coupling (unit_model, connections); coupling strength order matches connection list.
 function prepare_rates_coupled(rates, coupling::Tuple, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     couplingStrength = Float64[]

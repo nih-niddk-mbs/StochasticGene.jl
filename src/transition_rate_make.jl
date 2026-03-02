@@ -206,7 +206,7 @@ matrix components for fitting traces, mRNA histograms, and reporter gene data. I
 the construction of coupled systems with multiple interacting units.
 
 # Arguments
-- `coupling::Tuple`: Tuple of coupling parameters
+- `coupling::Tuple`: `(unit_model, connections::Vector{ConnectionSpec})`; each connection is `(β, s, α, t)`. Empty `connections` is valid (uncoupled T only).
 - `transitions::Tuple`: Tuple of transition rates
 - `G`: Total number of gene states
 - `R`: Number of reporter steps
@@ -1002,7 +1002,7 @@ the full coupled system dynamics.
 - `make_mat_TC(components, rates, coupling_strength)`: Uses components and rates to create the matrix
 
 # Returns
-- `SparseMatrixCSC`: The created coupled transition matrix TC
+- `SparseMatrixCSC`: The created coupled transition matrix TC (uncoupled T + sum over connections; empty connection list adds nothing).
 """
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
@@ -1124,7 +1124,7 @@ function _coupling_term(U, V, β::Int, α::Int, IT, unit_model, n::Int)
     Vβ
 end
 
-# connection_data: list of ConnectionRecord; build V_k from rates in loop.
+# connection_data: list of ConnectionRecord (may be empty; loop adds nothing and Tc = uncoupled T). Build V_k from rates in loop.
 function _make_mat_TC_connection_data(T, IT, unit_model, connection_data, coupling_strength, rates)
     n = length(unit_model)
     N = prod(size.(IT, 2))

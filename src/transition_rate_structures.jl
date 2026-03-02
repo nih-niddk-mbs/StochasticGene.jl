@@ -206,6 +206,8 @@ Each connection is identified by a 4-tuple `(β, s, α, t)` where:
 This flat representation is convenient for fast iteration and indexing when
 assembling coupled transition matrices; higher-level code is responsible for
 mapping model-level coupling specifications into these connection specifications.
+The connection list may be empty (uncoupled T is still built); source and target
+info per unit is derived via `source_states_for_unit` and `target_transition_for_unit`.
 """
 const ConnectionSpec = NTuple{4,Int}
 
@@ -265,13 +267,13 @@ end
 fields:
     N, model, sources, modelcomponents: as before.
     connections: optional precomputed per-connection data (e.g. `Vector{ConnectionRecord}`),
-        built from model-level coupling specifications.
-    Per-unit (s,t) are stored in modelcomponents[α].sourceState and .targetTransition (scalar or list).
+        built from model-level coupling `(unit_model, connections::Vector{ConnectionSpec})`.
+    Per-unit source/target are derived from the connection list (e.g. `source_states_for_unit`,
+    `target_transition_for_unit`) and stored in modelcomponents[α].sourceState and .targetTransition.
 
-Note: higher-level code is responsible for building any per-connection data structures
-from these components (e.g. source/target operators for coupling terms). The numerical
-matrix constructors in `transition_rate_make.jl` should depend only on these pre-built
-components, not on raw model information.
+Note: Coupling is supplied as `(unit_model, connections)`; empty `connections` is valid (Tc = uncoupled T).
+Higher-level code builds per-connection data from these; matrix constructors in `transition_rate_make.jl`
+depend only on the pre-built components.
 """
 struct TCoupledComponents{ModelType} <: AbstractComponents
     N::Int

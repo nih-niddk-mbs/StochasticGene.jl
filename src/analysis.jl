@@ -2341,11 +2341,11 @@ end
 #                 for source in sources
 #                     # if occursin("rates", f) && occursin(datacond, f) #&& ((!exclude_label && occursin(hlabel, f)) || exclude_label && !occursin(hlabel, f))
 #                     if occursin("rates", f) && occursin("$pattern$source$target", f)
-#                         write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1), zeromedian=zeromedian, datacol=datacol)
+#                         write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=((1, 2), [(1, source, 2, target)]), zeromedian=zeromedian, datacol=datacol)
 #                     end
 #                 end
 #                 if occursin("rates", f) && occursin("R$target", f)
-#                     coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                     coupling = ((1, 2), [(1, s, 2, target) for s in (G[1]+1):(G[1]+R[1])])
 #                     write_trace_dataframe(joinpath(root, f), datapath, datacond, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, coupling=coupling, zeromedian=zeromedian, datacol=datacol)
 #                 end
 #             end
@@ -2379,7 +2379,7 @@ end
 #                 for target in targets
 #                     for source in sources
 #                         if occursin("$pattern$source$target", f)
-#                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+#                             coupling = ((1, 2), [(1, source, 2, target)])
 #                             task_args = (
 #                                 joinpath(root, f), datapath, datacond, interval, ratetype,
 #                                 start, stop, probfn, noiseparams, splicetype,
@@ -2391,7 +2391,7 @@ end
 
 #                     # Tasks for R$target files
 #                     if occursin("R$target", f)
-#                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                         coupling = ((1, 2), [(1, s, 2, target) for s in (G[1]+1):(G[1]+R[1])])
 #                         task_args = (
 #                             joinpath(root, f), datapath, datacond, interval, ratetype,
 #                             start, stop, probfn, noiseparams, splicetype,
@@ -2448,7 +2448,7 @@ end
 #                     for source in sources
 #                         if occursin("$pattern$source$target", f)
 #                             file_path = joinpath(root, f)
-#                             coupling = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+#                             coupling = ((1, 2), [(1, source, 2, target)])
 
 #                             # Create a task for this file
 #                             t = @spawn begin
@@ -2469,7 +2469,7 @@ end
 #                     # Tasks for R$target files
 #                     if occursin("R$target", f)
 #                         file_path = joinpath(root, f)
-#                         coupling = ((1, 2), (tuple(), tuple(1)), (collect(G[1]+1:G[1]+R[1]), 0), (0, target), 1)
+#                         coupling = ((1, 2), [(1, s, 2, target) for s in (G[1]+1):(G[1]+R[1])])
 
 #                         # Create a task for this file
 #                         t = @spawn begin
