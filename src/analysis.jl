@@ -1257,123 +1257,6 @@ function ratestats(gene, G, folder, cond)
 end
 
 """
-    read_rates_folder(folder; ratetype="median", filepattern=nothing)
-
-Load rate parameters from all rate files in a folder (e.g. a `collected_rates` directory).
-
-Reads the selected row (ml/mean/median/last) from each file. The first file is used to infer
-column labels and the number of rates; files with a different number of columns are skipped with a warning.
-
-# Arguments
-- `folder::String`: Path to folder containing rate files (e.g. `"path/to/collected_rates"`).
-- `ratetype::String="median"`: Which row to read: `"ml"`, `"mean"`, `"median"`, or `"last"`.
-- `filepattern`: If provided, only files whose basename contains this string (e.g. `"rates"`).
-  If `nothing`, uses `"rates"` (files whose name contains \"rates\").
-
-# Returns
-- `matrix::Matrix{Float64}`: `n_genes × n_rates` matrix of rate values.
-- `labels::Vector{String}`: Rate parameter names (from first file's header, or `"rate_1"`, ... if no header).
-- `files::Vector{String}`: Paths to the files that were successfully read (one row per file).
-
-# Examples
-```julia
-mat, labels, files = read_rates_folder("results/collected_rates", ratetype="median")
-```
-"""
-function read_rates_folder(folder::String; ratetype::String="median", filepattern=nothing)
-    pattern = something(filepattern, "rates")
-    all_files = [joinpath(folder, f) for f in readdir(folder) if isfile(joinpath(folder, f)) && occursin(pattern, f)]
-    isempty(all_files) && return zeros(Float64, 0, 0), String[], String[]
-    row = get_row(ratetype)
-    # Use first file to get labels and n_rates
-    content = readdlm(all_files[1], ',', header=true)
-    data = content[1]
-    header = content[2]
-    n_rates = size(data, 2)
-    labels = if size(header, 1) >= 1 && !(header[1, 1] isa Number)
-        h = vec(header[1, :])
-        String.(h[1:min(end, n_rates)])
-    else
-        ["rate_$j" for j in 1:n_rates]
-    end
-    length(labels) != n_rates && (labels = [labels; ["rate_$j" for j in (length(labels)+1):n_rates]])
-    rows = Vector{Float64}[]
-    used_files = String[]
-    for f in all_files
-        r = readrates(f, row)
-        if length(r) == n_rates
-            push!(rows, r)
-            push!(used_files, f)
-        elseif length(r) > 0
-            @warn "Skipping $f: expected $n_rates rates, got $(length(r))"
-        end
-    end
-    isempty(rows) && return zeros(Float64, 0, n_rates), labels, String[]
-    (reduce(vcat, transpose.(rows)), labels, used_files)
-end
-
-"""
-    rate_distribution_summary(folder; ratetype="median", filepattern=nothing, quantiles=[0.025, 0.25, 0.5, 0.75, 0.975])
-
-Compute the distribution of each rate parameter across all genes in a folder of rate files.
-
-Intended for building priors for future fits: use the returned `priormean` and `priorcv` (or
-the per-rate summary table) to set `priormean` and `priorcv` in `fit(...)`.
-
-# Arguments
-- `folder::String`: Path to folder containing rate files (e.g. `"path/to/collected_rates"`).
-- `ratetype::String="median"`: Which row to read from each file: `"ml"`, `"mean"`, `"median"`, or `"last"`.
-- `filepattern`: If provided, only files whose basename contains this string. If `nothing`, uses `"rates"`.
-- `quantiles::Vector{Float64}`: Quantiles to compute (default: 2.5%, 25%, 50%, 75%, 97.5%).
-
-# Returns
-- `summary::DataFrame`: One row per rate with columns: `rate`, `mean`, `std`, `cv`, `median`, and requested quantiles (e.g. `q0025`, `q25`, `q50`, `q75`, `q975`), plus `n` (number of genes).
-- `priormean::Vector{Float64}`: Vector of prior means in rate order (drop-in for `fit(; priormean=...)`).
-- `priorcv::Vector{Float64}`: Vector of prior CVs (std/mean) in rate order; use for `fit(; priorcv=...)` (or a scalar if you prefer one CV for all).
-
-# Examples
-```julia
-summary, priormean, priorcv = rate_distribution_summary("results/collected_rates")
-# Use for a new fit:
-fit(; priormean=priormean, priorcv=priorcv, ...)
-```
-"""
-function rate_distribution_summary(folder::String; ratetype::String="median", filepattern=nothing, quantiles=[0.025, 0.25, 0.5, 0.75, 0.975])
-    matrix, labels, files = read_rates_folder(folder; ratetype, filepattern)
-    n_genes, n_rates = size(matrix)
-    n_genes == 0 && return DataFrame(), Float64[], Float64[]
-    qnames = ["q" * replace(string(round(q, digits=4)), "." => "") for q in quantiles]
-    priormean = Vector{Float64}(undef, n_rates)
-    priorcv_vec = Vector{Float64}(undef, n_rates)
-    mean_col = Float64[]
-    std_col = Float64[]
-    cv_col = Float64[]
-    median_col = Float64[]
-    q_cols = [Float64[] for _ in quantiles]
-    for j in 1:n_rates
-        col = matrix[:, j]
-        m = mean(col)
-        s = std(col)
-        priormean[j] = m
-        priorcv_vec[j] = m > 0 ? s / m : 0.0
-        push!(mean_col, m)
-        push!(std_col, s)
-        push!(cv_col, m > 0 ? priorcv_vec[j] : NaN)
-        push!(median_col, median(col))
-        for (i, q) in enumerate(quantiles)
-            push!(q_cols[i], quantile(col, q))
-        end
-    end
-    n_col = fill(n_genes, n_rates)
-    out = DataFrame(rate=labels, mean=mean_col, std=std_col, cv=cv_col, median=median_col)
-    for (i, qn) in enumerate(qnames)
-        out[!, Symbol(qn)] = q_cols[i]
-    end
-    out[!, :n] = n_col
-    (out, priormean, priorcv_vec)
-end
-
-"""
     meanofftime(r::Vector, n::Int, method)
 
 Calculate mean off time for a gene expression model.
@@ -2383,9 +2266,7 @@ function write_trace_dataframe(file::String, datapath::String, interval::Float64
     datacond, transitions, G, R, S, insertstep, hierarchical, coupling_field = parse_filename(file, hlabel=hlabel)
     coupling = make_coupling(coupling_field, G, R)
     if G isa Int && !isempty(coupling)
-        # Extended format (e.g. "24,33|33") use full coupling_field as subpath; legacy use first char
-        subpath = (occursin(',', coupling_field) || occursin('|', coupling_field)) ? coupling_field : string(coupling_field[1])
-        datapath = joinpath(datapath, subpath)
+        datapath = joinpath(datapath, string(coupling_field[1]))
     end
     println(datapath)
     r = readrates(file, get_row(ratetype))
@@ -2642,13 +2523,12 @@ Extract coupling field from a filepath based on a pattern.
 - `filepath::String`: Path to file
 
 # Returns
-- `Union{String, Nothing}`: Coupling field string (2-char unidirectional, 4-char reciprocal, or extended multi-connection), or nothing if not found
+- `Union{String, Nothing}`: Coupling field string (2-char unidirectional or 4-char reciprocal), or nothing if not found
 
 # Notes
 - Searches for pattern followed by coupling digits in filename
 - 2-char = unidirectional (e.g. "31", "R5")
 - 4-char = reciprocal (e.g. "3131", "31R5")
-- Extended (models 9–12): contains comma or pipe, e.g. "24,33|33" (multiple (s,t) per direction)
 - Use `make_coupling(coupling_field, G, R)` to build coupling structure
 
 # Examples
@@ -2658,38 +2538,18 @@ extract_source_target("gene", "rates_gene31_condition.txt")  # Returns: "31"
 
 # Reciprocal coupling
 extract_source_target("gene", "rates_gene3131_condition.txt")  # Returns: "3131"
-
-# Extended multi-connection (models 9–12)
-extract_source_target("gene", "rates_gene24,33|33_condition.txt")  # Returns: "24,33|33"
 ```
 """
 function extract_source_target(pattern::String, filepath::String)
+    # Get filename from path
     filename = basename(filepath)
-    idx = findfirst(pattern, filename)
-    idx === nothing && return nothing
 
-    # Segment after pattern until next '_' or end
-    start_pos = idx.stop + 1
-    rest = start_pos <= ncodeunits(filename) ? filename[start_pos:end] : ""
-    underscore_pos = findfirst('_', rest)
-    segment = underscore_pos === nothing ? rest : rest[1:prevind(rest, first(underscore_pos))]
-
-    # Sanitized extended form in filenames: digits/'R' plus '-' only (no ',' or '|')
-    # e.g. "gene24-33-33" for logical coupling "24,33|33".
-    if !isempty(segment) && occursin('-', segment) &&
-       !occursin(',', segment) && !occursin('|', segment)
-        return segment
-    end
-
-    # Extended format (models 9–12): contains ',' or '|' → return full segment
-    if !isempty(segment) && (occursin(',', segment) || occursin('|', segment))
-        return segment
-    end
-
-    # Legacy: 4-char reciprocal then 2-char unidirectional
+    # Escape special characters in pattern and build regex
     escaped_pattern = replace(pattern, r"([.*+?^\$()[]{}|\\])" => s"\\\1")
+    # Try 4-char reciprocal first (s1t1s2t2), then 2-char unidirectional (st)
     regex_4 = Regex("$(escaped_pattern)(\\d|R)(\\d)(\\d|R)(\\d)")
     regex_2 = Regex("$(escaped_pattern)(\\d|R)(\\d)")
+
     m = match(regex_4, filename)
     if m !== nothing
         return join(m.captures)
@@ -3711,11 +3571,6 @@ write_correlation_functions(
   compares these theoretical predictions against empirical correlation functions computed from experimental
   or simulated trace data.
 
-- **Segmentation faults**: Under heavy allocation load (many files, many lags, large coupled state space),
-  Julia's parallel garbage collector can occasionally segfault (e.g. in `gc_sweep_pool_parallel`). If you
-  see a segfault, run Julia with a single thread: `julia -t 1`. You can also reduce memory pressure by using
-  fewer lags (e.g. `lags=collect(0:10:300)`) or processing fewer files per run.
-
 # See Also
 - `write_correlation_functions_file`: Processes a single rate file (called internally by this function)
 - `correlation_functions`: Core HMM function that computes theoretical correlation functions
@@ -3748,196 +3603,9 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
                     m_Reporters1=fill(mReporters1, n_lags),
                     mReporters2=fill(mReporters2, n_lags)
                 ))
-                # Reduce peak allocation load to lower risk of parallel-GC segfault (Julia 1.11)
-                GC.gc()
             end
         end
     end
-end
-
-# ---- Correlation function uncertainty (MC and delta method) ----
-
-function _correlation_functions_uncertainty_setup(ratefile, statfile, fittedparam; pattern="gene", G=(3, 3), R=(3, 3), ratetype="median")
-    r = readrates(ratefile, get_row(ratetype))
-    coupling_field = extract_source_target(pattern, ratefile)
-    coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
-    n_fitted = length(fittedparam)
-    isempty(fittedparam) && (fittedparam = collect(1:length(r)); n_fitted = length(fittedparam))
-    # Covariance is only over fitted parameters (e.g. 2×2 when 2 params fitted); param-stats columns = fittedparam order
-    cov_raw = read_covparam(statfile)
-    cov_mat = isa(cov_raw, Matrix) ? Float64.(cov_raw) : (isempty(cov_raw) ? zeros(0, 0) : Float64.(reshape(cov_raw, n_fitted, n_fitted)))
-    size(cov_mat, 1) != n_fitted && throw(ArgumentError("param-stats covariance size $(size(cov_mat)) does not match length(fittedparam)=$n_fitted"))
-    θ_mean = log.(r[fittedparam])  # only fitted params; other entries of r stay fixed
-    r, coupling, θ_mean, cov_mat, fittedparam, n_fitted
-end
-
-function _correlation_functions_uncertainty_symmetrize(ac1ON, ac2ON, ac1Reporters, ac2Reporters)
-    (
-        ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-        ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-        ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-        ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]]
-    )
-end
-
-"""
-    correlation_functions_uncertainty_mc(ratefile, statfile, fittedparam; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", n_samples=1000, quantiles=[0.025, 0.975])
-
-Compute theoretical correlation functions with uncertainty bands via Monte Carlo sampling from the posterior.
-
-Draws `n_samples` rate vectors from a multivariate normal approximation to the posterior in log-rate space
-(using mean = median rates and covariance from param-stats log-parameter block), then computes
-`correlation_functions` for each draw. Returns point estimate (median across samples), lower/upper
-quantiles, and standard error for each output curve.
-
-# Arguments
-- `ratefile::String`: Path to rate file (e.g. `rates_tracejoint-...txt`).
-- `statfile::String`: Path to param-stats file (must contain log-parameter covariance block read by `read_covparam`).
-- `fittedparam::Vector{Int}`: Indices into the full rate vector that were fitted (e.g. only 2 indices for 2 fitted parameters). Order must match param-stats covariance columns. All other rates stay fixed at their values from `ratefile`.
-
-# Keyword arguments (model)
-- `transitions`, `G`, `R`, `S`, `insertstep`, `pattern`, `lags`, `probfn`, `ratetype`: Same as `write_correlation_functions_file`.
-
-# Keyword arguments (MC)
-- `n_samples::Int=1000`: Number of posterior samples.
-- `quantiles::Vector{Float64}=[0.025, 0.975]`: Quantiles for lower/upper bands.
-
-# Returns
-- `df::DataFrame`: Same columns as `write_correlation_functions` output (tau, cc_ON, ac1_ON, ...) plus for each curve
-  `*_lower`, `*_upper`, `*_se` (e.g. cc_ON_lower, cc_ON_upper, cc_ON_se).
-"""
-function correlation_functions_uncertainty_mc(ratefile, statfile, fittedparam; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", n_samples=1000, quantiles=[0.025, 0.975])
-    r, coupling, θ_mean, cov_mat, fittedparam, n_fitted = _correlation_functions_uncertainty_setup(ratefile, statfile, fittedparam; pattern, G, R, ratetype)
-    Σ = Symmetric(cov_mat) + 1e-8 * I
-    dist = try
-        MvNormal(θ_mean, Σ)
-    catch
-        MvNormal(θ_mean, Diagonal(1e-6 .+ abs.(diag(cov_mat))))
-    end
-    n_lags = length(lags) * 2 - 1
-    cc_ON_s = Vector{Float64}(undef, n_samples)
-    ac1_ON_s = similar(cc_ON_s); ac2_ON_s = similar(cc_ON_s)
-    cc_Reporters_s = similar(cc_ON_s); ac1_Reporters_s = similar(cc_ON_s); ac2_Reporters_s = similar(cc_ON_s)
-    cc_ON_all = zeros(n_samples, n_lags)
-    ac1_ON_all = zeros(n_samples, n_lags); ac2_ON_all = zeros(n_samples, n_lags)
-    cc_Reporters_all = zeros(n_samples, n_lags); ac1_Reporters_all = zeros(n_samples, n_lags); ac2_Reporters_all = zeros(n_samples, n_lags)
-    for s in 1:n_samples
-        θ_s = rand(dist)  # length n_fitted
-        r_s = copy(r)
-        r_s[fittedparam] .= exp.(θ_s)  # only fitted indices updated; rest fixed
-        tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions(r_s, transitions, G, R, S, insertstep, probfn, coupling, lags)
-        sym = _correlation_functions_uncertainty_symmetrize(ac1ON, ac2ON, ac1Reporters, ac2Reporters)
-        cc_ON_all[s, :] .= ccON
-        ac1_ON_all[s, :] .= sym.ac1_ON
-        ac2_ON_all[s, :] .= sym.ac2_ON
-        cc_Reporters_all[s, :] .= ccReporters
-        ac1_Reporters_all[s, :] .= sym.ac1_Reporters
-        ac2_Reporters_all[s, :] .= sym.ac2_Reporters
-    end
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
-    sym = _correlation_functions_uncertainty_symmetrize(ac1ON, ac2ON, ac1Reporters, ac2Reporters)
-    tau_sym = vcat(-reverse(lags), lags[2:end])
-    cc_ON_pt = vec(ccON)
-    ac1_ON_pt = sym.ac1_ON; ac2_ON_pt = sym.ac2_ON
-    cc_Reporters_pt = vec(ccReporters)
-    ac1_Reporters_pt = sym.ac1_Reporters; ac2_Reporters_pt = sym.ac2_Reporters
-    _qlo, _qhi = quantiles[1], quantiles[2]
-    DataFrame(
-        tau=tau_sym,
-        cc_ON=cc_ON_pt,
-        cc_ON_lower=vec(mapslices(c -> quantile(c, _qlo), cc_ON_all, dims=1)),
-        cc_ON_upper=vec(mapslices(c -> quantile(c, _qhi), cc_ON_all, dims=1)),
-        cc_ON_se=vec(mapslices(std, cc_ON_all, dims=1)),
-        ac1_ON=ac1_ON_pt,
-        ac1_ON_lower=vec(mapslices(c -> quantile(c, _qlo), ac1_ON_all, dims=1)),
-        ac1_ON_upper=vec(mapslices(c -> quantile(c, _qhi), ac1_ON_all, dims=1)),
-        ac1_ON_se=vec(mapslices(std, ac1_ON_all, dims=1)),
-        ac2_ON=ac2_ON_pt,
-        ac2_ON_lower=vec(mapslices(c -> quantile(c, _qlo), ac2_ON_all, dims=1)),
-        ac2_ON_upper=vec(mapslices(c -> quantile(c, _qhi), ac2_ON_all, dims=1)),
-        ac2_ON_se=vec(mapslices(std, ac2_ON_all, dims=1)),
-        m_ON1=fill(mON1, n_lags), m_ON2=fill(mON2, n_lags),
-        cc_Reporters=cc_Reporters_pt,
-        cc_Reporters_lower=vec(mapslices(c -> quantile(c, _qlo), cc_Reporters_all, dims=1)),
-        cc_Reporters_upper=vec(mapslices(c -> quantile(c, _qhi), cc_Reporters_all, dims=1)),
-        cc_Reporters_se=vec(mapslices(std, cc_Reporters_all, dims=1)),
-        ac1_Reporters=ac1_Reporters_pt,
-        ac1_Reporters_lower=vec(mapslices(c -> quantile(c, _qlo), ac1_Reporters_all, dims=1)),
-        ac1_Reporters_upper=vec(mapslices(c -> quantile(c, _qhi), ac1_Reporters_all, dims=1)),
-        ac1_Reporters_se=vec(mapslices(std, ac1_Reporters_all, dims=1)),
-        ac2_Reporters=ac2_Reporters_pt,
-        ac2_Reporters_lower=vec(mapslices(c -> quantile(c, _qlo), ac2_Reporters_all, dims=1)),
-        ac2_Reporters_upper=vec(mapslices(c -> quantile(c, _qhi), ac2_Reporters_all, dims=1)),
-        ac2_Reporters_se=vec(mapslices(std, ac2_Reporters_all, dims=1)),
-        m_Reporters1=fill(mReporters1, n_lags), mReporters2=fill(mReporters2, n_lags)
-    )
-end
-
-"""
-    correlation_functions_uncertainty_delta(ratefile, statfile, fittedparam; transitions=..., G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", epsilon=1e-6)
-
-Compute theoretical correlation functions with approximate standard errors via the delta method.
-
-Uses finite-difference Jacobian of the correlation outputs with respect to log-rate parameters and the
-log-parameter covariance from param-stats to approximate Var(y) = J Σ J'. Much cheaper than MC
-(1 + n_fitted evaluations of correlation_functions).
-
-# Arguments
-- `ratefile`, `statfile`, `fittedparam`: Same as `correlation_functions_uncertainty_mc`. Only fitted parameters are perturbed; others stay fixed.
-
-# Keyword arguments
-- `epsilon::Float64=1e-6`: Step size for finite-difference Jacobian (perturbation in log-rate space).
-
-# Returns
-- `df::DataFrame`: Point estimates (same as single-rate correlation_functions) plus `*_se` for each curve,
-  and optionally `*_lower`, `*_upper` from point ± 1.96*se (approximate 95% CI).
-"""
-function correlation_functions_uncertainty_delta(ratefile, statfile, fittedparam; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", epsilon=1e-6)
-    r, coupling, θ_mean, cov_mat, fittedparam, n_fitted = _correlation_functions_uncertainty_setup(ratefile, statfile, fittedparam; pattern, G, R, ratetype)
-    Σ_θ = Symmetric(cov_mat)
-    out0 = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = out0
-    sym0 = _correlation_functions_uncertainty_symmetrize(ac1ON, ac2ON, ac1Reporters, ac2Reporters)
-    n_lags = length(ccON)
-    J_ccON = zeros(n_lags, n_fitted)
-    J_ac1ON = zeros(n_lags, n_fitted); J_ac2ON = zeros(n_lags, n_fitted)
-    J_ccReporters = zeros(n_lags, n_fitted)
-    J_ac1Reporters = zeros(n_lags, n_fitted); J_ac2Reporters = zeros(n_lags, n_fitted)
-    for j in 1:n_fitted
-        r_j = copy(r)
-        r_j[fittedparam[j]] *= (1 + epsilon)  # perturb only j-th fitted param
-        out_j = correlation_functions(r_j, transitions, G, R, S, insertstep, probfn, coupling, lags)
-        _, _, _, _, _, _, _, _, ccON_j, ac1ON_j, ac2ON_j, _, _, _, _, ccReporters_j, ac1Reporters_j, ac2Reporters_j, _, _, _, _ = out_j
-        sym_j = _correlation_functions_uncertainty_symmetrize(ac1ON_j, ac2ON_j, ac1Reporters_j, ac2Reporters_j)
-        J_ccON[:, j] .= (ccON_j .- ccON) ./ epsilon
-        J_ac1ON[:, j] .= (sym_j.ac1_ON .- sym0.ac1_ON) ./ epsilon
-        J_ac2ON[:, j] .= (sym_j.ac2_ON .- sym0.ac2_ON) ./ epsilon
-        J_ccReporters[:, j] .= (ccReporters_j .- ccReporters) ./ epsilon
-        J_ac1Reporters[:, j] .= (sym_j.ac1_Reporters .- sym0.ac1_Reporters) ./ epsilon
-        J_ac2Reporters[:, j] .= (sym_j.ac2_Reporters .- sym0.ac2_Reporters) ./ epsilon
-    end
-    tau_sym = vcat(-reverse(lags), lags[2:end])
-    _var(J, Σ) = diag(J * Σ * J')
-    se_ccON = sqrt.(max.(0, _var(J_ccON, Σ_θ)))
-    se_ac1ON = sqrt.(max.(0, _var(J_ac1ON, Σ_θ)))
-    se_ac2ON = sqrt.(max.(0, _var(J_ac2ON, Σ_θ)))
-    se_ccReporters = sqrt.(max.(0, _var(J_ccReporters, Σ_θ)))
-    se_ac1Reporters = sqrt.(max.(0, _var(J_ac1Reporters, Σ_θ)))
-    se_ac2Reporters = sqrt.(max.(0, _var(J_ac2Reporters, Σ_θ)))
-    z = 1.96
-    DataFrame(
-        tau=tau_sym,
-        cc_ON=ccON,
-        cc_ON_se=se_ccON, cc_ON_lower=ccON .- z.*se_ccON, cc_ON_upper=ccON .+ z.*se_ccON,
-        ac1_ON=sym0.ac1_ON, ac1_ON_se=se_ac1ON, ac1_ON_lower=sym0.ac1_ON .- z.*se_ac1ON, ac1_ON_upper=sym0.ac1_ON .+ z.*se_ac1ON,
-        ac2_ON=sym0.ac2_ON, ac2_ON_se=se_ac2ON, ac2_ON_lower=sym0.ac2_ON .- z.*se_ac2ON, ac2_ON_upper=sym0.ac2_ON .+ z.*se_ac2ON,
-        m_ON1=fill(mON1, n_lags), m_ON2=fill(mON2, n_lags),
-        cc_Reporters=ccReporters,
-        cc_Reporters_se=se_ccReporters, cc_Reporters_lower=ccReporters .- z.*se_ccReporters, cc_Reporters_upper=ccReporters .+ z.*se_ccReporters,
-        ac1_Reporters=sym0.ac1_Reporters, ac1_Reporters_se=se_ac1Reporters, ac1_Reporters_lower=sym0.ac1_Reporters .- z.*se_ac1Reporters, ac1_Reporters_upper=sym0.ac1_Reporters .+ z.*se_ac1Reporters,
-        ac2_Reporters=sym0.ac2_Reporters, ac2_Reporters_se=se_ac2Reporters, ac2_Reporters_lower=sym0.ac2_Reporters .- z.*se_ac2Reporters, ac2_Reporters_upper=sym0.ac2_Reporters .+ z.*se_ac2Reporters,
-        m_Reporters1=fill(mReporters1, n_lags), mReporters2=fill(mReporters2, n_lags)
-    )
 end
 
 """

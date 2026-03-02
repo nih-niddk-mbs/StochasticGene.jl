@@ -166,8 +166,12 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         # Therefore after shifting, tau[e] - t > 0 (proposed next absolute time is positive)
         # Note: for taui in tau iterates over each Matrix in Vector{Matrix}, and
         # taui .-= t modifies each matrix in place (taui is a reference, not a copy)
-        for taui in tau
-            taui .-= t
+        if tau isa AbstractMatrix
+            tau .-= t
+        else
+            for taui in tau
+                taui .-= t
+            end
         end
         # Reset simulation time to match t0 initialization from initialize_sim
         t = 0.0
@@ -531,11 +535,13 @@ function prepare_rates_sim(rates, coupling, transitions, R, S, insertstep, n_noi
         push!(r, rates[j:j+n-1])
         j += n
     end
-    # Canonical order: to_connections(coupling), one γ per connection
-    conns = to_connections(coupling)
-    for k in 1:length(conns)
-        push!(couplingStrength, rates[j])
-        j += 1
+    # Canonical order: [(β, α) for α in 1:n for β in sources[α]], one param per (source, target) pair
+    sources = coupling[2]
+    for α in eachindex(coupling[1])
+        for β in sources[α]
+            push!(couplingStrength, rates[j])
+            j += 1
+        end
     end
     push!(r, couplingStrength)
     r
@@ -1062,44 +1068,46 @@ end
 TBW
 """
 
-function _state_in_s(state, s)
-    s isa Int && return s in state
-    return !isdisjoint(state, s)
-end
-
 function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling, verbose=false)
-    conns = to_connections(coupling)
-    coupling_strength = r[end]  # Vector of length ncoupling, same order as conns
+    sources = coupling[2][unit]
+    sstate = coupling[3]
+    ttrans = coupling[4]
+    targets = coupling[6][unit]
+    # Canonical (β, α) order: same as transition_rate_make and prepare_rates_sim
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in eachindex(coupling[1]) for β in coupling[2][α]]
+    coupling_strength = r[end]  # Vector of length ncoupling
+
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
 
-    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", conns: ", conns)
+    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
-    # unit as source (β): for each connection (unit, α, s, t_trans), update tau[α][t_trans]
-    for k in 1:length(conns)
-        β, α, s, t_trans = conns[k]
-        β != unit && continue
-        if isfinite(tau[α][t_trans, 1])
-            γc = coupling_strength[k]
-            s_set = s isa Int ? [s] : s
-            if isdisjoint(oldstate, s_set) && _state_in_s(newstate, s)
-                tau[α][t_trans, 1] = 1 / (1 + γc) * (tau[α][t_trans, 1] - t) + t
-            elseif _state_in_s(oldstate, s) && isdisjoint(newstate, s_set)
-                tau[α][t_trans, 1] = (1 + γc) * (tau[α][t_trans, 1] - t) + t
+    # unit as source: for each target, use coupling param for (unit, target)
+    for target in targets
+        verbose && println(isdisjoint(oldstate, sstate[unit]), " : ", !isdisjoint(newstate, sstate[unit]))
+        if isfinite(tau[target][ttrans[target], 1])
+            idx = findfirst(isequal((unit, target)), coupling_pairs)
+            γc = idx === nothing ? 0.0 : coupling_strength[idx]
+            if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
+                tau[target][ttrans[target], 1] = 1 / (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
+            elseif !isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
+                tau[target][ttrans[target], 1] = (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
     end
 
-    # unit as target (α): for each connection (β, unit, s, t_trans), update tau[unit][t_trans] when source β in state s
-    for k in 1:length(conns)
-        β, α, s, t_trans = conns[k]
-        α != unit && continue
-        t_trans ∈ enabled || continue
-        source_state_vec = findall(!iszero, vec(state[β, 1]))
-        _state_in_s(source_state_vec, s) || continue
-        γc = coupling_strength[k]
-        tau[unit][t_trans, 1] = 1 / (1 + γc) * (tau[unit][t_trans, 1] - t) + t
+    # unit as target: for each source, use coupling param for (source, unit)
+    for source in sources
+        verbose && println(ttrans[unit] ∈ enabled, ": ", tau[unit][ttrans[unit], 1])
+        if ttrans[unit] ∈ enabled
+            verbose && println(sstate[source], " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source]))
+            if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source])
+                idx = findfirst(isequal((source, unit)), coupling_pairs)
+                γc = idx === nothing ? 0.0 : coupling_strength[idx]
+                tau[unit][ttrans[unit], 1] = 1 / (1 + γc) * (tau[unit][ttrans[unit], 1] - t) + t
+            end
+        end
     end
     verbose && println("tau2: ", tau)
 end

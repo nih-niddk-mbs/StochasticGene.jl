@@ -335,13 +335,12 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 5-tuple or 6-tuple. First five elements: `(unit_model, sources, source_state, target_transition, ncoupling)` where:
+- `coupling=tuple()`: if nonempty, a 5-tuple `(unit_model, sources, source_state, target_transition, ncoupling)` where:
     1. `unit_model`: tuple of unit indices, e.g. (1, 2) for two coupled units
     2. `sources`: tuple indicating which unit(s) influence each unit, e.g. (tuple(), tuple(1)) means unit 2 is influenced by unit 1, unit 1 has no sources
     3. `source_state`: tuple specifying which state(s) in the source unit trigger coupling. Use (state, 0) for a single G state, or (collect(G+1:G+R), 0) for all R states. E.g. (3, 0) = G state 3; ([4,5,6], 0) = R states
     4. `target_transition`: tuple specifying which transition in the target unit is modulated, e.g. (0, target) where target is the transition index (transitions numbered consecutively: G transitions, then initiation, etc.)
     5. `ncoupling`: Int, number of coupling strength parameters (appended to the rate vector). Use `make_coupling("31", G, R)` in io.jl to build from a coupling field string (e.g. "31" = state 3→transition 1, "R5" = all R states→transition 5)
-    Optional 6th element `coupling_ranges`: constraint per coupling constant — a single `Symbol` applied to all (`:free`, `:activate`, or `:inhibit`) or a tuple/vector of length `ncoupling`. Use `make_coupling(field, G, R; coupling_ranges=:inhibit)` or `coupling_ranges=(:activate, :inhibit)` for per-connection signs.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -391,7 +390,6 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
-- `yieldfactor=1.0`: detection efficiency (0–1) for RNA and trace data. When < 1, the likelihood accounts for binomial observation loss (e.g. scRNA-seq or incomplete detection). Passed through to `load_data` and used for `datatype` "rna", "rnaonoff", "rnadwelltime", and trace types. Important for scRNA fits.
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
 
 # Returns
@@ -586,26 +584,8 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
-    # Ensure rates are Vector{Float64} so downstream (e.g. prepare_coupling) never sees Vector{Any}
-    if rinit isa AbstractVector && !(rinit isa Vector{Float64})
-        rinit = Float64.(rinit)
-    end
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    if propcv isa AbstractVector && length(propcv) != length(fittedparam)
-        throw(ArgumentError("propcv vector length ($(length(propcv))) must match number of fitted parameters ($(length(fittedparam)))"))
-    end
-    if propcv isa Tuple
-        n = size(propcv[1], 1)
-        if n != length(fittedparam)
-            throw(ArgumentError("propcv covariance matrix from file has size $n but number of fitted parameters is $(length(fittedparam))"))
-        end
-    elseif propcv isa AbstractMatrix
-        n = size(propcv, 1)
-        if n != length(fittedparam)
-            throw(ArgumentError("propcv covariance matrix has size $n but number of fitted parameters is $(length(fittedparam))"))
-        end
-    end
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     else
@@ -931,13 +911,12 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 - `gene`: Gene name
 - `datacond`: Experimental condition
 - `traceinfo`: Tuple of trace metadata
-- `temprna`: Divisor for RNA histogram counts (`h = div.(h, temprna)`). Use > 1 to downweight RNA relative to dwell times (e.g. to improve MCMC acceptance when RNA curvature is very high).
+- `temprna`: Integer divisor for histogram normalization
 - `datacol`: Column of trace data to extract (default = 3)
 - `zeromedian`: If true, zero-center each trace before fitting (default = false)
-- `yieldfactor`: Detection efficiency in (0, 1] for RNA/trace (default = 1.0). When < 1, likelihood accounts for binomial observation loss.
 
 # Returns
-- A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`, `RNADwellTimeData`)
+- A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`)
 
 # Throws
 - `ArgumentError` if `datatype` is unsupported
@@ -970,9 +949,6 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
-        if length(bins) != length(dttype)
-            throw(ArgumentError("rnadwelltime: number of dwell-time histograms ($(length(bins))) must match number of dttypes ($(length(dttype))). Use one file per dttype (2 columns each) or fewer files with 3 columns to get multiple histograms per file."))
-        end
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield)
@@ -1698,25 +1674,14 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
     end
 
+    # rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
+
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-        modes = coupling_ranges(coupling)
         for i in eachindex(couplingindices)
-            mode = i <= length(modes) ? modes[i] : :free
-            if mode == :activate
-                push!(ftransforms, log)
-                push!(invtransforms, exp)
-                push!(sigmatransforms, sigmalognormal)
-            elseif mode == :inhibit
-                push!(ftransforms, coupling_inhibitory_fwd)
-                push!(invtransforms, coupling_inhibitory_inv)
-                push!(sigmatransforms, sigmanormal)
-            else
-                # :free — γ ∈ (-1, ∞)
-                push!(ftransforms, log_shift1)
-                push!(invtransforms, invlog_shift1)
-                push!(sigmatransforms, sigmalognormal)
-            end
+            push!(ftransforms, log_shift1)
+            push!(invtransforms, invlog_shift1)
+            push!(sigmatransforms, sigmalognormal)
         end
     end
     if !isnothing(grid)
@@ -1790,7 +1755,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
         ncoupling = coupling[5]
-        couplingtrait = CouplingTrait(ncoupling, couplingindices, coupling_parameter_labels(coupling))
+        couplingtrait = CouplingTrait(ncoupling, couplingindices)
     else
         couplingindices = nothing
     end
@@ -1850,7 +1815,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 end
 
 """
-    checklength(r, transitions, R, S, insertstep, reporter, coupling=tuple(), grid=nothing)
+    checklength(r, transitions, R, S, insertstep, reporter)
 
 Check if parameter vector has correct length for the model.
 
@@ -1858,20 +1823,24 @@ Check if parameter vector has correct length for the model.
 - `r`: Parameter vector
 - `transitions`: Model transitions
 - `R, S, insertstep`: Model structure parameters
-- `reporter`: Reporter structure (single reporter or Vector for coupled)
-- `coupling`: Coupling structure (default: empty)
-- `grid`: Grid parameter (default: nothing)
+- `reporter`: Reporter structure
 
 # Returns
 - Nothing
 
 # Notes
-- Validates parameter vector length against num_all_parameters (rates + noise + coupling + grid)
-- Throws ArgumentError if length does not match
+- Validates parameter vector length against expected model parameters
+- Includes rate parameters and noise parameters if HMMReporter
+- Throws error if parameter vector has wrong length
+- Used for parameter validation before model fitting
 """
-function checklength(r, transitions, R, S, insertstep, reporter, coupling=tuple(), grid=nothing)
-    n_expected = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
-    length(r) != n_expected && throw(ArgumentError("r has wrong length: got $(length(r)), expected $n_expected (rates + noise + coupling + grid)"))
+function checklength(r, transitions, R, S, insertstep, reporter)
+    n = num_rates(transitions, R, S, insertstep)
+    if typeof(reporter) <: HMMReporter
+        (length(r) != n + reporter.n) && throw("r has wrong length")
+    else
+        (length(r) != n) && throw("r has wrong length")
+    end
     nothing
 end
 
@@ -2078,26 +2047,15 @@ Generate default prior means for coupled models.
 
 # Notes
 - Processes each unit in coupled model separately
-- Appends coupling parameter prior means (mode-dependent: :activate → 0.1, :inhibit → -0.1, :free → 0.0; weak coupling)
+- Appends coupling parameter prior means (0.0)
 - Used for coupled model initialization
 """
-function default_coupling_prior_mean(mode::Symbol)
-    mode == :activate && return 0.1
-    mode == :inhibit && return -0.1   # weak coupling, interior of (-1, 0)
-    return 0.0  # :free
-end
-
-function default_coupling_prior_means(coupling)
-    isempty(coupling) && return Float64[]
-    [default_coupling_prior_mean(m) for m in coupling_ranges(coupling)]
-end
-
 function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
     end
-    [rm; default_coupling_prior_means(coupling)]
+    [rm; fill(0.0, coupling[5])]
 end
 
 """
@@ -2353,12 +2311,10 @@ Set initial rate parameters to prior if empty or invalid.
 function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
     if isempty(r)
         println("No rate file, set rate to prior")
-        r = copy(priormean)
+        r = priormean
     elseif any(isnan.(r)) || any(isinf.(r))
         println("r out of bounds: ", r)
-        r = copy(priormean)
-    elseif length(r) != length(priormean)
-        throw(ArgumentError("Rate file length $(length(r)) != model length $(length(priormean)); rate file must match current model (e.g. same coupling)"))
+        r = priormean
     end
     println("initial: ", r)
     r
@@ -2943,7 +2899,7 @@ end
 Get proposal coefficient of variation from file or use default.
 
 # Arguments
-- `propcv`: Proposal coefficient of variation: scalar (if negative, read from file), or vector of length(fittedparam) for per-parameter CVs
+- `propcv`: Proposal coefficient of variation (if negative, will be read from file)
 - `infolder`: Input folder path
 - `label`: Label for the dataset
 - `gene`: Gene name
@@ -2951,21 +2907,16 @@ Get proposal coefficient of variation from file or use default.
 - `nalleles`: Number of alleles
 
 # Returns
-- Proposal coefficient of variation (scalar, vector of per-parameter CVs, or matrix)
+- Proposal coefficient of variation (scalar or matrix)
 
 # Notes
-- If propcv is a scalar and propcv < 0, reads covariance matrix from param-stats file
+- If propcv < 0, reads covariance matrix from param-stats file
 - Scales covariance by 2.38^2 / n for optimal MCMC acceptance rate
 - Returns absolute value of propcv if file doesn't exist or matrix is not positive definite
-- If propcv is already a vector (per-parameter CVs), it is returned as-is
 - Used for MCMC proposal distribution setup
 """
 function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
-    # Return vector/matrix/tuple as-is; never compare to 0 (avoids isless(::Vector, ::Float64))
-    if propcv isa AbstractVector || propcv isa AbstractMatrix || propcv isa Tuple
-        return propcv
-    end
-    if propcv isa Real && propcv < 0.0
+    if propcv < 0.0
         file = get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles)
         if !isfile(file)
             println(file, " does not exist")
@@ -3052,21 +3003,10 @@ end
 get_decay(a::Float64) = log(2) / a / 60.0
 
 """
-    alleles(gene, cell, root; nalleles=2, col=3)
-    alleles(gene, path; nalleles=2, col=3)
+    alleles(gene::String,cell::String,root::String,col::Int=3)
+    alleles(gene::String,path::String,col::Int=3)
 
-Return the number of alleles for a gene (e.g. for ploidy). If no alleles file exists under `root/data/alleles`, returns the default `nalleles`.
-
-# Arguments
-- `gene`: Gene name (must match a row in the alleles file).
-- `cell`: Cell type (e.g. `"HBEC"`); used to find the alleles file when `root` is used.
-- `root`: Root directory; `data/alleles` is sought under `root`.
-- `path`: Full path to a CSV alleles file (alternative to root/cell).
-- `nalleles`: Default value when no file is found or gene is missing (default 2).
-- `col`: Column index in the CSV for the allele count (default 3).
-
-# Returns
-- `Int`: Allele count for the gene.
+    Get allele number for gene and cell
 """
 function alleles(gene::String, cell::String, root::String; nalleles::Int=2, col::Int=3)
     path = get_file(root, "data/alleles", cell, "csv")

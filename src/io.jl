@@ -194,72 +194,25 @@ function parse_filename(filename::String; hlabel="-h")
 end
 
 """
-    normalize_coupling_field(coupling_field::String)
-
-Normalize a coupling-field string read from filenames or labels.
-
-- **Legacy specs** (`"31"`, `"3131"`, `"R5"`) are returned unchanged.
-- **Extended specs** that already contain `','` or `'|'` are returned unchanged.
-- **Sanitized extended specs** (where `','` and `'|'` were replaced by `'-'` for filenames,
-  e.g. `"24-33-33"` for `"24,33|33"`) are mapped back to a canonical extended form by
-  treating all but the last `'-'` as `','` and the last `'-'` as `'|'`.
-
-This keeps filenames shell-safe while letting the rest of the code work with the
-intended coupling syntax.
-"""
-function normalize_coupling_field(coupling_field::String)
-    # Empty / trivial
-    isempty(coupling_field) && return coupling_field
-
-    # Already extended: contains ',' or '|'
-    (occursin(',', coupling_field) || occursin('|', coupling_field)) && return coupling_field
-
-    # Legacy 2- or 4-character specs: digits and/or 'R' only
-    if all(c -> (isdigit(c) || c == 'R'), coupling_field) &&
-       (length(coupling_field) == 2 || length(coupling_field) == 4)
-        return coupling_field
-    end
-
-    # Heuristic for sanitized extended specs: contains '-' but no ',' or '|'
-    if occursin('-', coupling_field)
-        chars = collect(coupling_field)
-        dash_idxs = findall(==('-'), chars)
-        nd = length(dash_idxs)
-        if nd > 0
-            for (i, idx) in enumerate(dash_idxs)
-                chars[idx] = (i == nd) ? '|' : ','
-            end
-            return String(chars)
-        end
-    end
-
-    # Fallback: return as-is
-    return coupling_field
-end
-
-"""
     make_coupling(coupling_field::String, G, R)
 
 Construct coupling structure from coupling field and model parameters.
 
 # Arguments
-- `coupling_field::String`: Coupling field (e.g., "31", "R5", "24,33|33")
-- `G`: Number of gene states (Int or Tuple)
-- `R`: Number of RNA states (Int or Tuple)
+- `coupling_field::String`: Coupling field (e.g., "31", "R5")
+- `G`: Number of gene states (Int)
+- `R`: Number of RNA states (Int)
 
 # Returns
-- `Tuple`: Coupling structure in format ((1, 2), (sources...), (source_state...), (target_transition...), ncoupling[, coupling_ranges])
+- `Tuple`: Coupling structure in format ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
 
 # Examples
 ```julia
 # State 3 → State 1 coupling
 make_coupling("31", 3, 4)  # returns coupling from state 3 to state 1
 
-# All R states → State 5 coupling
+# All R states → State 5 coupling  
 make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
-
-# Extended multi-connection (models 9–12)
-make_coupling("24,33|33", (3, 3), (0, 0))
 ```
 
 # Notes
@@ -267,238 +220,24 @@ make_coupling("24,33|33", (3, 3), (0, 0))
 - Otherwise: single source state → target state
 - Target state is always the last character of coupling_field
 - Source state is first character for non-R couplings
-- Extended format (models 9–12): contains ',' or '|', e.g. "24,33|33" for multiple (s,t) per direction.
-  Sanitized filename forms like "24-33-33" are normalized back to this format internally.
 """
-function make_coupling(coupling_field::String, G, R; coupling_ranges=nothing)
-    coupling_field = normalize_coupling_field(coupling_field)
+function make_coupling(coupling_field::String, G, R)
     if isempty(coupling_field)
         return tuple()
-    end
-    Gt = G isa Tuple ? G : (G, G)
-    Rt = R isa Tuple ? R : (R, R)
-    # Extended multi-connection format (models 9–12)
-    if occursin(',', coupling_field) || occursin('|', coupling_field)
-        c = make_coupling_extended(coupling_field, Gt, Rt; coupling_ranges=coupling_ranges)
-        return c
-    end
-    if length(coupling_field) == 4
-        c = make_coupling_reciprocal(coupling_field, Gt, Rt; coupling_ranges=coupling_ranges)
-        return c
-    end
-    # Unidirectional (2-char or "R" + digit)
-    if startswith(coupling_field, "R")
-        source = collect(Gt[1]+1:Gt[1]+Rt[1])
+    elseif length(coupling_field) == 4
+        # Reciprocal: 4-char s1t1s2t2 format
+        Gt = G isa Tuple ? G : (G, G)
+        Rt = R isa Tuple ? R : (R, R)
+        return make_coupling_reciprocal(coupling_field, Gt, Rt)
     else
-        source = parse(Int, coupling_field[1])
-    end
-    target = parse(Int, coupling_field[2:end])
-    base = ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
-    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
-end
-
-"""
-    make_coupling_extended(coupling_field::String, G, R)
-
-Construct coupling structure from extended coupling field (models 9–12).
-Format: "[dir1]|[dir2]" where each dir is comma-separated "st" pairs (s = digit or R, t = digit).
-E.g. "24,33|33" = (1→2): (2,4),(3,3); (2→1): (3,3).
-"""
-function make_coupling_extended(coupling_field::String, G::Tuple, R::Tuple; coupling_ranges=nothing)
-    parts = split(coupling_field, '|'; limit=2)
-    # Parse direction 1→2 (target 2): first part
-    dir_12 = strip(parts[1])
-    sources_2 = Int[]
-    source_state_2 = Union{Int,Vector{Int}}[]
-    target_transition_2 = Int[]
-    for st in split(dir_12, ',')
-        st = strip(st)
-        isempty(st) && continue
-        s_char, t_char = st[1], st[2]
-        s = s_char == 'R' ? collect(G[1]+1:G[1]+R[1]) : parse(Int, string(s_char))
-        t = parse(Int, string(t_char))
-        push!(sources_2, 1)
-        push!(source_state_2, s)
-        push!(target_transition_2, t)
-    end
-    # Parse direction 2→1 (target 1): second part if present
-    sources_1 = Int[]
-    source_state_1 = Union{Int,Vector{Int}}[]
-    target_transition_1 = Int[]
-    if length(parts) >= 2
-        dir_21 = strip(parts[2])
-        for st in split(dir_21, ',')
-            st = strip(st)
-            isempty(st) && continue
-            s_char, t_char = st[1], st[2]
-            s = s_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s_char))
-            t = parse(Int, string(t_char))
-            push!(sources_1, 2)
-            push!(source_state_1, s)
-            push!(target_transition_1, t)
-        end
-    end
-    ncoupling = length(sources_1) + length(sources_2)
-    sources = (tuple(sources_1...), tuple(sources_2...))
-    source_state = (tuple(source_state_1...), tuple(source_state_2...))
-    target_transition = (tuple(target_transition_1...), tuple(target_transition_2...))
-    base = ((1, 2), sources, source_state, target_transition, ncoupling)
-    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
-end
-
-"""
-    to_connections(coupling)
-
-Normalize coupling 5-tuple to a flat list of connections in canonical order.
-
-# Arguments
-- `coupling`: 5-tuple (unit_model, sources, source_state, target_transition, ncoupling).
-  Empty tuple returns empty list.
-
-# Returns
-- `Vector{Tuple}`: List of (β, α, s, t) with β = source unit, α = target unit,
-  s = source state (Int or Vector{Int} for R states), t = target transition index.
-  Order: for α in 1:n for k in 1:length(sources[α]) with β=sources[α][k], s=source_state[α][k], t=target_transition[α][k].
-
-# Notes
-- Use this order everywhere for γ (fit, simulator, make_mat_TC).
-- Handles legacy (scalar source_state/target_transition per unit) and extended (tuples).
-"""
-function to_connections(coupling)
-    isempty(coupling) && return Tuple{Int,Int,Union{Int,Vector{Int}},Int}[]
-    unit_model, sources, source_state, target_transition, _ncoupling = coupling[1], coupling[2], coupling[3], coupling[4], coupling[5]
-    n = length(unit_model)
-    conns = Tuple{Int,Int,Union{Int,Vector{Int}},Int}[]
-    for α in 1:n
-        sα = sources[α]
-        nconn = length(sα)
-        nconn == 0 && continue
-        ss = source_state[α]
-        tt = target_transition[α]
-        for k in 1:nconn
-            β = sα[k]
-            s = (ss isa Tuple || ss isa AbstractVector) ? ss[k] : ss
-            t = (tt isa Tuple || tt isa AbstractVector) ? tt[k] : tt
-            push!(conns, (β, α, s, t))
-        end
-    end
-    conns
-end
-
-"""
-    _connection_source_label(s)
-
-Format source state `s` (Int or Vector{Int} for R states) for use in connection names.
-"""
-function _connection_source_label(s)
-    if s isa Vector || s isa Tuple
-        return "R"  # All R states (or multi-state block)
-    end
-    return "s" * string(s)
-end
-
-"""
-    connection_name(β, α, s, t; unit_labels=nothing)
-
-Return a short human-readable name for one coupling connection (β→α, state s, transition t).
-
-# Arguments
-- `β`: Source unit index (whose state is read).
-- `α`: Target unit index (whose transition rate is modulated).
-- `s`: Source state: `Int` (e.g. 3) or `Vector{Int}` for R states.
-- `t`: Target transition index.
-- `unit_labels::Union{Nothing,AbstractVector{String}}`: Optional labels for units (e.g. `["enhancer", "gene"]`).
-  If provided, names use labels instead of indices for the "β→α" part.
-
-# Returns
-- `String`: e.g. `"2→1_s3t5"` (unit 2 state 3 → unit 1 transition 5) or `"gene→enhancer_s3t5"` if `unit_labels` given.
-
-# Examples
-```julia
-connection_name(2, 1, 3, 5)                    # "2→1_s3t5"
-connection_name(2, 1, 3, 5; unit_labels=["enhancer", "gene"])  # "gene→enhancer_s3t5"
-connection_name(1, 2, [4,5,6], 5)              # "1→2_Rt5"
-```
-"""
-function connection_name(β::Int, α::Int, s, t::Int; unit_labels=nothing)
-    src = _connection_source_label(s)
-    dir = if unit_labels !== nothing && length(unit_labels) >= max(β, α)
-        string(unit_labels[β], "→", unit_labels[α])
-    else
-        string(β, "→", α)
-    end
-    return dir * "_" * src * "t" * string(t)
-end
-
-"""
-    coupling_connection_names(coupling; unit_labels=nothing)
-
-Return a vector of names for each coupling constant, in the same order as the rate vector
-(i.e. `to_connections(coupling)` and the γ order in combined rate files).
-
-Use these names when labeling columns, writing summaries, or plotting so that "first γ"
-is unambiguously tied to the actual connection (e.g. 2→1_s3t5) instead of the 4-char
-spec order (s1t1s2t2).
-
-# Arguments
-- `coupling`: 5-tuple (or 6-tuple with coupling_ranges) from `make_coupling` / `make_coupling_reciprocal`.
-- `unit_labels::Union{Nothing,AbstractVector{String}}`: Optional (e.g. `["enhancer", "gene"]`) to use
-  semantic names in the "β→α" part.
-
-# Returns
-- `Vector{String}`: One name per coupling parameter, e.g. `["2→1_s3t5", "1→2_s2t3"]` for a "2335" model
-  (first γ = gene→enhancer, second γ = enhancer→gene).
-
-# Examples
-```julia
-c = make_coupling_reciprocal("2335", (3, 3), (0, 0))
-coupling_connection_names(c)   # ["2→1_s3t5", "1→2_s2t3"]
-coupling_connection_names(c; unit_labels=["enhancer", "gene"])
-# ["gene→enhancer_s3t5", "enhancer→gene_s2t3"]
-```
-"""
-function coupling_connection_names(coupling; unit_labels=nothing)
-    isempty(coupling) && return String[]
-    conns = to_connections(coupling)
-    return [connection_name(β, α, s, t; unit_labels=unit_labels) for (β, α, s, t) in conns]
-end
-
-"""
-    coupling_parameter_labels(coupling; unit_labels=nothing)
-
-Canonical names for coupling parameters, in the same order as the rate vector (and `to_connections`).
-
-Use these for file headers and column labels (e.g. in combined rate files) instead of generic
-"γ_1", "γ_2". Returns the same as `coupling_connection_names(coupling; unit_labels=unit_labels)`.
-
-# Arguments
-- `coupling`: 5-tuple (or 6-tuple with coupling_ranges) from `make_coupling` / `make_coupling_reciprocal`.
-- `unit_labels`: Optional (e.g. `["enhancer", "gene"]`) for semantic unit names in labels.
-
-# Returns
-- `Vector{String}`: One name per coupling parameter, e.g. `["2→1_s3t5", "1→2_s2t3"]`.
-"""
-coupling_parameter_labels(coupling; unit_labels=nothing) = coupling_connection_names(coupling; unit_labels=unit_labels)
-
-"""
-    coupling_ranges(coupling) -> Vector{Symbol}
-
-Return the range constraint for each coupling constant (:free, :activate, or :inhibit).
-If coupling is a 5-tuple, returns fill(:free, ncoupling).
-If coupling has a 6th element, it may be a single Symbol (apply to all) or a tuple/vector of length ncoupling.
-"""
-function coupling_ranges(coupling)
-    isempty(coupling) && return Symbol[]
-    ncoupling = coupling[5]
-    if length(coupling) >= 6
-        r = coupling[6]
-        if r isa Symbol
-            return fill(r, ncoupling)
+        if startswith(coupling_field, "R")
+            source = collect(G[1]+1:G[1]+R[1])  # All R states
         else
-            return collect(r)
+            source = parse(Int, coupling_field[1])
         end
+        target = parse(Int, coupling_field[2:end])
+        return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
     end
-    return fill(:free, ncoupling)
 end
 
 """
@@ -526,7 +265,7 @@ make_coupling_reciprocal("3131", (3, 3), (3, 3))
 make_coupling_reciprocal("31R5", (3, 3), (3, 3))
 ```
 """
-function make_coupling_reciprocal(coupling_field::String, G, R; coupling_ranges=nothing)
+function make_coupling_reciprocal(coupling_field::String, G, R)
     if length(coupling_field) != 4
         throw(ArgumentError("coupling_field for reciprocal must be 4 characters (s1t1s2t2), got \"$coupling_field\""))
     end
@@ -539,8 +278,7 @@ function make_coupling_reciprocal(coupling_field::String, G, R; coupling_ranges=
     s2 = s2_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s2_char))
     t2 = parse(Int, string(t2_char))
     # coupling: sources=(tuple(2), tuple(1)), source_state=(s2, s1), target_transition=(t2, t1)
-    base = ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
-    return coupling_ranges === nothing ? base : (base..., coupling_ranges)
+    return ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
@@ -2132,13 +1870,8 @@ function rlabels_GRSM(model::AbstractGRSMmodel)
         else
             labels = hcat(labels, rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter))
         end
-        cplabels = model.trait.coupling.labels
-        if !isnothing(cplabels) && length(cplabels) == model.trait.coupling.ncoupling
-            labels = hcat(labels, reshape(cplabels, 1, :))
-        else
-            for i in 1:model.trait.coupling.ncoupling
-                labels = hcat(labels, ["Coupling_$i"])
-            end
+        for i in 1:model.trait.coupling.ncoupling
+            labels = hcat(labels, ["Coupling_$i"])
         end
     else
         labels = rlabels_GRSM(model.Gtransitions, model.R, model.S, model.reporter)
@@ -2712,8 +2445,7 @@ function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, 
     f = open(file, "w")
     # Calculate n_obs based on data type
     if is_histogram_compatible(data)
-        h = datahistogram(data)
-        n_obs = sum(round.(Int, h))
+        n_obs = sum(datahistogram(data))
     elseif typeof(data) <: RNACountData
         n_obs = length(data.countsRNA)
     elseif typeof(data) <: AbstractTraceData
@@ -3013,50 +2745,41 @@ function occursin_file(a, b, file::String)
 end
 
 """
-    read_rna(filepath::String)
+    read_rna(gene, cond, datapath)
 
-Read RNA count histogram from a file (first column = counts).
+Read RNA histogram data from a file.
 
 # Arguments
-- `filepath`: Path to the histogram file
+- `gene`: Gene name
+- `cond`: Condition identifier
+- `datapath`: Path to data directory
 
 # Returns
 - `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
 
 # Notes
-- Truncates if longer than 300 elements (keeps 99th percentile, max 1000); pads with zeros if fewer than 4.
+- Constructs filename as "{gene}_{cond}.txt"
+- Reads first column of data file
+- Truncates histogram if longer than 300 elements (keeps 99th percentile, max 1000)
+- Pads with zeros if histogram has fewer than 4 elements
+- Prints total histogram count for debugging
+- Used for reading RNA count histogram data
 """
-function read_rna(filepath::String)
-    h = readfile(filepath)[:, 1]
+function read_rna(gene, cond, datapath)
+    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
+    h = readfile(t)[:, 1]
+    # h = readfile(gene, cond, datapath)[:, 1]
+    # Only truncate if histogram has more than 400 elements
     if length(h) > 300
         h = truncate_histogram(h, 0.99, 1000)
     end
+    # Ensure h has at least 10 elements by padding with zeros if needed
     if length(h) < 4
         h = vcat(h, zeros(4 - length(h)))
     end
     println("Histogram count: ", sum(h))
-    return length(h), h
-end
-
-"""
-    read_rna(gene, cond, datapath)
-
-Read RNA histogram from a file `{gene}_{cond}.txt` in the given directory.
-
-# Arguments
-- `gene`: Gene name
-- `cond`: Condition identifier (e.g. `""` for files like CANX_.txt)
-- `datapath`: Path to directory containing the file
-
-# Returns
-- `Tuple{Int, Vector{Float64}}`: (histogram length, histogram data)
-
-# Notes
-- Constructs path as `joinpath(datapath, "{gene}_{cond}.txt")` and calls `read_rna(filepath)`.
-"""
-function read_rna(gene, cond, datapath)
-    t = joinpath(datapath, "$gene" * "_" * "$cond.txt")
-    read_rna(t)
+    nhist = length(h)
+    return nhist, h
 end
 
 """
@@ -3233,105 +2956,19 @@ function read_cell_counts(file)
 end
 
 """
-    validate_dwelltime_compat(dttype, onstates, dwellpath; datatype="rnadwelltime")
+    read_dwelltimes(datapath)
 
-Check that dttype, onstates, and the dwell-time file path(s) are compatible.
-
-- `length(onstates) == length(dttype)` (one onstate set per dwell type).
-- Either one file per type (`length(dwellpath) == length(dttype)`), or the HJ-style layout:
-  `length(dttype)==4`, `length(dwellpath)==2`, and dttype contains exactly two R-step types
-  (no \"G\") and two G-step types (contain \"G\").
-
-# Throws
-- `ArgumentError` if any check fails.
+read in a set of dwelltime files and return vector of time bins and values
 """
-function validate_dwelltime_compat(dttype::Vector, onstates, dwellpath; datatype="rnadwelltime")
-    ntypes = length(dttype)
-    nfiles = length(dwellpath)
-    if length(onstates) != ntypes
-        throw(ArgumentError("dttype and onstates length mismatch: dttype has $ntypes entries, onstates has $(length(onstates)). Each dwell type (e.g. ON, OFF, ONG, OFFG) must have one onstate set."))
-    end
-    if nfiles == ntypes
-        return nothing
-    end
-    if ntypes == 4 && nfiles == 2
-        rstep = count(x -> !occursin("G", x), dttype)
-        gstep = count(x -> occursin("G", x), dttype)
-        if rstep != 2 || gstep != 2
-            throw(ArgumentError("For 4 dttypes and 2 files, dttype must contain exactly two R-step types (e.g. ON, OFF) and two G-step types (e.g. ONG, OFFG). Got $rstep without 'G' and $gstep with 'G'."))
-        end
-        return nothing
-    end
-    throw(ArgumentError("dwellpath and dttype are incompatible: $nfiles file(s) for $ntypes dwell type(s). Use either one file per type, or 4 types with 2 files (first file = ON, OFF; second = ONG, OFFG)."))
-end
-
-"""
-    read_dwelltimes(datapath::String)
-    read_dwelltimes(datapath::Vector{String})
-
-Read dwell-time file(s) and return (bins, DT) as vectors.
-
-Column convention: first column is always bins; remaining columns are histograms in order.
-- 2 columns: one (bins, DT) pair.
-- 3 columns: two pairs (same bins for both; col 2 and col 3 are the two histograms).
-- More than 3 columns: throws `ArgumentError`.
-
-# Arguments
-- `datapath`: Single file path (string) or vector of file paths.
-
-# Returns
-- `bins::Vector{Vector}`: One bin vector per histogram, in order.
-- `DT::Vector{Vector}`: One dwell-time histogram per entry, in order.
-"""
-function read_dwelltimes(datapath::String)
-    bins = Vector{Vector}(undef, 0)
-    DT = Vector{Vector}(undef, 0)
-    read_dwelltimes!(bins, DT, datapath)
-    return bins, DT
-end
-
-function read_dwelltimes(datapath::Vector{String})
+function read_dwelltimes(datapath)
     bins = Vector{Vector}(undef, 0)
     DT = Vector{Vector}(undef, 0)
     for i in eachindex(datapath)
-        read_dwelltimes!(bins, DT, datapath[i])
-    end
-    return bins, DT
-end
-
-"""
-    read_dwelltimes!(bins, DT, datapath::String)
-
-In-place: read a single dwell-time file and append (bins, DT) onto `bins` and `DT`.
-
-First column is bins; remaining columns are histograms. 2 columns → append one (bins, DT)
-pair; 3 columns → append same bins twice and the two histogram columns to DT; more than
-3 columns → `ArgumentError`.
-
-# Arguments
-- `bins`: Vector to append bin vectors to.
-- `DT`: Vector to append dwell-time histogram vectors to.
-- `datapath`: Path to a single dwell-time file.
-
-# Returns
-- `(bins, DT)` (mutates the input vectors).
-"""
-function read_dwelltimes!(bins, DT, datapath::String)
-    c = readfile(datapath)
-    ncol = size(c, 2)
-    if ncol == 2
+        c = readfile(datapath[i])
         push!(bins, c[:, 1])
         push!(DT, c[:, 2])
-    elseif ncol == 3
-        bins_col = c[:, 1]
-        push!(bins, bins_col)
-        push!(bins, bins_col)
-        push!(DT, c[:, 2])
-        push!(DT, c[:, 3])
-    else
-        throw(ArgumentError("Dwell-time file must have 2 or 3 columns (bins + histogram(s)), got $ncol"))
     end
-    return bins, DT
+    bins, DT
 end
 
 """
@@ -3669,24 +3306,14 @@ end
 
 
 """
-    readrates(file::String, row::Int)
-    readrates(file::String)
+readrates(file::String,row::Int)
+readrates(file::String)
 
-Read rate (or parameter) values from a rates or param-stats file. The file is expected to have
-one or more rows of numeric values; `row` selects which row to return.
-
-# Arguments
-- `file`: Path to the file (e.g. `rates_*_*.txt` or `param-stats_*_*.txt`).
-- `row`: Row index (1-based). Convention: 1 = maximum likelihood, 2 = mean, 3 = median, 4 = last value of previous run.
-
-# Returns
-- `Vector{Float64}`: The selected row as Float64 values. A leading label column (if present) is skipped.
-
-# Example
-```julia
-rates = readrates("results/rates_gt_CANX_3331_2.txt", 3)  # median row
-rates = readrates("results/rates_gt_CANX_3331_2.txt")     # same as row 3 (median)
-```
+row
+1       maximum likelihood
+2       mean
+3       median
+4       last value of previous run
 """
 readrates(file::String, row::Int) = readrow(file, row)
 
@@ -3697,13 +3324,6 @@ readrates(file::String) = readrates(file, 3)
 """
     get_row(ratetype)
 
-Map a ratetype string to the 1-based row index used in rates/param-stats files.
-
-# Arguments
-- `ratetype`: One of `"ml"` (→ 1), `"mean"` (→ 2), `"median"` (→ 3), `"last"` (→ 4). Any other value returns 3 (median).
-
-# Returns
-- `Int`: Row index for use with `readrates(file, row)`.
 """
 function get_row(ratetype)
     if ratetype == "ml"
@@ -3720,19 +3340,6 @@ function get_row(ratetype)
     row
 end
 
-function _row_to_float64(raw)
-    out = Float64[]
-    for x in raw
-        if x isa Number
-            push!(out, Float64(x))
-        elseif x isa AbstractString
-            v = tryparse(Float64, x)
-            v !== nothing && push!(out, v)
-        end
-    end
-    return out
-end
-
 function readrow(file::String, row, delim=',')
     if isfile(file) && ~isempty(read(file))
         contents = readdlm(file, delim, header=false)
@@ -3741,11 +3348,10 @@ function readrow(file::String, row, delim=',')
         end
         if row <= size(contents, 1)
             m = contents[row, :]
-            raw = m[.~isempty.(m)]
-            return _row_to_float64(raw)
+            return m[.~isempty.(m)]
         else
             println("Row $row too large for file $file, returning median")
-            return _row_to_float64(contents[3, :])
+            return contents[3, :]
         end
     else
         println("File $file does not exist")
