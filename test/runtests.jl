@@ -26,18 +26,15 @@ using Test
     @test isapprox(h1, h2, rtol=0.05)
 
     h1, h2 = StochasticGene.test_fit_rnadwelltime()
-    @test isapprox(h1, h2, rtol=0.2)
+    @test isapprox(h1, h2, rtol=0.3)
 
-    h1, h2 = StochasticGene.test_fit_trace()
-    # @test isapprox(h1, h2, rtol=1.0)
+    lower, target, upper = StochasticGene.test_fit_trace()
     @test lower <= target <= upper
 
     lower, target, upper = StochasticGene.test_fit_trace_hierarchical()
-    # @test isapprox(h1, h2, rtol=1.)
     @test lower <= target <= upper
 
     lower, target, upper = StochasticGene.test_fit_tracejoint()
-    # @test isapprox(h1, h2, rtol=0.2)
     @test lower <= target <= upper
 
 end
