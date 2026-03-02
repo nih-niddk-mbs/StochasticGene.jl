@@ -176,11 +176,7 @@ Construct a default coupling structure for coupled models.
 - Used for specifying how different model units influence each other
 """
 function make_coupling(source::UnitRange{Int64}=1:3, target::UnitRange{Int64}=1:3)
-    coupling = []
-    for s in source, t in target
-        push!(coupling, ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1))
-    end
-    return coupling
+    [((1, 2), [(1, Int(s), 2, Int(t))]) for s in source for t in target]
 end
 
 """
@@ -325,6 +321,13 @@ function reset_nalleles(nalleles, coupling)
 end
 
 """
+    ncoupling(coupling)
+
+Return the number of coupling strength parameters. Coupling format is `(unit_model, connections::Vector{ConnectionSpec})`.
+"""
+ncoupling(coupling) = isempty(coupling) ? 0 : length(coupling[2])
+
+"""
     fit(; <keyword arguments> )
 
 Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
@@ -335,12 +338,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 5-tuple `(unit_model, sources, source_state, target_transition, ncoupling)` where:
-    1. `unit_model`: tuple of unit indices, e.g. (1, 2) for two coupled units
-    2. `sources`: tuple indicating which unit(s) influence each unit, e.g. (tuple(), tuple(1)) means unit 2 is influenced by unit 1, unit 1 has no sources
-    3. `source_state`: tuple specifying which state(s) in the source unit trigger coupling. Use (state, 0) for a single G state, or (collect(G+1:G+R), 0) for all R states. E.g. (3, 0) = G state 3; ([4,5,6], 0) = R states
-    4. `target_transition`: tuple specifying which transition in the target unit is modulated, e.g. (0, target) where target is the transition index (transitions numbered consecutively: G transitions, then initiation, etc.)
-    5. `ncoupling`: Int, number of coupling strength parameters (appended to the rate vector). Use `make_coupling("31", G, R)` in io.jl to build from a coupling field string (e.g. "31" = state 3→transition 1, "R5" = all R states→transition 5)
+- `coupling=tuple()`: if nonempty, `(unit_model, connections::Vector{ConnectionSpec})` with each connection `(β, s, α, t)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -1470,7 +1468,8 @@ Calculate coupling parameter indices.
 function coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
     n = num_all_parameters(transitions, R, S, insertstep, reporter, coupling, grid)
     g = isnothing(grid) ? 0 : 1
-    collect(n-g-coupling[5]+1:n-g)
+    c = ncoupling(coupling)
+    collect(n-g-c+1:n-g)
 end
 
 
@@ -1754,8 +1753,8 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
-        ncoupling = coupling[5]
-        couplingtrait = CouplingTrait(ncoupling, couplingindices)
+        ncp = ncoupling(coupling)
+        couplingtrait = CouplingTrait(ncp, couplingindices)
     else
         couplingindices = nothing
     end
@@ -1895,7 +1894,7 @@ function prior_hypercv(transitions, R::Tuple, S, insertstep, noisepriors, coupli
     for i in eachindex(R)
         append!(rm, prior_hypercv(transitions[i], R[i], S[i], insertstep[i], noisepriors[i]))
     end
-    [rm; fill(1.0, coupling[5])]
+    [rm; fill(1.0, ncoupling(coupling))]
 end
 
 """
@@ -2055,7 +2054,7 @@ function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, deca
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
     end
-    [rm; fill(0.0, coupling[5])]
+    [rm; fill(0.0, ncoupling(coupling))]
 end
 
 """
@@ -2351,7 +2350,7 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
         any(isnan.(r)) && println("r contains NaN, set rate to prior")
         any(isinf.(r)) && println("r contains Inf, set rate to prior")
         r = copy(priormean)
-        c = isempty(coupling) ? 0 : coupling[5]
+        c = ncoupling(coupling)
         g = isnothing(grid) ? 0 : 1
         # n_all_params = num_rates(transitions, R, S, insertstep) + length(noisepriors)
         n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
@@ -2422,7 +2421,7 @@ function default_fitted(datatype::String, transitions, R::Tuple, S::Tuple, inser
         fittedparam = vcat(fittedparam, totalrates .+ default_fitted(datatype, transitions[i], R[i], S[i], insertstep[i], noiseparams[i], coupling, grid))
         totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + noiseparams[i]
     end
-    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+coupling[5])]
+    [fittedparam; collect(fittedparam[end]+1:fittedparam[end]+ncoupling(coupling))]
 end
 
 """

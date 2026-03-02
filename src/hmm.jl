@@ -3050,7 +3050,6 @@ function predicted_states(rates::Vector, coupling, transitions, G::Tuple, R, S, 
 end
 
 function predicted_states(rates::Tuple, coupling, transitions, G::Tuple, R, S, insertstep, components, n_noise, reporters_per_state, probfn, interval, traces)
-    sourceStates = coupling[3]
     nT = components.N
     rshared, noiseparams, couplingStrength = rates
     a, p0 = make_ap(rshared[1], couplingStrength, interval, components)

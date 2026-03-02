@@ -1399,7 +1399,7 @@ function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupli
     else
         n = 0
     end
-    c = isempty(coupling) ? 0 : coupling[5]
+    c = isempty(coupling) ? 0 : length(coupling[2])
     g = isnothing(grid) ? 0 : 1
     num_rates(transitions, R, S, insertstep) + n + c + g
 end
@@ -1409,7 +1409,7 @@ function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, 
     for i in eachindex(R)
         n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
     end
-    c = isempty(coupling) ? 0 : coupling[5]
+    c = isempty(coupling) ? 0 : length(coupling[2])
     g = isnothing(grid) ? 0 : 1
     n + c + g
 end

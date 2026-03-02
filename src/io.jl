@@ -204,39 +204,39 @@ Construct coupling structure from coupling field and model parameters.
 - `R`: Number of RNA states (Int)
 
 # Returns
-- `Tuple`: Coupling structure in format ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+- `Tuple`: `(unit_model, connections)` with `unit_model=(1,2)` and `connections::Vector{ConnectionSpec}`;
+  each connection is `(β, s, α, t)` (source unit, source state, target unit, target transition).
 
 # Examples
 ```julia
-# State 3 → State 1 coupling
-make_coupling("31", 3, 4)  # returns coupling from state 3 to state 1
+# State 3 → transition 1 coupling (unit 1 → unit 2)
+make_coupling("31", 3, 4)  # returns ((1, 2), [(1, 3, 2, 1)])
 
-# All R states → State 5 coupling  
-make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
+# All R states → transition 5
+make_coupling("R5", 3, 4)  # returns ((1, 2), [(1, 4, 2, 5), (1, 5, 2, 5), ...])
 ```
 
 # Notes
-- If coupling_field starts with "R": all RNA states (G+1 to G+R) → target state
-- Otherwise: single source state → target state
-- Target state is always the last character of coupling_field
-- Source state is first character for non-R couplings
+- If coupling_field starts with "R": all RNA states (G+1 to G+R) → target transition
+- Otherwise: single source state → target transition (target from last character)
 """
 function make_coupling(coupling_field::String, G, R)
     if isempty(coupling_field)
         return tuple()
     elseif length(coupling_field) == 4
-        # Reciprocal: 4-char s1t1s2t2 format
         Gt = G isa Tuple ? G : (G, G)
         Rt = R isa Tuple ? R : (R, R)
         return make_coupling_reciprocal(coupling_field, Gt, Rt)
     else
         if startswith(coupling_field, "R")
-            source = collect(G[1]+1:G[1]+R[1])  # All R states
+            source = collect(G[1]+1:G[1]+R[1])
         else
             source = parse(Int, coupling_field[1])
         end
         target = parse(Int, coupling_field[2:end])
-        return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+        unit_model = (1, 2)
+        connections = ConnectionSpec[(1, s, 2, target) for s in (source isa AbstractVector ? source : [source])]
+        return (unit_model, connections)
     end
 end
 
@@ -254,7 +254,8 @@ Construct reciprocal (bidirectional) coupling structure from 4-character couplin
 - `R`: Tuple of RNA states per unit
 
 # Returns
-- `Tuple`: Reciprocal coupling structure ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+- `Tuple`: `(unit_model, connections)` with `unit_model=(1,2)` and `connections::Vector{ConnectionSpec}`;
+  order: (2, s2, 1, t2) for 2→1, then (1, s1, 2, t1) for 1→2 (canonical order by target α then source β).
 
 # Examples
 ```julia
@@ -269,16 +270,21 @@ function make_coupling_reciprocal(coupling_field::String, G, R)
     if length(coupling_field) != 4
         throw(ArgumentError("coupling_field for reciprocal must be 4 characters (s1t1s2t2), got \"$coupling_field\""))
     end
-    # Parse unit 1→2: s1 (char1), t1 (char2)
     s1_char, t1_char = coupling_field[1], coupling_field[2]
     s1 = s1_char == 'R' ? collect(G[1]+1:G[1]+R[1]) : parse(Int, string(s1_char))
     t1 = parse(Int, string(t1_char))
-    # Parse unit 2→1: s2 (char3), t2 (char4)
     s2_char, t2_char = coupling_field[3], coupling_field[4]
     s2 = s2_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s2_char))
     t2 = parse(Int, string(t2_char))
-    # coupling: sources=(tuple(2), tuple(1)), source_state=(s2, s1), target_transition=(t2, t1)
-    return ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+    unit_model = (1, 2)
+    connections = ConnectionSpec[]
+    for s in (s2 isa AbstractVector ? s2 : [s2])
+        push!(connections, (2, s, 1, t2))
+    end
+    for s in (s1 isa AbstractVector ? s1 : [s1])
+        push!(connections, (1, s, 2, t1))
+    end
+    return (unit_model, connections)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
