@@ -70,6 +70,12 @@ fits = fit(; kwargs...)
 - `inlabel::String = ""`: Label of initial parameter files
 - `writesamples::Bool = false`: Write MCMC samples
 
+### Run specification and key-based naming
+
+- `spec_file = nothing`: Path to an info TOML file from a previous run. Loads `[run]` as base options; any keyword overrides. See [Run specification (info TOML)](@ref).
+- `key = nothing`: When set, all outputs use this stem (e.g. `rates_<key>.txt`, `info_<key>.toml`). An `info_<key>.toml` is written with full fit arguments for reproducibility.
+- `cold::Bool = false`: With `spec_file`, if `true` then ignore `infolder`/`inlabel` and start from prior (cold start).
+
 ## Returns
 
 - `fits`: MCMC fit results containing:

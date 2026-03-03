@@ -168,9 +168,9 @@ plot_cross_correlation(cross_corr, "results/cross_correlation/")
 ```julia
 # Compare different coupling configurations
 configurations = [
-    (coupling=((1, 2), (Int[], [1]), [2, 0], [0, 2], 1), name="Strong coupling"),
-    (coupling=((1, 2), (Int[], [1]), [1, 0], [0, 1], 1), name="Weak coupling"),
-    (coupling=((1, 2), (Int[], Int[]), [0, 0], [0, 0], 1), name="No coupling")
+    (coupling=((1, 2), [(1, 2, 2, 2)]), name="Strong coupling"),
+    (coupling=((1, 2), [(1, 1, 2, 1)]), name="Weak coupling"),
+    (coupling=((1, 2), []), name="No coupling")
 ]
 
 config_fits = []

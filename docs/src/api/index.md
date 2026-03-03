@@ -20,6 +20,7 @@
 - [`load_model`](@ref): Load model parameters from files
 - [`rna_setup`](@ref): Set up project directory structure
 - [`readrates`](@ref): Read rate parameters from files
+- [`read_run_spec`](@ref), [`read_run_spec_for_rates_file`](@ref), [`info_toml_path_for_rates_file`](@ref): Load run specification from info TOML (see [Run specification (info TOML)](../run_spec_toml.md))
 - [`readfile`](@ref): Read data files with error handling
 
 ### Analysis and Visualization
@@ -359,7 +360,7 @@ For coupled transcriptional units, use tuples for model parameters:
 fits = fit(
     G = (2, 3),                          # Unit 1: 2 states, Unit 2: 3 states
     transitions = (([1,2], [2,1]), ([1,2], [2,3], [3,1])),
-    coupling = (1, 2, [1,2], [3,4], 2),  # Coupling specification
+    coupling = ((1, 2), [(1, 3, 2, 4)]),  # (unit_model, connections); each connection (β, s, α, t)
     # ... other parameters
 )
 ```

@@ -304,6 +304,9 @@ Arguments:
 - `transitions`, `G`, `R`, `S`, `insertstep`, `splicetype`: per-unit model specification.
 """
 # Empty connections allowed: no interaction matrices are built; Tc = sum of uncoupled unit matrices.
+# Build ConnectionRecords from the connections list here (not in the inner constructor), so we have
+# correct (β, s, α, t) per connection; the inner constructor's loop used source_state[α] which is
+# "states when α is a source" and would be empty for target-only units.
 function TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
     unit_model, connections = coupling
     n_units = length(unit_model)
@@ -314,15 +317,42 @@ function TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insert
     sources_t = ntuple(i -> tuple(sources_vec[i]...), n_units)
     source_state_t = ntuple(i -> source_states_for_unit(connections, i), n_units)
     target_transition_t = ntuple(i -> target_transition_for_unit(connections, i), n_units)
-    TCoupledComponents(unit_model, sources_t, source_state_t, target_transition_t,
-                       transitions, G, R, S, insertstep, splicetype)
+    comp = TCoupledUnitComponents[TCoupledUnitComponents(source_state_t[i], target_transition_t[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype) for i in eachindex(G)]
+    connection_data = ConnectionRecord[]
+    for (β, s, α, t) in connections
+        (s == 0) && continue
+        comp_α = comp[α]
+        trans_α = transitions[α]
+        G_α, R_α, S_α = G[α], R[α], S[α]
+        nT_α = comp_α.nT
+        indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[α])
+        G_β, R_β, S_β = G[β], R[β], S[β]
+        U_elements = set_elements_Source(s, G_β, R_β, S_β, splicetype)
+        U = make_mat_S(U_elements, comp[β].nT)
+        elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[α], indices_α, nT_α, splicetype)
+        push!(connection_data, ConnectionRecord(β, α, U, elementsTarget, nT_α))
+    end
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources_t, comp, connection_data)
 end
 
 
 function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
-    TForcedComponents(nT, elementsT, coupling[4])
+    if length(coupling) == 2
+        unit_model, connections = coupling
+        n_units = length(unit_model)
+        sources_vec = [Int[] for _ in 1:n_units]
+        for (β, s, α, t) in connections
+            push!(sources_vec[α], β)
+        end
+        sources_t = ntuple(i -> tuple(sources_vec[i]...), n_units)
+        targets_out = targets((unit_model, sources_t))
+        targets_t = ntuple(i -> tuple(targets_out[i]...), length(targets_out))
+        TForcedComponents(nT, elementsT, targets_t)
+    else
+        TForcedComponents(nT, elementsT, coupling[4])
+    end
 end
 """
     MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)

@@ -154,8 +154,8 @@ end
     test_compare_reciprocal(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, total, tol)
 
 Standalone test for reciprocal coupling: compares simulated and chemical master equation
-histograms with two-way coupling (unit 1 ↔ unit 2). Uses coupling ((1,2), ((2,),(1,)), (3,3), (3,3), 2)
-with two coupling parameters in canonical order [(2,1), (1,2)].
+histograms with two-way coupling (unit 1 ↔ unit 2). Uses coupling ((1, 2), [(2, 3, 1, 3), (1, 3, 2, 3)])
+with two coupling parameters in canonical order.
 
 # Returns
 - Tuple of (chemical master histogram, array of simulated histograms).
