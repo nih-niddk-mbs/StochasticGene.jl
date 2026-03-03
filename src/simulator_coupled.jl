@@ -80,12 +80,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 
 #Named arguments
 - `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
-- `coupling=tuple()`: if nonempty, a 4-tuple where elements are
-    1. tuple of model indices corresponding to each unit, e.g. (1, 1, 2) means that unit 1 and 2 use model 1 and unit 3 uses model 2
-    2. tuple of vectors indicating source units for each unit, e.g. ([2,3], [1], Int[]) means unit 1 is influenced by source units 2 and 3, unit 2 is influenced by unit 1 and unit 3 is uninfluenced.
-    3. source states, e.g. (3,0) means that model 1 influences other units whenever it is in G state 3, while model 2 does not influence any other unit
-    4. target transitions, e.g. (0, 4) means that model 1 is not influenced by any source while model 2 is influenced by sources at G transition 4.
-    5. Int indicating number of coupling parameters
+- `coupling=tuple()`: if nonempty, `(unit_model, connections)` where `unit_model` is a tuple of model indices per unit (e.g. (1, 2)) and `connections` is a vector of `(β, s, α, t)` (source unit, source state, target unit, target transition). Use `make_coupling` / `make_coupling_reciprocal` in io.jl to build from a coupling field string. Empty `connections` is valid (no interaction terms).
 - `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
 - `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
@@ -455,13 +450,13 @@ end
 Find coupled targets for each unit in a coupled model.
 
 # Arguments
-- `coupling::Tuple`: Coupling tuple containing (models, sources, source_states, target_transitions, n_coupling_params)
+- `coupling::Tuple`: Public API is `(unit_model, connections)`. Internally converted to 6-tuple (unit_model, sources, connections, target_transition, ncoupling, targets) for simulation.
 
 # Returns
 - `Vector{Vector{Int}}`: Vector where targets[i] contains indices of units that are influenced by unit i
 """
 function targets(coupling)
-    targets = Vector{Int}[]
+    targets_out = Vector{Int}[]
     models = coupling[1]
     sources = coupling[2]
     for m in models
@@ -471,40 +466,54 @@ function targets(coupling)
                 push!(t, i)
             end
         end
-        push!(targets, t)
+        push!(targets_out, t)
     end
-    targets
+    targets_out
+end
+
+# Build internal 6-tuple (unit_model, sources, connections, target_transition, ncoupling, targets)
+# from (unit_model, connections). Source state is not stored; derive via source_states_for_unit(connections, unit).
+function _coupling_from_connections(unit_model, connections)
+    n_units = length(unit_model)
+    sources_vec = [Int[] for _ in 1:n_units]
+    target_transition_vec = [Int[] for _ in 1:n_units]
+    for (β, s, α, t) in connections
+        push!(sources_vec[α], β)
+        push!(target_transition_vec[α], t)
+    end
+    sources = ntuple(i -> tuple(sources_vec[i]...), n_units)
+    target_transition = ntuple(i -> isempty(target_transition_vec[i]) ? 0 : target_transition_vec[i][1], n_units)
+    ncoupling = length(connections)
+    targets_out = targets((unit_model, sources))
+    (unit_model, sources, connections, target_transition, ncoupling, targets_out)
 end
 
 """
     prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
 
-Prepare parameters for coupled model simulation.
+Prepare parameters for coupled model simulation. Coupling is (unit_model, connections::Vector{ConnectionSpec}). Empty `connections` is valid.
 
 # Arguments
 - `r::Vector{Float64}`: Vector of rates including coupling parameters
-- `coupling::Tuple`: Coupling configuration tuple
+- `coupling::Tuple`: (unit_model, connections) with each connection (β, s, α, t)
 - `transitions::Tuple`: Transition definitions for each gene
-- `G::Tuple`: Number of gene states for each gene
-- `R::Tuple`: Number of pre-RNA steps for each gene
-- `S::Tuple`: Number of splice sites for each gene
-- `insertstep::Tuple`: Reporter insertion steps for each gene
-- `nalleles::Int`: Number of alleles
-- `noiseparams::Union{Int, Vector{Int}}`: Number of noise parameters
+- `G::Tuple`, `R::Tuple`, `S::Tuple`, `insertstep::Tuple`: Model dimensions
+- `nalleles::Int`, `noiseparams`: Alleles and noise param counts
 
 # Returns
-- `Tuple`: (coupling, nalleles, noiseparams, r_prepared) where r_prepared contains separated rate vectors for each gene
+- `Tuple`: (coupling_6, nalleles, noiseparams, r_prepared) with internal 6-tuple for simulation
 """
 function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
-    ncoupling = coupling[5]
+    unit_model, connections = coupling[1], coupling[2]
+    ncoupling = length(connections)
     if length(r) >= ncoupling && any(r[end-ncoupling+1:end] .< -1.0)
         throw(ArgumentError("all coupling strengths must be > -1.0"))
     end
     if noiseparams isa Number
         noiseparams = fill(noiseparams, length(G))
     end
-    coupling = (coupling..., targets(coupling))
-    return coupling, nalleles, noiseparams, prepare_rates_sim(r, coupling, transitions, R, S, insertstep, noiseparams)
+    coupling_6 = _coupling_from_connections(unit_model, connections)
+    return coupling_6, nalleles, noiseparams, prepare_rates_sim(r, coupling_6, transitions, R, S, insertstep, noiseparams)
 end
 
 
@@ -1070,9 +1079,10 @@ TBW
 
 function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling, verbose=false)
     sources = coupling[2][unit]
-    sstate = coupling[3]
+    connections = coupling[3]  # derive source states via source_states_for_unit(connections, unit)
     ttrans = coupling[4]
     targets = coupling[6][unit]
+    sstate_unit = source_states_for_unit(connections, unit)
     # Canonical (β, α) order: same as transition_rate_make and prepare_rates_sim
     coupling_pairs = Tuple{Int,Int}[(β, α) for α in eachindex(coupling[1]) for β in coupling[2][α]]
     coupling_strength = r[end]  # Vector of length ncoupling
@@ -1080,18 +1090,18 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
 
-    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
+    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate_unit, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
     # unit as source: for each target, use coupling param for (unit, target)
     for target in targets
-        verbose && println(isdisjoint(oldstate, sstate[unit]), " : ", !isdisjoint(newstate, sstate[unit]))
+        verbose && println(isdisjoint(oldstate, sstate_unit), " : ", !isdisjoint(newstate, sstate_unit))
         if isfinite(tau[target][ttrans[target], 1])
             idx = findfirst(isequal((unit, target)), coupling_pairs)
             γc = idx === nothing ? 0.0 : coupling_strength[idx]
-            if isdisjoint(oldstate, sstate[unit]) && !isdisjoint(newstate, sstate[unit])
+            if isdisjoint(oldstate, sstate_unit) && !isdisjoint(newstate, sstate_unit)
                 tau[target][ttrans[target], 1] = 1 / (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
-            elseif !isdisjoint(oldstate, sstate[unit]) && isdisjoint(newstate, sstate[unit])
+            elseif !isdisjoint(oldstate, sstate_unit) && isdisjoint(newstate, sstate_unit)
                 tau[target][ttrans[target], 1] = (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
@@ -1101,8 +1111,9 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     for source in sources
         verbose && println(ttrans[unit] ∈ enabled, ": ", tau[unit][ttrans[unit], 1])
         if ttrans[unit] ∈ enabled
-            verbose && println(sstate[source], " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source]))
-            if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate[source])
+            sstate_source = source_states_for_unit(connections, source)
+            verbose && println(sstate_source, " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate_source))
+            if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate_source)
                 idx = findfirst(isequal((source, unit)), coupling_pairs)
                 γc = idx === nothing ? 0.0 : coupling_strength[idx]
                 tau[unit][ttrans[unit], 1] = 1 / (1 + γc) * (tau[unit][ttrans[unit], 1] - t) + t

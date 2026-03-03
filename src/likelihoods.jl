@@ -306,7 +306,7 @@ function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, in
     return r, couplingStrength, noiseparams
 end
 
-# Overload using full coupling for canonical to_connections order (legacy and extended).
+# Overload using full coupling (unit_model, connections); coupling strength order matches connection list.
 function prepare_rates_coupled(rates, coupling::Tuple, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     couplingStrength = Float64[]
@@ -1399,7 +1399,7 @@ function num_all_parameters(transitions, R::Int, S, insertstep, reporter, coupli
     else
         n = 0
     end
-    c = isempty(coupling) ? 0 : coupling[5]
+    c = isempty(coupling) ? 0 : length(coupling[2])
     g = isnothing(grid) ? 0 : 1
     num_rates(transitions, R, S, insertstep) + n + c + g
 end
@@ -1409,7 +1409,7 @@ function num_all_parameters(transitions, R::Tuple, S::Tuple, insertstep::Tuple, 
     for i in eachindex(R)
         n += num_all_parameters(transitions[i], R[i], S[i], insertstep[i], reporter[i])
     end
-    c = isempty(coupling) ? 0 : coupling[5]
+    c = isempty(coupling) ? 0 : length(coupling[2])
     g = isnothing(grid) ? 0 : 1
     n + c + g
 end

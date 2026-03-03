@@ -204,39 +204,40 @@ Construct coupling structure from coupling field and model parameters.
 - `R`: Number of RNA states (Int)
 
 # Returns
-- `Tuple`: Coupling structure in format ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+- `Tuple`: `(unit_model, connections)` with `unit_model=(1,2)` and `connections::Vector{ConnectionSpec}`;
+  each connection is `(β, s, α, t)` (source unit, source state, target unit, target transition).
 
 # Examples
 ```julia
-# State 3 → State 1 coupling
-make_coupling("31", 3, 4)  # returns coupling from state 3 to state 1
+# State 3 → transition 1 coupling (unit 1 → unit 2)
+make_coupling("31", 3, 4)  # returns ((1, 2), [(1, 3, 2, 1)])
 
-# All R states → State 5 coupling  
-make_coupling("R5", 3, 4)  # returns coupling from states 4,5,6,7 to state 5
+# All R states → transition 5
+make_coupling("R5", 3, 4)  # returns ((1, 2), [(1, 4, 2, 5), (1, 5, 2, 5), ...])
 ```
 
 # Notes
-- If coupling_field starts with "R": all RNA states (G+1 to G+R) → target state
-- Otherwise: single source state → target state
-- Target state is always the last character of coupling_field
-- Source state is first character for non-R couplings
+- If coupling_field starts with "R": all RNA states (G+1 to G+R) → target transition
+- Otherwise: single source state → target transition (target from last character)
+- Empty connections is valid when building manually: use `(unit_model, ConnectionSpec[])`.
 """
 function make_coupling(coupling_field::String, G, R)
     if isempty(coupling_field)
         return tuple()
     elseif length(coupling_field) == 4
-        # Reciprocal: 4-char s1t1s2t2 format
         Gt = G isa Tuple ? G : (G, G)
         Rt = R isa Tuple ? R : (R, R)
         return make_coupling_reciprocal(coupling_field, Gt, Rt)
     else
         if startswith(coupling_field, "R")
-            source = collect(G[1]+1:G[1]+R[1])  # All R states
+            source = collect(G[1]+1:G[1]+R[1])
         else
             source = parse(Int, coupling_field[1])
         end
         target = parse(Int, coupling_field[2:end])
-        return ((1, 2), (tuple(), tuple(1)), (source, 0), (0, target), 1)
+        unit_model = (1, 2)
+        connections = ConnectionSpec[(1, s, 2, target) for s in (source isa AbstractVector ? source : [source])]
+        return (unit_model, connections)
     end
 end
 
@@ -254,7 +255,8 @@ Construct reciprocal (bidirectional) coupling structure from 4-character couplin
 - `R`: Tuple of RNA states per unit
 
 # Returns
-- `Tuple`: Reciprocal coupling structure ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+- `Tuple`: `(unit_model, connections)` with `unit_model=(1,2)` and `connections::Vector{ConnectionSpec}`;
+  order: (2, s2, 1, t2) for 2→1, then (1, s1, 2, t1) for 1→2 (canonical order by target α then source β).
 
 # Examples
 ```julia
@@ -269,16 +271,21 @@ function make_coupling_reciprocal(coupling_field::String, G, R)
     if length(coupling_field) != 4
         throw(ArgumentError("coupling_field for reciprocal must be 4 characters (s1t1s2t2), got \"$coupling_field\""))
     end
-    # Parse unit 1→2: s1 (char1), t1 (char2)
     s1_char, t1_char = coupling_field[1], coupling_field[2]
     s1 = s1_char == 'R' ? collect(G[1]+1:G[1]+R[1]) : parse(Int, string(s1_char))
     t1 = parse(Int, string(t1_char))
-    # Parse unit 2→1: s2 (char3), t2 (char4)
     s2_char, t2_char = coupling_field[3], coupling_field[4]
     s2 = s2_char == 'R' ? collect(G[2]+1:G[2]+R[2]) : parse(Int, string(s2_char))
     t2 = parse(Int, string(t2_char))
-    # coupling: sources=(tuple(2), tuple(1)), source_state=(s2, s1), target_transition=(t2, t1)
-    return ((1, 2), (tuple(2), tuple(1)), (s2, s1), (t2, t1), 2)
+    unit_model = (1, 2)
+    connections = ConnectionSpec[]
+    for s in (s2 isa AbstractVector ? s2 : [s2])
+        push!(connections, (2, s, 1, t2))
+    end
+    for s in (s1 isa AbstractVector ? s1 : [s1])
+        push!(connections, (1, s, 2, t1))
+    end
+    return (unit_model, connections)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
@@ -2197,6 +2204,210 @@ filename(data, model::AbstractGMmodel) = filename(data.label, data.gene, model.G
 filename(data, model::GRSMmodel) = filename(data.label, data.gene, model.G, model.R, model.S, model.insertstep, model.nalleles)
 
 """
+    filename(key::String)
+
+Key-based filename suffix: returns `_key.txt` so that `rates_key.txt` and `info_key.toml` share the same stem.
+Use when `fit(; key=\"identifier\", ...)` to write all outputs with that stem.
+"""
+filename(key::String) = "_" * key * ".txt"
+
+# -----------------------------------------------------------------------------
+# Run specification (info TOML): serialize/deserialize fit kwargs for reproducibility
+# -----------------------------------------------------------------------------
+
+function _toml_value(v)
+    v === nothing && return "nothing"
+    v isa String && return v
+    v isa Bool && return v
+    v isa Number && return v
+    v isa Symbol && return string(v)
+    if v isa Tuple
+        if isempty(v)
+            return []
+        end
+        if all(x -> x isa AbstractVector, v)
+            return [collect(x) for x in v]
+        end
+        return collect(v)
+    end
+    if v isa AbstractVector
+        isempty(v) && return v
+        if eltype(v) <: Number || eltype(v) <: String
+            return collect(v)
+        end
+        return [_toml_value(x) for x in v]
+    end
+    if v isa AbstractDict
+        return Dict(string(k) => _toml_value(val) for (k, val) in v)
+    end
+    return string(v)
+end
+
+"""Convert run_spec (Dict or NamedTuple) to TOML-serializable Dict with string keys."""
+function run_spec_to_toml(run_spec)
+    out = Dict{String,Any}()
+    ks = run_spec isa NamedTuple ? keys(run_spec) : keys(run_spec)
+    for k in ks
+        key = string(k)
+        key in ("probfn", "method", "coupling") && continue
+        v = run_spec isa NamedTuple ? getproperty(run_spec, k) : run_spec[k]
+        out[key] = _toml_value(v)
+    end
+    # coupling (unit_model, connections) as two keys for clean TOML
+    if run_spec isa NamedTuple && haskey(run_spec, :coupling)
+        c = run_spec.coupling
+        if !isempty(c) && length(c) == 2
+            out["coupling_unit_model"] = collect(c[1])
+            out["coupling_connections"] = [[Int(x[1]), Int(x[2]), Int(x[3]), Int(x[4])] for x in c[2]]
+        end
+    elseif run_spec isa Dict && haskey(run_spec, :coupling)
+        c = run_spec[:coupling]
+        if !isempty(c) && length(c) == 2
+            out["coupling_unit_model"] = collect(c[1])
+            out["coupling_connections"] = [[Int(x[1]), Int(x[2]), Int(x[3]), Int(x[4])] for x in c[2]]
+        end
+    end
+    if run_spec isa NamedTuple && haskey(run_spec, :probfn)
+        out["probfn"] = string(run_spec.probfn)
+    elseif run_spec isa Dict && (haskey(run_spec, :probfn) || haskey(run_spec, "probfn"))
+        out["probfn"] = string(get(run_spec, :probfn, get(run_spec, "probfn", "prob_Gaussian")))
+    end
+    if run_spec isa NamedTuple && haskey(run_spec, :method)
+        out["method"] = string(run_spec.method)
+    elseif run_spec isa Dict && (haskey(run_spec, :method) || haskey(run_spec, "method"))
+        out["method"] = string(get(run_spec, :method, get(run_spec, "method", "Tsit5")))
+    end
+    out
+end
+
+function _toml_escape(s::String)
+    need_quotes = occursin(r"[\"\n\\#\[\]{}]", s) || occursin(r"^\s|^#|^\[|,|\s$", s)
+    need_quotes ? "\"" * replace(replace(s, "\\" => "\\\\"), "\"" => "\\\"") * "\"" : s
+end
+
+function _write_toml_table(io::IO, d::Dict, indent="")
+    for (k, v) in sort(collect(d), by=first)
+        if v isa Dict && !isempty(v)
+            println(io, indent, "[", k, "]")
+            _write_toml_table(io, v, indent * "  ")
+        elseif v isa Vector{Any} && !isempty(v) && v[1] isa Vector
+            println(io, indent, k, " = [")
+            for row in v
+                println(io, indent, "  [", join(row, ", "), "],")
+            end
+            println(io, indent, "]")
+        elseif v isa Vector
+            println(io, indent, k, " = ", repr(v))
+        elseif v isa String
+            println(io, indent, k, " = ", _toml_escape(v))
+        elseif v isa Bool
+            println(io, indent, k, " = ", v ? "true" : "false")
+        else
+            println(io, indent, k, " = ", v)
+        end
+    end
+end
+
+"""
+    write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+
+Write run specification and key outputs to a TOML file (info_*.toml).
+Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Call after writeall when run_spec is provided.
+Sections: [run] = fit kwargs, [output] = llml, accept, total, median_param, etc., [model_info], [environment].
+"""
+function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+    open(file_toml, "w") do io
+        if run_spec !== nothing
+            run_dict = run_spec_to_toml(run_spec)
+            println(io, "[run]")
+            _write_toml_table(io, run_dict, "  ")
+        end
+        println(io, "")
+        println(io, "[output]")
+        _write_toml_table(io, Dict(
+            "llml" => fits.llml,
+            "accept" => fits.accept,
+            "total" => fits.total,
+            "median_param" => (size(fits.param, 1) > 0 ? vec(fits.param[:, 3]) : Float64[]),
+        ), "  ")
+        println(io, "")
+        println(io, "[model_info]")
+        lab = labels !== nothing ? labels : (model isa AbstractGRSMmodel ? rlabels(model) : String[])
+        _write_toml_table(io, Dict("rate_labels" => lab, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
+        println(io, "")
+        println(io, "[environment]")
+        _write_toml_table(io, Dict("julia_version" => string(VERSION), "threads" => Threads.nthreads()), "  ")
+    end
+end
+
+function _from_toml_value(k::String, v)
+    v isa String && v == "nothing" && return nothing
+    v isa String && return v
+    v isa Number && return v
+    v isa Bool && return v
+    if v isa Vector && !isempty(v) && v[1] isa Vector
+        return Tuple([Tuple(Int.(x)) for x in v])
+    end
+    if v isa Vector && length(v) > 0 && v[1] isa Number
+        # G, R, S, insertstep: single Int or Tuple
+        if k in ("G", "R", "S", "insertstep")
+            return length(v) == 1 ? Int(v[1]) : Tuple(Int.(v))
+        end
+        return Float64.(v)
+    end
+    if v isa Vector
+        return v
+    end
+    v
+end
+
+"""
+    read_run_spec(file_toml::String)
+
+Load run specification from an info TOML file. Returns Dict{Symbol, Any} suitable for fit(; spec...) or inspection.
+Parses [run]; restores types (e.g. \"nothing\" → nothing, coupling → (unit_model, connections)).
+"""
+function read_run_spec(file_toml::String)
+    d = Pkg.TOML.parsefile(file_toml)
+    run = get(d, "run", d)
+    out = Dict{Symbol, Any}()
+    for (k, v) in run
+        k in ("coupling_unit_model", "coupling_connections") && continue
+        out[Symbol(k)] = _from_toml_value(k, v)
+    end
+    if haskey(run, "coupling_unit_model") && haskey(run, "coupling_connections")
+        um = Tuple(Int.(run["coupling_unit_model"]))
+        conns = [Tuple(Int.(c)) for c in run["coupling_connections"]]
+        out[:coupling] = (um, conns)
+    end
+    out
+end
+
+"""
+    info_toml_path_for_rates_file(rates_file::String)
+
+Return the path to the info TOML that accompanies a rates file (same directory, same stem).
+E.g. \"path/rates_label_gene_3301_2.txt\" → \"path/info_label_gene_3301_2.toml\".
+"""
+function info_toml_path_for_rates_file(rates_file::String)
+    dir = dirname(rates_file)
+    base = basename(rates_file)
+    info_base = replace(replace(base, r"^rates" => "info"), r"\.txt$" => ".toml")
+    joinpath(dir, info_base)
+end
+
+"""
+    read_run_spec_for_rates_file(rates_file::String)
+
+If an info TOML exists next to the given rates file (same stem), load and return the run spec
+as Dict{Symbol, Any} suitable for fit(; spec...). Otherwise return nothing.
+"""
+function read_run_spec_for_rates_file(rates_file::String)
+    toml_path = info_toml_path_for_rates_file(rates_file)
+    isfile(toml_path) ? read_run_spec(toml_path) : nothing
+end
+
+"""
     writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
 
 Write all model fitting results to files.
@@ -2223,12 +2434,14 @@ Write all model fitting results to files.
 - Conditionally writes optimized and burst files if provided
 - Conditionally writes sample data if writesamples=true
 - Uses consistent filename generation for all output files
+- If `name_override` is set (e.g. from `fit(; key=\"id\", ...)`), use that suffix for all files (rates_id.txt, info_id.toml).
+- If `run_spec` is set, write info_<stem>.toml with [run], [output], [model_info], [environment].
 """
-function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false)
+function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false, name_override=nothing, run_spec=nothing)
     if !isdir(path)
         mkpath(path)
     end
-    name = filename(data, model)
+    name = name_override !== nothing ? name_override : filename(data, model)
     labels = rlabels(model)
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
@@ -2246,6 +2459,10 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     if writesamples
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
+    end
+    if run_spec !== nothing
+        file_toml = joinpath(path, replace("info" * name, r"\.txt$" => ".toml"))
+        write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
     end
 end
 

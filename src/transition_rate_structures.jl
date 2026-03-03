@@ -191,20 +191,96 @@ struct TDCoupledUnitComponents <: AbstractTDComponents
     TDdims::Vector{Int}
 
 end
+
+"""
+    ConnectionSpec
+
+Canonical representation of a single coupling connection at the matrix-construction level.
+
+Each connection is identified by a 4-tuple `(β, s, α, t)` where:
+- `β::Int`: source unit index
+- `s::Int`: source state index within unit β
+- `α::Int`: target unit index
+- `t::Int`: target transition index within unit α
+
+This flat representation is convenient for fast iteration and indexing when
+assembling coupled transition matrices; higher-level code is responsible for
+mapping model-level coupling specifications into these connection specifications.
+The connection list may be empty (uncoupled T is still built); source and target
+info per unit is derived via `source_states_for_unit` and `target_transition_for_unit`.
+"""
+const ConnectionSpec = NTuple{4,Int}
+
+"""
+    source_states_for_unit(connections, unit::Int)
+
+Return the source state(s) for which `unit` acts as a source, derived from the
+connection list. Empty if the unit is never a source.
+
+Single source of truth: no separate `source_state` aggregate is stored elsewhere.
+"""
+function source_states_for_unit(connections, unit::Int)
+    [Int(s) for (β, s, α, t) in connections if β == unit]
+end
+
+"""
+    target_transition_for_unit(connections, unit::Int)
+
+Return the target transition index for `unit` when it is a target (first connection
+to that unit), or 0 if the unit is never a target.
+"""
+function target_transition_for_unit(connections, unit::Int)
+    for (β, s, α, t) in connections
+        α == unit && return t
+    end
+    return 0
+end
+
+"""
+    ConnectionRecord
+
+Precomputed data for one coupling interaction, suitable for direct use in
+matrix assembly routines.
+
+Fields:
+- `β::Int`: source unit index
+- `α::Int`: target unit index
+- `U::SparseMatrixCSC`: source operator acting on unit β (built from G/R structure)
+- `elementsTarget::Vector{Element}`: element specification for the target operator
+  in unit α (used with `make_mat` and the rate vector for unit α)
+- `nTα::Int`: size of the target transition matrix for unit α
+
+These records are intended to be built once from model-level information and
+then reused whenever coupled transition matrices are constructed.
+"""
+struct ConnectionRecord
+    β::Int
+    α::Int
+    U::SparseMatrixCSC
+    elementsTarget::Vector{Element}
+    nTα::Int
+end
+
 """
  	TCoupledComponents
 
 fields:
     N, model, sources, modelcomponents: as before.
-    build_spec: optional (transitions, G, R, S, insertstep, splicetype) used to build per-connection U,V from (s,t) lists.
-    Per-unit (s,t) are stored in modelcomponents[α].sourceState and .targetTransition (scalar or list).
+    connections: optional precomputed per-connection data (e.g. `Vector{ConnectionRecord}`),
+        built from model-level coupling `(unit_model, connections::Vector{ConnectionSpec})`.
+    Per-unit source/target are derived from the connection list (e.g. `source_states_for_unit`,
+    `target_transition_for_unit`) and stored in modelcomponents[α].sourceState and .targetTransition.
+
+Note: Coupling is supplied as `(unit_model, connections)`; empty `connections` is valid (Tc = uncoupled T).
+Higher-level code builds per-connection data from these; matrix constructors in `transition_rate_make.jl`
+depend only on the pre-built components.
 """
 struct TCoupledComponents{ModelType} <: AbstractComponents
     N::Int
     model::Tuple
     sources::Tuple
     modelcomponents::ModelType
-    build_spec::Union{Nothing,Tuple}  # (transitions, G, R, S, insertstep, splicetype) for per-connection build
+    connections::Union{Nothing,Vector{ConnectionRecord}}
 end
 
 struct TForcedComponents <: AbstractTComponents

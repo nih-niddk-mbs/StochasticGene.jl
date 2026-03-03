@@ -766,6 +766,7 @@ the target specification.
 """
 function set_elements_Target(target, Gtransitions, G, R, S, insertstep, indices, nT, splicetype)
     elementsTarget = Vector{Element}(undef, 0)
+    (target == 0 || (target isa AbstractVector && isempty(target)) || (target isa Tuple && isempty(target))) && return elementsTarget
     Gts, Init, Rts = classify_transitions(target, indices)
     for t in Gts
         elements = set_elements_Gt(Gtransitions, t, indices.gamma)
@@ -814,9 +815,11 @@ end
 
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
-    # Use first (s,t) when stored as list so one set of elements per unit; per-connection U,V built at make_matvec_C time
-    s_in = (source_state isa Tuple || source_state isa AbstractVector) ? first(source_state) : source_state
-    t_in = (target_transition isa Tuple || target_transition isa AbstractVector) ? first(target_transition) : target_transition
+    # No coupling for this unit: empty source/target elements (do not build interaction matrices)
+    no_source = source_state == 0 || (source_state isa Union{Tuple,AbstractVector} && isempty(source_state))
+    no_target = target_transition == 0 || (target_transition isa Union{Tuple,AbstractVector} && isempty(target_transition))
+    s_in = no_source ? 0 : (source_state isa Union{Tuple,AbstractVector} ? first(source_state) : source_state)
+    t_in = no_target ? 0 : (target_transition isa Union{Tuple,AbstractVector} ? first(target_transition) : target_transition)
     elementsSource = set_elements_Source(s_in, G, R, S)
     elementsTarget = set_elements_Target(t_in, transitions, G, R, S, insertstep, indices, nT, splicetype)
     return elementsT, elementsSource, elementsTarget, nT

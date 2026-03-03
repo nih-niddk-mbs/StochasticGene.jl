@@ -141,11 +141,23 @@ function TDCoupledComponents(unit_model, sources, source_state, target_transitio
     for i in eachindex(G)
         push!(comp, TDCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], sojourn[i], dttype[i], splicetype))
     end
-    build_spec = (transitions, G, R, S, insertstep, splicetype)
-    TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, build_spec)
+    TCoupledComponents(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, nothing)
 end
 
-TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype="") = TDCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+# Build from (unit_model, connections). Source state and target transition are derived
+# from connections via source_states_for_unit / target_transition_for_unit (single source of truth).
+function TDCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype, splicetype="")
+    unit_model, connections = coupling[1], coupling[2]
+    n_units = length(unit_model)
+    sources_vec = [Int[] for _ in 1:n_units]
+    for (β, s, α, t) in connections
+        push!(sources_vec[α], β)
+    end
+    sources = ntuple(i -> tuple(sources_vec[i]...), n_units)
+    source_state = ntuple(i -> source_states_for_unit(connections, i), n_units)
+    target_transition = ntuple(i -> target_transition_for_unit(connections, i), n_units)
+    TDCoupledComponents(unit_model, sources, source_state, target_transition, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
+end
 
 """
     make_components_TRGCoupledUnit(source_state, target_transition, transitions, G::Int, R, S, insertstep, splicetype="")
@@ -194,7 +206,7 @@ matrix components for fitting traces, mRNA histograms, and reporter gene data. I
 the construction of coupled systems with multiple interacting units.
 
 # Arguments
-- `coupling::Tuple`: Tuple of coupling parameters
+- `coupling::Tuple`: `(unit_model, connections::Vector{ConnectionSpec})`; each connection is `(β, s, α, t)`. Empty `connections` is valid (uncoupled T only).
 - `transitions::Tuple`: Tuple of transition rates
 - `G`: Total number of gene states
 - `R`: Number of reporter steps
@@ -219,11 +231,23 @@ function make_components_TRGCoupled(unit_model, sources, source_state, target_tr
     for i in eachindex(G)
         push!(comp, make_components_TRGCoupledUnit(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
-    build_spec = (transitions, G, R, S, insertstep, splicetype)
-    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, build_spec)
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, nothing)
 end
 
-make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+# (unit_model, connections) format: derive per-unit data and dispatch to internal constructor.
+function make_components_TRGCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+    length(coupling) == 2 || return make_components_TRGCoupled(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+    unit_model, connections = coupling[1], coupling[2]
+    n_units = length(unit_model)
+    sources_vec = [Int[] for _ in 1:n_units]
+    for (β, s, α, t) in connections
+        push!(sources_vec[α], β)
+    end
+    sources_t = ntuple(i -> tuple(sources_vec[i]...), n_units)
+    source_state_t = ntuple(i -> source_states_for_unit(connections, i), n_units)
+    target_transition_t = ntuple(i -> target_transition_for_unit(connections, i), n_units)
+    make_components_TRGCoupled(unit_model, sources_t, source_state_t, target_transition_t, transitions, G, R, S, insertstep, splicetype)
+end
 
 TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype="") = make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype)
 
@@ -238,17 +262,97 @@ function TCoupledComponents(unit_model, sources, source_state, target_transition
     for i in eachindex(G)
         push!(comp, TCoupledUnitComponents(source_state[i], target_transition[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype))
     end
-    build_spec = (transitions, G, R, S, insertstep, splicetype)
-    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, build_spec)
+    # Build per-connection records from per-unit components and model-level specification.
+    connections = ConnectionRecord[]
+    n_units = length(unit_model)
+    for α in 1:n_units
+        sα = sources[α]
+        nconn = length(sα)
+        nconn == 0 && continue
+        comp_α = comp[α]
+        ss = comp_α.sourceState
+        tt = comp_α.targetTransition
+        trans_α = transitions[α]
+        G_α, R_α, S_α = G[α], R[α], S[α]
+        nT_α = comp_α.nT
+        indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[α])
+        for k in 1:nconn
+            β = sα[k]
+            s = (ss isa Tuple || ss isa AbstractVector) ? ss[k] : ss
+            t = (tt isa Tuple || tt isa AbstractVector) ? tt[k] : tt
+            (s isa Int && s == 0) && continue
+            G_β, R_β, S_β = G[β], R[β], S[β]
+            U_elements = set_elements_Source(s, G_β, R_β, S_β, splicetype)
+            U = make_mat_S(U_elements, comp[β].nT)
+            elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[α], indices_α, nT_α, splicetype)
+            push!(connections, ConnectionRecord(β, α, U, elementsTarget, nT_α))
+        end
+    end
+    # Always store connection list (can be empty). Tc = uncoupled T + sum over connections; empty loop does nothing.
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources, comp, connections)
 end
 
-TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="") = TCoupledComponents(coupling[1], coupling[2], coupling[3], coupling[4], transitions, G, R, S, insertstep, splicetype)
+"""
+    TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+
+High-level constructor for `TCoupledComponents` using connection specifications.
+
+Arguments:
+- `coupling::Tuple`: `(unit_model, connections)` where
+    - `unit_model`: tuple specifying the order of units
+    - `connections`: vector of `ConnectionSpec` = `(β, s, α, t)` for each connection
+- `transitions`, `G`, `R`, `S`, `insertstep`, `splicetype`: per-unit model specification.
+"""
+# Empty connections allowed: no interaction matrices are built; Tc = sum of uncoupled unit matrices.
+# Build ConnectionRecords from the connections list here (not in the inner constructor), so we have
+# correct (β, s, α, t) per connection; the inner constructor's loop used source_state[α] which is
+# "states when α is a source" and would be empty for target-only units.
+function TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+    unit_model, connections = coupling
+    n_units = length(unit_model)
+    sources_vec = [Int[] for _ in 1:n_units]
+    for (β, s, α, t) in connections
+        push!(sources_vec[α], β)
+    end
+    sources_t = ntuple(i -> tuple(sources_vec[i]...), n_units)
+    source_state_t = ntuple(i -> source_states_for_unit(connections, i), n_units)
+    target_transition_t = ntuple(i -> target_transition_for_unit(connections, i), n_units)
+    comp = TCoupledUnitComponents[TCoupledUnitComponents(source_state_t[i], target_transition_t[i], transitions[i], G[i], R[i], S[i], insertstep[i], splicetype) for i in eachindex(G)]
+    connection_data = ConnectionRecord[]
+    for (β, s, α, t) in connections
+        (s == 0) && continue
+        comp_α = comp[α]
+        trans_α = transitions[α]
+        G_α, R_α, S_α = G[α], R[α], S[α]
+        nT_α = comp_α.nT
+        indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[α])
+        G_β, R_β, S_β = G[β], R[β], S[β]
+        U_elements = set_elements_Source(s, G_β, R_β, S_β, splicetype)
+        U = make_mat_S(U_elements, comp[β].nT)
+        elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[α], indices_α, nT_α, splicetype)
+        push!(connection_data, ConnectionRecord(β, α, U, elementsTarget, nT_α))
+    end
+    TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources_t, comp, connection_data)
+end
 
 
 function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
     indices = set_indices(length(transitions), R, S, insertstep)
     elementsT, nT = f(transitions, G, R, S, insertstep, indices, splicetype)
-    TForcedComponents(nT, elementsT, coupling[4])
+    if length(coupling) == 2
+        unit_model, connections = coupling
+        n_units = length(unit_model)
+        sources_vec = [Int[] for _ in 1:n_units]
+        for (β, s, α, t) in connections
+            push!(sources_vec[α], β)
+        end
+        sources_t = ntuple(i -> tuple(sources_vec[i]...), n_units)
+        targets_out = targets((unit_model, sources_t))
+        targets_t = ntuple(i -> tuple(targets_out[i]...), length(targets_out))
+        TForcedComponents(nT, elementsT, targets_t)
+    else
+        TForcedComponents(nT, elementsT, coupling[4])
+    end
 end
 """
     MComponents(transitions::Tuple, G, R, nhist, decay, splicetype)
@@ -766,6 +870,12 @@ function make_mat_S(elements, nG)
     return G
 end
 
+# Only build when there is something to build. Empty elements => no source coupling for this unit.
+function _make_mat_source(elements, nG)
+    isempty(elements) && return spzeros(0, 0)
+    return make_mat_S(elements, nG)
+end
+
 """
     make_mat_C(components, rates)
 
@@ -795,12 +905,7 @@ function make_mat_C(components::TRGCoupledUnitComponents, rates)
     RG = make_mat(components.elementsRG, rates, nR)
     T = make_mat_TRG(G, GR, RGbar, RG, nG, nR)
     Gt = make_mat(components.elementsGt, rates, nG)
-    if components.elementsGs[1].a < 1 || components.elementsGs[1].b < 1
-        Gs = spzeros(0)
-    else
-        # Gs = make_mat_GC(nS, nS, couplingStrength)
-        Gs = make_mat_S(components.elementsGs, nG)
-    end
+    Gs = _make_mat_source(components.elementsGs, nG)
     return T, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
@@ -835,12 +940,7 @@ function make_mat_C(components::TDCoupledUnitComponents, rates)
     end
     G = make_mat(components.elementsG, rates, nG)
     Gt = make_mat(components.elementsTarget, rates, nG)
-    if components.elementsSource[1].a < 1 || components.elementsSource[1].b < 1
-        Gs = spzeros(0)
-    else
-        Gs = make_mat_S(components.elementsSource, nG)
-    end
-    Gt = make_mat(components.elementsTarget, rates, nG)
+    Gs = _make_mat_source(components.elementsSource, nG)
     return T, TD, G, Gt, Gs, sparse(I, nG, nG), sparse(I, nR, nR), sparse(I, nT, nT)
 end
 
@@ -877,29 +977,6 @@ function make_matvec_C(components::TCoupledComponents{Vector{TRGCoupledUnitCompo
     return T, G, Gt, Gs, IG, IR, IT
 end
 
-# Build per-connection (U, elementsTarget, nT_α, β, α) from (s,t) lists in components using build_spec; same order as to_connections.
-function _connection_data_from_components(components::TCoupledComponents{Vector{TCoupledUnitComponents}}, build_spec)
-    transitions, G, R, S, insertstep, splicetype = build_spec
-    comp = components.modelcomponents
-    ncoupling = sum(length.(components.sources))
-    ncoupling == 0 && return nothing
-    source_state = tuple([c.sourceState for c in comp]...)
-    target_transition = tuple([c.targetTransition for c in comp]...)
-    conns = to_connections((components.model, components.sources, source_state, target_transition, ncoupling))
-    data = Any[]
-    for (β, α, s, t) in conns
-        (s isa Int && s == 0) && continue
-        trans_α = transitions[α]
-        G_α, R_α, S_α = G[α], R[α], S[α]
-        nT_α = comp[α].nT
-        indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[α])
-        U = make_mat_S(set_elements_Source(s, G[β], R[β], S[β], splicetype), comp[β].nT)
-        elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[α], indices_α, nT_α, splicetype)
-        push!(data, (U, elementsTarget, nT_α, β, α))
-    end
-    length(data) == ncoupling ? data : nothing
-end
-
 function make_matvec_C(components::TCoupledComponents{Vector{TCoupledUnitComponents}}, rates)
     n = length(components.model)
     T = Vector{SparseMatrixCSC}(undef, n)
@@ -909,8 +986,7 @@ function make_matvec_C(components::TCoupledComponents{Vector{TCoupledUnitCompone
     for i in eachindex(components.model)
         T[i], Source[i], Target[i], IT[i] = make_mat_C(components.modelcomponents[i], rates[i])
     end
-    connection_UV = (components.build_spec !== nothing ? _connection_data_from_components(components, components.build_spec) : nothing)
-    return T, Source, Target, IT, connection_UV
+    return T, Source, Target, IT
 end
 
 function make_matvec_C(components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, rates)
@@ -956,7 +1032,7 @@ the full coupled system dynamics.
 - `make_mat_TC(components, rates, coupling_strength)`: Uses components and rates to create the matrix
 
 # Returns
-- `SparseMatrixCSC`: The created coupled transition matrix TC
+- `SparseMatrixCSC`: The created coupled transition matrix TC (uncoupled T + sum over connections; empty connection list adds nothing).
 """
 function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
     n = length(unit_model)
@@ -1051,10 +1127,11 @@ function make_mat_TC(components::TCoupledComponents{Vector{TRGCoupledUnitCompone
 end
 
 function make_mat_TC(components::TCoupledComponents{Vector{TCoupledUnitComponents}}, rates, coupling_strength)
-    T, Source, Target, IT, connection_UV = make_matvec_C(components, rates)
-    # Generalized coupling: per-connection (U,V) built from (s,t) lists when build_spec set
-    if connection_UV !== nothing && length(connection_UV) == length(coupling_strength)
-        return _make_mat_TC_connection_data(T, IT, components.model, connection_UV, coupling_strength, rates)
+    T, Source, Target, IT = make_matvec_C(components, rates)
+    # Build from connection list: Tc = uncoupled T + sum over connections (loop over empty does nothing).
+    connections = components.connections
+    if connections !== nothing && length(connections) == length(coupling_strength)
+        return _make_mat_TC_connection_data(T, IT, components.model, connections, coupling_strength, rates)
     end
     make_mat_TC(coupling_strength, T, Source, Target, IT, components.sources, components.model)
 end
@@ -1077,7 +1154,7 @@ function _coupling_term(U, V, β::Int, α::Int, IT, unit_model, n::Int)
     Vβ
 end
 
-# connection_data: list of (U_k, elementsTarget_k, nT_α_k, β_k, α_k); build V_k from rates in loop.
+# connection_data: list of ConnectionRecord (may be empty; loop adds nothing and Tc = uncoupled T). Build V_k from rates in loop.
 function _make_mat_TC_connection_data(T, IT, unit_model, connection_data, coupling_strength, rates)
     n = length(unit_model)
     N = prod(size.(IT, 2))
@@ -1089,7 +1166,12 @@ function _make_mat_TC_connection_data(T, IT, unit_model, connection_data, coupli
         Tc += Tα
     end
     for k in eachindex(connection_data)
-        U_k, elementsTarget_k, nT_α_k, β_k, α_k = connection_data[k]
+        rec = connection_data[k]
+        U_k = rec.U
+        elementsTarget_k = rec.elementsTarget
+        nT_α_k = rec.nTα
+        β_k = rec.β
+        α_k = rec.α
         V_k = make_mat(elementsTarget_k, rates[α_k], nT_α_k)
         Tc += coupling_strength[k] * _coupling_term(U_k, V_k, β_k, α_k, IT, unit_model, n)
     end
