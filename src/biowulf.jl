@@ -42,145 +42,92 @@ Use when building swarm/.jl filenames from label or coupling spec (e.g. "24,35|3
 sanitize_for_filename(s::AbstractString) = replace(replace(string(s), "," => "-"), "|" => "-")
 
 """
-    makeswarm(;<keyword arguments>)
+    makeswarm(keys::Vector{String}; <keyword arguments>)
+    makeswarm(; key::String, <keyword arguments>)
 
-write swarm and fit files used on biowulf
-
-
-#Arguments
-
-- 'nthreads=1`: number of Julia threads per processesor, default = 1
-- `swarmfile::String="fit"`: name of swarmfile to be executed by swarm
-- `juliafile::String="fitscript`: name of file to be called by julia in swarmfile
-- `src=""`: path to folder containing StochasticGene.jl/src (only necessary if StochasticGene not installed)
-- `filedir="."`: directory to write swarm and fit files (defaults to current directory)
-
-and all keyword arguments of function fit(; <keyword arguments> )
-
-see fit
-
-Note:: the keyword 'method' is handled slightly differently here than in the function fit.  In fit it is a function (i.e. numerical method function used in DifferentialEquations.jl) or a tuple
-of the numerical method and a Bool for hierarchical models.  However, in biowulf.jl, the numerical method must be a String, i.e. use "Tsit5()" for Tsit5().  This is because when Julia writes
-the function, it will parse the numerical method rather than just writing it.
-
-
-"""
-function makeswarm(; gene::String="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions=([1, 2], [2, 1]), G=2, R=0, S=0, insertstep=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, project="", prerun=0., sysimage="", filedir=".")
-    # Create filedir if it doesn't exist
-    if !isempty(filedir) && !isdir(filedir)
-        mkpath(filedir)
-    end
-    
-    modelstring = create_modelstring(G, R, S, insertstep)
-    label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
-    label_safe = sanitize_for_filename(label)
-    model_safe = sanitize_for_filename(modelstring)
-    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
-    sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
-    write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, project, sysimage)
-    write_fitfile(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-        fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, prerun)
-end
-
-
-
-
-"""
-    makeswarm(genes::Vector{String}; <keyword arguments> )
-
-write a swarmfile and fit files to run all each gene in vector genes
+Write a swarm file and one fit script per key for Biowulf. Each swarm line runs one script:
+`julia -t nthreads -p nchains fitscript_<key>.jl`. Each script calls `fit(; key=key, ...)` so the
+run is defined by `info_<key>.toml` (if present) plus any overrides.
 
 # Arguments
-- `genes`: vector of genes
-- `batchsize=1000`: number of jobs per swarmfile, default = 1000
-- `filedir="."`: directory to write swarm and fit files (defaults to current directory)
+- `keys` or `key`: run key(s); each key gets one swarm line and one script `fitscript_<key>.jl`.
+- `nthreads=1`: Julia threads per process.
+- `nchains=2`: number of parallel chains (passed to `-p`).
+- `swarmfile="fit"`: base name for the swarm file (writes `swarmfile.swarm`).
+- `juliafile="fitscript"`: base name for scripts (writes `juliafile_<key>.jl`).
+- `filedir="."`: directory for swarm and script files.
+- `project=""`, `sysimage=""`: optional `--project` and `--sysimage` for the julia command.
+- `src=""`: path to StochasticGene src (for script prolog; empty if package is installed).
+- Overrides (optional): `resultfolder`, `root`, `maxtime`, `samplesteps`, etc. are written into each
+  script so `fit(; key=key, resultfolder=..., ...)` uses them. Only simple types (String, Number, Bool) are serialized.
 
-and all arguments in makeswarm(;<keyword arguments>)
-
-
-    Examples
-
-julia> genes = ["MYC","SOX9"]
-
-julia> makeswarm(genes,cell="HBEC")
+# Examples
+```julia
+makeswarm(["33il", "44il"]; filedir="swarm", resultfolder="HCT116_test", root=".")
+makeswarm(; key="33il", resultfolder="HCT116_test", maxtime=120.0)
+```
 """
-function makeswarm(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, filedir=".", project="")
-    # Create filedir if it doesn't exist
+function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
-    
+    isempty(keys) && return
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
+    for k in keys
+        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitfile_key(scriptpath, k; src=src, resultfolder=resultfolder, root=root, maxtime=maxtime, samplesteps=samplesteps, kwargs...)
+    end
+end
+
+function makeswarm(; key::String, kwargs...)
+    isempty(key) && error("makeswarm(; key=...) requires a non-empty key")
+    makeswarm([key]; kwargs...)
+end
+
+"""
+    makeswarm_genes(genes::Vector{String}; <keyword arguments>)
+
+Write a swarm file and one shared fit script to run each gene in `genes`. Each swarm line runs the same
+script with the gene as argument: `julia -t nthreads -p nchains fitscript_<label>_<model>.jl gene`.
+The script calls `fit(...)` with `ARGS[1]` as the gene.
+
+# Arguments
+- `genes`: vector of gene names
+- `batchsize=1000`: number of jobs per swarm file when `genes` is large
+- `filedir="."`: directory to write swarm and script files
+- Plus the same fit/model kwargs (datatype, dttype, datapath, cell, datacond,
+  transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
+
+# Example
+```julia
+makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", resultfolder="out")
+```
+"""
+function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
+    fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, filedir=".", project="", sysimage="")
+    if !isempty(filedir) && !isdir(filedir)
+        mkpath(filedir)
+    end
     modelstring = create_modelstring(G, R, S, insertstep)
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, TransitionType)
     label_safe = sanitize_for_filename(label)
     model_safe = sanitize_for_filename(modelstring)
     ngenes = length(genes)
-    println("number of genes: ", ngenes)
-    juliafile = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
+    juliafile_full = juliafile * "_" * label_safe * "_" * model_safe * ".jl"
     if ngenes > batchsize
         batches = getbatches(genes, ngenes, batchsize)
         for batch in eachindex(batches)
-            sfile = swarmfile * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
-            write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, batches[batch], project)
+            sfile = (endswith(swarmfile, ".swarm") ? swarmfile[1:end-6] : swarmfile) * "_" * label_safe * "_" * model_safe * "_" * "$batch" * ".swarm"
+            write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile_full, batches[batch], project, sysimage)
         end
     else
-        sfile = swarmfile * "_" * label_safe * "_" * model_safe * ".swarm"
-        write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, genes, project)
+        sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+        write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile_full, genes, project, sysimage)
     end
-    write_fitfile_genes(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+    write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor)
-end
-"""
-    makeswarm_genes(;<keyword arguments> )
- 
-#Arguments
-    - `thresholdlow::Float=0`: lower threshold for halflife for genes to be fit
-    - `threhsoldhigh::=Inf`: upper threshold
-    - `filedir="."`: directory to write swarm and fit files (defaults to current directory)
-
-    and all keyword arguments in makeswarm(;<keyword arguments>)
-"""
-function makeswarm_genes(; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize::Int=1000, juliafile::String="fitscript", thresholdlow::Float64=0.0, thresholdhigh::Float64=Inf, datatype::String="", dttype::Vector=String[], datapath="", cell::String="HBEC", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test", inlabel::String="", label::String="",
-    fittedparam::Vector=Int[], fixedeffects::Tuple=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], priorcv=Float64=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, filedir=".", project="")
-    genes = checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh)
-    println(typeof(genes))
-    makeswarm(checkgenes(root, datacond, datapath, cell, thresholdlow, thresholdhigh), nchains=nchains, nthreads=nthreads, swarmfile=swarmfile, batchsize=batchsize, juliafile=juliafile, datatype=datatype, dttype=dttype, datapath=datapath, cell=cell, datacond=datacond, traceinfo=traceinfo, infolder=infolder, resultfolder=resultfolder, inlabel=inlabel, label=label,
-        fittedparam=fittedparam, fixedeffects=fixedeffects, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, coupling=coupling, TransitionType=TransitionType, grid=grid, root=root, elongationtime=elongationtime, priormean=priormean, nalleles=nalleles, priorcv=priorcv, onstates=onstates, decayrate=decayrate, splicetype=splicetype, probfn=probfn, noisepriors=noisepriors, hierarchical=hierarchical, ratetype=ratetype,
-        propcv=propcv, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, annealsteps=annealsteps, temp=temp, tempanneal=tempanneal, temprna=temprna, burst=burst, optimize=optimize, writesamples=writesamples, method=method, src=src, zeromedian=zeromedian, datacol=datacol, ejectnumber=ejectnumber, yieldfactor=yieldfactor, filedir=filedir)
-end
-
-"""
-    makeswarm(models::Vector{ModelArgs}; <keyword arguments> )
-
-creates a run for each model
-
-#Arguments
-- `models::Vector{ModelArgs}`: Vector of ModelArgs structures
-- `filedir="."`: directory to write swarm and fit files (defaults to current directory)
-
-and all keyword arguments in makeswarm(;<keyword arguments>)
-"""
-function makeswarm_models(models::Vector{ModelArgs}; gene="", nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", datatype::String="", dttype=String[], datapath="", cell::String="", datacond="", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="", resultfolder::String="test",
-    fittedparam::Vector=Int[], grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, filedir=".", project="")
-    # Create filedir if it doesn't exist
-    if !isempty(filedir) && !isdir(filedir)
-        mkpath(filedir)
-    end
-    
-    juliafile = juliafile * "_" * gene * "_" * datacond * ".jl"
-    sfile = swarmfile * "_" * gene * "_" * datacond * ".swarm"
-    
-    write_swarmfile(joinpath(filedir, sfile), nchains, nthreads, juliafile, datatype, datacond, cell, models, project)
-    write_fitfile_models(joinpath(filedir, juliafile), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, coupling, fittedparam,
-        grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
         decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor)
 end
 
@@ -212,118 +159,93 @@ function write_swarmfile(sfile, nchains, nthreads, juliafile::String, project=""
 end
 
 """
-    write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
+    write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="", sysimage="")
 
-Writes a swarmfile for a vector of genes.
-
-# Arguments
-- `sfile`: The path to the swarmfile to be written.
-- `nchains`: The number of chains to run.
-- `nthreads`: The number of threads to use.
-- `juliafile::String`: The path to the Julia file to be executed.
-- `genes::Vector{String}`: A vector of gene names.
-- `project`: The Julia project to use (optional, default is an empty string).
-
-# Description
-This function writes a swarmfile that specifies how to run a Julia file for each gene in the given vector of genes, with the specified number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
+Writes a swarm file with one line per gene. Each line runs: `julia ... juliafile gene` (gene passed as argument).
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="")
+function write_swarmfile(sfile, nchains, nthreads, juliafile::String, genes::Vector{String}, project="", sysimage="")
     f = open(sfile, "w")
     for gene in genes
-        gene = check_genename(gene, "(")
+        gene_safe = check_genename(gene, "(")
         if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene])
+            writedlm(f, ["julia -t $nthreads -p" nchains juliafile gene_safe])
+        elseif isempty(sysimage)
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile gene_safe])
         else
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile gene])
+            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains juliafile gene_safe])
         end
     end
     close(f)
 end
 
 """
-    write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
+    write_swarmfile_keys(sfile, nchains, nthreads, juliafile_base, keys::Vector{String}, project="", sysimage="")
 
-Writes a swarmfile for a vector of models.
-
-# Arguments
-- `sfile`: The path to the swarmfile to be written.
-- `nchains`: The number of chains to run.
-- `nthreads`: The number of threads to use.
-- `juliafile`: The path to the Julia file to be executed.
-- `datatype`: The type of data.
-- `datacond`: The data condition.
-- `cell`: The type of cell.
-- `models::Vector{ModelArgs}`: A vector of models.
-- `project`: The Julia project to use (optional, default is an empty string).
-
-# Description
-This function writes a swarmfile that specifies how to run a Julia file for each model in the given vector of models, with the specified number of chains and threads. If a project is specified, it includes the `--project` flag in the command.
+Writes a swarm file with one line per key. Each line runs: `julia -t nthreads -p nchains juliafile_base_<key>.jl`.
 """
-function write_swarmfile(sfile, nchains, nthreads, juliafile, datatype, datacond, cell, models::Vector{ModelArgs}, project="")
+function write_swarmfile_keys(sfile, nchains, nthreads, juliafile_base::String, keys::Vector{String}, project="", sysimage="")
     f = open(sfile, "w")
-    for model in models
-        label, inlabel = create_label(model.label, model.inlabel, datatype, datacond, cell, model.TransitionType)
-        if isempty(model.fixedeffects)
-            fixedeffects = "1"
-        else
-            fixedeffects = model.fixedeffects
-        end
+    base = isempty(juliafile_base) ? "fitscript" : juliafile_base
+    for k in keys
+        scriptname = base * "_" * sanitize_for_filename(k) * ".jl"
         if isempty(project)
-            writedlm(f, ["julia -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.TransitionType fixedeffects])
+            writedlm(f, ["julia -t $nthreads -p" nchains scriptname])
+        elseif isempty(sysimage)
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains scriptname])
         else
-            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains juliafile inlabel label model.G model.R model.S model.insertstep model.TransitionType fixedeffects])
+            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains scriptname])
         end
     end
     close(f)
 end
 
+function _format_fit_override(k::Symbol, v)::Union{String,Nothing}
+    v === nothing && return nothing
+    v isa AbstractString && return "$k=\"$(escape_string(String(v)))\""
+    v isa Real && return "$k=$v"
+    v isa Bool && return "$k=$v"
+    return nothing
+end
 
 """
-    write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
+    write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, ...)
 
-Writes a fitfile for the fit function parameters.
-
-# Arguments
-arguments are as in fit()
-
-# Description
-This function writes a fitfile that specifies how to run a fit for a given set of parameters. It includes the necessary prolog and handles the formatting of various parameters.
+Writes a script that runs `fit(; key=key, ...)` with optional overrides. Only String, Real, and Bool overrides are written.
 """
-function write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, prerun=0.)
-    s = '"'
-    # Written script must receive Tuple (transitions is tuple of tuples of vectors, or tuple of vectors)
-    transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
+function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
     f = open(fitfile, "w")
     write_prolog(f, src)
-    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
-    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    if prerun > 0.
-        write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $prerun, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor)\n")
-        write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor)")
-    else
-        write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s,$fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor)")
+    overrides = Dict{Symbol, String}()
+    if resultfolder !== ""
+        s = _format_fit_override(:resultfolder, resultfolder)
+        s !== nothing && (overrides[:resultfolder] = s)
     end
+    if root !== ""
+        s = _format_fit_override(:root, root)
+        s !== nothing && (overrides[:root] = s)
+    end
+    maxtime !== nothing && (s = _format_fit_override(:maxtime, maxtime); s !== nothing && (overrides[:maxtime] = s))
+    samplesteps !== nothing && (s = _format_fit_override(:samplesteps, samplesteps); s !== nothing && (overrides[:samplesteps] = s))
+    for (k, v) in pairs(kwargs)
+        s = _format_fit_override(Symbol(k), v)
+        s !== nothing && (overrides[Symbol(k)] = s)
+    end
+    fit_args = ["key=$(repr(key))", values(overrides)...]
+    write(f, "@time fit(; $(join(fit_args, ", ")))\n")
     close(f)
 end
 
 """
     write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
-    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
+        fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor)
 
-Write fitfile for genes
-
-# Arguments as in write_fitfile
+Writes a fit script that takes the gene as ARGS[1] and calls `fit(nchains, datatype, ..., ARGS[1], cell, ...)`.
 """
 function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
     decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0)
     s = '"'
-    # Written script must receive Tuple (transitions is tuple of tuples of vectors, or tuple of vectors)
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
     write_prolog(f, src)
@@ -333,27 +255,6 @@ function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell,
     close(f)
 end
 
-"""
-    write_fitfile(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder,
-    root, maxtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src)
-
-write fitfile for models
-
-# Arguments as in write_fitfile
-"""
-function write_fitfile_models(fitfile, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, coupling, fittedparam, grid,
-    root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0)
-    s = '"'
-    f = open(fitfile, "w")
-    write_prolog(f, src)
-    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
-    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, ARGS[1], ARGS[2], $fittedparam, ARGS[8], ARGS[3], ARGS[4], ARGS[5], ARGS[6], ARGS[7], $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor)")
-    close(f)
-end
 """
     write_prolog(f, src)
 

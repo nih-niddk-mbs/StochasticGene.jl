@@ -163,7 +163,6 @@ export
     make_mat,
     makeswarm,
     makeswarm_genes,
-    makeswarm_models,
     make_traces,
     make_traces_dataframe,
     mean,

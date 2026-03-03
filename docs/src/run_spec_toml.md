@@ -29,26 +29,16 @@ Coupling is stored as `coupling_unit_model` and `coupling_connections` in `[run]
 
 ## Starting a fit from a TOML file
 
-Use `spec_file` to load the run specification from an info TOML. All run options are read from the TOML's `[run]` section; any keyword arguments you pass to `fit` override those values.
+Pass `key = "identifier"` to load the run specification from `info_<key>.toml` in the results folder. The results folder is `folder_path(resultfolder, root, "results")`; set `resultfolder` and `root` in the call if needed. All run options are read from the TOML's `[run]` section; any keyword arguments you pass to `fit` override those values.
 
-- **Warm start**: If the TOML has `infolder` and (for key-based runs) `key`, and the corresponding rates file exists, it is used as initial rates.
-- **Cold start**: Pass `cold = true` to ignore `infolder`/`inlabel` and start from the prior.
+- If the rates file `rates_<key>.txt` exists in that results folder, it is used as initial rates (warm start).
 
 ```julia
-# Reproduce a run exactly
-fit(spec_file = "results/myfolder/info_myrun.toml")
+# Run using spec from info_myrun.toml (if it exists in resultfolder/root/results)
+fit(key = "myrun", resultfolder = "myfolder", root = ".")
 
-# Reproduce but override options and write to a new stem
-fit(
-    spec_file = "results/myfolder/info_myrun.toml",
-    nchains = 4,
-    samplesteps = 50_000,
-    resultfolder = "myfolder_long_run",
-    key = "long_run"
-)
-
-# Cold start from TOML (ignore any existing rates file)
-fit(spec_file = "results/myfolder/info_myrun.toml", cold = true, key = "cold_run")
+# Override options (same key, same output stem)
+fit(key = "myrun", resultfolder = "myfolder", nchains = 4, samplesteps = 50_000)
 ```
 
 ## Programmatic use
