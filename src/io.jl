@@ -2281,8 +2281,8 @@ function run_spec_to_toml(run_spec)
 end
 
 function _toml_escape(s::String)
-    need_quotes = occursin(r"[\"\n\\#\[\]{}]", s) || occursin(r"^\s|^#|^\[|,|\s$", s)
-    need_quotes ? "\"" * replace(replace(s, "\\" => "\\\\"), "\"" => "\\\"") * "\"" : s
+    # TOML string values must always be quoted; unquoted tokens are not valid string values.
+    "\"" * replace(replace(s, "\\" => "\\\\"), "\"" => "\\\"") * "\""
 end
 
 function _write_toml_table(io::IO, d::Dict, indent="")
@@ -2368,7 +2368,7 @@ Load run specification from an info TOML file. Returns Dict{Symbol, Any} suitabl
 Parses [run]; restores types (e.g. \"nothing\" → nothing, coupling → (unit_model, connections)).
 """
 function read_run_spec(file_toml::String)
-    d = Pkg.TOML.parsefile(file_toml)
+    d = TOML.parsefile(file_toml)
     run = get(d, "run", d)
     out = Dict{Symbol, Any}()
     for (k, v) in run

@@ -130,6 +130,7 @@ using Printf
 using SparseArrays
 using Statistics
 using StatsBase
+using TOML
 # using CUDA
 
 export

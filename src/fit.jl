@@ -371,7 +371,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `resultfolder::String=test`: folder for results of MCMC run
+- `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: number of MCMC sampling steps
@@ -508,8 +508,12 @@ function fit(; key=nothing, kwargs...)
         root = merged[:root]
         spec_path = joinpath(folder_path(resultfolder, root, "results"), "info_" * key * ".toml")
         if isfile(spec_path)
-            spec = read_run_spec(spec_path)
-            merged = merge(defaults, spec, kw)
+            try
+                spec = read_run_spec(spec_path)
+                merged = merge(defaults, spec, kw)
+            catch
+                # Info file exists but failed to parse (e.g. malformed TOML); use kwargs only
+            end
         end
     end
     run_spec = Dict{Symbol, Any}(merged)
