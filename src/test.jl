@@ -170,6 +170,16 @@ function test_compare_reciprocal(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6
     return make_array(vcat(h...)), make_array(vcat(hs...))
 end
 
+function test_compare_3u(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, .1, .1, .1, .1, 0., 0., 3.0, -.7], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3,3), R=(2, 2,0), S=(2, 2,0), insertstep=(1, 1,0), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)],[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], total=1000000, tol=1e-6)
+    coupling = ((1, 2, 3), [(3, 1, 1, 3), (3, 3, 2, 3)])
+    hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
+    h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
+    for i in eachindex(hs)
+        hs[i] = StochasticGene.normalize_histogram.(hs[i])
+    end
+    return make_array(vcat(h...)), make_array(vcat(hs...))
+end
+
 """
     test_fit_simrna(; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, nchains)
 

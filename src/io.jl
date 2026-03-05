@@ -2309,11 +2309,23 @@ function _write_toml_table(io::IO, d::Dict, indent="")
 end
 
 """
+    write_info(file::String, fits, data, model, labels; run_spec=nothing)
+
+Write the info file (TOML) for a run. Same stem as rates/measures (e.g. info_foo.toml).
+If `file` does not end in .toml, the extension is replaced. Delegates to `write_info_toml`.
+Sections: [output], [model_info], [environment]; if `run_spec` is set, also [run].
+"""
+function write_info(file::String, fits, data, model, labels; run_spec=nothing)
+    file_toml = endswith(file, ".toml") ? file : (replace(file, r"\.txt$" => "") * ".toml")
+    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
+end
+
+"""
     write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
 
 Write run specification and key outputs to a TOML file (info_*.toml).
-Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Call after writeall when run_spec is provided.
-Sections: [run] = fit kwargs, [output] = llml, accept, total, median_param, etc., [model_info], [environment].
+Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by write_info.
+Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
 """
 function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
     open(file_toml, "w") do io
@@ -2429,13 +2441,13 @@ Write all model fitting results to files.
 
 # Notes
 - Creates output directory if it doesn't exist
-- Writes rates, measures, parameter stats, and info files
+- Writes rates, measures, and parameter stats; if run_spec is set, also writes info_<stem>.toml
 - For hierarchical GRSM models, writes shared parameters
 - Conditionally writes optimized and burst files if provided
 - Conditionally writes sample data if writesamples=true
 - Uses consistent filename generation for all output files
 - If `name_override` is set (e.g. from `fit(; key=\"id\", ...)`), use that suffix for all files (rates_id.txt, info_id.toml).
-- If `run_spec` is set, write info_<stem>.toml with [run], [output], [model_info], [environment].
+- Always writes info_<stem>.toml with [output], [model_info], [environment]; if `run_spec` is set, also includes [run].
 """
 function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, data, temp, model::AbstractGeneTransitionModel; optimized=0, burst=0, writesamples=false, name_override=nothing, run_spec=nothing)
     if !isdir(path)
@@ -2446,7 +2458,6 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
-    write_info(joinpath(path, "info" * name), fits, data, model, labels)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
     end
@@ -2460,10 +2471,7 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
-    if run_spec !== nothing
-        file_toml = joinpath(path, replace("info" * name, r"\.txt$" => ".toml"))
-        write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
-    end
+    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec)
 end
 
 """
@@ -2811,56 +2819,6 @@ function write_burstsize(file::String, b::BurstMeasures)
     writedlm(f, b.median, ',')
     writedlm(f, b.mad, ',')
     writedlm(f, b.quantiles, ',')
-    close(f)
-end
-
-"""
-    write_info(file::String, fits, data, model, labels)
-
-Write model information and metadata to a file.
-
-# Arguments
-- `file::String`: Output file path
-- `fits`: Fit results structure
-- `data`: Data structure used for fitting
-- `model`: Model instance
-- `labels`: Parameter labels
-
-# Returns
-- Nothing, but writes info file with model metadata
-
-# Notes
-- Writes prior information for fitted parameters
-- Handles hierarchical models differently (uses fittedpriors)
-- Writes transformed prior means and standard deviations
-- Writes model structure information (Gtransitions)
-- Writes data metadata (label, gene, nalleles)
-- For trace data, writes interval information
-- Used for documenting model setup and priors
-"""
-function write_info(file::String, fits, data, model, labels)
-    f = open(file, "w")
-    if typeof(model) <: GRSMmodel && hasproperty(model.trait, :hierarchical)
-        # writedlm(f, labels[1:1, 1:num_all_parameters(model)], ',')  # labels
-        # println(model.trait) 
-        writedlm(f, [" " labels[1:1, model.trait.hierarchical.fittedpriors]], ',')  # labels
-        writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.trait.hierarchical.fittedpriors])'], ',')
-    else
-        writedlm(f, [" " labels[1:1, model.fittedparam]], ',')  # labels
-        # writedlm(f, ["prior mean" apply_transform(mean.(model.rateprior), model.transforms.f_inv[model.fittedparam])'], ',')
-    end
-
-    writedlm(f, ["transformed prior mean" reshape(mean.(model.rateprior), 1, :)], ',')
-    writedlm(f, ["transformedprior std" reshape(std.(model.rateprior), 1, :)], ',')
-    writedlm(f, ["Gtransitions" model.Gtransitions], ',')
-    writedlm(f, ["label" data.label], ',')
-    writedlm(f, ["gene" data.gene], ',')
-    writedlm(f, ["nalleles" model.nalleles], ',')
-    if typeof(data) <: AbstractTraceData
-        writedlm(f, ["interval" data.interval], ',')
-    end
-    # writedlm(f, ["G state probability" residenceprob_G(get_rates(fits.parml, model), model.G)], ',')
-    # writedlm(f, ["ON probability" onstate_prob(get_rates(fits.parml, model), model)], ',')
     close(f)
 end
 

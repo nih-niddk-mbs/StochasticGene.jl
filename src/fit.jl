@@ -389,7 +389,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
-- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and merges with your kwargs (kwargs override spec). If not found, uses your kwargs and defaults. Output files use that stem (e.g. `rates_33il.txt`, `info_33il.toml`).
+- `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
 
 # Returns
 - `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
