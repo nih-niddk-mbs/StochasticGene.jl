@@ -316,7 +316,7 @@ function prepare_rates_coupled(rates, coupling::Tuple, transitions, R::Tuple, S,
         push!(r, rates[j:j+n-1])
         j += n
     end
-    conns = to_connections(coupling)
+    conns = (isempty(coupling) || length(coupling) < 2) ? ConnectionSpec[] : coupling[2]
     for k in 1:length(conns)
         push!(couplingStrength, rates[j])
         j += 1
@@ -521,6 +521,8 @@ get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = mod
 get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
 # (Add more as needed)
 
+# Trace/dwell likelihood uses model.reporter and model.components, which can be built from
+# trace_specs/dwell_specs in make_structures (spec-driven path); legacy onstates/bins/dttype are derived there.
 function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
     r = prepare_rates(param, model)
     components = get_components(model, data)

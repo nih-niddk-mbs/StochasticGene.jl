@@ -104,9 +104,19 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
 
 """
-function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
+function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1, trace_specs=nothing, dwell_specs=nothing)
 
     r = copy(rin)
+    nunits = (G isa Tuple) ? length(G) : 1
+    if trace_specs !== nothing
+        onstates, traceinfo = legacy_onstates_traceinfo(trace_specs; nunits=nunits)
+        traceinterval = Float64(traceinfo[1])
+    end
+    if dwell_specs !== nothing
+        onstates_d, bins_derived, _dttype = legacy_dwell(dwell_specs)
+        onstates = onstates_d
+        bins = bins_derived
+    end
     if !isempty(coupling)
         coupling, nalleles, noiseparams, r = prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles, noiseparams)
         nhist = 0

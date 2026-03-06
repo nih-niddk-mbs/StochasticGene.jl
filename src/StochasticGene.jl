@@ -226,7 +226,6 @@ export
     coupling_ranges,
     default_coupling_prior_mean,
     default_coupling_prior_means,
-    to_connections,
     connection_name,
     coupling_connection_names,
     coupling_parameter_labels,
@@ -256,7 +255,13 @@ export
     write_traces_coupling,
     write_traces_coupling_spawn,
     write_winners,
-    zero_median
+    zero_median,
+    TraceSpec,
+    DwellSpec,
+    trace_specs_from_legacy,
+    dwell_specs_from_legacy,
+    legacy_onstates_traceinfo,
+    legacy_dwell
 
     
 
@@ -264,6 +269,7 @@ export
 
 # Type system and common functions
 include("common.jl")
+include("specs.jl")
 
 # Transition rate matrices of stochastic models defining master equations
 include("transition_rate_structures.jl")

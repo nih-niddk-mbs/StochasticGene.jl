@@ -2249,7 +2249,7 @@ function run_spec_to_toml(run_spec)
     ks = run_spec isa NamedTuple ? keys(run_spec) : keys(run_spec)
     for k in ks
         key = string(k)
-        key in ("probfn", "method", "coupling") && continue
+        key in ("probfn", "method", "coupling", "trace_specs", "dwell_specs") && continue
         v = run_spec isa NamedTuple ? getproperty(run_spec, k) : run_spec[k]
         out[key] = _toml_value(v)
     end
@@ -2277,6 +2277,17 @@ function run_spec_to_toml(run_spec)
     elseif run_spec isa Dict && (haskey(run_spec, :method) || haskey(run_spec, "method"))
         out["method"] = string(get(run_spec, :method, get(run_spec, "method", "Tsit5")))
     end
+    # trace_specs / dwell_specs: serialize as arrays of dicts for TOML
+    for (sym, key) in [(:trace_specs, "trace_specs"), (:dwell_specs, "dwell_specs")]
+        v = run_spec isa NamedTuple ? get(run_spec, sym, nothing) : get(run_spec, sym, get(run_spec, key, nothing))
+        v === nothing && continue
+        v isa Vector || continue
+        if sym === :trace_specs && !isempty(v) && first(v) isa TraceSpec
+            out[key] = [_trace_spec_to_dict(s) for s in v]
+        elseif sym === :dwell_specs && !isempty(v) && first(v) isa DwellSpec
+            out[key] = [_dwell_spec_to_dict(s) for s in v]
+        end
+    end
     out
 end
 
@@ -2285,26 +2296,58 @@ function _toml_escape(s::String)
     "\"" * replace(replace(s, "\\" => "\\\\"), "\"" => "\\\"") * "\""
 end
 
-function _write_toml_table(io::IO, d::Dict, indent="")
-    for (k, v) in sort(collect(d), by=first)
-        if v isa Dict && !isempty(v)
+function _toml_inline_string(d::Dict)
+    pairs = [string(k) * " = " * (v isa String ? _toml_escape(v) : string(v)) for (k, v) in sort(collect(d), by=first)]
+    "{ " * join(pairs, ", ") * " }"
+end
+
+# Write a TOML-valid array (empty -> [], strings quoted, numbers/bools as-is). Avoids repr(Vector{String}()) => "String[]".
+function _write_toml_array(io::IO, v::Vector, indent="")
+    if isempty(v)
+        print(io, "[]")
+        return
+    end
+    el = v[1]
+    if el isa String
+        print(io, "[ ", join(_toml_escape.(v), ", "), " ]")
+    elseif el isa Number || el isa Bool
+        print(io, "[ ", join(string.(v), ", "), " ]")
+    else
+        print(io, "[ ", join(string.(v), ", "), " ]")
+    end
+end
+
+function _write_toml_kv(io::IO, k, v, indent="")
+    if v isa Dict && !isempty(v)
+        # Inline table for simple dicts (e.g. emission = { kind = "G", state = 2 }) so it stays in current table
+        if all(x -> x isa Union{String,Number,Bool}, values(v))
+            println(io, indent, k, " = ", _toml_inline_string(v))
+        else
             println(io, indent, "[", k, "]")
             _write_toml_table(io, v, indent * "  ")
-        elseif v isa Vector{Any} && !isempty(v) && v[1] isa Vector
-            println(io, indent, k, " = [")
-            for row in v
-                println(io, indent, "  [", join(row, ", "), "],")
-            end
-            println(io, indent, "]")
-        elseif v isa Vector
-            println(io, indent, k, " = ", repr(v))
-        elseif v isa String
-            println(io, indent, k, " = ", _toml_escape(v))
-        elseif v isa Bool
-            println(io, indent, k, " = ", v ? "true" : "false")
-        else
-            println(io, indent, k, " = ", v)
         end
+    elseif v isa Vector{Any} && !isempty(v) && v[1] isa Vector
+        println(io, indent, k, " = [")
+        for row in v
+            println(io, indent, "  [", join(row, ", "), "],")
+        end
+        println(io, indent, "]")
+    elseif v isa Vector
+        print(io, indent, k, " = ")
+        _write_toml_array(io, v, indent)
+        println(io)
+    elseif v isa String
+        println(io, indent, k, " = ", _toml_escape(v))
+    elseif v isa Bool
+        println(io, indent, k, " = ", v ? "true" : "false")
+    else
+        println(io, indent, k, " = ", v)
+    end
+end
+
+function _write_toml_table(io::IO, d::Dict, indent="")
+    for (k, v) in sort(collect(d), by=first)
+        _write_toml_kv(io, k, v, indent)
     end
 end
 
@@ -2332,7 +2375,16 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         if run_spec !== nothing
             run_dict = run_spec_to_toml(run_spec)
             println(io, "[run]")
-            _write_toml_table(io, run_dict, "  ")
+            for (k, v) in sort(collect(run_dict), by=first)
+                if k in ("trace_specs", "dwell_specs") && v isa Vector && !isempty(v) && v[1] isa Dict
+                    for tab in v
+                        println(io, "  [[run.", k, "]]")
+                        _write_toml_table(io, tab, "    ")
+                    end
+                else
+                    _write_toml_kv(io, k, v, "  ")
+                end
+            end
         end
         println(io, "")
         println(io, "[output]")
@@ -2391,6 +2443,12 @@ function read_run_spec(file_toml::String)
         um = Tuple(Int.(run["coupling_unit_model"]))
         conns = [Tuple(Int.(c)) for c in run["coupling_connections"]]
         out[:coupling] = (um, conns)
+    end
+    if haskey(run, "trace_specs") && run["trace_specs"] isa Vector
+        out[:trace_specs] = [_dict_to_trace_spec(isa(x, Dict) ? x : Dict(string(k) => v for (k, v) in pairs(x))) for x in run["trace_specs"]]
+    end
+    if haskey(run, "dwell_specs") && run["dwell_specs"] isa Vector
+        out[:dwell_specs] = [_dict_to_dwell_spec(isa(x, Dict) ? x : Dict(string(k) => v for (k, v) in pairs(x))) for x in run["dwell_specs"]]
     end
     out
 end

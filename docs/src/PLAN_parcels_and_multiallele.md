@@ -1,26 +1,31 @@
-# Plan: Parcel redesign and multi-unit multi-allele RNA
+# Plan: Measurement Spec redesign and multi-unit multi-allele RNA
+
+Naming: **TraceSpec** and **DwellSpec** (replacing "parcel" in the API).
 
 ## 1. Current scope (single-entity trace and dwelltime)
 
-### 1.1 Trace parcel (single entity)
+### 1.1 TraceSpec (single entity) — implemented
 - **unit**: single unit index
-- **emission**: reporter sum, specific R step, G state, or small struct
+- **emission**: `:reporter_sum` or `(kind=:G, state=k)` for a single G state
 - **frame_interval**, **start_frame**, **end_frame**
-- Optional: **active_fraction**, **background_mean**, **reporter** / output index
+- Optional: **active_fraction**, **background_mean**, **output_index**
 
-### 1.2 Dwell-time parcel (single entity)
+### 1.2 DwellSpec (single entity) — implemented
 - **unit**: single unit index
-- **state_spec**: `(kind = :G, state = k)` or `(kind = :R, step = k)` (same idea as trace)
+- **kind**: `:G` or `:R` (gene-state vs R-step space)
 - **sojourn_kind**: `:in_state` | `:out_of_state` (replaces ON/OFF/ONG/OFFG)
+- **onstates**: the set of "on" states for this histogram
 - **bins**: histogram bins for this dwell type
-- Optional: output index
+- Optional: **output_index**
 
-### 1.3 Implementation tasks (now)
-- Define structs/named tuples for trace and dwell parcels.
-- Replace or wrap current onstates / bins / dttype with lists of these parcels for trace and dwell.
-- Simulator: loop over parcels; use `parcel.unit` to index state; use parcel fields for emission, state_spec, sojourn_kind, bins, frames.
-- Likelihood / prediction: same parcel-driven logic for trace and dwell.
-- Hidden units: no parcel for that unit ⇒ no indexing in trace/dwell.
+### 1.3 Implementation status
+- **Done**: `TraceSpec` and `DwellSpec` structs in `src/specs.jl`; conversion helpers `trace_specs_from_legacy`, `dwell_specs_from_legacy`, `legacy_onstates_traceinfo`, `legacy_dwell`. `fit(; trace_specs=..., dwell_specs=...)` and `make_structures` accept specs and derive legacy onstates/traceinfo/bins/dttype for the current pipeline.
+- **Done**: Refactor make_reporter_components to build from trace_specs/dwell_specs when provided: trace path builds one `HMMReporter` per `TraceSpec` for coupled models (enables hidden units); dwell path uses `legacy_dwell(dwell_specs)` for single-unit. Helper `hmm_reporter_from_trace_spec` in `specs.jl`.
+- **Done**: I/O: `run_spec_to_toml` and `read_run_spec` in `io.jl` serialize/deserialize `trace_specs` and `dwell_specs` to/from info_*.toml (array-of-tables for specs).
+- **Done**: Tests: `test_spec_conversion`, `test_spec_io_roundtrip`, `test_spec_trace_in_fit`, `test_spec_dwell_in_fit`.
+- **Done (entry-point)**: Simulator accepts optional `trace_specs` and `dwell_specs`; derives onstates, bins, traceinterval via `legacy_onstates_traceinfo` / `legacy_dwell` and runs with existing logic. Full internal "loop over specs" (set_onoff, set_before, make_trace from spec.unit/emission) remains optional for later.
+- **Done**: Likelihood/prediction is spec-driven via make_structures: when trace_specs/dwell_specs are passed to fit, reporter and components are built from specs (or legacy derived), so ll_hmm_trace and predictedfn use the spec-derived model.
+- **Hidden units**: supported in trace coupled path (fewer reporter channels than units when fewer trace_specs than units).
 - Leave RNA and nalleles unchanged for now.
 
 ---

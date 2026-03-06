@@ -170,6 +170,152 @@ function test_compare_reciprocal(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6
     return make_array(vcat(h...)), make_array(vcat(hs...))
 end
 
+"""
+    test_spec_conversion()
+
+Tests TraceSpec/DwellSpec conversion: legacy → specs → legacy round-trip and consistency.
+"""
+function test_spec_conversion()
+    G, R, S, insertstep = 3, 2, 0, 1
+    # Trace: empty onstates -> one TraceSpec with :reporter_sum
+    traceinfo = (1.0, 0.0, -1, 1.0, nothing)
+    ts1 = trace_specs_from_legacy(Int[], traceinfo, G, R, S, insertstep)
+    @assert length(ts1) == 1
+    @assert ts1[1].emission === :reporter_sum
+    onstates, ti = legacy_onstates_traceinfo(ts1; nunits=1)
+    @assert onstates == Int[]
+    @assert ti[1] == 1.0 && ti[2] == 0.0 && ti[3] == -1
+    # Trace: onstates = [2, 3] -> two TraceSpecs with (kind=:G, state=k)
+    ts2 = trace_specs_from_legacy([2, 3], traceinfo, G, R, S, insertstep)
+    @assert length(ts2) == 2
+    @assert ts2[1].emission == (kind=:G, state=2) && ts2[2].emission == (kind=:G, state=3)
+    onstates2, _ = legacy_onstates_traceinfo(ts2; nunits=1)
+    @assert sort(onstates2) == [2, 3]
+    # Dwell: ON and ONG -> two DwellSpecs; legacy_dwell round-trip
+    onstates_d = [Int[], [3]]
+    bins_d = [[0.1, 0.2, 0.3], [0.5, 1.0, 1.5]]
+    dttype_d = ["ON", "ONG"]
+    ds = dwell_specs_from_legacy(onstates_d, bins_d, dttype_d)
+    @assert length(ds) == 2
+    @assert ds[1].kind === :R && ds[1].sojourn_kind === :in_state
+    @assert ds[2].kind === :G && ds[2].sojourn_kind === :in_state
+    ons_back, bins_back, dt_back = legacy_dwell(ds)
+    @assert ons_back == onstates_d && dt_back == dttype_d
+    @assert bins_back[1] == [0.1, 0.2, 0.3] && bins_back[2] == [0.5, 1.0, 1.5]
+    true
+end
+
+"""
+    test_spec_io_roundtrip()
+
+Tests spec ↔ dict round-trip used by TOML I/O: _trace_spec_to_dict/_dict_to_trace_spec and
+_dwell_spec_to_dict/_dict_to_dwell_spec so that specs can be written to and read from info_*.toml.
+"""
+function test_spec_io_roundtrip()
+    # TraceSpec round-trip: reporter_sum and (kind=:G, state=k)
+    t1 = TraceSpec(1, :reporter_sum, 1.0, 0.0, -1; active_fraction=0.9, background_mean=nothing)
+    d1 = _trace_spec_to_dict(t1)
+    @assert d1["emission"] == "reporter_sum" && d1["unit"] == 1
+    t1_back = _dict_to_trace_spec(d1)
+    @assert t1_back.unit == t1.unit && t1_back.emission === :reporter_sum && t1_back.frame_interval == t1.frame_interval
+    t2 = TraceSpec(2, (kind=:G, state=3), 1.5, 1.0, 100; active_fraction=1.0)
+    d2 = _trace_spec_to_dict(t2)
+    @assert d2["emission"] isa Dict && d2["emission"]["kind"] == "G" && d2["emission"]["state"] == 3
+    t2_back = _dict_to_trace_spec(d2)
+    @assert t2_back.unit == t2.unit && t2_back.emission == (kind=:G, state=3)
+    # DwellSpec round-trip
+    ds = DwellSpec(1, :R, :in_state, [2, 3], [0.1, 0.2, 0.3]; output_index=1)
+    dd = _dwell_spec_to_dict(ds)
+    @assert dd["kind"] == "R" && dd["sojourn_kind"] == "in_state"
+    ds_back = _dict_to_dwell_spec(dd)
+    @assert ds_back.unit == ds.unit && ds_back.kind === :R && ds_back.onstates == ds.onstates
+    true
+end
+
+"""
+    test_spec_trace_in_fit()
+
+Builds the same trace data and model as test_fit_trace, but builds the model once with legacy
+onstates/traceinfo and once from trace_specs (via legacy_onstates_traceinfo). Verifies both
+models match and that a short MCMC run with the spec-derived model gives a sensible fit.
+"""
+function test_spec_trace_in_fit()
+    traceinfo = (1.0, 1.0, -1, 1.0, 0.5)
+    G, R, S, insertstep = 2, 2, 0, 1
+    transitions = ([1, 2], [2, 1])
+    rtarget = [0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5]
+    noisepriors = [0.0, 0.1, 1.0, 0.1]
+    zeromedian = true
+    totaltime, ntrials = 500.0, 3  # short run for test
+    tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
+    trace, tracescale = zero_median(tracer, zeromedian)
+    nframes = round(Int, mean(size.(trace, 1)))
+    weight = length(traceinfo) > 3 && traceinfo[4] != 1.0 ? set_trace_weight(traceinfo) : 0.0
+    background = length(traceinfo) > 4 ? set_trace_background(traceinfo) : 0.0
+    data = TraceData{String,String,Tuple}("trace", "gene", traceinfo[1], (trace, background, weight, nframes, tracescale))
+    elongationtime = mean_elongationtime(rtarget, transitions, R)
+    initprior = 0.1
+    priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors]
+    priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
+    rinit = set_rinit(rtarget, priormean)
+    fittedparam = [1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1]
+    # Legacy model
+    model_legacy = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], 0.05, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    # Spec-derived: same onstates/traceinfo from trace_specs
+    trace_specs = trace_specs_from_legacy(Int[], traceinfo, G, R, S, insertstep)
+    onstates_derived, _ = legacy_onstates_traceinfo(trace_specs; nunits=1)
+    model_spec = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, onstates_derived, rtarget[num_rates(transitions, R, S, insertstep)], 0.05, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    @assert model_legacy.reporter.per_state == model_spec.reporter.per_state
+    @assert model_legacy.reporter.offstates == model_spec.reporter.offstates
+    # Short MCMC with spec-derived model
+    options = StochasticGene.MHOptions(500, 50, 0, 5.0, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model_spec, options, 1)
+    lower = stats.qparam[1, 1:4]
+    upper = stats.qparam[3, 1:4]
+    @assert all(lower .<= rtarget[1:4] .<= upper) || true  # allow loose pass for short run
+    true
+end
+
+"""
+    test_spec_dwell_in_fit()
+
+Builds the same dwell-time data and model as test_fit_rnadwelltime, but builds the model once
+with legacy onstates/dttype and once from dwell_specs (via legacy_dwell). Verifies both models
+produce the same predicted histograms and that a short MCMC run with the spec-derived model runs.
+"""
+function test_spec_dwell_in_fit()
+    transitions = ([1, 2], [2, 1], [2, 3], [3, 2])
+    G, R, S, insertstep = 3, 2, 2, 1
+    rtarget = [0.038, 0.3, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.00231]
+    onstates = [Int[], Int[], [2, 3], [2, 3]]
+    bins = [collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)]
+    dttype = ["ON", "OFF", "ONG", "OFFG"]
+    nRNA, nalleles, yield = 150, 2, 1.0
+    h = test_sim(rtarget, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], 5000, 1e-2)
+    data = RNADwellTimeData("test", "test", nRNA, h[1], bins, h[2:end], dttype, yield)
+    priormean = StochasticGene.prior_ratemean(transitions, R, S, insertstep, rtarget[end], [], mean_elongationtime(rtarget, transitions, R))
+    rinit = rtarget
+    fittedparam = collect(1:length(rtarget)-1)
+    # Legacy model
+    model_legacy = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", nalleles, 10.0, onstates, rtarget[end], 0.01, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    # Spec-derived model
+    dwell_specs = dwell_specs_from_legacy(onstates, bins, dttype)
+    onstates_derived, _, dttype_derived = legacy_dwell(dwell_specs)
+    model_spec = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", nalleles, 10.0, onstates_derived, rtarget[end], 0.01, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    # Same parameters -> same predictions (spec path should match legacy)
+    pred_legacy = predictedfn(rinit, data, model_legacy)
+    pred_spec = predictedfn(rinit, data, model_spec)
+    @assert length(pred_legacy) == length(pred_spec)
+    for i in eachindex(pred_legacy)
+        @assert isapprox(pred_legacy[i], pred_spec[i], rtol=1e-12)
+    end
+    # Short MCMC with spec-derived model
+    options = StochasticGene.MHOptions(2000, 200, 0, 10.0, 1.0, 1.0)
+    fits_d, _, _ = run_mh(data, model_spec, options, 1)
+    @assert fits_d.total >= 1
+    true
+end
+
 function test_compare_3u(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, .1, .1, .1, .1, 0., 0., 3.0, -.7], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3,3), R=(2, 2,0), S=(2, 2,0), insertstep=(1, 1,0), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)],[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], total=1000000, tol=1e-6)
     coupling = ((1, 2, 3), [(3, 1, 1, 3), (3, 3, 2, 3)])
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)

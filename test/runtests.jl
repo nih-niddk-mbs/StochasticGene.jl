@@ -37,4 +37,10 @@ using Test
     lower, target, upper = StochasticGene.test_fit_tracejoint()
     @test lower <= target <= upper
 
+    @test StochasticGene.test_spec_conversion()
+    @test StochasticGene.test_spec_io_roundtrip()
+
+    @test StochasticGene.test_spec_trace_in_fit()
+    @test StochasticGene.test_spec_dwell_in_fit()
+
 end
