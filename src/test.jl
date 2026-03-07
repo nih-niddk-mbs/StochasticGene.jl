@@ -206,6 +206,45 @@ function test_spec_conversion()
 end
 
 """
+    test_info_toml_writer()
+
+Ensures write_info_toml produces valid TOML: write a file with run_spec containing previously
+problematic keys (transitions, dttype, traceinfo, zeromedian, etc.), then parse with TOML.parsefile only.
+Fails if the written file is not valid TOML.
+"""
+function test_info_toml_writer()
+    run_spec = (
+        transitions = (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+        dttype = String[],
+        traceinfo = [1.666, 1.0, -1],
+        zeromedian = Bool[1, 1],
+        G = (3, 3),
+        R = (3, 3),
+        S = (0, 0),
+        insertstep = (1, 1),
+        key = "testkey",
+        coupling = ((1, 2), [(1, 4, 2, 3), (2, 4, 1, 3)]),
+    )
+    fits = Fit(zeros(1, 4), Float64[], Float64[], 0.0, Float64[], Float64[], 0.0, 0, 0)
+    data = (interval = 1.0,)
+    model = (ratetransforms = (),)
+    path = tempname() * ".toml"
+    try
+        write_info_toml(path, fits, data, model; run_spec = run_spec, labels = ["Rate1_12", "Rate2_12"])
+        d = TOML.parsefile(path)
+        @assert haskey(d, "run")
+        @assert haskey(d, "output")
+        @assert haskey(d, "model_info")
+        @assert d["run"]["dttype"] == []
+        @assert d["run"]["transitions"] isa Vector && length(d["run"]["transitions"]) == 2
+        @assert d["model_info"]["rate_labels"] isa Vector && length(d["model_info"]["rate_labels"]) == 2
+    finally
+        rm(path, force = true)
+    end
+    true
+end
+
+"""
     test_spec_io_roundtrip()
 
 Tests spec ↔ dict round-trip used by TOML I/O: _trace_spec_to_dict/_dict_to_trace_spec and

@@ -3462,15 +3462,55 @@ Compute theoretical correlation functions for a single rate file and return the 
 # Default coupling for two-unit uncoupled when filename/spec give no coupling (correlation_functions requires coupling[1]).
 const _default_coupling_two_units = ((1, 2), Tuple{Int,Int,Int,Int}[])
 
-function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
-    println(file)
-    r = readrates(file, get_row(ratetype))
-    coupling_field = extract_source_target(pattern, file)
-    coupling = (isnothing(coupling_field) || isempty(coupling_field)) ? _default_coupling_two_units : make_coupling(coupling_field, G, R)
-    if isempty(coupling) || (length(coupling) >= 1 && isempty(coupling[1]))
-        coupling = _default_coupling_two_units
+# Normalize G, R, S, insertstep from spec (may be Vector from TOML) to Tuple for correlation_functions.
+_to_tuple(v) = v isa Tuple ? v : (length(v) == 1 ? (v[1], v[1]) : (v[1], v[2]))
+# Transitions from TOML can be flat 8-tuple ((1,2),(2,1),...) or already ((...),(...)); normalize to ((...), (...)).
+function _to_transitions(v)
+    if v isa Tuple && length(v) == 2 && v[1] isa Tuple && v[2] isa Tuple
+        return v
     end
+    if v isa Tuple && length(v) >= 8
+        p(x) = x isa AbstractVector ? [Int(x[1]), Int(x[2])] : [Int(x[1]), Int(x[2])]
+        return ((p(v[1]), p(v[2]), p(v[3]), p(v[4])), (p(v[5]), p(v[6]), p(v[7]), p(v[8])))
+    end
+    (( [1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))
+end
+
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml"; spec=nothing, coupling_field_override=nothing)
+    println(file)
+    # spec: key-based path only — all model params from info file. Otherwise legacy: params from arguments, coupling from filename (or override).
+    if spec !== nothing
+        transitions = _to_transitions(get(spec, :transitions, transitions))
+        G = _to_tuple(get(spec, :G, G))
+        R = _to_tuple(get(spec, :R, R))
+        S = _to_tuple(get(spec, :S, S))
+        insertstep = _to_tuple(get(spec, :insertstep, insertstep))
+        probfn = _probfn_from_spec(spec)
+        coupling = get(spec, :coupling, _default_coupling_two_units)
+        if isempty(coupling) || (length(coupling) >= 1 && isempty(coupling[1]))
+            coupling = _default_coupling_two_units
+        end
+    else
+        coupling_field = coupling_field_override !== nothing ? coupling_field_override : extract_source_target(pattern, file)
+        coupling = (isnothing(coupling_field) || isempty(coupling_field)) ? _default_coupling_two_units : make_coupling(coupling_field, G, R)
+        if isempty(coupling) || (length(coupling) >= 1 && isempty(coupling[1]))
+            coupling = _default_coupling_two_units
+        end
+    end
+    r = readrates(file, get_row(ratetype))
     correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
+end
+
+# Return a coupling field string if key (or key with "-suffix" stripped) looks like 2- or 4-char coupling code; else nothing.
+# Matches legacy convention where key encodes coupling (e.g. "11", "00R3", "3131"); key "24-33" → try "24".
+function _coupling_field_from_key(key::String)
+    for candidate in (key, split(key, "-")[1])
+        n = length(candidate)
+        n == 2 && (candidate[1] in '0':'9' || candidate[1] == 'R') && candidate[2] in '0':'9' && return candidate
+        n == 4 && (candidate[1] in '0':'9' || candidate[1] == 'R') && candidate[2] in '0':'9' &&
+            (candidate[3] in '0':'9' || candidate[3] == 'R') && candidate[4] in '0':'9' && return candidate
+    end
+    return nothing
 end
 
 # Resolve probfn from run_spec (may be string from TOML, e.g. "prob_Gaussian").
@@ -3484,39 +3524,44 @@ function _probfn_from_spec(spec)
     prob_Gaussian
 end
 
-# Key-based: one key. Reads rates_<key>.txt and info_<key>.toml (if present), uses ratetype, returns (tau, ccON, ..., out_path).
+# Build DataFrame from correlation_functions return: symmetrize ac (positive-lag only from HMM), sort by tau so output is strictly ascending (avoids spiky plots from row order).
+function _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters)
+    n = length(tau)
+    # ac from HMM is positive lags only; extend to full symmetric [ac(τ) for τ = -max..0..+max]
+    ac1ON_sym = [reverse(ac1ON); ac1ON[2:end]]
+    ac2ON_sym = [reverse(ac2ON); ac2ON[2:end]]
+    ac1R_sym = [reverse(ac1Reporters); ac1Reporters[2:end]]
+    ac2R_sym = [reverse(ac2Reporters); ac2Reporters[2:end]]
+    df = DataFrame(
+        tau=tau,
+        cc_ON=ccON,
+        ac1_ON=ac1ON_sym,
+        ac2_ON=ac2ON_sym,
+        m_ON1=fill(mON1, n),
+        m_ON2=fill(mON2, n),
+        cc_Reporters=ccReporters,
+        ac1_Reporters=ac1R_sym,
+        ac2_Reporters=ac2R_sym,
+        m_Reporters1=fill(mReporters1, n),
+        mReporters2=fill(mReporters2, n),
+    )
+    sort!(df, :tau)
+    df
+end
+
+# Key-based: one key. Uses only info file for model params (transitions, G, R, S, insertstep, coupling, probfn). Arguments are ignored (legacy naming only).
 function _write_correlation_functions_one_key(folder::String, key::String; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
     rates_file = joinpath(folder, "rates_" * key * ".txt")
     isfile(rates_file) || error("Rate file not found: ", rates_file)
     spec = try
         read_run_spec_for_rates_file(rates_file)
-    catch
-        nothing  # malformed TOML (e.g. dttype = String[]) or missing file: use defaults
+    catch e
+        error("Key-based path requires a valid info file for key \"$key\". ", info_toml_path_for_rates_file(rates_file), " — ", e)
     end
-    if spec !== nothing
-        transitions = get(spec, :transitions, transitions)
-        G = get(spec, :G, G)
-        R = get(spec, :R, R)
-        S = get(spec, :S, S)
-        insertstep = get(spec, :insertstep, insertstep)
-        probfn = _probfn_from_spec(spec)
-        coupling = get(spec, :coupling, _default_coupling_two_units)
-        if isempty(coupling)
-            coupling_field = extract_source_target(pattern, rates_file)
-            coupling = isnothing(coupling_field) ? _default_coupling_two_units : make_coupling(coupling_field, G, R)
-        end
-    else
-        coupling_field = extract_source_target(pattern, rates_file)
-        coupling = isnothing(coupling_field) ? _default_coupling_two_units : make_coupling(coupling_field, G, R)
-    end
-    # correlation_functions requires coupling[1] (unit model); normalize ((), []) or () from TOML/defaults
-    if isempty(coupling) || (length(coupling) >= 1 && isempty(coupling[1]))
-        coupling = _default_coupling_two_units
-    end
-    r = readrates(rates_file, get_row(ratetype))
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
+    spec === nothing && error("Key-based path requires info file for key \"$key\". Not found: ", info_toml_path_for_rates_file(rates_file))
+    result = write_correlation_functions_file(rates_file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; spec=spec)
     out_path = joinpath(folder, "crosscorrelation_" * key * ".csv")
-    (tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters, out_path)
+    (result..., out_path)
 end
 
 """
@@ -3524,13 +3569,12 @@ end
 
 Compute theoretical correlation functions for rate files and write results to CSV files.
 
-# Key-based mode
-- **Single key**: `write_correlation_functions(folder, key)` uses `rates_<key>.txt` and `info_<key>.toml` (if present)
-  in `folder`, and `ratetype` (e.g. `"median"`, `"ml"`, `"mean"`) to choose the rate row. Writes `crosscorrelation_<key>.csv`.
-- **All keys in folder**: `write_correlation_functions(folder; use_keys=true)` discovers all `rates_*.txt` in `folder`,
-  extracts the key from each filename, and processes them in parallel (`Threads.@threads`). Optional `ratetype` (default `"median"`).
-- **Specific keys**: `write_correlation_functions(folder; keys=["3333a", "11-h"], ratetype="median")` processes only those keys (multithreaded).
-When an info file exists, `transitions`, `G`, `R`, `S`, `insertstep`, `coupling`, and `probfn` are read from it; otherwise defaults (and optional `pattern` for coupling from filename) are used.
+# Key-based mode (uses only the info file)
+- **Single key**: `write_correlation_functions(folder, key)` uses `rates_<key>.txt` and **requires** `info_<key>.toml` in `folder`.
+  All model parameters (transitions, G, R, S, insertstep, coupling, probfn) are read from the info file. Writes `crosscorrelation_<key>.csv`.
+- **All keys / specific keys**: `write_correlation_functions(folder; use_keys=true)` or `keys=["11", "00R3"]` discovers keys from `info_<key>.toml` in `folder` and processes in parallel. For each key, `rates_<key>.txt` must also exist.
+  All model parameters come from the info file; `ratetype` (e.g. `"median"`, `"ml"`) and `lags` are the only arguments used in key-based mode.
+- **Legacy arguments** (`transitions`, `G`, `R`, `S`, `insertstep`, `pattern`, `probfn`) are used only for legacy filename-based mode, not for key-based.
 
 # Legacy mode
 Compute theoretical correlation functions for all rate files in a folder and write results to CSV files.
@@ -3644,20 +3688,7 @@ write_correlation_functions(
 function write_correlation_functions(folder::String, key::String; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
     result = _write_correlation_functions_one_key(folder, key; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
     tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters, out_path = result
-    n_lags = length(tau)
-    CSV.write(out_path, DataFrame(
-        tau=tau,
-        cc_ON=ccON,
-        ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-        ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-        m_ON1=fill(mON1, n_lags),
-        m_ON2=fill(mON2, n_lags),
-        cc_Reporters=ccReporters,
-        ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-        ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-        m_Reporters1=fill(mReporters1, n_lags),
-        mReporters2=fill(mReporters2, n_lags)
-    ))
+    CSV.write(out_path, _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters))
     out_path
 end
 
@@ -3669,8 +3700,9 @@ function write_correlation_functions(folder; key=nothing, keys=nothing, use_keys
     if use_keys || keys !== nothing
         key_list = keys !== nothing ? collect(keys) : String[]
         if isempty(key_list)
+            # Discover keys from info_*.toml (source of truth for model params); each key must have rates_<key>.txt in folder
             for f in readdir(folder)
-                m = match(r"^rates_(.+)\.txt$", f)
+                m = match(r"^info_(.+)\.toml$", f)
                 m !== nothing && push!(key_list, m.captures[1])
             end
         end
@@ -3680,20 +3712,7 @@ function write_correlation_functions(folder; key=nothing, keys=nothing, use_keys
             try
                 result = _write_correlation_functions_one_key(folder, key_list[i]; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
                 tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters, out_path = result
-                n_lags = length(tau)
-                CSV.write(out_path, DataFrame(
-                    tau=tau,
-                    cc_ON=ccON,
-                    ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-                    ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-                    m_ON1=fill(mON1, n_lags),
-                    m_ON2=fill(mON2, n_lags),
-                    cc_Reporters=ccReporters,
-                    ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-                    ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-                    m_Reporters1=fill(mReporters1, n_lags),
-                    mReporters2=fill(mReporters2, n_lags)
-                ))
+                CSV.write(out_path, _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters))
                 out_paths[i] = out_path
             catch e
                 @warn "write_correlation_functions failed for key $(key_list[i])" exception=e
@@ -3711,23 +3730,7 @@ function write_correlation_functions(folder; key=nothing, keys=nothing, use_keys
                 parts = fields(basename(file))
                 new_model = create_modelstring(G, R, S, insertstep)
                 out = joinpath(root, "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
-                n_lags = length(tau)
-
-                CSV.write(out, DataFrame(
-                    tau=tau,
-                    # ON state: unnormalized cc, ac1, ac2, m1, m2
-                    cc_ON=ccON,
-                    ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-                    ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-                    m_ON1=fill(mON1, n_lags),
-                    m_ON2=fill(mON2, n_lags),
-                    # Reporters: unnormalized cc, ac1, ac2, m1, m2
-                    cc_Reporters=ccReporters,
-                    ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-                    ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-                    m_Reporters1=fill(mReporters1, n_lags),
-                    mReporters2=fill(mReporters2, n_lags)
-                ))
+                CSV.write(out, _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters))
             end
         end
     end

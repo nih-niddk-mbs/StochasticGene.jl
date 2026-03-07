@@ -51,6 +51,17 @@ struct Summary_Fields <: Fields
 end
 
 """
+    Key_Fields <: Fields
+
+Structure for key-based filenames (2 underscore-separated fields: name, key).
+E.g. `rates_33il.txt` → name=\"rates\", key=\"33il\".
+"""
+struct Key_Fields <: Fields
+    name::String
+    key::String
+end
+
+"""
     BurstMeasures
 
 Structure for storing burst size statistics
@@ -450,41 +461,42 @@ get_suffix(file::String) = chop(file, tail=4), last(file, 3)
 """
     fields(file::String)
 
-Parse a filename to extract structured field information.
+Parse a filename to extract structured field information. Fields are underscore-separated in the stem.
+- **2 fields** → Key_Fields(name, key) — key format (e.g. rates_33il.txt)
+- **4 fields** → Summary_Fields(name, label, cond, model) — short style (CSV)
+- **5 fields** → Result_Fields with empty cond
+- **6 fields** → Result_Fields(name, label, cond, gene, model, nalleles) — standard
 
 # Arguments
 - `file::String`: Filename to parse
 
 # Returns
-- `Result_Fields` or `Summary_Fields`: Structured field information
+- `Key_Fields`, `Summary_Fields`, or `Result_Fields`
 
 # Notes
-- For CSV files: expects 4 fields (name, label, cond, model)
-- For TXT files: expects 6 fields (name, label, cond, gene, model, nalleles) or 5 fields (name, label, "", gene, model, nalleles)
-- Throws ArgumentError for incorrect file name formats
-- Does not account for CSV files with less than 4 fields
+- Throws ArgumentError for field counts other than 2, 4, 5, or 6.
 """
 function fields(file::String)
     file, suffix = get_suffix(file)
     v = split(file, "_")
+    n = length(v)
+    if n == 2
+        return Key_Fields(v[1], v[2])
+    end
     if suffix == "csv"
-        if length(v) == 4
-            s = Summary_Fields(v[1], v[2], v[3], v[4])
+        if n == 4
+            return Summary_Fields(v[1], v[2], v[3], v[4])
         else
-            println(file)
-            throw(ArgumentError("Incorrect file name format"))
-        end
-    else
-        if length(v) == 6
-            s = Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
-        elseif length(v) == 5
-            s = Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
-        else
-            println(file)
-            throw(ArgumentError("Incorrect file name format"))
+            throw(ArgumentError("CSV filename must have 4 fields (name_label_cond_model), got $n: $file"))
         end
     end
-    return s
+    if n == 6
+        return Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
+    elseif n == 5
+        return Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
+    else
+        throw(ArgumentError("TXT filename must have 2 (key), 5, or 6 fields, got $n: $file"))
+    end
 end
 
 """
@@ -2222,11 +2234,13 @@ function _toml_value(v)
     v isa Number && return v
     v isa Symbol && return string(v)
     if v isa Tuple
-        if isempty(v)
-            return []
-        end
+        isempty(v) && return []
         if all(x -> x isa AbstractVector, v)
             return [collect(x) for x in v]
+        end
+        # transitions etc.: Tuple of Tuples of Vector -> array of arrays for valid TOML
+        if all(x -> x isa Tuple, v) && all(x -> all(y -> y isa AbstractVector, x), v)
+            return [[collect(y) for y in x] for x in v]
         end
         return collect(v)
     end
@@ -2332,16 +2346,20 @@ function _write_toml_kv(io::IO, k, v, indent="")
             println(io, indent, "  [", join(row, ", "), "],")
         end
         println(io, indent, "]")
-    elseif v isa Vector
+    elseif v isa AbstractVector
+        # Always write arrays as valid TOML (never repr); covers Vector, Matrix (vec), Adjoint, etc.
         print(io, indent, k, " = ")
-        _write_toml_array(io, v, indent)
+        _write_toml_array(io, collect(v), indent)
         println(io)
     elseif v isa String
         println(io, indent, k, " = ", _toml_escape(v))
     elseif v isa Bool
         println(io, indent, k, " = ", v ? "true" : "false")
-    else
+    elseif v isa Number
         println(io, indent, k, " = ", v)
+    else
+        # Fallback: quote as TOML string (e.g. "nothing", method name)
+        println(io, indent, k, " = ", _toml_escape(string(v)))
     end
 end
 
@@ -2397,7 +2415,9 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         println(io, "")
         println(io, "[model_info]")
         lab = labels !== nothing ? labels : (model isa AbstractGRSMmodel ? rlabels(model) : String[])
-        _write_toml_table(io, Dict("rate_labels" => lab, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
+        # Ensure rate_labels is a Vector so we write valid TOML [ "a", "b", ... ] (never Matrix repr)
+        rate_labels_vec = lab isa AbstractMatrix ? vec(collect(String, lab)) : (lab isa AbstractVector ? collect(String, lab) : String[])
+        _write_toml_table(io, Dict("rate_labels" => rate_labels_vec, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
         println(io, "")
         println(io, "[environment]")
         _write_toml_table(io, Dict("julia_version" => string(VERSION), "threads" => Threads.nthreads()), "  ")
@@ -2430,6 +2450,7 @@ end
 
 Load run specification from an info TOML file. Returns Dict{Symbol, Any} suitable for fit(; spec...) or inspection.
 Parses [run]; restores types (e.g. \"nothing\" → nothing, coupling → (unit_model, connections)).
+Requires valid TOML; throws on parse error.
 """
 function read_run_spec(file_toml::String)
     d = TOML.parsefile(file_toml)
