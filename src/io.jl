@@ -2242,7 +2242,8 @@ function _toml_value(v)
         if all(x -> x isa Tuple, v) && all(x -> all(y -> y isa AbstractVector, x), v)
             return [[collect(y) for y in x] for x in v]
         end
-        return collect(v)
+        # mixed tuple (e.g. hierarchical = (2, Int[], ())) -> TOML-safe array; never repr(Int64[]) or ()
+        return [_toml_value(x) for x in v]
     end
     if v isa AbstractVector
         isempty(v) && return v
@@ -2300,6 +2301,13 @@ function run_spec_to_toml(run_spec)
             out[key] = [_trace_spec_to_dict(s) for s in v]
         elseif sym === :dwell_specs && !isempty(v) && first(v) isa DwellSpec
             out[key] = [_dwell_spec_to_dict(s) for s in v]
+        end
+    end
+    # Ensure datacond and traceinfo are always written when present (needed for write_traces / interval)
+    for (sym, key) in [(:datacond, "datacond"), (:traceinfo, "traceinfo")]
+        if run_spec isa NamedTuple ? haskey(run_spec, sym) : (haskey(run_spec, sym) || haskey(run_spec, key))
+            v = run_spec isa NamedTuple ? getproperty(run_spec, sym) : get(run_spec, sym, get(run_spec, key, nothing))
+            out[key] = _toml_value(v)
         end
     end
     out
@@ -2430,7 +2438,19 @@ function _from_toml_value(k::String, v)
     v isa Number && return v
     v isa Bool && return v
     if v isa Vector && !isempty(v) && v[1] isa Vector
-        return Tuple([Tuple(Int.(x)) for x in v])
+        # transitions: uncoupled = [[a,b],[c,d],...] -> tuple of vectors; coupled = [[[a,b],...], [[a,b],...]] -> tuple of (tuple of vectors)
+        if !isempty(v[1]) && v[1][1] isa Vector
+            return Tuple([Tuple([round.(Int, p) for p in unit]) for unit in v])
+        else
+            return Tuple([round.(Int, x) for x in v])
+        end
+    end
+    # hierarchical: [nhypersets, vector, optional tuple] from TOML -> (Int, Vector{Int}, Tuple); must come before v[1] isa Number (avoids Float64.(v) on [2, [], []])
+    if k == "hierarchical" && v isa Vector && length(v) >= 2
+        first = round(Int, v[1])
+        second = v[2] isa Vector ? Int.(v[2]) : Int[]
+        third = length(v) >= 3 && v[3] isa Vector ? (isempty(v[3]) ? () : Tuple(Int.(v[3]))) : ()
+        return (first, second, third)
     end
     if v isa Vector && length(v) > 0 && v[1] isa Number
         # G, R, S, insertstep: single Int or Tuple
@@ -2445,15 +2465,27 @@ function _from_toml_value(k::String, v)
     v
 end
 
+"""Fix legacy invalid TOML: hierarchical = [ 2, Int64[], () ] → [ 2, [], [] ] so parser accepts it."""
+function _sanitize_hierarchical_toml(s::String)
+    s = replace(s, "Int64[]" => "[]")
+    s = replace(s, r",\s*\(\)\s*\]" => ", [] ]")
+    s = replace(s, r",\s*\(\)\s*," => ", [] ,")
+    s = replace(s, r"\[\s*\(\)\s*\]" => "[ [] ]")
+    s = replace(s, r"\[\s*\(\)\s*," => "[ [] ,")
+    s
+end
+
 """
     read_run_spec(file_toml::String)
 
 Load run specification from an info TOML file. Returns Dict{Symbol, Any} suitable for fit(; spec...) or inspection.
 Parses [run]; restores types (e.g. \"nothing\" → nothing, coupling → (unit_model, connections)).
-Requires valid TOML; throws on parse error.
+Requires valid TOML; throws on parse error. Legacy files with invalid hierarchical = [ 2, Int64[], () ] are sanitized before parsing.
 """
 function read_run_spec(file_toml::String)
-    d = TOML.parsefile(file_toml)
+    s = read(file_toml, String)
+    s = _sanitize_hierarchical_toml(s)
+    d = TOML.parse(IOBuffer(s))
     run = get(d, "run", d)
     out = Dict{Symbol, Any}()
     for (k, v) in run
@@ -2496,6 +2528,50 @@ as Dict{Symbol, Any} suitable for fit(; spec...). Otherwise return nothing.
 function read_run_spec_for_rates_file(rates_file::String)
     toml_path = info_toml_path_for_rates_file(rates_file)
     isfile(toml_path) ? read_run_spec(toml_path) : nothing
+end
+
+"""
+    read_run_spec_and_interval(file_toml::String)
+
+Load [run] as run spec and read interval from the info TOML.
+Returns (spec::Dict{Symbol, Any}, interval::Float64).
+Interval is taken from [model_info].interval, or [run].traceinfo[1] if present, else 1.0.
+"""
+function read_run_spec_and_interval(file_toml::String)
+    s = read(file_toml, String)
+    s = _sanitize_hierarchical_toml(s)
+    d = TOML.parse(IOBuffer(s))
+    run = get(d, "run", d)
+    out = Dict{Symbol, Any}()
+    for (k, v) in run
+        k in ("coupling_unit_model", "coupling_connections") && continue
+        out[Symbol(k)] = _from_toml_value(k, v)
+    end
+    if haskey(run, "coupling_unit_model") && haskey(run, "coupling_connections")
+        um = Tuple(Int.(run["coupling_unit_model"]))
+        conns = [Tuple(Int.(c)) for c in run["coupling_connections"]]
+        out[:coupling] = (um, conns)
+    end
+    if haskey(run, "trace_specs") && run["trace_specs"] isa Vector
+        out[:trace_specs] = [_dict_to_trace_spec(isa(x, Dict) ? x : Dict(string(k) => v for (k, v) in pairs(x))) for x in run["trace_specs"]]
+    end
+    if haskey(run, "dwell_specs") && run["dwell_specs"] isa Vector
+        out[:dwell_specs] = [_dict_to_dwell_spec(isa(x, Dict) ? x : Dict(string(k) => v for (k, v) in pairs(x))) for x in run["dwell_specs"]]
+    end
+    mi = get(d, "model_info", Dict())
+    interval = get(mi, "interval", nothing)
+    if interval === nothing && haskey(run, "traceinfo") && run["traceinfo"] isa Vector && !isempty(run["traceinfo"])
+        interval = Float64(run["traceinfo"][1])
+    else
+        interval = interval === nothing ? 1.0 : Float64(interval)
+    end
+    (out, interval)
+end
+
+"""If info TOML exists for the given rates file, return (run_spec, interval). Otherwise (nothing, 1.0)."""
+function read_run_spec_and_interval_for_rates_file(rates_file::String)
+    toml_path = info_toml_path_for_rates_file(rates_file)
+    isfile(toml_path) ? read_run_spec_and_interval(toml_path) : (nothing, 1.0)
 end
 
 """

@@ -2274,21 +2274,70 @@ function write_trace_dataframe(file::String, datapath::String, interval::Float64
     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian, datacol=datacol)
 end
 
-function write_traces(folder::String, datapath::String, interval::Float64, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
-    # Collect all files to process first
-    files_to_process = String[]
-    for (root, dirs, files) in walkdir(folder)
-        for f in files
-            if occursin("rates", f)
-                push!(files_to_process, joinpath(root, f))
+"""Key-based front-end: read info TOML for this rates file, extract all parameters from spec, then call core write_trace_dataframe(outfile, datapath, datacond, interval, r, ...). Hierarchical: from TOML hierarchical field; if nonempty, use hierarchical stack."""
+function write_trace_dataframe_from_info(rates_file::String, spec, interval::Real; ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, grid=nothing, zeromedian=false, datacol=3)
+    key = replace(basename(rates_file), "rates_" => "", ".txt" => "")
+    datapath = spec[:datapath]
+    root = get(spec, :root, nothing)
+    if root !== nothing && root != "." && datapath !== nothing && !isabspath(datapath)
+        datapath = joinpath(root, datapath)
+    end
+    datacond = spec[:datacond]
+    interval = Float64(interval)
+    transitions = spec[:transitions]
+    G, R, S, insertstep = spec[:G], spec[:R], spec[:S], spec[:insertstep]
+    # Hierarchical from TOML: use hierarchical stack when field is present and nonempty (e.g. (2, [], ()) or [2, [], []])
+    hierarchical_from_toml = get(spec, :hierarchical, nothing)
+    hierarchical = if hierarchical_from_toml === nothing || hierarchical_from_toml === false
+        false
+    elseif hierarchical_from_toml isa AbstractVector
+        !isempty(hierarchical_from_toml)
+    else
+        true  # Tuple or other nonempty structure from TOML
+    end
+    coupling = get(spec, :coupling, tuple())
+    r = readrates(rates_file, get_row(ratetype))
+    out = replace(rates_file, "rates" => "predictedtraces", ".txt" => ".csv")
+    write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian, datacol=datacol)
+    out
+end
+
+"""Legacy call style: write_traces(folder, datapath; interval=1.0, ...) forwards to write_traces(folder; datapath=datapath, interval=interval, ...)."""
+write_traces(folder::String, datapath::String; interval::Float64=1.0, kwargs...) = write_traces(folder; datapath=datapath, interval=interval, kwargs...)
+
+"""
+    write_traces(folder; datapath=nothing, interval=1.0, ...)
+
+Find all rates_*.txt in folder. For each file:
+- If an info TOML exists (key-based): read spec and interval from it, call write_trace_dataframe_from_info(rates_file, spec, interval; ...).
+- Else (legacy): require datapath (and use interval kwarg), call write_trace_dataframe(rates_file, datapath, interval; ...) which extracts model parameters from the filename.
+Returns list of output CSV paths.
+"""
+function write_traces(folder::String; datapath=nothing, interval::Float64=1.0, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
+    rate_files = [f for f in readdir(folder) if startswith(f, "rates_") && endswith(f, ".txt")]
+    out_paths = String[]
+    for f in rate_files
+        rates_file = joinpath(folder, f)
+        try
+            spec, interval_from_toml = read_run_spec_and_interval_for_rates_file(rates_file)
+            if spec !== nothing
+                # Key-based: all parameters from info TOML
+                out = write_trace_dataframe_from_info(rates_file, spec, Float64(interval_from_toml); ratetype=ratetype, start=start, stop=stop, probfn=probfn, noiseparams=noiseparams, splicetype=splicetype, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
+                push!(out_paths, out)
+            else
+                # Legacy: parameters from filename; need datapath (and interval from kwarg)
+                if datapath === nothing
+                    @warn "No info TOML for $f and datapath not provided, skipping"
+                    continue
+                end
+                write_trace_dataframe(rates_file, datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
+                push!(out_paths, joinpath(folder, replace(f, "rates" => "predictedtraces", ".txt" => ".csv")))
             end
+        catch e
+            @warn "write_trace_dataframe failed for $f: $(sprint(showerror, e))"
         end
     end
-    
-    # Process files in parallel
-    Threads.@threads for file_path in files_to_process
-        write_trace_dataframe(file_path, datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
-    end
+    out_paths
 end
 
 
@@ -3549,179 +3598,45 @@ function _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, 
     df
 end
 
-# Key-based: one key. Uses only info file for model params (transitions, G, R, S, insertstep, coupling, probfn). Arguments are ignored (legacy naming only).
-function _write_correlation_functions_one_key(folder::String, key::String; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+# ---- Key-based: one key (full stack); all keys (threaded) ----
+"""One key: read rates_<key>.txt and info_<key>.toml, compute correlation functions, write crosscorrelation_<key>.csv. Returns path."""
+function write_correlation_functions(folder::String, key::AbstractString; lags=collect(0:1:200), ratetype="median", probfn=prob_Gaussian)
+    key = string(key)
     rates_file = joinpath(folder, "rates_" * key * ".txt")
     isfile(rates_file) || error("Rate file not found: ", rates_file)
-    spec = try
-        read_run_spec_for_rates_file(rates_file)
-    catch e
-        error("Key-based path requires a valid info file for key \"$key\". ", info_toml_path_for_rates_file(rates_file), " — ", e)
-    end
-    spec === nothing && error("Key-based path requires info file for key \"$key\". Not found: ", info_toml_path_for_rates_file(rates_file))
-    result = write_correlation_functions_file(rates_file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; spec=spec)
+    spec = read_run_spec_for_rates_file(rates_file)
+    spec === nothing && error("Info file not found for key \"", key, "\"")
+    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_correlation_functions_file(rates_file, (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), (3, 3), (3, 3), (0, 0), (1, 1), "gene", lags, probfn, ratetype; spec=spec)
     out_path = joinpath(folder, "crosscorrelation_" * key * ".csv")
-    (result..., out_path)
-end
-
-"""
-    write_correlation_functions(folder [, key]; key=nothing, keys=nothing, use_keys=false, ratetype="median", ...)
-
-Compute theoretical correlation functions for rate files and write results to CSV files.
-
-# Key-based mode (uses only the info file)
-- **Single key**: `write_correlation_functions(folder, key)` uses `rates_<key>.txt` and **requires** `info_<key>.toml` in `folder`.
-  All model parameters (transitions, G, R, S, insertstep, coupling, probfn) are read from the info file. Writes `crosscorrelation_<key>.csv`.
-- **All keys / specific keys**: `write_correlation_functions(folder; use_keys=true)` or `keys=["11", "00R3"]` discovers keys from `info_<key>.toml` in `folder` and processes in parallel. For each key, `rates_<key>.txt` must also exist.
-  All model parameters come from the info file; `ratetype` (e.g. `"median"`, `"ml"`) and `lags` are the only arguments used in key-based mode.
-- **Legacy arguments** (`transitions`, `G`, `R`, `S`, `insertstep`, `pattern`, `probfn`) are used only for legacy filename-based mode, not for key-based.
-
-# Legacy mode
-Compute theoretical correlation functions for all rate files in a folder and write results to CSV files.
-
-This is the main function for batch-processing rate parameter files to generate theoretical cross-correlation
-and auto-correlation predictions. It recursively searches a folder for files matching the pattern
-`*rates*tracejoint*`, computes theoretical correlation functions for each using the HMM framework,
-and writes comprehensive results to CSV files that can be used for model scoring against empirical data.
-
-# Arguments
-- `folder::String`: Path to folder containing rate files. The function recursively searches all subdirectories.
-- `transitions::Tuple`: Tuple of transition definitions for each unit. Each element specifies allowed
-  state transitions as a vector of pairs `[from, to]`. Default: `(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))`
-  for a 3-state model with forward/backward transitions for both units.
-- `G::Tuple{Int, Int}`: Number of gene states for each unit (default: `(3, 3)`).
-- `R::Tuple{Int, Int}`: Number of RNA states for each unit (default: `(3, 3)`).
-- `S::Tuple{Int, Int}`: Initial state definitions (default: `(0, 0)`).
-- `insertstep::Tuple{Int, Int}`: Insert step definitions (default: `(1, 1)`).
-- `interval::Float64`: Time interval for transitions in the same units as the rate parameters (default: `1.0`).
-- `pattern::String`: Pattern to extract coupling information from filename (default: `"gene"`). Used by
-  `extract_source_target` to determine which states are coupled.
-- `lags::Vector{Int}`: Time lags for correlation function computation. The function computes correlations at these
-  lags and also includes negative lags (symmetric). Default: `collect(0:1:200)` which gives lags from -200 to 200.
-- `probfn`: Probability function for the observation model (default: `prob_Gaussian`). Determines how
-  reporter counts are generated from hidden states.
-- `ratetype::String`: Which row of rates to use from the rate file (default: `"median"`). Other options
-  include `"ml"` (maximum likelihood), `"mean"`, etc. This selects which parameter estimate to use when
-  multiple estimates are stored in the file.
-
-# Output Files
-
-For each input file matching `*rates*tracejoint*.txt`, creates a corresponding output file
-`*crosscorrelation*tracejoint*.csv` in the same directory. The CSV file contains the following columns:
-
-## Time Lags
-- `tau::Vector{Int}`: Time lags from `-max_lag` to `+max_lag` (symmetric around zero)
-
-## ON State Correlation Functions (Binary: 1 if reporter > 0, 0 otherwise)
-- `cc_ON::Vector{Float64}`: Cross-correlation function between enhancer and gene ON states (unnormalized: E[xy] - E[x]E[y]).
-  Positive τ means enhancer leads (E[enhancer(t) × gene(t+τ)] - E[enhancer] × E[gene]).
-- `ac1_ON::Vector{Float64}`: Auto-correlation function of enhancer ON states (unnormalized, symmetric: includes negative lags).
-- `ac2_ON::Vector{Float64}`: Auto-correlation function of gene ON states (unnormalized, symmetric: includes negative lags).
-- `mON1::Vector{Float64}`: Mean ON state probability for enhancer (repeated for each lag, scalar value).
-- `mON2::Vector{Float64}`: Mean ON state probability for gene (repeated for each lag, scalar value).
-
-## Reporter Count Correlation Functions (Raw integer counts)
-- `cc_Reporters::Vector{Float64}`: Cross-correlation function between enhancer and gene reporter counts (unnormalized).
-  Same convention as `cc_ON` (positive τ means enhancer leads).
-- `ac1_Reporters::Vector{Float64}`: Auto-correlation function of enhancer reporter counts (unnormalized, symmetric).
-- `ac2_Reporters::Vector{Float64}`: Auto-correlation function of gene reporter counts (unnormalized, symmetric).
-- `mR1::Vector{Float64}`: Mean reporter count for enhancer (repeated for each lag, scalar value).
-- `mR2::Vector{Float64}`: Mean reporter count for gene (repeated for each lag, scalar value).
-
-# Workflow
-
-1. **File Discovery**: Recursively walks through `folder` and identifies all files containing both
-   `"rates"` and `"tracejoint"` in the filename.
-
-2. **Rate Loading**: For each matching file, loads rate parameters using `readrates(file, get_row(ratetype))`.
-
-3. **Coupling Extraction**: Extracts coupling information from the filename using `extract_source_target(pattern, file)`
-   to determine which states are coupled (e.g., gene state 1 to gene state 3, or RNA states).
-
-4. **Correlation Function Computation**: Calls `correlation_functions` (via `write_correlation_functions_file`) to compute all theoretical
-   correlation functions using the HMM framework.
-
-5. **File Writing**: Writes results to CSV with filename pattern: `rates_*.txt` → `crosscorrelation_*.csv`.
-
-# Usage Example
-
-```julia
-# Process all rate files in a results folder
-write_correlation_functions(
-    "results/5Prime-coupled-2025-11-27/",
-    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
-    G=(3, 3),
-    R=(3, 3),
-    lags=collect(0:1:200),  # Lags from -200 to 200
-    ratetype="median"
-)
-```
-
-# Notes
-
-- **Unnormalized Correlation Functions**: All correlation function values are unnormalized (E[xy] - E[x]E[y]). To normalize
-  by means, divide by (m1 × m2) for cross-correlations or by (m × m) for auto-correlations.
-
-- **Lag Convention**: Positive τ means the first unit (enhancer) leads the second unit (gene). This matches
-  the convention used in `StatsBase.crosscov(enhancer, gene, lags)`.
-
-- **Symmetric Auto-correlations**: Auto-correlation functions are symmetric (ac(τ) = ac(-τ)), so negative lags are
-  included by reversing the positive lag values.
-
-- **File Matching**: Only files containing both `"rates"` and `"tracejoint"` in the filename are processed.
-  This pattern identifies files containing joint trace fitting results.
-
-- **Batch Processing**: This function is designed for batch processing of multiple model fits. Each rate
-  file typically corresponds to a different coupling model (e.g., gene state 1→3 coupling vs. gene state 2→3).
-
-- **Model Scoring**: The output CSV files are designed to be read by `score_models_from_traces`, which
-  compares these theoretical predictions against empirical correlation functions computed from experimental
-  or simulated trace data.
-
-# See Also
-- `write_correlation_functions_file`: Processes a single rate file (called internally by this function)
-- `correlation_functions`: Core HMM function that computes theoretical correlation functions
-- `score_models_from_traces`: Scores theoretical predictions against empirical data
-- `readrates`: Loads rate parameters from text files
-"""
-# Single key: folder + key. Reads rates_<key>.txt and info_<key>.toml, uses ratetype (default "median"), writes crosscorrelation_<key>.csv.
-function write_correlation_functions(folder::String, key::String; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
-    result = _write_correlation_functions_one_key(folder, key; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters, out_path = result
     CSV.write(out_path, _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters))
     out_path
 end
 
-# Folder: key=nothing and keys=nothing and !use_keys -> legacy (walkdir, rates*tracejoint). key set -> single key. keys set or use_keys -> key-based batch (multithreaded).
-function write_correlation_functions(folder; key=nothing, keys=nothing, use_keys=false, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
-    if key !== nothing
-        return write_correlation_functions(folder, key; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
-    end
-    if use_keys || keys !== nothing
-        key_list = keys !== nothing ? collect(keys) : String[]
-        if isempty(key_list)
-            # Discover keys from info_*.toml (source of truth for model params); each key must have rates_<key>.txt in folder
-            for f in readdir(folder)
-                m = match(r"^info_(.+)\.toml$", f)
-                m !== nothing && push!(key_list, m.captures[1])
-            end
+"""Keys from info_*.toml in folder."""
+info_keys_in_folder(folder) = sort!([m.captures[1] for f in readdir(folder) for m in (match(r"^info_(.+)\.toml$", f),) if m !== nothing])
+
+"""All keys: discover keys in folder, then for each key call write_correlation_functions(folder, key) in parallel. Returns paths of written files."""
+function write_correlation_functions_all(folder::String; lags=collect(0:1:200), ratetype="median", probfn=prob_Gaussian)
+    keys = info_keys_in_folder(folder)
+    isempty(keys) && return String[]
+    # Avoid segfaults when multiple Julia threads call BLAS/FFTW: force single-threaded use inside this parallel region.
+    try; LinearAlgebra.BLAS.set_num_threads(1); catch; end
+    try; FFTW.set_num_threads(1); catch; end
+    out_paths = Vector{String}(undef, length(keys))
+    Threads.@threads for i in 1:length(keys)
+        try
+            out_paths[i] = write_correlation_functions(folder, keys[i]; lags=lags, ratetype=ratetype, probfn=probfn)
+        catch e
+            erm = sprint(showerror, e)
+            @warn "write_correlation_functions failed for key $(keys[i]): $(length(erm) > 300 ? erm[1:300] * "..." : erm)"
+            out_paths[i] = ""
         end
-        isempty(key_list) && return String[]
-        out_paths = Vector{String}(undef, length(key_list))
-        Threads.@threads for i in 1:length(key_list)
-            try
-                result = _write_correlation_functions_one_key(folder, key_list[i]; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
-                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters, out_path = result
-                CSV.write(out_path, _correlation_functions_to_dataframe(tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters))
-                out_paths[i] = out_path
-            catch e
-                @warn "write_correlation_functions failed for key $(key_list[i])" exception=e
-                out_paths[i] = ""
-            end
-        end
-        return filter(!isempty, out_paths)
     end
-    # Legacy: walkdir, rates*tracejoint
+    filter(!isempty, out_paths)
+end
+
+# ---- Legacy: walkdir, rates*tracejoint, filename-based output ----
+function _write_correlation_functions_legacy(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
     for (root, dirs, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
@@ -3734,6 +3649,11 @@ function write_correlation_functions(folder; key=nothing, keys=nothing, use_keys
             end
         end
     end
+end
+
+"""Legacy: walkdir for rates*tracejoint, filename-based CSV output."""
+function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+    _write_correlation_functions_legacy(folder; transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, pattern=pattern, lags=lags, probfn=probfn, ratetype=ratetype)
 end
 
 """
