@@ -283,6 +283,38 @@ struct TCoupledComponents{ModelType} <: AbstractComponents
     connections::Union{Nothing,Vector{ConnectionRecord}}
 end
 
+"""
+    TDCoupledSpecComponent
+
+Per-dwell-spec component for the spec-based coupled dwell path. Holds the sojourn
+state set in the space that matches the TC used at prediction time: full coupled
+T-space for R-space specs (OFF/ON), coupled G-space for G-space specs (OFFG/ONG).
+`is_G_space` selects which TC is built (Gm vs T[unit]) so sojourn and matrix match.
+"""
+struct TDCoupledSpecComponent
+    sojourn::Vector{Int}
+    is_G_space::Bool
+end
+
+"""
+    TDCoupledSpecComponents
+
+Spec-based coupled dwell components: one TDCoupledSpecComponent per DwellSpec,
+plus uncoupled full-space elements and connection_data for coupling. Each component's
+sojourn set matches the TC space (full T or G). TC is built as make_mat(elements_*, rates_full, N)
+plus coupling terms (bilinear) added via connection_data.
+"""
+struct TDCoupledSpecComponents
+    specs::Vector{DwellSpec}
+    components::Vector{TDCoupledSpecComponent}
+    underlying::TCoupledComponents{Vector{TDCoupledUnitComponents}}
+    connection_data::Vector{ConnectionRecord}
+    elements_T::Vector{Element}
+    nT_T::Int
+    elements_G::Vector{Element}
+    nT_G::Int
+end
+
 struct TForcedComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}

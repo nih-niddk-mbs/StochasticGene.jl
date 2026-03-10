@@ -74,6 +74,11 @@ fits = fit(; kwargs...)
 
 - `key = nothing`: When nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key = "33il"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec (kwargs override spec); if not found, uses kwargs and defaults. All outputs use that stem (e.g. `rates_<key>.txt`, `info_<key>.toml`). See [Run specification (info TOML)](@ref).
 
+### Trace and dwell specs (coupled models, hidden units)
+
+- `trace_specs = nothing`: A **vector of `TraceSpec` structures**, or nothing. For `datatype` "trace" or "tracejoint": when not nothing, `trace_specs` are used and legacy `onstates`/`traceinfo` are ignored. One HMMReporter is built per spec; for coupled models, length can be less than the number of units (missing units are hidden). Stored in `info_*.toml` when using key-based runs. See [Trace and dwell specs](../trace_and_dwell_specs.md).
+- `dwell_specs = nothing`: A **vector of `DwellSpec` structures**, or nothing. For `datatype` "dwelltime" or "rnadwelltime": when not nothing, `dwell_specs` are used and legacy `onstates`/`bins`/`dttype` are ignored. Stored in `info_*.toml` when using key-based runs. See [Trace and dwell specs](../trace_and_dwell_specs.md).
+
 ## Returns
 
 - `fits`: MCMC fit results containing:

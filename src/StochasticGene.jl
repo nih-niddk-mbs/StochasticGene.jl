@@ -204,6 +204,7 @@ export
     run_mh,
     run_mcmc_parallel,
     set_indices,
+    set_elements_TCoupledSpec,
     set_elements_TCoupledUnit,
     simulate_trace,
     simulate_trace_data,

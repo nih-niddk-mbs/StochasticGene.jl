@@ -323,9 +323,44 @@ end
 """
     ncoupling(coupling)
 
-Return the number of coupling strength parameters. Coupling format is `(unit_model, connections::Vector{ConnectionSpec})`.
+Return the number of coupling strength parameters.
+
+Coupling format on this branch is `(unit_model, connections::Vector{ConnectionSpec})`
+or `(unit_model, connections::Vector{ConnectionSpec}, ranges)`, where `ranges`
+is a tuple/vector of sign modes (see `coupling_ranges`).
 """
 ncoupling(coupling) = isempty(coupling) ? 0 : length(coupling[2])
+
+"""
+    coupling_ranges(coupling)
+
+Return per-connection coupling sign modes.
+
+- If `coupling` has only two elements `(unit_model, connections)`, all modes
+  default to `:free` (no sign constraint, γ ∈ (-1, ∞)).
+- If `coupling` has a third element, it is interpreted as:
+    * a single `Symbol` (`:free`, `:activate`, or `:inhibit`) applied to all
+      connections, or
+    * a tuple/vector of such symbols, one per connection.
+
+The returned value is a `Vector{Symbol}` of length `ncoupling(coupling)`.
+"""
+function coupling_ranges(coupling)
+    n = ncoupling(coupling)
+    n == 0 && return Symbol[]
+    if length(coupling) < 3
+        return fill(:free, n)
+    end
+    ranges = coupling[3]
+    if ranges isa Symbol
+        return fill(ranges, n)
+    elseif ranges isa Tuple || ranges isa AbstractVector
+        length(ranges) == n || throw(ArgumentError("coupling_ranges length ($(length(ranges))) must match number of connections ($n)"))
+        return [Symbol(r) for r in ranges]
+    else
+        throw(ArgumentError("Unsupported coupling_ranges type $(typeof(ranges)); expected Symbol or tuple/vector of Symbols"))
+    end
+end
 
 """
     fit(; <keyword arguments> )
@@ -390,6 +425,8 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
+- `trace_specs=nothing`: vector of `TraceSpec` structures, or nothing. For datatype trace/tracejoint: when not nothing, trace_specs are used and legacy `onstates`/`traceinfo` are ignored. One HMMReporter is built per spec; for coupled models, length can be less than the number of units (missing units are hidden).
+- `dwell_specs=nothing`: vector of `DwellSpec` structures, or nothing. For datatype dwelltime/rnadwelltime: when not nothing, dwell_specs are used and legacy `onstates`/`bins`/`dttype` are ignored.
 
 # Returns
 - `fits`: MCMC fit results (posterior samples, log-likelihoods, etc.)
@@ -1224,6 +1261,66 @@ function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, 
 end
 
 """
+    make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, dwell_specs::Vector{DwellSpec}, coupling)
+
+Spec-based coupled dwell path: build one TDCoupledSpecComponent per DwellSpec with sojourn in full
+coupled T- or G-space. Returns (reporter, TDCoupledSpecComponents) for use with
+predictedarray(r, coupling_strength, comps::TDCoupledSpecComponents).
+No dt flag or G-only reduced TC; each spec gets exact TD and barrier in the same space.
+"""
+function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, dwell_specs::Vector{DwellSpec}, coupling)
+    unit_model = collect(coupling[1])
+    nunits = length(G)
+    Tdims = [T_dimension(G[k], R[k], S[k]) for k in unit_model]
+    # Underlying components (for connection_data and coupling terms)
+    onstates_c, _bins_c, dttype_c = legacy_dwell_coupled(dwell_specs, nunits)
+    sojourn = sojourn_states(onstates_c, G, R, S, insertstep, dttype_c)
+    underlying = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype_c, splicetype)
+    sojourn_c = coupled_states(sojourn, coupling, underlying, G)
+    nonzeros_c = coupled_states(nonzero_rows(underlying), coupling, underlying, G)
+    reporter = (sojourn_c, nonzeros_c)
+    # Connection records for coupling terms (underlying.connections is nothing for TDCoupled path)
+    connection_data = ConnectionRecord[]
+    for (β, s, α, t) in coupling[2]
+        (s == 0) && continue
+        comp_α = underlying.modelcomponents[α]
+        trans_α = transitions[α]
+        G_α, R_α, S_α = G[α], R[α], S[α]
+        nT_α = comp_α.nT
+        indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[α])
+        G_β, R_β, S_β = G[β], R[β], S[β]
+        U_elements = set_elements_Source(s, G_β, R_β, S_β, splicetype)
+        U = make_mat_S(U_elements, underlying.modelcomponents[β].nT)
+        elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[α], indices_α, nT_α, splicetype)
+        push!(connection_data, ConnectionRecord(β, α, U, elementsTarget, nT_α))
+    end
+    # Full-space uncoupled elements (T and G) for building TC directly
+    elements_T, nT_T = set_elements_TCoupledSpec(transitions, G, R, S, insertstep, coupling, splicetype; space=:T)
+    elements_G, nT_G = set_elements_TCoupledSpec(transitions, G, R, S, insertstep, coupling, splicetype; space=:G)
+    # Per-spec sojourn set in the space that matches TC (full T or coupled G)
+    Tdims_G = [G[k] for k in unit_model]
+    comp_list = TDCoupledSpecComponent[]
+    for spec in dwell_specs
+        u = spec.unit
+        Gu, Ru, Su = G[u], R[u], S[u]
+        insertstepu = insertstep[u]
+        if spec.space === :R
+            local_on = isempty(spec.onstates) ? on_states(Gu, Ru, Su, insertstepu) : on_states(spec.onstates, Gu, Ru, Su)
+            sojourn_local = spec.side === :out_of_region ? off_states(Gu, Ru, Su, insertstepu, local_on) : local_on
+            TDdim = T_dimension(Gu, Ru, Su)
+            sojourn_full = coupled_states(Int.(sojourn_local), u, unit_model, TDdim, Tdims)
+            push!(comp_list, TDCoupledSpecComponent(sojourn_full, false))
+        else
+            local_on = isempty(spec.onstates) ? collect(1:Gu) : spec.onstates
+            sojourn_local = spec.side === :out_of_region ? off_states(Gu, local_on) : local_on
+            sojourn_full = coupled_states(Int.(sojourn_local), u, unit_model, Gu, Tdims_G)
+            push!(comp_list, TDCoupledSpecComponent(sojourn_full, true))
+        end
+    end
+    return reporter, TDCoupledSpecComponents(dwell_specs, comp_list, underlying, connection_data, elements_T, nT_T, elements_G, nT_G)
+end
+
+"""
     make_reporter_components_original(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
 
 Create original reporter components for trace analysis.
@@ -1515,6 +1612,8 @@ Create reporter components for trace data analysis.
 - `noisepriors`: Noise priors
 - `coupling`: Coupling structure
 - `ejectnumber`: Number of mRNAs per burst (default: 1)
+- `trace_specs=nothing`: (keyword) Vector of `TraceSpec` structures. When not nothing, used and legacy onstates/traceinfo are ignored; one HMMReporter is built per spec (supports hidden units when fewer specs than units).
+- `dwell_specs=nothing`: (keyword) Vector of `DwellSpec` structures. When not nothing, used and legacy onstates/bins/dttype are ignored.
 
 # Returns
 - `Tuple`: (reporter, components)
@@ -1524,6 +1623,7 @@ Create reporter components for trace data analysis.
 - Creates appropriate components for fluorescence trace modeling
 - Handles HMM-based analysis of time series data
 - Used for live-cell imaging data analysis
+- For coupled multi-unit models (e.g. 3 units), pass trace_specs with one spec per observed unit; units without a spec are hidden (no observed trace).
 """
 function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; trace_specs=nothing, dwell_specs=nothing)
     # When trace_specs provided and coupled: build one HMMReporter per spec (supports hidden units).
@@ -1854,14 +1954,27 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
     end
 
-    # rate_transforms!(ftransforms, invtransforms, sigmatransforms, nrates, reporter, zeromedian)
-
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        modes = coupling_ranges(coupling)
         for i in eachindex(couplingindices)
-            push!(ftransforms, log_shift1)
-            push!(invtransforms, invlog_shift1)
-            push!(sigmatransforms, sigmalognormal)
+            mode = i <= length(modes) ? modes[i] : :free
+            if mode === :activate
+                # γ ≥ 0
+                push!(ftransforms, log)
+                push!(invtransforms, exp)
+                push!(sigmatransforms, sigmalognormal)
+            elseif mode === :inhibit
+                # γ ∈ (-1, 0)
+                push!(ftransforms, coupling_inhibitory_fwd)
+                push!(invtransforms, coupling_inhibitory_inv)
+                push!(sigmatransforms, sigmanormal)
+            else
+                # :free — γ ∈ (-1, ∞)
+                push!(ftransforms, log_shift1)
+                push!(invtransforms, invlog_shift1)
+                push!(sigmatransforms, sigmalognormal)
+            end
         end
     end
     if !isnothing(grid)

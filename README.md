@@ -323,14 +323,13 @@ The results will be found in a folder called results/trace-test, which you can s
 In this example run, `rhat` is above 2.5 indicating that the number of samples was probably insufficient to obtain a good sampling of the posterior distributions. Here maxtime was set to 60 seconds. Either `maxtime` or `samplesteps` needs to be increased. I often run for 12 to 24 hours using nchains=16 and samplesteps=1000000 on the Biowulf cluster. If you rerun fit, it will use a previously fitted rate as an initial condition. You can choose whether the rate you use is the maximum likelihood rate, the median of the posterior, the mean of the posterior, or the last sample, using the `ratetype` keyword. There are also keywords to specify the cell type, gene name, and any condition, which will be added to the file name to distinguish between different runs. You can add an additional label to the file name using the `label` keyword.
 
 
-Model predicted traces using the Viterbi algorithm can be generated with
+Model predicted traces (from fitted rates) can be generated with
 
 ```
-julia> write_traces("results/trace-test/","data/testtraces","",1.)
-results/trace-test/rates_trace-TEST-nstate_testtrace_test_3221_1.txt
-
+julia> write_traces("results/trace-test/", "data/testtraces"; interval=1.0)
 ```
-This function will read in all the rate files in the `results/trace-test folder and the output will be in files that begins with predictedtraces, which you can read in with
+
+This finds all `rates_*.txt` in `results/trace-test/`. If each has an `info_*.toml`, parameters (datapath, interval, etc.) come from that file; otherwise pass `datapath` as above. Output files are named `predictedtraces_*.csv`. You can read one with
 
 ```
  df=CSV.read("results/trace-test/predictedtraces_trace-TEST-nstate_testtrace_test_3221_1.csv",DataFrame)

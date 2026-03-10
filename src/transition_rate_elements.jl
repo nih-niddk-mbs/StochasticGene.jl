@@ -825,6 +825,52 @@ function set_elements_TCoupledUnit(source_state, target_transition, transitions,
     return elementsT, elementsSource, elementsTarget, nT
 end
 
+"""
+    set_elements_TCoupledSpec(transitions, G, R, S, insertstep, coupling, splicetype; space=:T)
+
+Build full coupled transition-matrix elements (uncoupled part only) in full state space.
+Returns (elements::Vector{Element}, N::Int) so that make_mat(elements, rates_full, N) gives
+the uncoupled block; coupling terms must be added separately (bilinear in coupling_strength × rate).
+
+- `space=:T`: full T-space (product of per-unit T dimensions). Use for R-space dwell (ON/OFF).
+- `space=:G`: full G-space (product of per-unit G). Use for G-space dwell (ONG/OFFG).
+
+`rates_full` must be [rates_unit1; rates_unit2; ...; rates_unitN] in unit_model order.
+"""
+function set_elements_TCoupledSpec(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling, splicetype::String; space::Symbol=:T)
+    unit_model = collect(coupling[1])
+    n_units = length(unit_model)
+    # Per-unit dimensions and rate offsets in model order
+    if space === :T
+        dims = T_dimension(G, R, S, unit_model)
+        N = prod(dims)
+    else
+        dims = [G[k] for k in unit_model]
+        N = prod(dims)
+    end
+    rate_offsets = Vector{Int}(undef, n_units + 1)
+    rate_offsets[1] = 0
+    for α in 1:n_units
+        k = unit_model[α]
+        rate_offsets[α + 1] = rate_offsets[α] + num_rates_unit(transitions[k], R[k], S[k], insertstep[k])
+    end
+    out = Element[]
+    for α in 1:n_units
+        k = unit_model[α]
+        ind_α = set_indices(length(transitions[k]), R[k], S[k], insertstep[k])
+        splicetype_k = splicetype isa Tuple ? splicetype[k] : splicetype
+        if space === :T
+            elements_α, _ = set_elements_TGRS(transitions[k], G[k], R[k], S[k], insertstep[k], ind_α, splicetype_k)
+        else
+            elements_α = set_elements_G(transitions[k], ind_α.gamma)
+        end
+        # set_elements_TGRS can return Vector{Any}; ensure Vector{Element} for expand_unit_elements_to_full
+        elements_α = Vector{Element}(elements_α)
+        append!(out, expand_unit_elements_to_full(elements_α, α, dims, rate_offsets[α]))
+    end
+    return out, N
+end
+
 
 
 

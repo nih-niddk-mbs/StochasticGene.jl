@@ -239,40 +239,36 @@ function on_states!(onstates::Vector, G::Int, R::Int, insertstep, base)
 end
 
 """
-    off_states(G::Int, R, S, insertstep)
+    off_states(G::Int, R, S, insertstep, onstates)
     off_states(nT, onstates)
     off_states(reporters)
 
-Return barrier (off) states, complement of sojourn (on) states.
+Return barrier (off) states, defined as the complement of a given ON set.
 
 # Description
-This function returns the barrier (off) states, which are the complement of the sojourn (on) states.
+For GR/GRS models, OFF states are always defined as the complement of the ON
+set in the appropriate T-space. This helper makes that complement explicit so
+that hidden units and future refactors cannot change OFF semantics.
 
 # Arguments
 - `G::Int`: Total number of genes.
 - `R`: Number of reporters.
-- `S`: Number of states.
+- `S`: Number of splice states.
 - `insertstep`: Insert step.
-- `nT`: Total number of states.
-- `onstates`: Vector of on states.
-- `reporters`: Vector of reporter states.
+- `nT`: Total number of T-states for the unit (`T_dimension(G,R,S)`).
+- `onstates`: Vector of ON state indices (in T-space).
+- `reporters`: Vector of reporter counts per T-state.
 
 # Methods
-- `off_states(G::Int, R, S, insertstep)`: Computes off states based on the given parameters.
-- `off_states(nT, onstates)`: Computes off states as the complement of the given on states.
-- `off_states(reporters)`: Computes off states based on the reporter states.
-
-# Returns
-- `Vector{Int}`: Vector of off states.
+- `off_states(G::Int, R, S, insertstep, onstates)`: Complement of `onstates`
+   in the single-unit T-space defined by `(G,R,S,insertstep)`.
+- `off_states(nT, onstates)`: Generic complement helper in `1:nT`.
+- `off_states(reporters)`: OFF states where reporter count is zero.
 """
-function off_states(G::Int, R, S, insertstep, onstates=Int[])
-    if !isempty(onstates)
-        return off_states(G, onstates)
-    else
-        base = S > 0 ? 3 : 2
-        nT = G * base^R
-        off_states(nT, on_states(G, R, S, insertstep))
-    end
+function off_states(G::Int, R, S, insertstep, onstates::Vector{Int})
+    base = S > 0 ? 3 : 2
+    nT = G * base^R
+    off_states(nT, onstates)
 end
 
 off_states(nT, onstates) = setdiff(collect(1:nT), onstates)
@@ -296,7 +292,8 @@ function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
         sojourn = on_states(G, R, S, insertstep)
     end
     if dttype == "OFF"
-        sojourn = off_states(T_dimension(G, R, S), sojourn)
+        # OFF sojourn = complement of ON set in this unit's T-space
+        sojourn = off_states(G, R, S, insertstep, sojourn)
     elseif dttype == "OFFG"
         sojourn = off_states(G, sojourn)
     end
@@ -364,6 +361,31 @@ function T_dimension(G::Tuple, R::Tuple, S::Tuple, unit_model)
 end
 
 """
+    expand_unit_elements_to_full(elements::Vector{Element}, unit_α::Int, dims::Vector{Int}, rate_offset::Int)
+
+Expand one unit's transition elements to full coupled state space (Kronecker ordering).
+`dims` is the per-unit dimension in model order; `unit_α` is the unit index (1-based).
+Emits Element(a_full, b_full, rate_offset + element.index, pm) for each (left, right) block.
+"""
+function expand_unit_elements_to_full(elements::Vector{Element}, unit_α::Int, dims::Vector{Int}, rate_offset::Int)
+    n = length(dims)
+    n_α = dims[unit_α]
+    left_dim = unit_α > 1 ? prod(dims[1:unit_α-1]) : 1
+    right_dim = unit_α < n ? prod(dims[unit_α+1:end]) : 1
+    out = Element[]
+    for e in elements
+        a_full_base = (e.a - 1) * right_dim
+        b_full_base = (e.b - 1) * right_dim
+        for left in 1:left_dim, right in 1:right_dim
+            a_full = (left - 1) * n_α * right_dim + a_full_base + right
+            b_full = (left - 1) * n_α * right_dim + b_full_base + right
+            push!(out, Element(a_full, b_full, rate_offset + e.index, e.pm))
+        end
+    end
+    out
+end
+
+"""
     get_TDdims(components)
 
 Extract dwell time dimensions from component structures.
@@ -382,7 +404,7 @@ get_TDdims(components) = [comp.TDdims for comp in components.modelcomponents]
 
 
 """
-    coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
+    coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, Tdims::Vector{Int})
 
 Expand sojourn states for a single unit to the full coupled system dimensions.
 
@@ -392,19 +414,19 @@ dimensions of a coupled system. It uses Kronecker product operations to properly
 map the unit's states to the full system state space.
 
 # Arguments
-- `sojourn::Vector`: Vector of sojourn state indices for the unit
+- `sojourn::Vector`: Vector of sojourn state indices for the unit (in that unit's T-space)
 - `unit_index::Int`: Index of the unit in the coupled system
 - `unit_model::Vector`: Vector specifying the order of units
-- `TDdim::Int`: Dimension of the transition matrix for this unit
-- `G`: Vector of gene counts for each unit
+- `TDdim::Int`: Dimension of the transition matrix for this unit (its local T-dimension)
+- `Tdims::Vector{Int}`: Per-unit T-dimensions (`Tdims[u] = T_dimension(G[u],R[u],S[u])`)
 
 # Returns
 - `Vector{Int}`: Expanded sojourn states for the full coupled system
 """
-function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, G)
+function coupled_states(sojourn::Vector, unit_index::Int, unit_model::Vector, TDdim::Int, Tdims::Vector{Int})
 
-    right_dim = prod(G[unit_model[unit_index+1:end]], init=1)
-    left_dim = prod(G[unit_model[unit_index-1:-1:1]], init=1)
+    right_dim = prod(Tdims[unit_model[unit_index+1:end]], init=1)
+    left_dim = prod(Tdims[unit_model[unit_index-1:-1:1]], init=1)
     expanded = indices_kron_right(sojourn, right_dim)
     sort(indices_kron_left(expanded, TDdim * right_dim, left_dim))
 end
@@ -419,20 +441,27 @@ the coupled_states function to each unit's sojourn states. It handles the full
 coupled system state space expansion.
 
 # Arguments
-- `sojourn`: Vector of sojourn state vectors for each unit
+- `sojourn`: Vector of sojourn state vectors for each unit (per-spec)
 - `coupling`: Coupling specification tuple
 - `components`: Component structures containing dwell time dimensions
-- `G`: Vector of gene counts for each unit
+- `G`: Vector of gene counts for each unit (used only to derive per-unit T-dims)
 
 # Returns
 - `Vector`: Expanded sojourn states for all units in the coupled system
 """
 function coupled_states(sojourn, coupling, components, G)
     TDdims = get_TDdims(components)
+    # Derive per-unit T dimensions (identical across specs for a given unit).
+    # When a unit has no dwell components (empty TDdims[i]), fall back to G[i]
+    # so hidden units still contribute the correct local dimension.
+    Tdims = Vector{Int}(undef, length(G))
+    for i in eachindex(G)
+        Tdims[i] = isempty(TDdims[i]) ? G[i] : TDdims[i][1]
+    end
     coupled = deepcopy(sojourn)
     for i in eachindex(TDdims)
         for j in eachindex(TDdims[i])
-            coupled[i][j] = coupled_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], G)
+            coupled[i][j] = coupled_states(sojourn[i][j], i, collect(coupling[1]), TDdims[i][j], Tdims)
         end
     end
     coupled
@@ -571,6 +600,60 @@ function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple
     reporters
 end
 
+# === Spec-based reporters_per_state (TraceSpec) ===
+
+function num_reporters_per_state(G::Int, R::Int, S::Int, insertstep::Int,
+                                 specs::Vector{TraceSpec})
+    base = S > 0 ? 3 : 2
+    nT = G * base^R
+    out = Vector{Vector{Int}}(undef, length(specs))
+    for (j, spec) in pairs(specs)
+        reporters = zeros(Int, nT)
+        if spec.space === :R
+            # AllStates / ReporterNonzero: use existing num_reporters_per_index over T
+            if spec.region isa AllStates || spec.region isa ReporterNonzero
+                for i in 1:G, z in 1:base^R
+                    idx = state_index(G, i, z)
+                    reporters[idx] = num_reporters_per_index(z, R, insertstep, base)
+                end
+            elseif spec.region isa ExplicitStates
+                # Explicit T-indices
+                for idx in spec.region.states
+                    1 <= idx <= nT || continue
+                    reporters[idx] = 1
+                end
+            end
+        elseif spec.space === :G
+            # G-space: ExplicitStates over gene indices
+            if spec.region isa ExplicitStates
+                Sg = spec.region.states
+                for i in 1:G, z in 1:base^R
+                    idx = state_index(G, i, z)
+                    reporters[idx] = (i in Sg) ? 1 : 0
+                end
+            else
+                for i in 1:G, z in 1:base^R
+                    idx = state_index(G, i, z)
+                    reporters[idx] = 1
+                end
+            end
+        end
+        out[j] = reporters
+    end
+    return out
+end
+
+function num_reporters_per_state(G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple,
+                                 specs::Vector{TraceSpec})
+    out = Vector{Vector{Int}}(undef, length(specs))
+    for (j, spec) in pairs(specs)
+        u = spec.unit
+        (u < 1 || u > length(G)) && error("TraceSpec unit $(u) out of range for $(length(G)) units")
+        out[j] = num_reporters_per_state(G[u], R[u], S[u], insertstep[u], [spec])[1]
+    end
+    return out
+end
+
 
 """
     reduce_reporters_per_state(reporters::Vector{Int}, dims::Vector{Int}, unit_model)
@@ -664,6 +747,25 @@ function set_indices(ntransitions, R, S, insertstep, offset)
     else
         Indices(offset .+ collect(1:ntransitions), offset .+ [ntransitions + 1], Int[], offset + ntransitions + 2)
     end
+end
+
+"""
+    num_rates_unit(transitions, R, S, insertstep)
+
+Number of transition rates for a single unit (no coupling). Used by set_elements_TCoupledSpec
+for global rate indexing.
+"""
+function num_rates_unit(transitions, R, S, insertstep)
+    R = Int(R)
+    S = Int(S)
+    insertstep = Int(insertstep)
+    if R > 0
+        insertstep > R && throw(DomainError("insertstep>R"))
+        S == 0 && (insertstep = 1)
+        S > R - insertstep + 1 && (S = R - insertstep + 1)
+        return length(transitions) + 1 + R + S + 1
+    end
+    return length(transitions) + 2
 end
 
 """

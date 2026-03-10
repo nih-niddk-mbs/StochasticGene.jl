@@ -2274,13 +2274,17 @@ function write_trace_dataframe(file::String, datapath::String, interval::Float64
     write_trace_dataframe(out, datapath, datacond, interval, r, transitions, G, R, S, insertstep, start, stop, probfn, noiseparams, splicetype, state=state, hierarchical=hierarchical, coupling=coupling, grid=grid, zeromedian=zeromedian, datacol=datacol)
 end
 
-"""Key-based front-end: read info TOML for this rates file, extract all parameters from spec, then call core write_trace_dataframe(outfile, datapath, datacond, interval, r, ...). Hierarchical: from TOML hierarchical field; if nonempty, use hierarchical stack."""
-function write_trace_dataframe_from_info(rates_file::String, spec, interval::Real; ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, grid=nothing, zeromedian=false, datacol=3)
+"""Key-based front-end: read info TOML for this rates file, extract all parameters from spec, then call core write_trace_dataframe(outfile, datapath, datacond, interval, r, ...). Hierarchical: from TOML hierarchical field; if nonempty, use hierarchical stack. When datapath_override (and optionally root_override) are set, use them instead of spec's datapath/root for loading trace data."""
+function write_trace_dataframe_from_info(rates_file::String, spec, interval::Real; ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, grid=nothing, zeromedian=false, datacol=3, datapath_override=nothing, root_override=nothing)
     key = replace(basename(rates_file), "rates_" => "", ".txt" => "")
-    datapath = spec[:datapath]
-    root = get(spec, :root, nothing)
-    if root !== nothing && root != "." && datapath !== nothing && !isabspath(datapath)
-        datapath = joinpath(root, datapath)
+    if datapath_override !== nothing
+        datapath = root_override !== nothing && root_override != "." && !isabspath(datapath_override) ? joinpath(root_override, datapath_override) : datapath_override
+    else
+        datapath = spec[:datapath]
+        root = get(spec, :root, nothing)
+        if root !== nothing && root != "." && datapath !== nothing && !isabspath(datapath)
+            datapath = joinpath(root, datapath)
+        end
     end
     datacond = spec[:datacond]
     interval = Float64(interval)
@@ -2306,38 +2310,43 @@ end
 write_traces(folder::String, datapath::String; interval::Float64=1.0, kwargs...) = write_traces(folder; datapath=datapath, interval=interval, kwargs...)
 
 """
-    write_traces(folder; datapath=nothing, interval=1.0, ...)
+    write_traces(folder; datapath=nothing, root=nothing, interval=1.0, ...)
 
 Find all rates_*.txt in folder. For each file:
-- If an info TOML exists (key-based): read spec and interval from it, call write_trace_dataframe_from_info(rates_file, spec, interval; ...).
+- If an info TOML exists (key-based): read spec and interval from it, call write_trace_dataframe_from_info(rates_file, spec, interval; ...). When datapath (or root) is provided, they override the TOML's datapath/root for loading trace data so the same run works when data lives elsewhere.
 - Else (legacy): require datapath (and use interval kwarg), call write_trace_dataframe(rates_file, datapath, interval; ...) which extracts model parameters from the filename.
-Returns list of output CSV paths.
+Uses multi-threading over rate files. Returns list of output CSV paths.
 """
-function write_traces(folder::String; datapath=nothing, interval::Float64=1.0, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
+function write_traces(folder::String; datapath=nothing, root=nothing, interval::Float64=1.0, ratetype::String="median", start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype="", hlabel="-h", state=true, grid=nothing, zeromedian=false, datacol=3)
     rate_files = [f for f in readdir(folder) if startswith(f, "rates_") && endswith(f, ".txt")]
-    out_paths = String[]
-    for f in rate_files
+    isempty(rate_files) && return String[]
+    # Avoid segfaults when multiple Julia threads call BLAS/FFTW
+    try; LinearAlgebra.BLAS.set_num_threads(1); catch; end
+    try; FFTW.set_num_threads(1); catch; end
+    out_paths = Vector{String}(undef, length(rate_files))
+    Threads.@threads for i in 1:length(rate_files)
+        f = rate_files[i]
         rates_file = joinpath(folder, f)
         try
             spec, interval_from_toml = read_run_spec_and_interval_for_rates_file(rates_file)
             if spec !== nothing
-                # Key-based: all parameters from info TOML
-                out = write_trace_dataframe_from_info(rates_file, spec, Float64(interval_from_toml); ratetype=ratetype, start=start, stop=stop, probfn=probfn, noiseparams=noiseparams, splicetype=splicetype, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
-                push!(out_paths, out)
+                out = write_trace_dataframe_from_info(rates_file, spec, Float64(interval_from_toml); ratetype=ratetype, start=start, stop=stop, probfn=probfn, noiseparams=noiseparams, splicetype=splicetype, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol, datapath_override=datapath, root_override=root)
+                out_paths[i] = out
             else
-                # Legacy: parameters from filename; need datapath (and interval from kwarg)
                 if datapath === nothing
                     @warn "No info TOML for $f and datapath not provided, skipping"
-                    continue
+                    out_paths[i] = ""
+                else
+                    write_trace_dataframe(rates_file, datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
+                    out_paths[i] = joinpath(folder, replace(f, "rates" => "predictedtraces", ".txt" => ".csv"))
                 end
-                write_trace_dataframe(rates_file, datapath, interval, ratetype, start, stop, probfn, noiseparams, splicetype, hlabel=hlabel, state=state, grid=grid, zeromedian=zeromedian, datacol=datacol)
-                push!(out_paths, joinpath(folder, replace(f, "rates" => "predictedtraces", ".txt" => ".csv")))
             end
         catch e
             @warn "write_trace_dataframe failed for $f: $(sprint(showerror, e))"
+            out_paths[i] = ""
         end
     end
-    out_paths
+    filter(!isempty, out_paths)
 end
 
 

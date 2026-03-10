@@ -2378,25 +2378,26 @@ function _write_toml_table(io::IO, d::Dict, indent="")
 end
 
 """
-    write_info(file::String, fits, data, model, labels; run_spec=nothing)
+    write_info(file::String, fits, data, model, labels; run_spec=nothing, initial_condition_used=nothing)
 
 Write the info file (TOML) for a run. Same stem as rates/measures (e.g. info_foo.toml).
 If `file` does not end in .toml, the extension is replaced. Delegates to `write_info_toml`.
-Sections: [output], [model_info], [environment]; if `run_spec` is set, also [run].
+Sections: [output], [model_info], [environment]; if `run_spec` is set, also [run]. If initial_condition_used is set, also [initial_condition_used] (informational only).
 """
-function write_info(file::String, fits, data, model, labels; run_spec=nothing)
+function write_info(file::String, fits, data, model, labels; run_spec=nothing, initial_condition_used=nothing)
     file_toml = endswith(file, ".toml") ? file : (replace(file, r"\.txt$" => "") * ".toml")
-    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels)
+    write_info_toml(file_toml, fits, data, model; run_spec=run_spec, labels=labels, initial_condition_used=initial_condition_used)
 end
 
 """
-    write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+    write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, initial_condition_used=nothing)
 
 Write run specification and key outputs to a TOML file (info_*.toml).
 Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by write_info.
 Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
+If initial_condition_used is provided (vector of rates), writes [initial_condition_used] for information only; not read back by the code.
 """
-function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing, initial_condition_used=nothing)
     open(file_toml, "w") do io
         if run_spec !== nothing
             run_dict = run_spec_to_toml(run_spec)
@@ -2429,6 +2430,13 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         println(io, "")
         println(io, "[environment]")
         _write_toml_table(io, Dict("julia_version" => string(VERSION), "threads" => Threads.nthreads()), "  ")
+        if initial_condition_used !== nothing && initial_condition_used isa AbstractVector && !isempty(initial_condition_used)
+            println(io, "")
+            println(io, "[initial_condition_used]")
+            # Flatten so single-unit (Vector{Float64}) or coupled (Vector{Vector{Float64}}) both write as one list
+            rates_flat = eltype(initial_condition_used) <: Number ? Float64.(initial_condition_used) : Float64.(vcat(initial_condition_used...))
+            _write_toml_table(io, Dict("rates" => rates_flat), "  ")
+        end
     end
 end
 
@@ -2626,7 +2634,8 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
         write_array(joinpath(path, "ll_sampled_rates" * name), fits.ll)
         write_array(joinpath(path, "sampled_rates" * name), permutedims(inverse_transform_params(fits.param, model)))
     end
-    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec)
+    initial_condition_used = (size(fits.param, 2) >= 1 ? get_rates(fits.param[:, 1], model) : Float64[])
+    write_info(joinpath(path, "info" * name), fits, data, model, labels; run_spec=run_spec, initial_condition_used=initial_condition_used)
 end
 
 """

@@ -52,6 +52,8 @@ fits, stats, measures, data, model, options = fit(nchains=4)
 - [Installation](installation.md): How to install StochasticGene.jl
 - [Getting Started](getting_started.md): Basic usage and examples
 - [API Reference](api/index.md): Detailed documentation of all functions and types
+- [Trace and dwell specs](trace_and_dwell_specs.md): How to use `trace_specs` and `dwell_specs` (per-unit observables, hidden units)
+- [Run specification (info TOML)](run_spec_toml.md): Key-based runs and info TOML contents
 - [Examples](examples/index.md): More complex usage examples
 - [Contributing](contributing.md): How to contribute to the project
 

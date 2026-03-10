@@ -66,9 +66,11 @@ set_actions() = Dict("activateG!" => 1, "deactivateG!" => 2, "transitionG!" => 3
 # invert_dict(D) = Dict(D[k] => k for k in keys(D)) put into utilities
 
 """
-    simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false)
+    simulator(r, transitions, G, R, S, insertstep; coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=10000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", verbose::Bool=false, trace_specs=nothing, dwell_specs=nothing)
 
-Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null vector will return a vector of the mRNA histogram and ON and OFF time histograms. If traceinterval > 0, it will return a vector containing the mRNA histogram and the traces
+Simulate any GRSM model. Returns steady state mRNA histogram. If bins (or dwell_specs) are provided, returns dwell-time histograms. If traceinterval > 0 (or trace_specs), returns traces.
+
+When **trace_specs** (vector of `TraceSpec`) or **dwell_specs** (vector of `DwellSpec`) are not nothing, they are used and legacy `onstates`/`bins`/`traceinfo` are ignored, so the same specs can drive both simulator and the fit/prediction stack. When **dwell_specs** is used, only the requested dwell type per spec is returned (e.g. OFF, ON, OFFG, or ONG); when using legacy **onstates** and **bins**, both ON and OFF histograms are returned for each onstate set.
 
 #Arguments
 - `r`: vector of rates
@@ -79,18 +81,20 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `insertstep`: reporter insertion step
 
 #Named arguments
-- `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate)
+- `bins::Vector=Float64[]`: vector of time bin vectors for each set of ON and OFF histograms or vector of vectors of time bins (one time bin vector for each onstate). Ignored when dwell_specs is set.
 - `coupling=tuple()`: if nonempty, `(unit_model, connections)` where `unit_model` is a tuple of model indices per unit (e.g. (1, 2)) and `connections` is a vector of `(β, s, α, t)` (source unit, source state, target unit, target transition). Use `make_coupling` / `make_coupling_reciprocal` in io.jl to build from a coupling field string. Empty `connections` is valid (no interaction terms).
+- `dwell_specs=nothing`: vector of `DwellSpec` structures; when not nothing, used instead of onstates/bins and only the requested dwell type per spec is returned.
 - `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
-- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
+- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON). Ignored when dwell_specs or trace_specs is set. When used with bins, both ON and OFF time distributions are computed for each ON state set.
 - `probfn`=prob_Gaussian: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
 - `splicetype`::String: splice action
 - `tol`::Float64=1e-6: convergence error tolerance for mRNA histogram (not used when simulating traces are made)
 - `totalsteps`::Int=10000000: maximum number of simulation steps (not usred when simulating traces)
 - `totaltime`::Float64=0.0: total time of simulation
-- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made.
+- `trace_specs=nothing`: vector of `TraceSpec` structures; when not nothing, used to set traceinterval and onstates for traces (legacy onstates/traceinfo ignored).
+- `traceinterval`: Interval in minutes between frames for intensity traces.  If 0, traces are not made. Set from trace_specs when trace_specs is provided.
 - `verbose::Bool=false`: flag for printing state information
 
 #Example:
@@ -108,12 +112,18 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
 
     r = copy(rin)
     nunits = (G isa Tuple) ? length(G) : 1
+    dwell_dttype = nothing  # when set, return only requested dwell type per spec (no extra ON/OFF)
     if trace_specs !== nothing
         onstates, traceinfo = legacy_onstates_traceinfo(trace_specs; nunits=nunits)
         traceinterval = Float64(traceinfo[1])
     end
     if dwell_specs !== nothing
-        onstates_d, bins_derived, _dttype = legacy_dwell(dwell_specs)
+        if isempty(coupling)
+            onstates_d, bins_derived, dwell_dttype = legacy_dwell(dwell_specs)
+        else
+            onstates_d, bins_derived, dttype_nested = legacy_dwell_coupled(dwell_specs, nunits)
+            dwell_dttype = vcat(dttype_nested...)
+        end
         onstates = onstates_d
         bins = bins_derived
     end
@@ -228,14 +238,35 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
     results = []
     nhist > 0 && push!(results, prune_mhist(mhist, nhist))
     if onoff
-        if !isempty(coupling)
-            for i in eachindex(histontdd)
-                push!(results, vcat([[histontdd[i][j], histofftdd[i][j]] for j in eachindex(histontdd[i])]...))
+        if dwell_dttype !== nothing
+            # Return only the requested dwell type per spec (align with dwell_specs / prediction stack).
+            flat_idx = 1
+            if !isempty(coupling)
+                for i in eachindex(histontdd)
+                    for j in eachindex(histontdd[i])
+                        dt = dwell_dttype[flat_idx]
+                        push!(results, (dt == "ON" || dt == "ONG") ? histontdd[i][j] : histofftdd[i][j])
+                        flat_idx += 1
+                    end
+                end
+            else
+                for i in eachindex(histontdd)
+                    dt = dwell_dttype[flat_idx]
+                    push!(results, (dt == "ON" || dt == "ONG") ? histontdd[i] : histofftdd[i])
+                    flat_idx += 1
+                end
             end
         else
-            for i in eachindex(histontdd)
-                push!(results, histontdd[i])
-                push!(results, histofftdd[i])
+            # Legacy: return both ON and OFF for each onstate set.
+            if !isempty(coupling)
+                for i in eachindex(histontdd)
+                    push!(results, vcat([[histontdd[i][j], histofftdd[i][j]] for j in eachindex(histontdd[i])]...))
+                end
+            else
+                for i in eachindex(histontdd)
+                    push!(results, histontdd[i])
+                    push!(results, histofftdd[i])
+                end
             end
         end
     end

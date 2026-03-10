@@ -1748,6 +1748,23 @@ invlog_shift1(v::Float64) = exp(v) - 1
 invlog_shift1(v::Array) = exp.(v) .- 1
 
 """
+    coupling_inhibitory_fwd(x)
+    coupling_inhibitory_inv(y)
+
+Transform for inhibitory coupling strengths γ ∈ (-1, 0).
+
+- Forward:  map γ ↦ y = logit(γ + 1)  (γ ∈ (-1, 0) → y ∈ ℝ)
+- Inverse:  map y ↦ γ = invlogit(y) - 1
+
+These are used to lock the sign of coupling parameters while sampling in an
+unconstrained space.
+"""
+coupling_inhibitory_fwd(x::Float64) = logit(x + 1.0)
+coupling_inhibitory_fwd(x::Array) = logit.(x .+ 1.0)
+coupling_inhibitory_inv(y::Float64) = invlogit(y) - 1.0
+coupling_inhibitory_inv(y::Array) = invlogit.(y) .- 1.0
+
+"""
     logit(x::Float64)
     logit(x::Array)
 
@@ -1813,17 +1830,6 @@ logit_range(x::Float64, a::Float64, b::Float64) = logit((x - a) / (b - a))
 logit_range(x::Array, a::Float64, b::Float64) = logit.((x .- a) ./ (b - a))
 invlogit_range(y::Float64, a::Float64, b::Float64) = a + (b - a) * invlogit(y)
 invlogit_range(y::Array, a::Float64, b::Float64) = a .+ (b - a) .* invlogit.(y)
-
-"""
-    coupling_inhibitory_fwd(x)
-    coupling_inhibitory_inv(y)
-
-Transform for inhibitory coupling γ ∈ (-1, 0): forward = logit(γ + 1), inverse = invlogit(y) - 1.
-"""
-coupling_inhibitory_fwd(x::Float64) = logit(x + 1.0)
-coupling_inhibitory_fwd(x::Array) = logit.(x .+ 1.0)
-coupling_inhibitory_inv(y::Float64) = invlogit(y) - 1.0
-coupling_inhibitory_inv(y::Array) = invlogit.(y) .- 1.0
 
 """
     logsumexp(u::Array, v::Array)

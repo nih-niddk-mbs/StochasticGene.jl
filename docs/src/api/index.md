@@ -15,6 +15,9 @@
 - [`simulate_trace_vector`](@ref): Generate vectors of traces
 - [`simulate_trials`](@ref): Simulate multiple model realizations
 
+### Guides
+- [Trace and dwell specs](../trace_and_dwell_specs.md): Using `trace_specs` and `dwell_specs` for per-unit observables and hidden units
+
 ### Data Loading and Management
 - [`load_data`](load_data.md): Load experimental data from files
 - [`load_model`](@ref): Load model parameters from files

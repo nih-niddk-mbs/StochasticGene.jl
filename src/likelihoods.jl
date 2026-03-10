@@ -429,7 +429,7 @@ end
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:grid,)}}
     r = get_rates(param, model)
-    prepare_rates_grid(r, model.nrates, model.reporter, model.trait.grid.gridindices)   
+    prepare_rates_grid(r, model.nrates, model.reporter, model.trait.grid.gridindices)
 end
 
 
@@ -540,11 +540,11 @@ end
 function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     llg, llgp = ll_hmm_trace(param, data, model)
     r = get_rates(param, model)
-    
+
     # Get nRNA_true from data structure (extract from yield tuple)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true)
-    
+
     # Apply loss matrix if yield < 1.0 (observation noise for RNA histogram)
     yield_val = get_yield_value(data.yield)
     if yield_val < 1.0
@@ -553,7 +553,7 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     else
         predictions = p_true
     end
-    
+
     logpredictions = log.(max.(predictions, eps()))
     hist = datahistogram(data)
     return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
@@ -584,7 +584,7 @@ Calculates the likelihood for a single RNA histogram.
 function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
     r = get_rates(param, model)
     M = make_mat_M(model.components, r)
-    
+
     # Get nRNA_true from data structure (already computed in load_data)
     # For RNACountData: data.nRNA is already nRNA_true
     # For other types: extract from yield tuple using get_nRNA_true
@@ -594,7 +594,7 @@ function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransition
         nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     end
     p_true = steady_state(M, model.components.nT, model.nalleles, nRNA_true)
-    
+
     # Apply loss matrix if yield < 1.0 (observation noise)
     # Note: RNACountData has per-cell yields (Vector), handled separately in loglikelihood()
     # For histogram data (RNAData, RNAOnOffData, etc.), use global yield (Union{Float64, Tuple})
@@ -814,6 +814,8 @@ function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype)
     ]
 end
 
+
+
 function steady_state_dist(r, components, dt)
     pss = nothing
     pssG = nothing
@@ -851,8 +853,8 @@ function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype)
     p = steady_state_dist(r, components, dt)
     [
         dt[i] ?
-            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)) :
-            dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i])[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]))
+        dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)) :
+        dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i])[nonzeros[i], nonzeros[i]], nonzero_states(sojourn[i], nonzeros[i]), init_S(r, sojourn[i], components.elementsT, p.pss, nonzeros[i]))
         for i in eachindex(sojourn)
     ]
 end
@@ -861,6 +863,7 @@ function predictedarray(r, components::MTComponents, bins, reporter, dttype, nal
     M = make_mat_M(components.mcomponents, r)
     [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
 end
+
 
 function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
     pssG = nothing
@@ -880,6 +883,18 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
 end
 
 function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn, dt, nonzeros, bins)
+    println(dt)
+    println(size.(Gm))
+    println(size.(Gs))
+    println(size.(Gt))
+    println(size.(IT))
+    println(size.(IG))
+    println(size.(IR))
+    println(coupling_strength)
+    println(sources)
+    # println(model)
+    # println(nonzeros)
+    # println(bins)
     if dt
         if !haskey(cache.TC, dt)
             cache.TC[dt] = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
@@ -892,8 +907,15 @@ function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, 
             cache.TC[dt] = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
             cache.pss[dt] = normalized_nullspace(cache.TC[dt])
         end
+        # For OFF dwell in coupled models, use the same sojourn-based reduction as the
+        # G-space case: restrict TC to the sojourn set and let dwelltimePDF handle the
+        # barrier. Using nonzeros here assumes a particular sparsity pattern that can
+        # break when sojourn has been defined via true complements in coupled space.
+        # println(size(cache.TC[dt]))
         TCD = make_mat_TCD(cache.TC[dt], sojourn)
-        return dwelltimePDF(bins, TCD[nonzeros, nonzeros], nonzero_states(sojourn, nonzeros), init_S(sojourn, cache.TC[dt], cache.pss[dt], nonzeros))
+        # println(size(TCD))
+        # println(sojourn)
+        return dwelltimePDF(bins, TCD, sojourn, init_S(sojourn, cache.TC[dt], cache.pss[dt]))
     end
 end
 
@@ -920,6 +942,27 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
         end
         push!(hists, h)
         empty_cache!(cache)
+    end
+    return hists
+end
+
+# Spec-based coupled dwell: TC from full-space elements (uncoupled) + coupling terms; comps carry specs and sojourn.
+function predictedarray(r, coupling_strength, comps::TDCoupledSpecComponents)
+    rates_full = vcat(r...)
+    unit_model = collect(comps.underlying.model)
+    conn = comps.connection_data
+    hists = Vector{Vector{Float64}}(undef, length(comps.specs))
+    for (j, (spec, comp)) in enumerate(zip(comps.specs, comps.components))
+        if comp.is_G_space
+            dims = [comps.underlying.modelcomponents[i].nG for i in eachindex(comps.underlying.model)]
+            TC = make_mat_TC_from_elements(comps.elements_G, rates_full, comps.nT_G, unit_model, conn, coupling_strength, r, dims)
+        else
+            dims = [comps.underlying.modelcomponents[i].nT for i in eachindex(comps.underlying.model)]
+            TC = make_mat_TC_from_elements(comps.elements_T, rates_full, comps.nT_T, unit_model, conn, coupling_strength, r, dims)
+        end
+        TCD = make_mat_TCD(TC, comp.sojourn)
+        pss = normalized_nullspace(TC)
+        hists[j] = dwelltimePDF(spec.bins, TCD, comp.sojourn, init_S(comp.sojourn, TC, pss))
     end
     return hists
 end
@@ -1121,7 +1164,7 @@ Return the fitted parameters in the same (transformed) space used for MCMC (e.g.
 """
 get_param(model::AbstractGeneTransitionModel) = log.(model.rates[model.fittedparam])
 
-function get_param(model::AbstractGRSMmodel) 
+function get_param(model::AbstractGRSMmodel)
     transform_rates(model.rates[model.fittedparam], model)
 end
 

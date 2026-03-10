@@ -18,14 +18,16 @@ The file has four top-level sections:
 
 | Section       | Description |
 |---------------|-------------|
-| `[run]`       | Full set of fit arguments (datapath, G, R, S, transitions, coupling, nchains, samplesteps, noisepriors, etc.). Keys match `fit(; kwargs...)` names. |
+| `[run]`       | Full set of fit arguments (datapath, datacond, G, R, S, transitions, coupling, hierarchical, nchains, samplesteps, noisepriors, **trace_specs**, **dwell_specs**, traceinfo, etc.). Keys match `fit(; kwargs...)` names. |
 | `[output]`    | Key results from the run (e.g. `llml`, `accept`, `total`, `median_param`). |
 | `[model_info]`| Model metadata (e.g. `rate_labels`, `interval`). |
 | `[environment]`| `julia_version`, `threads` (for replication). |
 
 Unset or optional arguments are stored as the string `"nothing"`; when the file is read back, `"nothing"` is interpreted as Julia `nothing`.
 
-Coupling is stored as `coupling_unit_model` and `coupling_connections` in `[run]` (format `(unit_model, connections)` with each connection `(β, s, α, t)`).
+- **Coupling** is stored as `coupling_unit_model` and `coupling_connections` in `[run]` (format `(unit_model, connections)` with each connection `(β, s, α, t)`).
+- **trace_specs** and **dwell_specs** (when present) are stored in `[run]` as arrays of tables; used for coupled trace/dwell runs and for hidden-unit setups (e.g. 3 units with 1 hidden). See [Trace and dwell specs](trace_and_dwell_specs.md) for how to build and use them.
+- **interval** for trace prediction is taken from `[model_info].interval`, or `[run].traceinfo[1]` if present, else `1.0`. Used by `write_traces` and `read_run_spec_and_interval_for_rates_file`.
 
 ## Starting a fit from a TOML file
 
@@ -56,6 +58,9 @@ toml_path = info_toml_path_for_rates_file("results/myfolder/rates_myrun.txt")
 
 # Load spec from the rates file's companion TOML (if it exists)
 spec = read_run_spec_for_rates_file("results/myfolder/rates_myrun.txt")
+
+# Load spec and interval (for write_traces / trace prediction)
+spec, interval = read_run_spec_and_interval_for_rates_file("results/myfolder/rates_myrun.txt")
 ```
 
 ## See also

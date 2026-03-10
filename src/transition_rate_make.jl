@@ -1057,9 +1057,10 @@ function make_mat_TC(coupling_strength, T, U, V, IT, sources, unit_model)
         end
         for β in α+1:n
             if β ∈ sources[α]
-                # Coupling term must have same state order (1..n) as Tα. Build V[α]⊗I⊗..⊗U[β]⊗I..
+                # Coupling term must have same state order (1..n) as Tα. Build I_1..I_α-1 ⊗ V[α]⊗I_α+1..I_β-1⊗U[β]⊗I_β+1..I_n.
                 # (Original order kron_left(V[α],..,β-1,1); kron(U[β],Vβ) gave (β,α,α) → size n_β·n_α² ≠ N when n_α≠1.)
                 Vβ = V[unit_model[α]]
+                Vβ = kron_left(Vβ, IT, unit_model, α - 1, 1)
                 Vβ = kron_right(Vβ, IT, unit_model, α + 1, β - 1)
                 Vβ = kron(Vβ, U[unit_model[β]])
                 Vβ = kron_right(Vβ, IT, unit_model, β + 1, n)
@@ -1245,7 +1246,9 @@ matrix is used for dwell time analysis.
 function make_mat_TCD(TC::SparseMatrixCSC, sojourn::Vector{Int})
     TCD = copy(TC)
     make_mat_TCD!(TCD, sojourn)
-    return dropzeros(TCD)
+    # Keep the original indexing so that barrier/sojourn indices (defined in the
+    # full T-space) remain valid. Zeroed entries are fine for dwelltimePDF.
+    return TCD
 end
 
 """
@@ -1282,4 +1285,24 @@ function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_st
         make_mat_TCD!(TCD[i], sojourn[i])
     end
     return dropzeros.(TCD)
+end
+
+"""
+    make_mat_TC_from_elements(elements_linear, rates_full, N, unit_model, connection_data, coupling_strength, rates_split, dims)
+
+Build full coupled TC from uncoupled full-space elements plus coupling terms.
+`dims` is per-unit dimension in unit_model order (T or G); IT is built from dims.
+"""
+function make_mat_TC_from_elements(elements_linear, rates_full, N, unit_model, connection_data, coupling_strength, rates_split, dims)
+    Tc = make_mat(elements_linear, rates_full, N)
+    n = length(unit_model)
+    IT = [sparse(I, d, d) for d in dims]
+    for k in eachindex(connection_data)
+        rec = connection_data[k]
+        V_k = make_mat(rec.elementsTarget, rates_split[rec.α], rec.nTα)
+        β_pos = findfirst(isequal(rec.β), unit_model)
+        α_pos = findfirst(isequal(rec.α), unit_model)
+        Tc += coupling_strength[k] * _coupling_term(rec.U, V_k, β_pos, α_pos, IT, unit_model, n)
+    end
+    return Tc
 end

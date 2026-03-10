@@ -2,6 +2,59 @@
 # Measurement specs: TraceSpec and DwellSpec for trace and dwell-time observables.
 # Specs are the canonical way to define which units are observed and how (supports hidden units).
 
+# --------------- Region selectors (sigma-algebra elements) ---------------
+
+abstract type RegionSelector end
+
+"""
+    AllStates()
+
+Region selector meaning "all states" in the given space (:R, :G, :T, ...).
+
+For `space = :R`, this is interpreted consistently with existing code as
+"all R states starting at insertstep" when passed through the current
+`num_reporters_per_state` / dwell-time helpers.
+"""
+struct AllStates <: RegionSelector
+end
+
+"""
+    ExplicitStates(states)
+
+Region selector for an explicit set of state indices in the given space.
+"""
+struct ExplicitStates <: RegionSelector
+    states::Vector{Int}
+end
+
+"""
+    ReporterNonzero()
+
+Region selector meaning "all states where the reporter count is nonzero"
+in the given space (typically :R or :T). Interpretation is delegated to the
+existing reporter helper functions so semantics stay consistent.
+"""
+struct ReporterNonzero <: RegionSelector
+end
+
+function _infer_trace_region(emission)
+    if emission === :reporter_sum
+        return :R, AllStates()
+    elseif emission isa NamedTuple && hasproperty(emission, :kind) && hasproperty(emission, :state) && emission.kind === :G
+        return :G, ExplicitStates([Int(emission.state)])
+    else
+        throw(ArgumentError("Unsupported TraceSpec emission: $(emission)"))
+    end
+end
+
+function _infer_dwell_space_side(dttype::Symbol)
+    dttype === :OFF  && return (:R, :out_of_region)
+    dttype === :ON   && return (:R, :in_region)
+    dttype === :OFFG && return (:G, :out_of_region)
+    dttype === :ONG  && return (:G, :in_region)
+    throw(ArgumentError("Unknown dwell dttype: $(dttype); expected :OFF, :ON, :OFFG, or :ONG"))
+end
+
 """
     TraceSpec
 
@@ -22,6 +75,8 @@ One trace channel per `TraceSpec`; order of specs = order of columns in trace da
 """
 struct TraceSpec
     unit::Int
+    space::Symbol
+    region::RegionSelector
     emission::Union{Symbol,NamedTuple}
     frame_interval::Float64
     start_frame::Float64
@@ -31,7 +86,8 @@ struct TraceSpec
     output_index::Union{Int,Nothing}
     function TraceSpec(unit::Int, emission, frame_interval::Real, start_frame::Real, end_frame;
                        active_fraction::Real=1.0, background_mean=nothing, output_index=nothing)
-        new(unit, emission, Float64(frame_interval), Float64(start_frame), end_frame,
+        space, region = _infer_trace_region(emission)
+        new(unit, space, region, emission, Float64(frame_interval), Float64(start_frame), end_frame,
             Float64(active_fraction), background_mean, output_index)
     end
 end
@@ -43,27 +99,27 @@ Specification for a single dwell-time (sojourn) histogram measurement.
 
 # Fields
 - `unit::Int`: Which unit this dwell type refers to (1-based index).
-- `kind::Symbol`: `:G` (gene-state space) or `:R` (R-step / full state space).
-- `sojourn_kind::Symbol`: `:in_state` (time in the "on" set) or `:out_of_state` (time out).
+- `dttype::Symbol`: Dwell type: `:OFF`, `:ON` (R space), `:OFFG`, `:ONG` (G space).
 - `onstates::Vector{Int}`: The set of states considered "on" for this histogram (empty for R = any step).
 - `bins::Vector{Float64}`: Histogram bin edges for this dwell type.
 - `output_index::Union{Int,Nothing}`: Optional index for ordering (default nothing).
-
-Maps to legacy: ON/OFF (kind=:R), ONG/OFFG (kind=:G); sojourn_kind = :in_state (ON/ONG), :out_of_state (OFF/OFFG).
 """
 struct DwellSpec
     unit::Int
-    kind::Symbol
-    sojourn_kind::Symbol
+    space::Symbol
+    region::RegionSelector
+    side::Symbol
+    dttype::Symbol
     onstates::Vector{Int}
     bins::Vector{Float64}
     output_index::Union{Int,Nothing}
-    function DwellSpec(unit::Int, kind::Symbol, sojourn_kind::Symbol, onstates::Vector{Int}, bins::Vector{<:Real};
+    function DwellSpec(unit::Int, dttype::Symbol, onstates::Vector{Int}, bins::Vector{<:Real};
                        output_index=nothing)
-        (kind === :G || kind === :R) || throw(ArgumentError("kind must be :G or :R"))
-        (sojourn_kind === :in_state || sojourn_kind === :out_of_state) ||
-            throw(ArgumentError("sojourn_kind must be :in_state or :out_of_state"))
-        new(unit, kind, sojourn_kind, Int.(onstates), Float64.(bins), output_index)
+        (dttype === :OFF || dttype === :ON || dttype === :OFFG || dttype === :ONG) ||
+            throw(ArgumentError("dttype must be :OFF, :ON, :OFFG, or :ONG"))
+        space, side = _infer_dwell_space_side(dttype)
+        region = ExplicitStates(Int.(onstates))
+        new(unit, space, region, side, dttype, Int.(onstates), Float64.(bins), output_index)
     end
 end
 
@@ -145,13 +201,13 @@ function dwell_specs_from_legacy(onstates, bins, dttype; unit::Int=1)
         ons = eltype(onstates) <: Vector ? onstates[i] : copy(onstates)
         b = eltype(bins) <: Vector && eltype(bins) != Float64 ? bins[i] : bins
         if dt == "OFF"
-            push!(specs, DwellSpec(unit, :R, :out_of_state, ons, b; output_index=i))
+            push!(specs, DwellSpec(unit, :OFF, ons, b; output_index=i))
         elseif dt == "ON"
-            push!(specs, DwellSpec(unit, :R, :in_state, ons, b; output_index=i))
+            push!(specs, DwellSpec(unit, :ON, ons, b; output_index=i))
         elseif dt == "OFFG"
-            push!(specs, DwellSpec(unit, :G, :out_of_state, ons, b; output_index=i))
+            push!(specs, DwellSpec(unit, :OFFG, ons, b; output_index=i))
         elseif dt == "ONG"
-            push!(specs, DwellSpec(unit, :G, :in_state, ons, b; output_index=i))
+            push!(specs, DwellSpec(unit, :ONG, ons, b; output_index=i))
         else
             throw(ArgumentError("Unknown dttype: $dt"))
         end
@@ -178,13 +234,13 @@ function dwell_specs_from_legacy(onstates::Vector{Vector{Vector{Int}}}, bins, dt
             ons = onstates[i][j]
             b = bi[j]
             if dt == "OFF"
-                push!(specs, DwellSpec(i, :R, :out_of_state, ons, b; output_index=j))
+                push!(specs, DwellSpec(i, :OFF, ons, b; output_index=j))
             elseif dt == "ON"
-                push!(specs, DwellSpec(i, :R, :in_state, ons, b; output_index=j))
+                push!(specs, DwellSpec(i, :ON, ons, b; output_index=j))
             elseif dt == "OFFG"
-                push!(specs, DwellSpec(i, :G, :out_of_state, ons, b; output_index=j))
+                push!(specs, DwellSpec(i, :OFFG, ons, b; output_index=j))
             elseif dt == "ONG"
-                push!(specs, DwellSpec(i, :G, :in_state, ons, b; output_index=j))
+                push!(specs, DwellSpec(i, :ONG, ons, b; output_index=j))
             else
                 throw(ArgumentError("Unknown dttype: $dt"))
             end
@@ -247,17 +303,32 @@ function legacy_dwell(dwell_specs::Vector{DwellSpec})
     for s in dwell_specs
         push!(onstates, s.onstates)
         push!(bins, s.bins)
-        if s.kind === :R && s.sojourn_kind === :out_of_state
-            push!(dttype, "OFF")
-        elseif s.kind === :R && s.sojourn_kind === :in_state
-            push!(dttype, "ON")
-        elseif s.kind === :G && s.sojourn_kind === :out_of_state
-            push!(dttype, "OFFG")
-        else
-            push!(dttype, "ONG")
-        end
+        push!(dttype, string(s.dttype))
     end
     onstates, bins, dttype
+end
+
+"""
+    legacy_dwell_coupled(dwell_specs::Vector{DwellSpec}, nunits::Int)
+
+Return (onstates, bins, dttype) in the coupled-format expected by `set_onoff`:
+
+- `onstates::Vector{Vector{Vector{Int}}}`: per-unit, per-dwell-type ON-state sets
+- `bins::Vector{Vector{Vector{Float64}}}`: per-unit, per-dwell-type bin edges
+- `dttype::Vector{Vector{String}}`: per-unit, per-dwell-type dwell type strings
+"""
+function legacy_dwell_coupled(dwell_specs::Vector{DwellSpec}, nunits::Int)
+    onstates = [Vector{Vector{Int}}() for _ in 1:nunits]
+    bins = [Vector{Vector{Float64}}() for _ in 1:nunits]
+    dttype = [String[] for _ in 1:nunits]
+    for s in dwell_specs
+        u = s.unit
+        (u < 1 || u > nunits) && throw(ArgumentError("DwellSpec unit $(u) out of range for $(nunits) units"))
+        push!(onstates[u], s.onstates)
+        push!(bins[u], s.bins)
+        push!(dttype[u], string(s.dttype))
+    end
+    return onstates, bins, dttype
 end
 
 # --------------- Build HMMReporter from TraceSpec (coupled; one channel per spec) ---------------
@@ -338,8 +409,7 @@ end
 function _dwell_spec_to_dict(spec::DwellSpec)
     Dict{String,Any}(
         "unit" => spec.unit,
-        "kind" => string(spec.kind),
-        "sojourn_kind" => string(spec.sojourn_kind),
+        "dttype" => string(spec.dttype),
         "onstates" => spec.onstates,
         "bins" => spec.bins,
         "output_index" => spec.output_index,
@@ -350,12 +420,22 @@ function _dict_to_dwell_spec(d::Dict)
     oi = get(d, "output_index", nothing)
     (oi isa String && oi == "nothing") && (oi = nothing)
     oi !== nothing && (oi = Int(oi))
+    dt = haskey(d, "dttype") ? Symbol(d["dttype"]) : _legacy_dttype_from_kind(d)
     DwellSpec(
         Int(d["unit"]),
-        Symbol(d["kind"]),
-        Symbol(d["sojourn_kind"]),
+        dt,
         Int.(d["onstates"]),
         Float64.(d["bins"]);
         output_index=oi,
     )
+end
+
+function _legacy_dttype_from_kind(d::Dict)
+    k = Symbol(get(d, "kind", "R"))
+    s = Symbol(get(d, "sojourn_kind", "out_of_state"))
+    (k === :R && s === :out_of_state) && return :OFF
+    (k === :R && s === :in_state) && return :ON
+    (k === :G && s === :out_of_state) && return :OFFG
+    (k === :G && s === :in_state) && return :ONG
+    error("Invalid legacy kind/sojourn_kind in dwell_spec")
 end

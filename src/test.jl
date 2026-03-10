@@ -171,6 +171,78 @@ function test_compare_reciprocal(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6
 end
 
 """
+    test_compare_3u_specs(dwell_specs; kwargs...)
+
+Three-unit coupled dwell-time test using `dwell_specs` as a vector of `DwellSpec`
+structures, supplied directly as an argument.
+
+- Units 1 and 2 are observed.
+- Unit 3 is a hidden 3-state unit with no R or mRNA (R3 = 0, S3 = 0).
+- Coupling:
+    - unit 3, state 1 → unit 1, transition 3
+    - unit 3, state 3 → unit 2, transition 3
+
+Returns the simulated dwell histograms from `simulator` (normalized). This is
+not wired into `runtests.jl`; call it manually.
+"""
+function test_compare_3u_specs(;
+    dwell_specs::Vector{DwellSpec}=[
+        DwellSpec(1, :ON,  Int[],                collect(1.0:1.0:30.0)),
+        DwellSpec(1, :OFF, [3],                  collect(1.0:1.0:30.0)),
+        DwellSpec(2, :ON,  Int[],                collect(1.0:1.0:30.0)),
+        DwellSpec(2, :OFF, [3],                  collect(1.0:1.0:30.0)),
+    ],
+    r = [0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2,
+         1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86,
+         0.5, 1.0, 0.1, 0.1, 0.1, 0.1, 0.0, 0.0, 0.0, 0.],
+    transitions = (
+        ([1, 2], [2, 1], [2, 3], [3, 2]),
+        ([1, 2], [2, 1], [2, 3], [3, 2]),
+        ([1, 2], [2, 1], [2, 3], [3, 2])
+    ),
+    G = (3, 3, 3),
+    R = (2, 2, 0),
+    S = (2, 2, 0),
+    insertstep = (1, 1, 0),
+    total = 1_000_000,
+    tol = 1e-6,
+)
+    # Coupling for three units: hidden unit 3 drives units 1 and 2
+    coupling = ((1, 2, 3),
+                [(3, 1, 1, 3),   # unit3 state1 -> unit1 transition 3
+                 (3, 3, 2, 3)], (:free, :free))  # unit3 state3 -> unit2 transition 3
+
+    # Spec-based coupled dwell path: exact TD and barrier per DwellSpec in full (T or G) space.
+    nunits = length(G)
+    reporter, comps = make_reporter_components_DT(
+        transitions, G, R, S, insertstep, "", dwell_specs, coupling,
+    )
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    nbase = sum(nrates)
+    couplingindices = collect(nbase + 1 : nbase + length(coupling[2]))
+    rates_split, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
+    h_pred_nested = predictedarray(rates_split, couplingStrength, comps)
+    h_pred_norm = vcat(StochasticGene.normalize_histogram.(h_pred_nested)...)
+
+    # Run three-unit coupled simulator with unit 3 hidden (no R, no mRNA) and
+    # dwell_specs driving which histograms are produced for units 1 and 2.
+    hs = simulator(
+        r, transitions, G, R, S, insertstep;
+        coupling=coupling,
+        nhist=0,
+        noiseparams=0,
+        dwell_specs=dwell_specs,
+        totalsteps=total,
+        tol=tol,
+    )
+
+    # Normalize simulated histograms (one normalization per histogram).
+    hs_norm = StochasticGene.normalize_histogram.(hs)
+
+    return make_array(h_pred_norm), make_array(vcat(hs_norm...))
+end
+
+"""
     test_spec_conversion()
 
 Tests TraceSpec/DwellSpec conversion: legacy → specs → legacy round-trip and consistency.
@@ -197,11 +269,64 @@ function test_spec_conversion()
     dttype_d = ["ON", "ONG"]
     ds = dwell_specs_from_legacy(onstates_d, bins_d, dttype_d)
     @assert length(ds) == 2
-    @assert ds[1].kind === :R && ds[1].sojourn_kind === :in_state
-    @assert ds[2].kind === :G && ds[2].sojourn_kind === :in_state
+    @assert ds[1].dttype === :ON
+    @assert ds[2].dttype === :ONG
     ons_back, bins_back, dt_back = legacy_dwell(ds)
     @assert ons_back == onstates_d && dt_back == dttype_d
     @assert bins_back[1] == [0.1, 0.2, 0.3] && bins_back[2] == [0.5, 1.0, 1.5]
+    true
+end
+
+"""
+    test_spec_regions()
+
+Quick sanity checks for the new `space` / `region` / `side` fields on TraceSpec and DwellSpec.
+These are not wired into runtests; run manually from the REPL when validating spec semantics.
+"""
+function test_spec_regions()
+    # TraceSpec: reporter_sum -> R-space, AllStates region
+    t_rs = TraceSpec(1, :reporter_sum, 1.0, 0.0, -1)
+    @assert t_rs.space === :R
+    @assert t_rs.region isa AllStates
+
+    # TraceSpec: G-state emission -> G-space, ExplicitStates
+    t_g = TraceSpec(1, (kind=:G, state=2), 1.0, 0.0, -1)
+    @assert t_g.space === :G
+    @assert t_g.region isa ExplicitStates
+    @assert t_g.region.states == [2]
+
+    # TraceSpec: fallback emission -> R-space, ReporterNonzero
+    t_f = TraceSpec(1, :custom_emission, 1.0, 0.0, -1)
+    @assert t_f.space === :R
+    @assert t_f.region isa ReporterNonzero
+
+    # DwellSpec: ON / OFF in R-space
+    bins = [0.1, 0.2, 0.3]
+    d_on = DwellSpec(1, :ON, Int[], bins)
+    @assert d_on.space === :R
+    @assert d_on.side === :in_region
+    @assert d_on.region isa ExplicitStates
+    @assert d_on.region.states == Int[]
+
+    d_off = DwellSpec(1, :OFF, [2, 3], bins)
+    @assert d_off.space === :R
+    @assert d_off.side === :out_of_region
+    @assert d_off.region isa ExplicitStates
+    @assert d_off.region.states == [2, 3]
+
+    # DwellSpec: ONG / OFFG in G-space
+    d_ong = DwellSpec(1, :ONG, [2], bins)
+    @assert d_ong.space === :G
+    @assert d_ong.side === :in_region
+    @assert d_ong.region isa ExplicitStates
+    @assert d_ong.region.states == [2]
+
+    d_offg = DwellSpec(1, :OFFG, [2, 3], bins)
+    @assert d_offg.space === :G
+    @assert d_offg.side === :out_of_region
+    @assert d_offg.region isa ExplicitStates
+    @assert d_offg.region.states == [2, 3]
+
     true
 end
 
@@ -263,11 +388,11 @@ function test_spec_io_roundtrip()
     t2_back = _dict_to_trace_spec(d2)
     @assert t2_back.unit == t2.unit && t2_back.emission == (kind=:G, state=3)
     # DwellSpec round-trip
-    ds = DwellSpec(1, :R, :in_state, [2, 3], [0.1, 0.2, 0.3]; output_index=1)
+    ds = DwellSpec(1, :ON, [2, 3], [0.1, 0.2, 0.3]; output_index=1)
     dd = _dwell_spec_to_dict(ds)
-    @assert dd["kind"] == "R" && dd["sojourn_kind"] == "in_state"
+    @assert dd["dttype"] == "ON"
     ds_back = _dict_to_dwell_spec(dd)
-    @assert ds_back.unit == ds.unit && ds_back.kind === :R && ds_back.onstates == ds.onstates
+    @assert ds_back.unit == ds.unit && ds_back.dttype === :ON && ds_back.onstates == ds.onstates
     true
 end
 
