@@ -2260,7 +2260,10 @@ Generate default prior means for coupled models.
 
 # Notes
 - Processes each unit in coupled model separately
-- Appends coupling parameter prior means (0.0)
+- Appends coupling parameter prior means using coupling sign modes:
+  * `:free`     ⇒ 0.0
+  * `:activate` ⇒ +0.5
+  * `:inhibit`  ⇒ -0.5
 - Used for coupled model initialization
 """
 function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
@@ -2268,7 +2271,14 @@ function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, deca
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))
     end
-    [rm; fill(0.0, ncoupling(coupling))]
+    ranges = coupling_ranges(coupling)
+    coupling_means = Float64[
+        mode === :activate ? 0.5 :
+        mode === :inhibit  ? -0.5 :
+        0.0
+        for mode in ranges
+    ]
+    [rm; coupling_means]
 end
 
 """

@@ -141,7 +141,7 @@ Compare simulated and chemical master equation histograms for coupled models.
 # Returns
 - Tuple of (chemical master histogram, array of simulated histograms).
 """
-function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 2.9], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), [(1, 3, 2, 4)]), total=1000000, tol=1e-6)
+function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 2.9], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), [(1, 3, 2, 4)], [:free]), total=1000000, tol=1e-6)
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
     h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
     for i in eachindex(hs)
@@ -161,7 +161,7 @@ with two coupling parameters in canonical order.
 - Tuple of (chemical master histogram, array of simulated histograms).
 """
 function test_compare_reciprocal(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 3.0, -.7], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], total=1000000, tol=1e-6)
-    coupling = ((1, 2), [(2, 3, 1, 3), (1, 3, 2, 3)])
+    coupling = ((1, 2), [(2, 3, 1, 3), (1, 3, 2, 3)], [:activate, :inhibit])
     hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
     h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
     for i in eachindex(hs)
@@ -403,15 +403,19 @@ Fit a simulated joint trace dataset for coupled models and compare to the target
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_tracejoint(; coupling=((1, 2), [(1, 2, 2, 1)]), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., .05, 1.0, .05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, 3.5], rinit=Float64[], nsamples=10000, onstates=Int[], totaltime=2000.0, ntrials=10, fittedparam=Int[21], propcv=0.05, cv=10.0, interval=1.0, noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]), maxtime=60.0, method=Tsit5())
+function test_fit_tracejoint(; coupling=((1, 2), [(1, 2, 2, 1)], [:free]), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., .05, 1.0, .05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, -0.4], rinit=Float64[], nsamples=10000, onstates=Int[], totaltime=2000.0, ntrials=10, fittedparam=Int[21], propcv=0.05, cv=10.0, interval=1.0, noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]), maxtime=60.0, method=Tsit5())
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1))
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
-    rinit = [0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, 3.5]
-    fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, coupling, nothing)
+    println(priormean)
+    rinit = [0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, -0.4]
+    rinit = rtarget
+    # fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, coupling, nothing)
+    fittedparam = [21]
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
+    return fits, stats, measures, model, data, options
     println(fits.accept," ",fits.total)
     lower = stats.qparam[1,:]
     upper = stats.qparam[3,:]
