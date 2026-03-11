@@ -323,9 +323,58 @@ end
 """
     ncoupling(coupling)
 
-Return the number of coupling strength parameters. Coupling format is `(unit_model, connections::Vector{ConnectionSpec})`.
+Return the number of coupling strength parameters.
+
+Coupling format is `(unit_model, connections::Vector{ConnectionSpec})` or
+`(unit_model, connections::Vector{ConnectionSpec}, ranges)`, where `ranges`
+encodes per-connection sign modes (see `coupling_ranges`).
 """
 ncoupling(coupling) = isempty(coupling) ? 0 : length(coupling[2])
+
+"""
+    coupling_ranges(coupling)
+
+Return per-connection coupling sign modes.
+
+- If `coupling` has only two elements `(unit_model, connections)`, all modes
+  default to `:free` (no sign constraint, γ ∈ (-1, ∞)).
+- If `coupling` has a third element, it is interpreted as:
+    * a single `Symbol` (`:free`, `:activate`, or `:inhibit`) applied to all
+      connections, or
+    * a tuple/vector of such symbols, one per connection.
+
+Valid modes and their semantics:
+
+- `:activate`: γ ∈ (0, ∞)  (log / exp transform)
+- `:inhibit`:  γ ∈ (-1, 0) (logit-style transform via `coupling_inhibitory_fwd` / `coupling_inhibitory_inv`)
+- `:free`:     γ ∈ (-1, ∞) (shifted-log transform via `log_shift1` / `invlog_shift1`)
+
+The returned value is a `Vector{Symbol}` of length `ncoupling(coupling)`.
+"""
+@inline function _normalize_coupling_mode(mode::Symbol)
+    # Accept historical aliases but normalize to the canonical names.
+    mode === :positive && return :activate
+    mode === :negative && return :inhibit
+    mode
+end
+
+function coupling_ranges(coupling)
+    n = ncoupling(coupling)
+    n == 0 && return Symbol[]
+    if length(coupling) < 3
+        return fill(:free, n)
+    end
+    ranges = coupling[3]
+    if ranges isa Symbol
+        m = _normalize_coupling_mode(ranges)
+        return fill(m, n)
+    elseif ranges isa Tuple || ranges isa AbstractVector
+        length(ranges) == n || throw(ArgumentError("coupling_ranges length ($(length(ranges))) must match number of connections ($n)"))
+        return [_normalize_coupling_mode(Symbol(r)) for r in ranges]
+    else
+        throw(ArgumentError("Unsupported coupling_ranges type $(typeof(ranges)); expected Symbol or tuple/vector of Symbols"))
+    end
+end
 
 """
     fit(; <keyword arguments> )
@@ -338,7 +387,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, `(unit_model, connections::Vector{ConnectionSpec})` with each connection `(β, s, α, t)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. Empty `connections` is valid (uncoupled T is still built).
+- `coupling=tuple()`: if nonempty, `(unit_model, connections::Vector{ConnectionSpec})` with each connection `(β, s, α, t)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. Empty `connections` is valid (uncoupled T is still built). Optionally a third element may be provided to specify per-connection sign modes (`:free`, `:activate`, `:inhibit`), see `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -1827,10 +1876,25 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
 
     if !isempty(coupling)
         couplingindices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+        modes = coupling_ranges(coupling)
         for i in eachindex(couplingindices)
-            push!(ftransforms, log_shift1)
-            push!(invtransforms, invlog_shift1)
-            push!(sigmatransforms, sigmalognormal)
+            mode = i <= length(modes) ? modes[i] : :free
+            if mode === :activate
+                # γ ∈ (0, ∞)
+                push!(ftransforms, log)
+                push!(invtransforms, exp)
+                push!(sigmatransforms, sigmalognormal)
+            elseif mode === :inhibit
+                # γ ∈ (-1, 0)
+                push!(ftransforms, coupling_inhibitory_fwd)
+                push!(invtransforms, coupling_inhibitory_inv)
+                push!(sigmatransforms, sigmanormal)
+            else
+                # :free — γ ∈ (-1, ∞)
+                push!(ftransforms, log_shift1)
+                push!(invtransforms, invlog_shift1)
+                push!(sigmatransforms, sigmalognormal)
+            end
         end
     end
     if !isnothing(grid)
