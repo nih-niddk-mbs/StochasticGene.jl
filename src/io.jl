@@ -439,13 +439,24 @@ Extract the base name and file extension from a filename.
 ```julia
 get_suffix("rates_gene_condition_3401_2.txt")  # returns ("rates_gene_condition_3401_2", "txt")
 get_suffix("summary.csv")                      # returns ("summary", "csv")
+get_suffix("summary.csv.gz")                   # returns ("summary.csv", "gz")
+get_suffix("info_key.toml")                   # returns ("info_key", "toml")
 ```
 
-# Notes
-- Removes the last 4 characters (including the dot) to get the base name
-- Returns the last 3 characters as the extension
 """
-get_suffix(file::String) = chop(file, tail=4), last(file, 3)
+# get_suffix(file::String) = chop(file, tail=4), last(file, 3)
+
+function get_suffix(file::String)
+    parts = split(file, ".")
+    if length(parts) == 1
+        println("No suffix")
+        return file, ""
+    elseif length(parts) == 2
+        return parts[1], parts[2]
+    else
+        return join(parts[1:end-1], "."), parts[end]
+    end
+end
 
 """
     fields(file::String)
@@ -456,35 +467,39 @@ Parse a filename to extract structured field information.
 - `file::String`: Filename to parse
 
 # Returns
-- `Result_Fields` or `Summary_Fields`: Structured field information
+- `Result_Fields` or `Summary_Fields` or `Tuple{String, String}`: Structured field information
 
 # Notes
 - For CSV files: expects 4 fields (name, label, cond, model)
 - For TXT files: expects 6 fields (name, label, cond, gene, model, nalleles) or 5 fields (name, label, "", gene, model, nalleles)
-- Throws ArgumentError for incorrect file name formats
+- Throws ArgumentError for unknown file name formats
 - Does not account for CSV files with less than 4 fields
+- For key-based naming: returns Tuple{String, String}
 """
 function fields(file::String)
     file, suffix = get_suffix(file)
     v = split(file, "_")
     if suffix == "csv"
         if length(v) == 4
-            s = Summary_Fields(v[1], v[2], v[3], v[4])
+            return Summary_Fields(v[1], v[2], v[3], v[4])
+        elseif length(v) == 2
+            return v[1], v[2]
         else
             println(file)
-            throw(ArgumentError("Incorrect file name format"))
+            throw(ArgumentError("Unknown file name format"))
         end
     else
         if length(v) == 6
-            s = Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
+            return Result_Fields(v[1], v[2], v[3], v[4], v[5], v[6])
         elseif length(v) == 5
-            s = Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
+            return Result_Fields(v[1], v[2], "", v[3], v[4], v[5])
+        elseif length(v) == 2
+            return v[1], v[2]
         else
             println(file)
-            throw(ArgumentError("Incorrect file name format"))
+            throw(ArgumentError("Unknown file name format"))
         end
     end
-    return s
 end
 
 """
@@ -685,6 +700,23 @@ function get_files(files::Vector, resultname, label, cond, model)
     files[file_indices(parts, resultname, label, cond, model)]
     # files[(getfield.(parts, :name).==resultname).&(getfield.(parts, :label).==label).&(getfield.(parts, :cond).==cond).&(getfield.(parts, :model).==model)]
 end
+
+"""
+    get_key(file::String)
+
+Extract key from a filename.
+
+# Arguments
+- `file::String`: Filename to parse
+
+# Returns
+- `String`: Key extracted from filename
+
+# Notes
+- Uses fields() to parse filename structure
+- Returns the key field from the parsed structure
+"""
+get_key(file::String) = fields(file)[2]
 
 """
     get_gene(file::String)
@@ -2222,13 +2254,16 @@ function _toml_value(v)
     v isa Number && return v
     v isa Symbol && return string(v)
     if v isa Tuple
-        if isempty(v)
-            return []
-        end
+        isempty(v) && return []
         if all(x -> x isa AbstractVector, v)
             return [collect(x) for x in v]
         end
-        return collect(v)
+        # Tuple of Tuples of Vector (e.g. coupled transitions) -> array of arrays for valid TOML
+        if all(x -> x isa Tuple, v) && all(x -> all(y -> y isa AbstractVector, x), v)
+            return [[collect(y) for y in x] for x in v]
+        end
+        # mixed tuple (e.g. hierarchical = (2, Int[], ()), traceinfo = (1.66, 1.0, -1)) -> TOML-safe array; never repr(Real[]/Int64[]/())
+        return [_toml_value(x) for x in v]
     end
     if v isa AbstractVector
         isempty(v) && return v
@@ -2249,22 +2284,20 @@ function run_spec_to_toml(run_spec)
     ks = run_spec isa NamedTuple ? keys(run_spec) : keys(run_spec)
     for k in ks
         key = string(k)
+        # probfn, method, coupling are handled specially below
         key in ("probfn", "method", "coupling") && continue
         v = run_spec isa NamedTuple ? getproperty(run_spec, k) : run_spec[k]
         out[key] = _toml_value(v)
     end
-    # coupling (unit_model, connections) as two keys for clean TOML
-    if run_spec isa NamedTuple && haskey(run_spec, :coupling)
-        c = run_spec.coupling
-        if !isempty(c) && length(c) == 2
-            out["coupling_unit_model"] = collect(c[1])
-            out["coupling_connections"] = [[Int(x[1]), Int(x[2]), Int(x[3]), Int(x[4])] for x in c[2]]
-        end
-    elseif run_spec isa Dict && haskey(run_spec, :coupling)
-        c = run_spec[:coupling]
-        if !isempty(c) && length(c) == 2
-            out["coupling_unit_model"] = collect(c[1])
-            out["coupling_connections"] = [[Int(x[1]), Int(x[2]), Int(x[3]), Int(x[4])] for x in c[2]]
+    # coupling: always treated as 3-tuple (unit_model, connections, modes)
+    if (run_spec isa NamedTuple && haskey(run_spec, :coupling)) ||
+       (run_spec isa Dict && haskey(run_spec, :coupling))
+        c = run_spec isa NamedTuple ? run_spec.coupling : run_spec[:coupling]
+        if !isempty(c)
+            um, conns, modes = c
+            out["coupling_unit_model"] = collect(um)
+            out["coupling_connections"] = [[Int(x[1]), Int(x[2]), Int(x[3]), Int(x[4])] for x in conns]
+            out["coupling_modes"] = [String(m) for m in modes]
         end
     end
     if run_spec isa NamedTuple && haskey(run_spec, :probfn)
@@ -2285,25 +2318,52 @@ function _toml_escape(s::String)
     "\"" * replace(replace(s, "\\" => "\\\\"), "\"" => "\\\"") * "\""
 end
 
+"""Single array element to TOML string (recursive for nested arrays/tuples)."""
+function _toml_elem_str(x)
+    x isa String && return _toml_escape(x)
+    (x isa Number || x isa Bool) && return string(x)
+    if x isa Vector
+        return isempty(x) ? "[]" : "[" * join(_toml_elem_str.(x), ", ") * "]"
+    end
+    if x isa Tuple
+        return isempty(x) ? "[]" : "[" * join(_toml_elem_str.(x), ", ") * "]"
+    end
+    repr(x)
+end
+
 function _write_toml_table(io::IO, d::Dict, indent="")
     for (k, v) in sort(collect(d), by=first)
         if v isa Dict && !isempty(v)
             println(io, indent, "[", k, "]")
             _write_toml_table(io, v, indent * "  ")
         elseif v isa Vector{Any} && !isempty(v) && v[1] isa Vector
+            # Array of arrays (e.g. transitions): valid TOML, no trailing comma for strict parsers
             println(io, indent, k, " = [")
-            for row in v
-                println(io, indent, "  [", join(row, ", "), "],")
+            for (i, row) in enumerate(v)
+                row_str = "[" * join(_toml_elem_str.(row), ", ") * "]"
+                println(io, indent, "  ", row_str, i < length(v) ? "," : "")
             end
             println(io, indent, "]")
         elseif v isa Vector
-            println(io, indent, k, " = ", repr(v))
+            # TOML arrays: [] or [elem, ...]; repr() produces Julia syntax (e.g. String[], Int64[], ()) which TOML cannot parse
+            if isempty(v)
+                println(io, indent, k, " = []")
+            else
+                parts = String[]
+                for x in v
+                    push!(parts, _toml_elem_str(x))
+                end
+                println(io, indent, k, " = [", join(parts, ", "), "]")
+            end
         elseif v isa String
             println(io, indent, k, " = ", _toml_escape(v))
         elseif v isa Bool
             println(io, indent, k, " = ", v ? "true" : "false")
-        else
+        elseif v isa Number
             println(io, indent, k, " = ", v)
+        else
+            # method, probfn, etc.: string and quote so TOML accepts (no unquoted { } , etc.)
+            println(io, indent, k, " = ", _toml_escape(string(v)))
         end
     end
 end
@@ -2328,6 +2388,10 @@ Same stem as rates/measures (e.g. rates_foo.txt → info_foo.toml). Called by wr
 Sections: [output] = llml, accept, total, median_param; [model_info]; [environment]. If run_spec is provided, also [run] = fit kwargs.
 """
 function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing, labels=nothing)
+    # Write companion JLD2 with exact Julia types (functions, ODE solvers, etc.)
+    if run_spec !== nothing
+        write_run_spec_jld2(file_toml, run_spec)
+    end
     open(file_toml, "w") do io
         if run_spec !== nothing
             run_dict = run_spec_to_toml(run_spec)
@@ -2336,16 +2400,22 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
         end
         println(io, "")
         println(io, "[output]")
+        # Use column 3 for median_param when available; fall back to the last column when there are
+        # fewer than 3 samples, and write an empty array when there are no parameters.
+        nsamples = size(fits.param, 2)
+        median_param = (size(fits.param, 1) > 0 && nsamples > 0) ? vec(fits.param[:, min(3, nsamples)]) : Float64[]
         _write_toml_table(io, Dict(
             "llml" => fits.llml,
             "accept" => fits.accept,
             "total" => fits.total,
-            "median_param" => (size(fits.param, 1) > 0 ? vec(fits.param[:, 3]) : Float64[]),
+            "median_param" => median_param,
         ), "  ")
         println(io, "")
         println(io, "[model_info]")
         lab = labels !== nothing ? labels : (model isa AbstractGRSMmodel ? rlabels(model) : String[])
-        _write_toml_table(io, Dict("rate_labels" => lab, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
+        # rate_labels must be Vector{String} for valid TOML array (never Matrix repr)
+        rate_labels_vec = lab isa AbstractMatrix ? vec(collect(String, lab)) : (lab isa AbstractVector ? collect(String, lab) : String[])
+        _write_toml_table(io, Dict("rate_labels" => rate_labels_vec, "interval" => (hasfield(typeof(data), :interval) ? data.interval : 1.0), "fittedparam" => (hasfield(typeof(model), :ratetransforms) && model.ratetransforms isa Tuple ? Int[] : Int[]),), "  ")
         println(io, "")
         println(io, "[environment]")
         _write_toml_table(io, Dict("julia_version" => string(VERSION), "threads" => Threads.nthreads()), "  ")
@@ -2353,12 +2423,48 @@ function write_info_toml(file_toml::String, fits, data, model; run_spec=nothing,
 end
 
 function _from_toml_value(k::String, v)
+    # probfn is stored as a string in TOML; map back to the actual function/tuple of functions
+    if k == "probfn" && v isa String
+        s = strip(v)
+        # Tuple form: "(StochasticGene.prob_Gaussian, StochasticGene.prob_Gaussian)"
+        if startswith(s, "(") && endswith(s, ")")
+            inner = strip(s[2:end-1])
+            parts = split(inner, ',')
+            fns = map(parts) do p
+                ps = strip(p)
+                if endswith(ps, "prob_Gaussian")
+                    return prob_Gaussian
+                else
+                    error("Unsupported probfn entry in info TOML: $ps")
+                end
+            end
+            return Tuple(fns)
+        end
+        # Single-name form: "prob_Gaussian" or "StochasticGene.prob_Gaussian"
+        if endswith(s, "prob_Gaussian")
+            return prob_Gaussian
+        end
+        error("Unsupported probfn format in info TOML: $s")
+    end
     v isa String && v == "nothing" && return nothing
     v isa String && return v
     v isa Number && return v
     v isa Bool && return v
-    if v isa Vector && !isempty(v) && v[1] isa Vector
-        return Tuple([Tuple(Int.(x)) for x in v])
+    # transitions: arrays of Int tuples; other array-of-arrays (e.g. noisepriors) should not be forced to Int
+    if k == "transitions" && v isa Vector && !isempty(v) && v[1] isa Vector
+        # Uncoupled: [[1,2],[2,1]] -> ([1,2],[2,1]). Coupled: [[[1,2],...], [[1,2],...]] -> ((...), (...))
+        if !isempty(v[1]) && v[1][1] isa Vector
+            return Tuple(Tuple(Int.(p) for p in unit) for unit in v)
+        else
+            return Tuple(Int.(x) for x in v)
+        end
+    end
+    # hierarchical: [nhypersets, vector, optional tuple] from TOML -> (Int, Vector{Int}, Tuple); before v[1] isa Number so [2, [], []] doesn't get Float64.(v)
+    if k == "hierarchical" && v isa Vector && length(v) >= 2
+        first_ = round(Int, v[1])
+        second_ = v[2] isa Vector ? Int.(v[2]) : Int[]
+        third_ = length(v) >= 3 && v[3] isa Vector ? (isempty(v[3]) ? () : Tuple(Int.(v[3]))) : ()
+        return (first_, second_, third_)
     end
     if v isa Vector && length(v) > 0 && v[1] isa Number
         # G, R, S, insertstep: single Int or Tuple
@@ -2374,25 +2480,41 @@ function _from_toml_value(k::String, v)
 end
 
 """
+    info_jld2_path(file_toml::String)
+
+Return path to the companion JLD2 file for a given info TOML path (same stem, `.jld2` extension).
+"""
+info_jld2_path(file_toml::String) = replace(file_toml, r"\.toml$" => ".jld2")
+
+"""
+    write_run_spec_jld2(file_toml::String, run_spec)
+
+Write a companion JLD2 file alongside the info TOML with the full run_spec dict preserved in
+exact Julia types (functions, ODE solvers, symbols, etc.).  TOML remains the human-readable
+record; JLD2 is the machine-readable one used by read_run_spec.
+"""
+function write_run_spec_jld2(file_toml::String, run_spec)
+    jld2_path = info_jld2_path(file_toml)
+    try
+        # Convert run_spec to Dict{String,Any} so JLD2 doesn't need to serialize the full NamedTuple schema
+        d = Dict{String, Any}(string(k) => (run_spec isa NamedTuple ? getproperty(run_spec, k) : run_spec[k])
+                               for k in (run_spec isa NamedTuple ? keys(run_spec) : keys(run_spec)))
+        jldsave(jld2_path; run_spec=d)
+    catch e
+        @warn "Could not write JLD2 companion for $file_toml: $(sprint(showerror, e))"
+    end
+end
+
+"""
     read_run_spec(file_toml::String)
 
-Load run specification from an info TOML file. Returns Dict{Symbol, Any} suitable for fit(; spec...) or inspection.
-Parses [run]; restores types (e.g. \"nothing\" → nothing, coupling → (unit_model, connections)).
+Load run specification from the companion JLD2 file (same stem, `.jld2` extension).
+Returns Dict{Symbol, Any} with exact Julia types (functions, ODE solvers, tuples, etc.).
+The TOML file is the human-readable record; this function always reads from JLD2.
 """
 function read_run_spec(file_toml::String)
-    d = TOML.parsefile(file_toml)
-    run = get(d, "run", d)
-    out = Dict{Symbol, Any}()
-    for (k, v) in run
-        k in ("coupling_unit_model", "coupling_connections") && continue
-        out[Symbol(k)] = _from_toml_value(k, v)
-    end
-    if haskey(run, "coupling_unit_model") && haskey(run, "coupling_connections")
-        um = Tuple(Int.(run["coupling_unit_model"]))
-        conns = [Tuple(Int.(c)) for c in run["coupling_connections"]]
-        out[:coupling] = (um, conns)
-    end
-    out
+    d = load(info_jld2_path(file_toml), "run_spec")
+    Dict{Symbol, Any}(Symbol(k) => v for (k, v) in d)
 end
 
 """

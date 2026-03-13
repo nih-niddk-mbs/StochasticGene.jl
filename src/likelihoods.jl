@@ -316,7 +316,7 @@ function prepare_rates_coupled(rates, coupling::Tuple, transitions, R::Tuple, S,
         push!(r, rates[j:j+n-1])
         j += n
     end
-    conns = to_connections(coupling)
+    conns = (isempty(coupling) || length(coupling) < 2) ? [] : coupling[2]
     for k in 1:length(conns)
         push!(couplingStrength, rates[j])
         j += 1

@@ -120,6 +120,7 @@ using Distributed
 using Distributions
 using Downloads
 using FFTW
+using JLD2
 using JSON
 using LinearAlgebra
 using LSODA
@@ -226,9 +227,6 @@ export
     coupling_ranges,
     default_coupling_prior_mean,
     default_coupling_prior_means,
-    to_connections,
-    connection_name,
-    coupling_connection_names,
     coupling_parameter_labels,
     TComponents,
     T_dimension,

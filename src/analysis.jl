@@ -3423,7 +3423,7 @@ end
 
 
 """
-    write_correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
+    correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:10:1000), probfn=prob_Gaussian, ratetype="ml")
 
 Compute theoretical correlation functions for a single rate file and return the results.
 
@@ -3459,12 +3459,74 @@ Compute theoretical correlation functions for a single rate file and return the 
 - All cross-correlations and auto-correlations are unnormalized (E[xy] - E[x]E[y])
 - ON states are binary (1 if reporter count > 0, 0 otherwise)
 """
-function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
-    println(file)
+function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
     r = readrates(file, get_row(ratetype))
     coupling_field = extract_source_target(pattern, file)
     coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
     correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
+end
+
+"""
+    write_correlation_functions_file(file, transitions=..., G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
+
+Write correlation functions to a CSV file.
+
+# Arguments
+- `file::String`: Path to the rate file (typically a `.txt` file containing rate parameters)
+- `transitions::Tuple`: Tuple of transition definitions for each unit (default: 3-state model transitions)
+- `G::Tuple`: Number of gene states for each unit (default: (3, 3))
+- `R::Tuple`: Number of RNA states for each unit (default: (3, 3))
+- `S::Tuple`: Initial state definitions (default: (1, 0))
+- `insertstep::Tuple`: Insert step definitions (default: (1, 1))
+- `pattern::String`: Pattern to extract coupling information from filename (default: "gene")
+- `lags::Vector{Int}`: Time lags for correlation function computation (default: 0:1:200)
+- `probfn`: Probability function for observation model (default: prob_Gaussian)
+- `ratetype::String`: Which row of rates to use from file (default: "ml" for maximum likelihood)
+
+# Returns
+- `nothing`: Returns nothing
+"""
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median")
+
+    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
+    parts = fields(basename(file))
+    new_model = create_modelstring(G, R, S, insertstep)
+    out = joinpath(dirname(file), "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
+    write_correlation_csv(out, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+
+        # CSV.write(out, DataFrame(
+        #     tau=tau,
+        #     # ON state: unnormalized cc, ac1, ac2, m1, m2
+        #     cc_ON=ccON,
+        #     ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
+        #     ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
+        #     m_ON1=fill(mON1, n_lags),
+        #     m_ON2=fill(mON2, n_lags),
+        #     # Reporters: unnormalized cc, ac1, ac2, m1, m2
+        #     cc_Reporters=ccReporters,
+        #     ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
+        #     ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
+        #     m_Reporters1=fill(mReporters1, n_lags),
+        #     mReporters2=fill(mReporters2, n_lags)
+        # ))
+        # return nothing
+end
+
+function write_correlation_csv(outfile::String, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+    n_lags = length(tau)
+    CSV.write(outfile, DataFrame(
+        tau=tau,
+        cc_ON=ccON,
+        ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
+        ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
+        m_ON1=fill(mON1, n_lags),
+        m_ON2=fill(mON2, n_lags),
+        cc_Reporters=ccReporters,
+        ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
+        ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
+        m_Reporters1=fill(mReporters1, n_lags),
+        mReporters2=fill(mReporters2, n_lags)
+    ))
 end
 
 """
@@ -3578,35 +3640,33 @@ write_correlation_functions(
 - `readrates`: Loads rate parameters from text files
 """
 function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
-    for (root, dirs, files) in walkdir(folder)
+    for (root, _, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
-                parts = fields(basename(file))
-                new_model = create_modelstring(G, R, S, insertstep)
-                out = joinpath(root, "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
-                n_lags = length(tau)
-
-                CSV.write(out, DataFrame(
-                    tau=tau,
-                    # ON state: unnormalized cc, ac1, ac2, m1, m2
-                    cc_ON=ccON,
-                    ac1_ON=[reverse(ac1ON); ac1ON[2:end]],
-                    ac2_ON=[reverse(ac2ON); ac2ON[2:end]],
-                    m_ON1=fill(mON1, n_lags),
-                    m_ON2=fill(mON2, n_lags),
-                    # Reporters: unnormalized cc, ac1, ac2, m1, m2
-                    cc_Reporters=ccReporters,
-                    ac1_Reporters=[reverse(ac1Reporters); ac1Reporters[2:end]],
-                    ac2_Reporters=[reverse(ac2Reporters); ac2Reporters[2:end]],
-                    m_Reporters1=fill(mReporters1, n_lags),
-                    mReporters2=fill(mReporters2, n_lags)
-                ))
+                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
             end
         end
     end
 end
+
+function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median")
+    for (root, _, files) in walkdir(folder)
+        for f in files
+            if occursin("info", f) && endswith(f, ".jld2")
+                info = read_run_spec(joinpath(root, f))
+                key = get_key(f)
+                ratefile = joinpath(root, "rates_" * key * ".txt")
+                @info "computing correlations for $ratefile"
+                r = readrates(ratefile, get_row(ratetype))
+                tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
+                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], info[:insertstep], info[:probfn], info[:coupling], lags)
+                write_correlation_csv(joinpath(root, "crosscorrelation_" * key * ".csv"), tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+            end
+        end
+    end
+end
+
 
 """
     write_correlation_functions_empirical(trace_folder, unit1_filename, unit2_filename, output_file; intensity_labels=nothing, intensity_start=1, intensity_stop=-1, intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)

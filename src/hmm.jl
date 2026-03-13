@@ -2694,7 +2694,11 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
     ON = Vector[]
     reporters = Vector[]
     for i in eachindex(noiseparams)
-        dists = probfn(noiseparams[i], num_per_state[i], components.N)
+        if typeof(probfn) <: Tuple
+            dists = probfn[i](noiseparams[i], num_per_state[i], components.N)
+        else
+            dists = probfn(noiseparams[i], num_per_state[i], components.N)
+        end
         mi = mean.(dists)  # E[O|state]
         vi = var.(dists)   # Var(O|state)
         second_moment = vi .+ mi.^2

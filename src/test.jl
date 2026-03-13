@@ -1574,6 +1574,94 @@ end
 # end
 
 
+"""
+    test_run_spec_roundtrip(; tmpdir=mktempdir())
+
+Round-trip test for the JLD2 run_spec serialization.  Builds a run_spec dict that mirrors
+the exact types produced by fit(...) for a coupled tracejoint model, writes it to a JLD2
+companion file via write_run_spec_jld2, reads it back via read_run_spec, then asserts every
+field is identical (===, ==, or ≈ as appropriate).
+
+Usage:
+    StochasticGene.test_run_spec_roundtrip()
+"""
+function test_run_spec_roundtrip(; tmpdir=mktempdir())
+    run_spec = Dict{Symbol, Any}(
+        :key            => "11",
+        :datapath       => "data/3Prime_gene_enhancer/including_background/short",
+        :TransitionType => "nstate",
+        :maxtime        => 30.0,
+        :inlabel        => "tracejoint-HBEC-nstate_enhancer-gene11",
+        :label          => "tracejoint-HBEC-nstate_enhancer-gene11",
+        :nchains        => 1,
+        :samplesteps    => 100000,
+        :datatype       => "tracejoint",
+        :warmupsteps    => 0,
+        :cell           => "HBEC",
+        :resultfolder   => "3Prime-coupled-test",
+        :propcv         => 0.05,
+        :ratetype       => "median",
+        :infolder       => "3Prime-coupled-2026-03-11",
+        :datacol        => 3,
+        :gene           => "MYC",
+        :root           => ".",
+        :decayrate      => 1.0,
+        :transitions    => (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+        :G              => (3, 3),
+        :R              => (3, 3),
+        :S              => (0, 0),
+        :insertstep     => (1, 1),
+        :coupling       => ((1, 2), [(1, 1, 2, 1)], [:inhibit]),
+        :priormean      => [0.001, 0.001, 0.01, 0.01, 0.1, 0.15, 0.15, 0.15, 0.03165055618995184, 0.0, 0.1, 0.5, 0.15, 0.01, 0.01, 0.01, 0.01, 0.1, 0.6, 0.6, 0.6, 1.0, 0.0, 0.1, 0.9, 0.2, -0.1],
+        :priorcv        => [1.0, 1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.1, 0.1, 1.0, 1.0, 1.0, 1.0, 1.0, 0.1, 0.1, 0.1, 1.0, 0.1, 0.1, 0.01, 0.1, 10.0],
+        :fittedparam    => [14, 27],
+        :fixedeffects   => (),
+        :noisepriors    => ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2]),
+        :hierarchical   => (),
+        :datacond       => ["enhancer", "gene"],
+        :elongationtime => (20.0, 5.0),
+        :traceinfo      => (1.6666666666666667, 1.0, -1),
+        :zeromedian     => Bool[1, 1],
+        :probfn         => (prob_Gaussian, prob_Gaussian),
+        :method         => Tsit5(),
+        :prerun         => 0.0,
+    )
+
+    # Write and read back via JLD2
+    fake_toml = joinpath(tmpdir, "info_roundtrip.toml")
+    write_run_spec_jld2(fake_toml, run_spec)
+    loaded = read_run_spec(fake_toml)
+
+    failures = String[]
+
+    for k in keys(run_spec)
+        orig  = run_spec[k]
+        back  = get(loaded, k, missing)
+        if back === missing
+            push!(failures, "  MISSING key :$k")
+            continue
+        end
+        ok = try
+            if orig isa AbstractFloat || (orig isa AbstractArray && eltype(orig) <: AbstractFloat)
+                orig ≈ back
+            else
+                orig == back
+            end
+        catch
+            false
+        end
+        ok || push!(failures, "  MISMATCH :$k\n    orig : $(repr(orig))\n    back : $(repr(back))")
+    end
+
+    if isempty(failures)
+        println("run_spec round-trip: ALL $(length(run_spec)) fields OK  (tmpdir=$tmpdir)")
+    else
+        println("run_spec round-trip: $(length(failures)) FAILURE(S):")
+        foreach(println, failures)
+    end
+    return isempty(failures)
+end
+
 # --- Notes on the `set_d` function family ---
 # Your `set_d` functions often return newly created arrays of Distributions.
 # e.g., `probfn(noiseparams, reporters_per_state, N)`
