@@ -2234,6 +2234,34 @@ Create DataFrame from TraceData object and model parameters.
 - Creates observation distributions and state information
 - Delegates to appropriate make_traces_dataframe method based on parameter types
 """
+
+"""
+    make_traces_dataframe_key(data::AbstractTraceData, rin, run_spec::Dict{Symbol,Any}; state=true, splicetype="", grid=nothing)
+
+Key-based entry point for predicted trace generation. Extracts all model parameters from
+`run_spec` (loaded from a JLD2 companion file), normalises `noisepriors` → `noiseparams::Int`
+and `probfn` tuple → single function as required by the coupled vs uncoupled back-end, then
+delegates to `make_traces_dataframe`.
+"""
+function make_traces_dataframe_key(data::AbstractTraceData, rin, run_spec::Dict{Symbol,Any}; state::Bool=true, splicetype::String="", grid=nothing)
+    G         = run_spec[:G]
+    coupling  = get(run_spec, :coupling, tuple())
+    noisepriors = run_spec[:noisepriors]
+    probfn_raw  = run_spec[:probfn]
+    if !isempty(coupling) && G isa Tuple
+        fn = probfn_raw isa Tuple ? probfn_raw : ntuple(_ -> probfn_raw, length(G))
+        np = noisepriors isa Tuple ? length(noisepriors[1]) : length(noisepriors)
+    else
+        fn = probfn_raw isa Tuple ? first(probfn_raw) : probfn_raw
+        np = noisepriors isa Tuple ? length(noisepriors[1]) : length(noisepriors)
+    end
+    make_traces_dataframe(data, rin,
+        run_spec[:transitions], G, run_spec[:R], run_spec[:S], run_spec[:insertstep],
+        fn, np, splicetype, state,
+        !isempty(get(run_spec, :hierarchical, ())),
+        coupling, grid, run_spec[:zeromedian])
+end
+
 function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
     if hierarchical
@@ -2291,6 +2319,50 @@ function write_traces(folder::String, datapath::String, interval::Float64, ratet
     end
 end
 
+"""
+    write_traces_key(folder; ratetype="median", state=true, splicetype="", grid=nothing)
+
+New front-end for predicted trace generation. Walks `folder` for `info_*.jld2` files,
+loads each run_spec directly (exact Julia types), and calls the back-end
+`write_trace_dataframe` with all parameters taken from the stored spec.
+No filename parsing, no user-supplied model parameters required.
+"""
+function write_traces_key(folder::String;
+        ratetype::String="median",
+        state::Bool=true,
+        splicetype::String="",
+        grid=nothing,
+        datapath=nothing,
+        datacond=nothing,
+        datacol=nothing,
+        zeromedian=nothing,
+        interval=nothing)
+    jobs = Tuple{String,String,String}[]
+    for (root, _, files) in walkdir(folder)
+        for f in files
+            if occursin("info", f) && endswith(f, ".jld2")
+                key = get_key(f)
+                push!(jobs, (joinpath(root, f), joinpath(root, "rates_" * key * ".txt"), joinpath(root, "predictedtraces_" * key * ".csv")))
+            end
+        end
+    end
+    Threads.@threads for (info_path, ratefile, outfile) in jobs
+        @info "writing traces for $ratefile"
+        info     = read_run_spec(info_path)
+        r        = readrates(ratefile, get_row(ratetype))
+        traceinfo = info[:traceinfo]
+        dt       = isnothing(interval)   ? Float64(traceinfo[1]) : Float64(interval)
+        start    = length(traceinfo) > 1 ? traceinfo[2] : 1
+        stop     = length(traceinfo) > 2 ? traceinfo[3] : -1
+        dp       = isnothing(datapath)   ? info[:datapath]   : datapath
+        dc       = isnothing(datacond)   ? info[:datacond]   : datacond
+        col      = isnothing(datacol)    ? info[:datacol]    : datacol
+        zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
+        data = load_data_trace(dp, "", "", dc, (dt, start, stop, 1.0, 0.0), :trace, col, zm)
+        df = make_traces_dataframe_key(data, r, info; state=state, splicetype=splicetype, grid=grid)
+        CSV.write(outfile, df)
+    end
+end
 
 
 # """
