@@ -2426,8 +2426,19 @@ function viterbi_log(loga, logb, logp0, N, T)
     ψ[:, 1] .= 0
     for t in 2:T
         for j in 1:N
-            m, ψ[j, t] = findmax(ϕ[:, t-1] + loga[:, j])
-            ϕ[j, t] = m + logb[j, t]
+            # m, ψ[j, t] = findmax(ϕ[:, t-1] + loga[:, j])  # allocates N-vector each iteration
+            # ϕ[j, t] = m + logb[j, t]
+            best = -Inf
+            bestk = 1
+            for k in 1:N
+                v = ϕ[k, t-1] + loga[k, j]
+                if v > best
+                    best = v
+                    bestk = k
+                end
+            end
+            ψ[j, t] = bestk
+            ϕ[j, t] = best + logb[j, t]
         end
     end
     q[T] = argmax(ϕ[:, T])
@@ -2450,12 +2461,24 @@ function viterbi(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1<:AbstractArra
     ψ[:, 1] .= 0
     for t in 2:T
         for j in 1:N
-            if !b[1][1]
-                m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[1][:, j], 0.0)))
-            else
-                m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[2][:, j], 0.0)))
+            # if !b[1][1]                                                              # allocates N-vector each iteration
+            #     m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[1][:, j], 0.0)))
+            # else
+            #     m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[2][:, j], 0.0)))
+            # end
+            # ϕ[j, t] = m + logb[j, t]
+            acol = b[1][1] ? a[2][:, j] : a[1][:, j]
+            best = -Inf
+            bestk = 1
+            for k in 1:N
+                v = ϕ[k, t-1] + log(max(acol[k], 0.0))
+                if v > best
+                    best = v
+                    bestk = k
+                end
             end
-            ϕ[j, t] = m + logb[j, t]
+            ψ[j, t] = bestk
+            ϕ[j, t] = best + logb[j, t]
         end
     end
     q[T] = argmax(ϕ[:, T])
@@ -2557,8 +2580,19 @@ function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
     ψ[:, :, 1] .= 0
     for t in 2:T
         for j in 1:Ngrid, i in 1:Nstate
-            m, ψ[i, j, t] = findmax(ϕ[:, :, t-1] .+ loga[:, i] .+ loga_grid[:, j])
-            ϕ[i, j, t] = m + logb[i, j, t]
+            # m, ψ[i, j, t] = findmax(ϕ[:, :, t-1] .+ loga[:, i] .+ loga_grid[:, j])  # allocates Nstate×Ngrid array each iteration
+            # ϕ[i, j, t] = m + logb[i, j, t]
+            best = -Inf
+            besti, bestj = 1, 1
+            for jj in 1:Ngrid, ii in 1:Nstate
+                v = ϕ[ii, jj, t-1] + loga[ii, i] + loga_grid[jj, j]
+                if v > best
+                    best = v
+                    besti, bestj = ii, jj
+                end
+            end
+            ψ[i, j, t] = LinearIndices((Nstate, Ngrid))[besti, bestj]
+            ϕ[i, j, t] = best + logb[i, j, t]
         end
         q[T] = argmax(ϕ[:, :, T])
         for t in T-1:-1:1

@@ -1662,6 +1662,45 @@ function test_run_spec_roundtrip(; tmpdir=mktempdir())
     return isempty(failures)
 end
 
+"""
+    profile_trace_prediction(info_jld2::String, rates_file::String; ratetype="median")
+
+Profile a single `make_traces_dataframe_key` call to find allocation hotspots.
+Runs the call once to warm up JIT, then profiles allocations on the second call.
+
+Reports:
+- Wall time and allocations for the full call (@time)
+- Top allocation sites via Profile.Allocs (requires Julia 1.8+)
+
+Usage:
+    StochasticGene.profile_trace_prediction(
+        "results/5Prime-coupled-2026-03-11/info_2435.jld2",
+        "results/5Prime-coupled-2026-03-11/rates_2435.txt")
+"""
+function profile_trace_prediction(info_jld2::String, rates_file::String; ratetype::String="median")
+    info = read_run_spec(info_jld2)
+    r    = readrates(rates_file, get_row(ratetype))
+    traceinfo = info[:traceinfo]
+    data = load_data_trace(info[:datapath], "", "", info[:datacond],
+        (Float64(traceinfo[1]), traceinfo[2], traceinfo[3], 1.0, 0.0),
+        :trace, info[:datacol], info[:zeromedian])
+
+    println("=== Warmup (JIT) ===")
+    make_traces_dataframe_key(data, r, info)
+
+    println("\n=== Timed run ===")
+    @time make_traces_dataframe_key(data, r, info)
+
+    bytes = @allocated make_traces_dataframe_key(data, r, info)
+    println("\n=== Allocations (timed run, post-JIT) ===")
+    println("  Total: ", round(bytes / 1024^3, digits=2), " GiB")
+    println("\nTo get per-site breakdown, run at the REPL:")
+    println("  using Profile")
+    println("  Profile.Allocs.@profile sample_rate=1 StochasticGene.make_traces_dataframe_key(data, r, info)")
+    println("  PProf.Allocs.pprof()  # requires PProf.jl")
+    return nothing
+end
+
 # --- Notes on the `set_d` function family ---
 # Your `set_d` functions often return newly created arrays of Distributions.
 # e.g., `probfn(noiseparams, reporters_per_state, N)`
