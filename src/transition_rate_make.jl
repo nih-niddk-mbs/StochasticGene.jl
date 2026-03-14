@@ -1183,6 +1183,109 @@ function make_mat_T(components::TCoupledComponents{Vector{TCoupledUnitComponents
     make_mat_TC(components, rates, coupling_strength)
 end
 
+"""
+    make_mat_TC_gene_full(coupling_strength, Gm, Gs, Gt, IG, sources, model)
+
+Gene-level coupled transition matrix (G-only, no R): builds N_gene×N_gene with correct
+Kronecker ordering for mixed nG per unit. Use for dt=true (e.g. ONG, OFFG) when units have
+different G sizes or hidden units. Does not call legacy make_mat_TC.
+"""
+function make_mat_TC_gene_full(coupling_strength, Gm, Gs, Gt, IG, sources, model)
+    unit_model = model
+    n = length(unit_model)
+    N = prod(size.(IG, 2))
+    Tc = spzeros(N, N)
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in 1:n for β in sources[α]]
+    function kron_slots(Ms::Vector)
+        out = Ms[1]
+        for j in 2:n
+            out = kron(out, Ms[j])
+        end
+        out
+    end
+    for α in 1:n
+        Ms = [j == α ? Gm[unit_model[α]] : IG[unit_model[j]] for j in 1:n]
+        Tα = kron_slots(Ms)
+        for β in 1:α-1
+            if β ∈ sources[α]
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Ms_c = [j == β ? Gs[unit_model[β]] : (j == α ? Gt[unit_model[α]] : IG[unit_model[j]]) for j in 1:n]
+                Tα += coupling_strength[idx] * kron_slots(Ms_c)
+            end
+        end
+        for β in α+1:n
+            if β ∈ sources[α]
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Ms_c = [j == β ? Gs[unit_model[β]] : (j == α ? Gt[unit_model[α]] : IG[unit_model[j]]) for j in 1:n]
+                Tα += coupling_strength[idx] * kron_slots(Ms_c)
+            end
+        end
+        Tc += Tα
+    end
+    return Tc
+end
+
+"""
+    make_mat_TC_full(unit, Tin, T_full, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+
+General coupled transition matrix for dwell times: always uses full per-unit state dimensions
+(N = ∏ n_α) and full U/V/IT—no marginalization shortcuts. Use this path for hidden units,
+mixed R per unit, or when legacy make_mat_TC(unit, ...) would give dimension mismatches.
+Implements its own N×N build so Kronecker ordering is correct for mixed dimensions; does not
+call the shared make_mat_TC (legacy path unchanged).
+"""
+function make_mat_TC_full(unit::Int, Tin::SparseMatrixCSC, T_full, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+    unit_model = model
+    n = length(unit_model)
+    # Full-size U, V for every unit
+    U = Vector{SparseMatrixCSC}(undef, n)
+    V = Vector{SparseMatrixCSC}(undef, n)
+    for i in 1:n
+        if size(IR[i], 1) > 0
+            U[i] = kron(IR[i], Gs[i])
+            V[i] = kron(IR[i], Gt[i])
+        else
+            U[i] = Gs[i]
+            V[i] = Gt[i]
+        end
+    end
+    T = copy(T_full)
+    T[unit] = Tin
+    N = prod(size.(IT, 2))
+    Tc = spzeros(N, N)
+    coupling_pairs = Tuple{Int,Int}[(β, α) for α in 1:n for β in sources[α]]
+    # Helper: Kronecker product in state order (1..n) with given per-slot matrices
+    function kron_slots(Ms::Vector)
+        out = Ms[1]
+        for j in 2:n
+            out = kron(out, Ms[j])
+        end
+        out
+    end
+    for α in 1:n
+        # Uncoupled block: slot α = T[α], others = IT
+        Ms = [j == α ? T[unit_model[α]] : IT[unit_model[j]] for j in 1:n]
+        Tα = kron_slots(Ms)
+        for β in 1:α-1
+            if β ∈ sources[α]
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Ms_c = [j == β ? U[unit_model[β]] : (j == α ? V[unit_model[α]] : IT[unit_model[j]]) for j in 1:n]
+                Tα += coupling_strength[idx] * kron_slots(Ms_c)
+            end
+        end
+        for β in α+1:n
+            if β ∈ sources[α]
+                idx = findfirst(isequal((β, α)), coupling_pairs)
+                Ms_c = [j == β ? U[unit_model[β]] : (j == α ? V[unit_model[α]] : IT[unit_model[j]]) for j in 1:n]
+                Tα += coupling_strength[idx] * kron_slots(Ms_c)
+            end
+        end
+        Tc += Tα
+    end
+    return Tc
+end
+
+# Legacy: uses G-only matrices for non-current units (marginalization shortcut). Do not use for hidden units or mixed R.
 function make_mat_TC(unit::Int, Tin::SparseMatrixCSC, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
     U = copy(Gs)
     V = copy(Gt)
@@ -1251,34 +1354,26 @@ end
 """
     make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
 
-Create dwell time transition matrices for coupled system.
-
-# Description
-This function creates dwell time transition matrices for a coupled system by
-applying the coupled transition matrix construction and then filtering for
-sojourn states. It handles multiple dwell time matrices for different units.
-
-# Arguments
-- `unit::Int`: Unit index in the coupled system
-- `TD::Vector`: Vector of dwell time matrices
-- `Gm`: Vector of gene matrices
-- `Gs`: Vector of source matrices
-- `Gt`: Vector of target matrices
-- `IT`: Vector of identity matrices
-- `IG`: Vector of gene identity matrices
-- `IR`: Vector of RNA identity matrices
-- `coupling_strength`: Coupling strength parameters
-- `sources`: Source specifications
-- `model`: Model specification
-- `sojourn::Vector{Vector{Int}}`: Vector of sojourn state vectors for each unit
-
-# Returns
-- `Vector{SparseMatrixCSC}`: Vector of dwell time transition matrices with zeros removed
+Legacy: create dwell time transition matrices using G-marginalization path (make_mat_TC(unit, ...)).
 """
 function make_mat_TCD(unit::Int, TD::Vector, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
     TCD = Vector{SparseMatrixCSC}(undef, length(TD))
     for i in eachindex(TD)
         TCD[i] = make_mat_TC(unit, TD[i], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
+        make_mat_TCD!(TCD[i], sojourn[i])
+    end
+    return dropzeros.(TCD)
+end
+
+"""
+    make_mat_TCD_full(unit::Int, TD::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
+
+General path: dwell time TCD matrices using full dimensions (make_mat_TC_full). Use for hidden units / mixed R.
+"""
+function make_mat_TCD_full(unit::Int, TD::Vector, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, sojourn::Vector{Vector{Int}})
+    TCD = Vector{SparseMatrixCSC}(undef, length(TD))
+    for i in eachindex(TD)
+        TCD[i] = make_mat_TC_full(unit, TD[i], T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
         make_mat_TCD!(TCD[i], sojourn[i])
     end
     return dropzeros.(TCD)

@@ -2032,7 +2032,7 @@ Create trace data model from raw traces and model parameters.
 - Supports coupled and uncoupled model types
 """
 function make_trace_datamodel(traces::Vector, interval::Float64, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])), Int[])
     make_trace_datamodel(data, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
 end
 
@@ -2201,7 +2201,7 @@ Create DataFrame from raw traces and model parameters.
 - Handles both coupled and uncoupled models automatically
 """
 function make_traces_dataframe(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])), Int[])
     make_traces_dataframe(data, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
 end
 
@@ -2263,7 +2263,7 @@ function make_traces_dataframe_key(data::AbstractTraceData, rin, run_spec::Dict{
 end
 
 function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])))
+    # data = TraceData{String,String,Tuple}("", "", interval, (traces, [], 0.0, length(traces[1])), Int[])
     if hierarchical
         h = (2, [8], ())
         method = (Tsit5(), true)

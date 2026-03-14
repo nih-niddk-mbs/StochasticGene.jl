@@ -36,7 +36,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     usually the first row is the shared and mean hyper parameters and the 2nd are the standard deviations, the rest of the rows are the individual rates and noise params
 - `infolder::String=""`: result folder used for initial parameters
 - `inlabel::String=""`: label of files used for initial conditions
-- `insertstep=1`: R step where reporter is inserted
+- `insertstep=1`: R step where reporter is inserted. Must be >= 1; when R = 0, insertstep is ignored (no RNA steps).
 - `label::String=""`: label of output files produced
 - `maxtime=60`: maximum wall time for run, default = 60 min
 - `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), Tsit5(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
@@ -59,6 +59,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
 - `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `end`, `zeromedian` (and optionally `active_fraction`, `background`). When non-empty, used for observation-first traces (enables hidden units). Legacy `traceinfo`/`zeromedian` apply when `trace_specs` is empty.
+- `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, dttype). When non-empty, used for dwell-time data with multiple units or observation mapping. Legacy dwell data uses single-unit defaults when empty.
 - `traceinfo=(1.0, 1., -1, 1., 0.5)`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
     for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
     If active fraction is 1.0, then traceinfo can be a 3-tuple, e.g. (1.0, 1., -1) since background correction is not needed
@@ -173,6 +174,7 @@ const _FIT_DEFAULTS = (
     ejectnumber=1,
     yieldfactor=1.0,
     trace_specs=[],
+    dwell_specs=[],
 )
 
 function fit(; key=nothing, kwargs...)
@@ -252,6 +254,7 @@ function fit(; key=nothing, kwargs...)
     ejectnumber = merged[:ejectnumber]
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
+    dwell_specs = merged[:dwell_specs]
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, merged[:TransitionType])
     run_spec[:label] = label
     run_spec[:inlabel] = inlabel
@@ -266,9 +269,9 @@ function fit(; key=nothing, kwargs...)
     _current_name_override[] = name_override
     try
         if rinit === nothing
-            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs)
+            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
         else
-            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs)
+            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
         end
     finally
         _current_run_spec[] = nothing
@@ -280,14 +283,14 @@ end
     fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[])
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     transitions = get_transitions(G, TransitionType)
     fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling, grid)
     println("transitions: ", transitions)
     println("fixedeffects: ", fixedeffects)
     println("fittedparam: ", fittedparam)
     fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, parse(Int, G), parse(Int, R), parse(Int, S), parse(Int, insertstep), tuple(), root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
-        propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs)
+        propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 end
 
 """
@@ -295,22 +298,22 @@ end
 
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[])
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
     propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
-    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs)
+    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 end
 
 """
     fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[])
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
-    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs)
+    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -579,6 +582,37 @@ function set_decayrate(decayrate::Tuple, gene, cell, root)
 end
 
 """
+    normalize_insertstep(R, insertstep)
+
+Enforce insertstep >= 1 everywhere. When R = 0, insertstep is ignored (no RNA steps) and 1 is used.
+When R > 0, insertstep is clamped to at least 1; a warning is issued if it was < 1.
+"""
+function normalize_insertstep(R::Int, insertstep::Int)
+    if R == 0
+        return 1
+    end
+    if insertstep < 1
+        @warn "insertstep was $insertstep ( < 1 ); set to 1"
+        return 1
+    end
+    return insertstep
+end
+function normalize_insertstep(R::Tuple, insertstep::Tuple)
+    out = collect(insertstep)
+    for i in eachindex(R)
+        if R[i] == 0
+            out[i] = 1
+        elseif insertstep[i] < 1
+            @warn "insertstep[$i] was $(insertstep[i]) ( < 1 ); set to 1"
+            out[i] = 1
+        else
+            out[i] = insertstep[i]
+        end
+    end
+    return tuple(out...)
+end
+
+"""
     reset_S(S::Int, R::Int, insertstep::Int)
 
 Adjust the number of splice sites S if it exceeds R - insertstep + 1.
@@ -719,7 +753,7 @@ end
 
 
 """
-    make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[])
+    make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[], dwell_specs=[])
 
 Create and configure data, model, and options structures for fitting.
 
@@ -765,6 +799,7 @@ Create and configure data, model, and options structures for fitting.
 - `datacol`: Data column (default: 3)
 - `ejectnumber`: Ejection number (default: 1)
 - `trace_specs`: Container of trace specs for observation-first traces (default: empty); each spec has at least `unit`, `interval`, `start`, `end`, `zeromedian`. Not used until translation layer is implemented.
+- `dwell_specs`: Container of dwell-time specs per unit (default: empty); used for multi-unit or observation-mapped dwell data when non-empty. Legacy single-unit when empty.
 
 # Returns
 - `Tuple`: (data, model, options) structures
@@ -776,8 +811,9 @@ Create and configure data, model, and options structures for fitting.
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
 """
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[])
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     gene = check_genename(gene, "[")
+    insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
     if G == 1 && !isempty(transitions)
         println("G=1, transitions are ignored")
@@ -786,12 +822,25 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
-    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor)
+    isempty(dwell_specs) && (units = Int[])
+    units = get_units(dwell_specs, trace_specs)
+    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, units)
+    # For dwelltime with dwell_specs and coupling: build full onstates/dttype (so coupled TD matrices include hidden units) and set data.units
+    dwell_dttype_full = nothing
+    if (datatype == "dwelltime" || datatype == "dwell") && !isempty(dwell_specs) && !isempty(coupling)
+        n_units = length(coupling[1])
+        full_onstates, full_dttype = full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
+        onstates = full_onstates
+        dwell_dttype_full = full_dttype
+        if data isa DwellTimeData
+            data = DwellTimeData(data.label, data.gene, data.bins, data.DwellTimes, data.DTtypes, observed_units_from_dwell_specs(dwell_specs))
+        end
+    end
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, dwell_dttype_full=dwell_dttype_full)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     else
@@ -800,7 +849,24 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     return data, model, options
 end
 
+"""
+    get_units(dwell_specs, trace_specs)
 
+Return the vector of observed unit indices (1-based) from dwell_specs or trace_specs.
+Each spec in either container is a NamedTuple with a `unit` field.
+When both are empty, returns Int[] (legacy: no unit subset).
+When only one is non-empty, returns [spec.unit for spec in that container].
+When both non-empty, returns units from dwell_specs (used e.g. for DwellTimeData).
+"""
+function get_units(dwell_specs, trace_specs)
+    if !isempty(dwell_specs)
+        return [spec.unit for spec in dwell_specs]
+    elseif !isempty(trace_specs)
+        return [spec.unit for spec in trace_specs]
+    else
+        return Int[]
+    end
+end
 """
     set_trace_background(traceinfo)
 
@@ -1016,7 +1082,7 @@ Load and process trace data from files.
 - Supports single and joint trace data types
 - Throws error if no traces are found
 """
-function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0)
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0, units=Int[])
     if typeof(datapath) <: String
         tracer = read_tracefiles(datapath, datacond, traceinfo, col)
     else
@@ -1039,12 +1105,12 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
         background = set_trace_background(traceinfo)
     end
     if datatype == :trace || datatype == :tracejoint
-        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale))
+        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale), Int[])
     elseif datatype == :tracerna
         len, h = read_rna(gene, datacond, datapath[2])
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
-        return TraceRNAData{typeof((trace, background, weight, nframes)),typeof(h)}(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h, yield)
+        return TraceRNAData{typeof((trace, background, weight, nframes)),typeof(h)}(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h, yield, units)
     else
         throw(ArgumentError("Unsupported datatype '$datatype'"))
     end
@@ -1094,7 +1160,7 @@ Load trace data for grid-based analysis.
 function load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
     trace = read_tracefiles_grid(datapath, datacond, traceinfo)
     # nframes = traceinfo[3] < 0 ? floor(Int, (720 - traceinfo[2] + traceinfo[1]) / traceinfo[1]) : floor(Int, (traceinfo[3] - traceinfo[2] + traceinfo[1]) / traceinfo[1])
-    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1))
+    return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, Vector[], 0.0, 1), Int[])
 end
 
 const TRACE_DATATYPES = Set([
@@ -1127,21 +1193,21 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 # Throws
 - `ArgumentError` if `datatype` is unsupported
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false, yieldfactor::Float64=1.0)
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false, yieldfactor::Float64=1.0, units=Int[])
     dt = normalize_datatype(datatype)
 
     if dt == :rna
         len, h = read_rna(gene, datacond, datapath)
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
-        return RNAData{typeof(len),typeof(h)}(label, gene, len, h, yield)
+        return RNAData{typeof(len),typeof(h)}(label, gene, len, h, yield, units)
 
     elseif dt == :rnacount
         countsRNA, yield_vec, nRNA = read_rnacount(gene, datacond, datapath)
         # Compute nRNA using nhist_loss if any yield < 1.0 (use minimum for most conservative)
         min_yield = minimum(yield_vec)
         nRNA_computed = min_yield < 1.0 ? nhist_loss(nRNA, min_yield) : nRNA
-        return RNACountData(label, gene, nRNA_computed, countsRNA, yield_vec)
+        return RNACountData(label, gene, nRNA_computed, countsRNA, yield_vec, units)
 
     elseif dt == :rnaonoff
         len, h = read_rna(gene, datacond, datapath[1])
@@ -1149,7 +1215,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         LC = readfile(gene, datacond, datapath[2])
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
-        return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3], yield)
+        return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3], yield, units)
 
     elseif dt == :rnadwelltime
         len, h = read_rna(gene, datacond, datapath[1])
@@ -1157,7 +1223,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         bins, DT = read_dwelltimes(datapath[2:end])
         # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
-        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield)
+        return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield, units)
 
     elseif dt == :dwelltime
         bins, DT = read_dwelltimes(datapath)
@@ -1167,7 +1233,7 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         if dt == :tracegrid
             return load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
         else
-            return load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian, yieldfactor)
+            return load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian, yieldfactor, units)
         end
 
     else
@@ -1469,7 +1535,32 @@ function make_reporter_components(data::RNAOnOffData, transitions, G::Int, R::In
 end
 
 """
-    make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
+    full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
+
+Build full-length onstates and dttype (length n_units) for model construction when some units are hidden.
+Observed units get their spec; hidden units get a placeholder (copy of first spec) so coupled TD matrices are built for all units.
+"""
+function full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
+    observed = observed_units_from_dwell_specs(dwell_specs)
+    full_onstates = Vector{typeof(dwell_specs[1].onstates)}(undef, n_units)
+    full_dttype = Vector{typeof(dwell_specs[1].dttype)}(undef, n_units)
+    placeholder_o = dwell_specs[1].onstates
+    placeholder_d = dwell_specs[1].dttype
+    for k in 1:n_units
+        j = findfirst(==(k), observed)
+        if j !== nothing
+            full_onstates[k] = dwell_specs[j].onstates
+            full_dttype[k] = dwell_specs[j].dttype
+        else
+            full_onstates[k] = placeholder_o
+            full_dttype[k] = placeholder_d
+        end
+    end
+    full_onstates, full_dttype
+end
+
+"""
+    make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing)
 
 Create reporter components for dwell time data analysis.
 
@@ -1484,18 +1575,20 @@ Create reporter components for dwell time data analysis.
 - `noisepriors`: Noise priors
 - `coupling`: Coupling structure
 - `ejectnumber`: Number of mRNAs per burst (default: 1)
+- `dttype_full`: Optional full-length dwell type vector for all units (used when some units are hidden).
 
 # Returns
 - `Tuple`: (reporter, components)
 
 # Notes
 - Delegates to make_reporter_components_DT for dwell time analysis
-- Uses dwell time types from data structure
+- Uses dwell time types from data structure (or dttype_full when provided)
 - Creates appropriate components for dwell time distribution modeling
 - Used for analyzing time spent in different model states
 """
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-    make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, data.DTtypes, coupling)
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing)
+    dtype = (dttype_full !== nothing) ? dttype_full : data.DTtypes
+    make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, dtype, coupling)
 end
 
 """
@@ -1932,9 +2025,10 @@ end
 
 
 """
-    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
+    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
 
 Construct and return the appropriate model struct for the given data and options.
+When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full-length dttype for all units) so that coupled TD matrices are built correctly when some units are hidden.
 
 # Arguments
 - `data`: Data structure
@@ -1968,8 +2062,13 @@ Construct and return the appropriate model struct for the given data and options
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10)
-    reporter, components = make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
+    insertstep = normalize_insertstep(R, insertstep)
+    reporter, components = if data isa DwellTimeData && dwell_dttype_full !== nothing
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dttype_full=dwell_dttype_full)
+    else
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+    end
 
     nrates = num_rates(transitions, R, S, insertstep)
     ratetransforms = make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, reporter, coupling, grid, hierarchical, zeromedian)
@@ -2276,6 +2375,7 @@ Generate default prior means for coupled models.
 - Used for coupled model initialization
 """
 function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
+    length(initprior) < length(R) && (initprior = vcat(initprior, fill(0.1, length(R) - length(initprior))))
     rm = Float64[]
     for i in eachindex(R)
         append!(rm, prior_ratemean(transitions[i], R[i], S[i], insertstep[i], decayrate, noisepriors[i], elongationtime[i], initprior[i]))

@@ -218,6 +218,8 @@ export
     summarize_model_scores,
     test_compare,
     test_compare_coupling,
+    test_num_reporters_consistency,
+    diagnose_sim_vs_cme,
     test_fit_rna,
     test_fit_rnadwelltime,
     test_fit_rnaonoff,

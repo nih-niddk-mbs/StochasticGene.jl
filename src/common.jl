@@ -66,7 +66,9 @@ struct RNAData{nType,hType} <: AbstractRNAData{hType}
     nRNA::nType
     histRNA::hType
     yield::Union{Float64, Tuple{Float64, Int}}
+    units::Vector{Int}
 end
+RNAData(label, gene, nRNA, histRNA, yield) = RNAData(label, gene, nRNA, histRNA, yield, [1])
 
 struct RNACountData <: AbstractRNAData{Vector{Int}}
     label::String
@@ -74,7 +76,9 @@ struct RNACountData <: AbstractRNAData{Vector{Int}}
     nRNA::Int
     countsRNA::Vector{Int}
     yieldfactor::Vector{Float64}
+    units::Vector{Int}
 end
+RNACountData(label, gene, nRNA, countsRNA, yieldfactor) = RNACountData(label, gene, nRNA, countsRNA, yieldfactor, [1])
 
 struct DwellTimeData <: AbstractHistogramData
     label::String
@@ -82,7 +86,9 @@ struct DwellTimeData <: AbstractHistogramData
     bins::Vector
     DwellTimes::Vector
     DTtypes::Vector
+    units::Vector{Int}
 end
+DwellTimeData(label, gene, bins, DwellTimes, DTtypes) = DwellTimeData(label, gene, bins, DwellTimes, DTtypes, [1])
 
 """
     RNAOnOffData
@@ -107,7 +113,9 @@ struct RNAOnOffData <: AbstractHistogramData
     ON::Vector
     OFF::Vector
     yield::Union{Float64, Tuple{Float64, Int}}
+    units::Vector{Int}
 end
+RNAOnOffData(label, gene, nRNA, histRNA, bins, ON, OFF, yield) = RNAOnOffData(label, gene, nRNA, histRNA, bins, ON, OFF, yield, [1])
 """
     RNADwellTimeData
 
@@ -131,7 +139,9 @@ struct RNADwellTimeData <: AbstractHistogramData
     DwellTimes::Vector{Vector}
     DTtypes::Vector
     yield::Union{Float64, Tuple{Float64, Int}}
+    units::Vector{Int}
 end
+RNADwellTimeData(label, gene, nRNA, histRNA, bins, DwellTimes, DTtypes, yield) = RNADwellTimeData(label, gene, nRNA, histRNA, bins, DwellTimes, DTtypes, yield, [1])
 """
     TraceData{labelType,geneType,traceType}
 
@@ -142,13 +152,17 @@ Structure for storing trace data.
 - `gene::geneType`: Gene name (case sensitive).
 - `interval::Float64`: Time interval between trace points.
 - `trace::traceType`: Trace data.
+- `units::Vector{Int}`: Unit index per observation (trace column); empty means legacy 1:1 (observation i = unit i).
 """
 struct TraceData{labelType,geneType,traceType} <: AbstractTraceData
     label::labelType
     gene::geneType
     interval::Float64
     trace::traceType
+    units::Vector{Int}
 end
+# Legacy constructor: omit units (default empty = 1:1 mapping).
+TraceData(label, gene, interval, trace) = TraceData(label, gene, interval, trace, Int[])
 """
     TraceRNAData{traceType,hType}
 
@@ -161,7 +175,8 @@ Structure for storing trace RNA histogram data.
 - `trace`: Trace data (type varies).
 - `nRNA`: Histogram length.
 - `histRNA`: RNA histogram (type varies).
-- `yieldfactor`: Detection efficiency (default 1.0).
+- `yield`: Detection efficiency (Float64 or (yield, nRNA_true) tuple).
+- `units::Vector{Int}`: Unit index per observation; empty means legacy 1:1.
 """
 struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     label::String
@@ -171,7 +186,10 @@ struct TraceRNAData{traceType,hType} <: AbstractTraceHistogramData
     nRNA::Int
     histRNA::hType
     yield::Union{Float64, Tuple{Float64, Int}}
+    units::Vector{Int}
 end
+# Legacy constructor: omit units (default empty = 1:1 mapping).
+TraceRNAData(label, gene, interval, trace, nRNA, histRNA, yield) = TraceRNAData(label, gene, interval, trace, nRNA, histRNA, yield, Int[])
 
 # Helper functions for yield Union type
 """

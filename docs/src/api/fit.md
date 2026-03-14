@@ -17,7 +17,7 @@ fits = fit(; kwargs...)
 - `G::Int = 2`: Number of gene states
 - `R::Int = 0`: Number of pre-RNA steps
 - `S::Int = 0`: Number of splice sites (must be ≤ R - insertstep + 1)
-- `insertstep::Int = 1`: Reporter insertion step
+- `insertstep::Int = 1`: Reporter insertion step (must be ≥ 1; ignored when R = 0)
 - `transitions::Tuple`: Tuple of vectors specifying state transitions
 
 ### Data Parameters

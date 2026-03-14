@@ -1617,18 +1617,19 @@ function ll_off(trace::Tuple, noiseparams, reporter, components, a::Matrix, p0)
     end
 end
 
-function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method)
+function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method; observed_units=nothing)
     l = 0.0
     components = components.modelcomponents
     dims = [components[i].nT for i in eachindex(components)]
-    for i in eachindex(rates)
-        if typeof(trace[3]) <: AbstractVector && trace[3][i] > 0.0
+    unit_inds = observed_units !== nothing ? observed_units : eachindex(rates)
+    for (idx, i) in enumerate(unit_inds)
+        if typeof(trace[3]) <: AbstractVector && length(trace[3]) >= idx && trace[3][idx] > 0.0
             a, p0 = make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method)
             rps = reduce_reporters_per_state(reporter[i].per_state, dims, i)
-            d = set_d_background(noiseparams[i], trace[5][i], rps, reporter[i].probfn, dims[i])
-            b = set_b_background(trace[2][i], d)
+            d = set_d_background(noiseparams[i], trace[5][idx], rps, reporter[i].probfn, dims[i])
+            b = set_b_background(trace[2][idx], d)
             _, C = forward(a, b, p0)
-            l += -sum(log.(C)) * trace[3][i] * trace[4]
+            l += -sum(log.(C)) * trace[3][idx] * trace[4]
         end
     end
     l * length(trace[1])
@@ -1834,13 +1835,19 @@ function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter,
     ll + lb, logpredictions
 end
 
-# coupled
-function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+# coupled (observed_units: when set, only these units have trace columns; full model still has all units)
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
-    d = set_d(noiseparams, reporter)
+    if observed_units !== nothing
+        noiseparams_obs = [noiseparams[i] for i in observed_units]
+        reporter_obs = reporter[observed_units]
+        d = set_d(noiseparams_obs, reporter_obs)
+    else
+        d = set_d(noiseparams, reporter)
+    end
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
-    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method)
+    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units)
     ll + lb, logpredictions
 end
 
