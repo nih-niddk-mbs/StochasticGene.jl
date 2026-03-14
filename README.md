@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.7.2**
+**Version 1.7.3**
 
 <!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl)
