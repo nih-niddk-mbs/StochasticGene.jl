@@ -415,7 +415,7 @@ function test_fit_tracejoint(; coupling=((1, 2), [(1, 2, 2, 1)], [:free]), G=(2,
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
-    return fits, stats, measures, model, data, options
+    # return fits, stats, measures, model, data, options
     println(fits.accept," ",fits.total)
     lower = stats.qparam[1,:]
     upper = stats.qparam[3,:]
