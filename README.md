@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.7**
+**Version 1.7.2**
 
 <!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl)
@@ -68,7 +68,9 @@ fits = fit(
 
 ## Module Structure
 
-- `transition_rate_make.jl`: Transition rate calculations
+- `common.jl`: Type system and common functions
+- `transition_rate_structures.jl`, `transition_rate_elements.jl`, `transition_rate_functions.jl`, `transition_rate_make.jl`: Transition rate matrices and master equations
+- `likelihoods.jl`: Likelihood functions for fitting
 - `metropolis_hastings.jl`: MCMC parameter estimation
 - `io.jl`: Input/output operations
 - `chemical_master.jl`: Chemical master equation solutions
@@ -78,18 +80,18 @@ fits = fit(
 - `analysis.jl`: Post-fit analysis tools
 - `biowulf.jl`: NIH Biowulf cluster support
 - `hmm.jl`: Hidden Markov model functions
+- `test.jl`: Test functions
 
 ## Dependencies
 
-- `CSV`: Data handling
-- `DataFrames`: Data manipulation
+- `CSV`, `DataFrames`: Data handling and manipulation
 - `Distributed`: Parallel processing
-- `Distributions`: Statistical distributions
-- `LSODA`: ODE solvers
+- `Distributions`, `StatsBase`: Statistical distributions and functions
+- `LSODA`, `OrdinaryDiffEq`: ODE solvers
 - `MultivariateStats`: Statistical analysis
 - `Optim`: Optimization algorithms
-- `ProgressMeter`: Progress tracking
-- `StatsBase`: Statistical functions
+- `FFTW`, `JLD2`, `JSON`, `TOML`: FFT, serialization, and configuration
+- `SparseArrays`, `LinearAlgebra`: Numerical linear algebra
 
 ## Documentation
 

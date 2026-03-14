@@ -8,16 +8,21 @@
 
 # Functions to compute steady state mRNA histograms
 """
-steady_state(M,nT,nalleles,nhist)
-steady_state(M,nT,nalleles)
+    steady_state(M, nT, nalleles, nhist)
+    steady_state(M, nT, nalleles)
 
-return steady state mRNA histogram for G and GR models
+Return steady-state mRNA histogram for G and GR models by computing the null space of the
+truncated full transition matrix.
 
-computes null space of the truncated full transition matrix.
+# Arguments
+- `M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
+- `nT`: Dimension of state transitions
+- `nalleles`: Number of alleles (for convolution)
+- `nhist`: Length of histogram to return (four-argument form only)
 
--`M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
--`nT`: dimension of state transitions
-
+# Returns
+- `steady_state(M, nT, nalleles, nhist)`: Vector of length `nhist`
+- `steady_state(M, nT, nalleles)`: Full marginal histogram convolved over alleles
 """
 steady_state(M, nT, nalleles, nhist) = steady_state(M, nT, nalleles)[1:nhist]
 

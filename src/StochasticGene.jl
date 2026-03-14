@@ -6,7 +6,7 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
-**Version:** 1.7
+**Version:** 1.7.2
 
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
@@ -80,7 +80,9 @@ fits = fit(
 
 # Module Structure
 
-- `transition_rate_make.jl`: Transition rate calculations
+- `common.jl`: Type system and common functions
+- `transition_rate_structures.jl`, `transition_rate_elements.jl`, `transition_rate_functions.jl`, `transition_rate_make.jl`: Transition rate matrices and master equations
+- `likelihoods.jl`: Likelihood functions for fitting
 - `metropolis_hastings.jl`: MCMC parameter estimation
 - `io.jl`: Input/output operations
 - `chemical_master.jl`: Chemical master equation solutions
@@ -90,24 +92,24 @@ fits = fit(
 - `analysis.jl`: Post-fit analysis tools
 - `biowulf.jl`: NIH Biowulf cluster support
 - `hmm.jl`: Hidden Markov model functions
+- `test.jl`: Test functions
 
 # Dependencies
 
-- `CSV`: Data handling
-- `DataFrames`: Data manipulation
+- `CSV`, `DataFrames`: Data handling and manipulation
 - `Distributed`: Parallel processing
-- `Distributions`: Statistical distributions
-- `LSODA`: ODE solvers
+- `Distributions`, `StatsBase`: Statistical distributions and functions
+- `LSODA`, `OrdinaryDiffEq`: ODE solvers
 - `MultivariateStats`: Statistical analysis
 - `Optim`: Optimization algorithms
-- `Plots`: Visualization
-- `ProgressMeter`: Progress tracking
-- `StatsBase`: Statistical functions
+- `FFTW`: FFT operations
+- `JLD2`, `JSON`, `TOML`: Serialization and configuration
+- `SparseArrays`, `LinearAlgebra`: Numerical linear algebra
 
 # Documentation
 
 For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
-Stable docs correspond to the current release (v1.7).
+Stable docs correspond to the current release (v1.7.2).
 """
 module StochasticGene
 # __precompile__(true)
@@ -303,13 +305,4 @@ include("hmm.jl")
 # test functions
 include("test.jl")
 
-
-"""
-A Julia module for simulation and Bayesian inference of parameters of stochastic models of gene transcription.
-
-API Overview:
-
-
-"""
-
-end #Module
+end # module StochasticGene
