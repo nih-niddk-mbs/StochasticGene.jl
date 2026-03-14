@@ -211,7 +211,7 @@ Solve master equation problem using DifferentialEquations.jl
 """
 function time_evolve_diff(t, Q::SparseMatrixCSC, P0, method=Rosenbrock23())
     tspan = (t[1], t[end])
-    prob = ODEProblem(fevolve, P0, tspan, Q)
+    prob = ODEProblem(fevolve!, P0, tspan, Q)
     sol = solve(prob, method, saveat=t)
     return sol'
 end
@@ -283,11 +283,11 @@ function normalized_nullspace(M::SparseMatrixCSC)
     m = size(M, 1)
     p = zeros(m)
     F = qr(M)   #QR decomposition
-    R = F.R
+    R = Matrix(F.R)  # convert to dense once to avoid repeated sparse slicing in back substitution
     # Back substitution to solve R*p = 0
     p[end] = 1.0
     for i in 1:m-1
-        p[m-i] = -R[m-i, m-i+1:end]' * p[m-i+1:end] / R[m-i, m-i]
+        p[m-i] = -dot(@view(R[m-i, m-i+1:end]), @view(p[m-i+1:end])) / R[m-i, m-i]
     end
     # Permute elements according to sparse matrix result
     pp = copy(p)

@@ -688,7 +688,7 @@ Create emission probability matrix from observations and distributions.
 function set_b(trace::Vector, d::Vector{T}) where {T<:Distribution}
     N = length(d)
     b = Matrix{Float64}(undef, N, length(trace))
-    for (t, obs) in enumerate(trace)
+    @inbounds for (t, obs) in enumerate(trace)
         for j in 1:N
             b[j, t] = pdf(d[j], obs)
         end
@@ -710,7 +710,7 @@ function set_b(trace, d::Vector{T}) where {T<:Vector}
     N = length(d[1])
     b = ones(N, size(trace, 1))
     t = 1
-    for obs in eachrow(trace)
+    @inbounds for obs in eachrow(trace)
         for i in eachindex(d)
             for j in 1:N
                 b[j, t] *= pdf(d[i][j], obs[i])
@@ -731,7 +731,7 @@ function set_b(trace, d::Array{T,3}) where {T<:Distribution}
     Nstate, Ngrid, _ = size(d)
     b = ones(Nstate, Ngrid, size(trace, 2))
     t = 1
-    for obs in eachcol(trace)
+    @inbounds for obs in eachcol(trace)
         for l in 1:Ngrid
             for k in 1:Ngrid
                 for j in 1:Nstate
@@ -751,7 +751,7 @@ set_b(trace, d, N)
 
 function set_b(trace::Vector, d::Vector, N)
     b = Matrix{Float64}(undef, N, length(trace))
-    for (t, obs) in enumerate(trace)
+    @inbounds for (t, obs) in enumerate(trace)
         for j in 1:N
             b[j, t] = pdf(d[j], obs)
         end
@@ -762,7 +762,7 @@ end
 function set_b(trace, d::Vector{T}, N) where {T<:Vector}
     b = ones(N, size(trace, 1))
     t = 1
-    for obs in eachrow(trace)
+    @inbounds for obs in eachrow(trace)
         for j in 1:N
             for i in eachindex(d)
                 b[j, t] *= pdf(d[i][j], obs[i])
@@ -776,7 +776,7 @@ end
 function set_b(trace, d, Nstate, Ngrid)
     b = ones(Nstate, Ngrid, size(trace, 2))
     t = 1
-    for obs in eachcol(trace)
+    @inbounds for obs in eachcol(trace)
         for l in 1:Ngrid
             for k in 1:Ngrid
                 for j in 1:Nstate
@@ -809,7 +809,7 @@ function set_b(trace, params, reporters_per_state::Vector{Int}, probfn::T, N::In
     d = probfn(params, reporters_per_state, N)
     b = Matrix{Float64}(undef, N, length(trace))
     t = 1
-    for obs in trace
+    @inbounds for obs in trace
         for j in 1:N
             b[j, t] = pdf(d[j], obs)
         end
@@ -835,7 +835,7 @@ function set_logb(trace, params, reporters_per_state, probfn::Function, N)
     d = probfn(params, reporters_per_state, N)
     logb = Matrix{Float64}(undef, N, length(trace))
     t = 1
-    for obs in trace
+    @inbounds for obs in trace
         for j in 1:N
             logb[j, t] = logpdf(d[j], obs)
         end
@@ -852,7 +852,7 @@ function set_logb_coupled_inplace(trace, params, reporter, N)
     end
     logb = zeros(N, size(trace, 1))
     t = 1
-    for obs in eachrow(trace)
+    @inbounds for obs in eachrow(trace)
         for j in 1:N
             for i in eachindex(d)
                 logb[j, t] += logpdf(d[i][j], obs[i])
@@ -919,7 +919,7 @@ Performs the update: α[j,t] += α[i,t-1] * a[i,j] * b[j]
 This is the core operation in the forward algorithm recursion.
 """
 function forward_inner_operation!(α, a::Matrix, b::Vector, i, j, t)
-    α[j, t] += α[i, t-1] * a[i, j] * b[j]
+    @inbounds α[j, t] += α[i, t-1] * a[i, j] * b[j]
 end
 
 function forward_inner_operation_ad(α, a, b::Vector, i, j, t)
@@ -929,7 +929,7 @@ function forward_inner_operation_ad(α, a, b::Vector, i, j, t)
 end
 
 function forward_inner_operation!(α, a::Matrix, b::Matrix, i, j, t)
-    α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
+    @inbounds α[j, t] += α[i, t-1] * a[i, j] * b[j, t]
 end
 
 function forward_inner_operation_ad(α, a::Matrix, b::Matrix, i, j, t)
@@ -961,17 +961,17 @@ function forward(a, b, p0, N, T)
     # else
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
-    α[:, 1] = p0 .* b[:, 1]
-    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
-    α[:, 1] *= C[1]
-    for t in 2:T
+    @views α[:, 1] .= p0 .* b[:, 1]
+    C[1] = 1 / max(sum(@view α[:, 1]), eps(Float64))
+    @views α[:, 1] .*= C[1]
+    @inbounds for t in 2:T
         for j in 1:N
             for i in 1:N
                 forward_inner_operation!(α, a, b, i, j, t)
             end
         end
-        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
-        α[:, t] *= C[t]
+        C[t] = 1 / max(sum(@view α[:, t]), eps(Float64))
+        @views α[:, t] .*= C[t]
     end
     return α, C
     # end
@@ -984,20 +984,20 @@ function forward(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1 <: AbstractAr
     α = zeros(N, T)
     C = Vector{Float64}(undef, T)
     if ~b[1][1]
-        α[:, 1] = p0[1] .* b[2][:, 1]
+        @views α[:, 1] .= p0[1] .* b[2][:, 1]
     else
-        α[:, 1] = p0[2] .* b[2][:, 1]
+        @views α[:, 1] .= p0[2] .* b[2][:, 1]
     end
-    C[1] = 1 / max(sum(α[:, 1]), eps(Float64))
-    α[:, 1] *= C[1]
-    for t in 2:T
+    C[1] = 1 / max(sum(@view α[:, 1]), eps(Float64))
+    @views α[:, 1] .*= C[1]
+    @inbounds for t in 2:T
         for j in 1:N
             for i in 1:N
                 forward_inner_operation!(α, a, b, i, j, t)
             end
         end
-        C[t] = 1 / max(sum(α[:, t]), eps(Float64))
-        α[:, t] *= C[t]
+        C[t] = 1 / max(sum(@view α[:, t]), eps(Float64))
+        @views α[:, t] .*= C[t]
     end
     return α, C
     # end
@@ -1128,7 +1128,7 @@ function forward_grid(a, a_grid, b, p0, Nstate, Ngrid, T)
     α[:, :, 1] = p0 .* b[:, :, 1]
     C[1] = 1 / sum(α[:, :, 1])
     α[:, :, 1] *= C[1]
-    for t in 2:T
+    @inbounds for t in 2:T
         for l in 1:Ngrid, k in 1:Nstate
             for j in 1:Ngrid, i in 1:Nstate
                 α[i, j, t] += α[k, l, t-1] * a[k, i] * a_grid[l, j] * b[i, j, t]
@@ -1367,7 +1367,7 @@ Computes log(α) where α[i,t] = P(O_1,...,O_t, q_t = S_i | λ) using logsumexp 
 """
 function forward_log!(ϕ, ψ, loga, logb, logp0, N, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
-    for t in 2:T
+    @inbounds for t in 2:T
         for k in 1:N
             for j in 1:N
                 ψ[j] = ϕ[j, t-1] + loga[j, k] + logb[k, t]
@@ -1428,7 +1428,7 @@ Compute backward variable β using scaled backward algorithm.
 function backward_scaled(a, b, C, N, T)
     β = ones(N, T)
     β[:, T] /= C[T]
-    for t in T-1:-1:1
+    @inbounds for t in T-1:-1:1
         for i in 1:N
             for j in 1:N
                 β[i, t] += a[i, j] * b[j, t+1] * β[j, t+1]
@@ -1489,7 +1489,7 @@ function backward_log(a, b, N, T)
     ψ = zeros(N)
     ϕ = Matrix{Float64}(undef, N, T)
     ϕ[:, T] = [0.0, 0.0]
-    for t in T-1:-1:1
+    @inbounds for t in T-1:-1:1
         for i in 1:N
             for j in 1:N
                 ψ[j] = ϕ[j, t+1] + loga[i, j] + log.(b[j, t+1])
@@ -2294,7 +2294,7 @@ returns ξ and γ
 function expected_transitions(α, a, b, β, N, T)
     ξ = Array{Float64}(undef, N, N, T - 1)
     γ = Array{Float64}(undef, N, T - 1)
-    for t in 1:T-1
+    @inbounds for t in 1:T-1
         for j = 1:N
             for i = 1:N
                 ξ[i, j, t] = α[i, t] * a[i, j] * b[j, t+1] * β[j, t+1]
@@ -2326,7 +2326,7 @@ Compute expected transition counts using log-space forward and backward variable
 function expected_transitions_log(logα, a, b, logβ, N, T)
     ξ = Array{Float64}(undef, N, N, T - 1)
     γ = Array{Float64}(undef, N, T - 1)
-    for t in 1:T-1
+    @inbounds for t in 1:T-1
         for j = 1:N
             for i = 1:N
                 ξ[i, j, t] = logα[i, t] + log(a[i, j]) + log(b[j, t+1]) + logβ[j, t+1]
@@ -2378,7 +2378,7 @@ function expected_a(ξ, γ, N::Int)
     a = zeros(N, N)
     ξS = sum(ξ, dims=3)
     γS = sum(γ, dims=2)
-    for i in 1:N, j in 1:N
+    @inbounds for i in 1:N, j in 1:N
         a[i, j] = ξS[i, j] / γS[i]
     end
     return a
@@ -2424,7 +2424,7 @@ function viterbi_log(loga, logb, logp0, N, T)
     q = Vector{Int}(undef, T)
     ϕ[:, 1] = logp0 + logb[:, 1]
     ψ[:, 1] .= 0
-    for t in 2:T
+    @inbounds for t in 2:T
         for j in 1:N
             # m, ψ[j, t] = findmax(ϕ[:, t-1] + loga[:, j])  # allocates N-vector each iteration
             # ϕ[j, t] = m + logb[j, t]
@@ -2442,7 +2442,7 @@ function viterbi_log(loga, logb, logp0, N, T)
         end
     end
     q[T] = argmax(ϕ[:, T])
-    for t in T-1:-1:1
+    @inbounds for t in T-1:-1:1
         q[t] = ψ[q[t+1], t+1]
     end
     return q
@@ -2459,7 +2459,7 @@ function viterbi(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1<:AbstractArra
         ϕ[:, 1] = log.(max.(p0[2], 0.0)) .+ logb[:, 1]
     end
     ψ[:, 1] .= 0
-    for t in 2:T
+    @inbounds for t in 2:T
         for j in 1:N
             # if !b[1][1]                                                              # allocates N-vector each iteration
             #     m, ψ[j, t] = findmax(ϕ[:, t-1] + log.(max.(a[1][:, j], 0.0)))
@@ -2482,7 +2482,7 @@ function viterbi(a::Vector{T1}, b::Vector{T2}, p0, N, T) where {T1<:AbstractArra
         end
     end
     q[T] = argmax(ϕ[:, T])
-    for t in T-1:-1:1
+    @inbounds for t in T-1:-1:1
         q[t] = ψ[q[t+1], t+1]
     end
     return q
@@ -2578,7 +2578,7 @@ function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
     q = Vector{Int}(undef, T)
     ϕ[:, :, 1] = logp0 .+ logb[:, :, 1]
     ψ[:, :, 1] .= 0
-    for t in 2:T
+    @inbounds for t in 2:T
         for j in 1:Ngrid, i in 1:Nstate
             # m, ψ[i, j, t] = findmax(ϕ[:, :, t-1] .+ loga[:, i] .+ loga_grid[:, j])  # allocates Nstate×Ngrid array each iteration
             # ϕ[i, j, t] = m + logb[i, j, t]
@@ -2594,10 +2594,10 @@ function viterbi_grid_log(loga, loga_grid, logb, logp0, Nstate, Ngrid, T)
             ψ[i, j, t] = LinearIndices((Nstate, Ngrid))[besti, bestj]
             ϕ[i, j, t] = best + logb[i, j, t]
         end
-        q[T] = argmax(ϕ[:, :, T])
-        for t in T-1:-1:1
-            q[t] = ψ[q[t+1], t+1]
-        end
+    end
+    q[T] = argmax(ϕ[:, :, T])
+    @inbounds for t in T-1:-1:1
+        q[t] = ψ[q[t+1], t+1]
     end
     return q
 end
@@ -2826,7 +2826,7 @@ function crosscorfn_hmm(a, p0, meanintensity1, meanintensity2, step_indices::Vec
     else
         as = I  # Identity if only one step
     end
-    for l in eachindex(step_indices)
+    @inbounds for l in eachindex(step_indices)
         for i in eachindex(meanintensity1)
             for j in eachindex(meanintensity2)
                 cc[l] += m1[i] * al[i, j] * meanintensity2[j]

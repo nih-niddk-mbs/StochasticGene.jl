@@ -792,7 +792,7 @@ end
 
 TBW
 """
-gstate(G, state, allele) = argmax(state[1:G, allele])
+gstate(G, state, allele) = argmax(@view state[1:G, allele])
 
 """
     state_index(state::Array, G, allele)
@@ -800,7 +800,7 @@ gstate(G, state, allele) = argmax(state[1:G, allele])
 
 returns state index given state vector
 """
-state_index(state::Array, G, allele) = argmax(state[1:G, allele])
+state_index(state::Array, G, allele) = argmax(@view state[1:G, allele])
 
 """
     state_index(state::Array, G, R, S, allele=1)
@@ -1534,7 +1534,7 @@ end
 
 return number of states with R steps > 1
 """
-num_reporters(state, allele, G::Int, R, insertstep) = sum(state[G+insertstep:G+R, allele] .> 1)
+num_reporters(state, allele, G::Int, R, insertstep) = count(>(1), @view state[G+insertstep:G+R, allele])
 
 
 """
