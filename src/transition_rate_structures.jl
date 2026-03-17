@@ -261,26 +261,6 @@ struct ConnectionRecord
     nTα::Int
 end
 
-"""
-    IndexCoupledFull, ElementCoupledFull
-
-Typed index + element for full-space coupled stacks. `IndexCoupledFull` encodes where to
-look up the rate (base/unit, coupling, noise, etc.). This leaves the legacy
-`Element` unchanged (flat Int index), and is only used by `TCoupledFullComponents`
-and related full-matrix constructors.
-"""
-struct IndexCoupledFull
-    kind::UInt8   # 0 = base/unit rate, 1 = coupling, 2 = noise, etc.
-    slot::Int32   # unit slot or connection index
-    local::Int32  # local index within that slot/container (0 if unused)
-end
-
-struct ElementCoupledFull
-    a::Int        # row
-    b::Int        # col
-    idx::IndexCoupledFull
-    pm::Int8
-end
 
 """
  	TCoupledComponents
@@ -304,23 +284,42 @@ struct TCoupledComponents{ModelType} <: AbstractComponents
     connections::Union{Nothing,Vector{ConnectionRecord}}
 end
 
+
+"""
+IndexCoupledFull, ElementCoupledFull
+Typed index + element for full-space coupled stacks.
+`IndexCoupledFull` encodes the model and local rate index. This leaves the
+legacy `Element` unchanged and is only used by `TCoupledFullComponents` and
+related full-matrix constructors.
+"""
+
+struct IndexCoupledFull
+    model::Int        # model index in transitions tuple
+    localindex::Int   # local rate index within that model
+end
+
+struct ElementCoupledFull
+    a::Int        # row
+    b::Int        # col
+    idx::IndexCoupledFull
+    pm::Int8
+end
+
+
 """
     TCoupledFullComponents
 
 Coupled transition matrix represented by full N×N matrix elements (no Kronecker
-at compute time). Single `elements` vector; `coupling_k[i]` is 0 for uncoupled,
-1..n_coupling for connection k (γ = rates[coupling_start + k]).
+at compute time), with uncoupled and coupling elements stored separately.
 
 - `N::Int`: Full state dimension.
-- `elements::Vector{ElementCoupledFull}`: All T elements (uncoupled then coupling) with typed indices.
-- `target_rates::Vector{Int}`: Length n_coupling; flat base-rate index per connection.
-- `n_coupling::Int`: Number of coupling strengths (at end of flat vector).
+- `elements_base::Vector{ElementCoupledFull}`: Uncoupled contributions.
+- `elements_coupling::Vector{ElementCoupledFull}`: Coupling contributions.
 """
 struct TCoupledFullComponents <: AbstractComponents
     N::Int
-    elements::Vector{ElementCoupledFull}
-    target_rates::Vector{Int}
-    n_coupling::Int
+    elements_base::Vector{ElementCoupledFull}
+    elements_coupling::Vector{ElementCoupledFull}
 end
 
 """

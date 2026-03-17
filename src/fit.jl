@@ -1816,6 +1816,15 @@ function coupling_indices(transitions, R, S, insertstep, reporter, coupling, gri
     collect(n-g-c+1:n-g)
 end
 
+function coupling_indices_full(transitions, R, S, insertstep, reporter, coupling, grid)
+    indices = coupling_indices(transitions, R, S, insertstep, reporter, coupling, grid)
+    targets = Vector{Tuple{Int,Int}}(undef, length(coupling[2]))
+    for (i, c) in enumerate(coupling[2])
+        targets[i] = (coupling[1][c[3]], c[4])
+    end
+    indices, targets
+end
+
 
 
 """

@@ -828,33 +828,42 @@ end
 # Full state-space (slot-order) element setters using unit_model and full_state_index_unit /
 # full_state_from_index_unit so Kronecker ordering matches TCoupledComponents.
 
-function set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model, rate_offset_per_unit)
+function set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model)
     n_units = length(unit_model)
     nT = collect(T_dimension(G, R, S, unit_model))
-    elements = ElementCoupledFull[]
+    elements_base = ElementCoupledFull[]
+    # (row, col, model, localindex) -> indices into elements_base
+    pm_db = Dict{NTuple{4,Int}, Vector{Int}}()
     for slot in 1:n_units
         model = unit_model[slot]
         indices = set_indices(length(transitions[model]), R[model], S[model], insertstep[model])
         unit_elements, _ = set_elements_TGRS(transitions[model], G[model], R[model], S[model], insertstep[model], indices, splicetype)
-        full_elems = expand_unit_elements_to_full(slot, unit_elements, G, R, S, unit_model, rate_offset_per_unit)
-        append!(elements, full_elems)
+        full_elems = expand_unit_elements_to_full(slot, model, unit_elements, G, R, S, unit_model)
+        for fe in full_elems
+            push!(elements_base, fe)
+            key = (fe.a, fe.b, fe.idx.model, fe.idx.localindex)
+            push!(get!(pm_db, key, Int[]), length(elements_base))
+        end
     end
-    target_rates = set_elements_coupling!(elements, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_unit, nT, splicetype)
-    return elements, target_rates
+    elements_coupling = ElementCoupledFull[]
+    set_elements_coupling_full!(elements_coupling, pm_db, coupling, transitions, G, R, S, insertstep, splicetype, unit_model, nT, elements_base)
+    return elements_base, elements_coupling
 end
 
 """
-    set_elements_coupling!(elements, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_model, nT, splicetype="")
+    set_elements_coupling_full!(elements_coupling, pm_db, coupling, transitions, G, R, S, insertstep, splicetype, unit_model, nT)
 
-Append coupling elements to `elements` and return `target_rates`, a Vector{Int} of
-length n_coupling. For connection k, all appended elements use the same coupling
-parameter index γ_k (encoded in their `index` field); `target_rates[k]` stores the
-flat index of the associated target base rate in the model block.
+Build full-space coupling elements. For each connection k, finds the target model and
+local rate index, then looks up matching base elements in pm_db to import their sign.
+Coupling elements have idx.localindex = k (connection index) pointing into coupling_rates.
 """
-function set_elements_coupling!(elements::Vector{ElementCoupledFull}, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_unit, nT::Vector{Int}, splicetype="")
+function set_elements_coupling_full!(elements_coupling::Vector{ElementCoupledFull},
+                                     pm_db::Dict{NTuple{4,Int}, Vector{Int}},
+                                     coupling::Tuple,
+                                     transitions, G, R, S, insertstep, splicetype,
+                                     unit_model, nT::Vector{Int},
+                                     elements_base::Vector{ElementCoupledFull})
     connections = length(coupling) >= 2 ? coupling[2] : Int[]
-    target_rates = Int[]
-    coupling_start = rate_offset_per_unit[end]
     for k in eachindex(connections)
         (β, s, α, t) = connections[k]
         (s == 0) && continue
@@ -863,47 +872,90 @@ function set_elements_coupling!(elements::Vector{ElementCoupledFull}, coupling, 
         G_α, R_α, S_α = G[m_α], R[m_α], S[m_α]
         nT_α = nT[α]
         indices_α = set_indices(length(trans_α), R_α, S_α, insertstep[m_α])
-        U_elements = set_elements_Source(s, G[m_β], R[m_β], S[m_β], splicetype)
-        U = make_mat_S(U_elements, nT[β])
         elementsTarget = set_elements_Target(t, trans_α, G_α, R_α, S_α, insertstep[m_α], indices_α, nT_α, splicetype)
         isempty(elementsTarget) && error("No target elements for connection $(k) (β=$β, α=$α, t=$t)")
-        # Base-rate block for the *slot* α in the flat vector
-        rate_base_target = rate_offset_per_unit[α]
-        # All target elements for a given connection share the same base rate index; take the first.
-        local_target_idx = elementsTarget[1].index
-        target_flat_idx = rate_base_target + local_target_idx
-        gamma_index = coupling_start + k
-        expanded = expand_coupling_to_full(U, elementsTarget, β, α, nT, gamma_index)
-        append!(elements, expanded)
-        push!(target_rates, target_flat_idx)
+        local_target_idx = first(elementsTarget).index
+        U_elements = set_elements_Source(s, G[m_β], R[m_β], S[m_β], splicetype)
+        U = make_mat_S(U_elements, nT[β])
+        full_cpl = expand_coupling_to_full_model(U, elementsTarget, β, α, nT, m_α, local_target_idx, pm_db, elements_base, k)
+        append!(elements_coupling, full_cpl)
     end
-    return target_rates
 end
 
 """
-Expand one unit's transition elements to full N×N state space. For each unit element (a,b,rate,pm),
-emits one full-space `ElementCoupledFull` for each full state k where slot i has state a: row=k, col=full
-state with slot i = b (others unchanged). Rate index is encoded in `IndexCoupledFull` with
-kind = 0 (base/unit rate) and `slot` = flat base-rate index.
+    expand_unit_elements_to_full(slot, model, unit_elements, G, R, S, unit_model)
+
+Expand per-unit elements into full space, tagging each with (model, localindex).
 """
-function expand_unit_elements_to_full(i, unit_elements, G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple, rate_offset_per_model::Vector{Int})
+function expand_unit_elements_to_full(slot::Int, model::Int, unit_elements::Vector,
+                                      G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple)
     elements = ElementCoupledFull[]
     nT = collect(T_dimension(G, R, S, unit_model))
     N = prod(nT)
-    rate_base = rate_offset_per_model[unit_model[i]]
     for e in unit_elements
-        flat_idx = rate_base + e.index
+        localindex = e.index
         for k in 1:N
             state = full_state_from_index_unit(k, G, R, S, unit_model)
-            state[i] != e.a && continue
+            state[slot] != e.a && continue
             col_state = collect(state)
-            col_state[i] = e.b
+            col_state[slot] = e.b
             col = full_state_index_unit(col_state, G, R, S, unit_model)
-            idx = IndexCoupledFull(0x00, Int32(flat_idx), Int32(0))
-            push!(elements, ElementCoupledFull(k, col, idx, Int8(e.pm)))
+            push!(elements, ElementCoupledFull(k, col, IndexCoupledFull(model, localindex), Int8(e.pm)))
         end
     end
     return elements
+end
+
+"""
+    expand_coupling_to_full_model(U, elementsTarget, β, α, nT, model, localindex, pm_db, k)
+
+Compute full-space coupling elements for connection k. Imports pm from pm_db at
+(row, col, model, localindex). Coupling element idx.localindex = k (→ coupling_rates[k]).
+"""
+function expand_coupling_to_full_model(U::SparseMatrixCSC,
+                                       elementsTarget::Vector,
+                                       β::Int, α::Int,
+                                       nT::Vector{Int},
+                                       model::Int, localindex::Int,
+                                       pm_db::Dict{NTuple{4,Int}, Vector{Int}},
+                                       elements_base::Vector{ElementCoupledFull},
+                                       k::Int)
+    n = length(nT)
+    N = prod(nT)
+    positions = filter(i -> i != β && i != α, 1:n)
+    other_dims = nT[positions]
+    block_other = isempty(positions) ? 1 : prod(other_dims)
+    out = ElementCoupledFull[]
+    Urows, Ucols, Uvals = findnz(U)
+    for o in 1:block_other
+        state = zeros(Int, n)
+        r = o - 1
+        for (ii, pos) in enumerate(reverse(positions))
+            state[pos] = mod(r, other_dims[ii]) + 1
+            r = div(r, other_dims[ii])
+        end
+        for ui in eachindex(Urows)
+            iβ, jβ = Urows[ui], Ucols[ui]
+            u_sign = sign(Uvals[ui])
+            u_sign == 0 && continue
+            for e in elementsTarget
+                row_state = copy(state)
+                row_state[β] = jβ
+                row_state[α] = e.a
+                col_state = copy(state)
+                col_state[β] = iβ
+                col_state[α] = e.b
+                row = full_state_index(row_state, nT)
+                col = full_state_index(col_state, nT)
+                key = (row, col, model, localindex)
+                haskey(pm_db, key) || continue
+                # import pm from first matching base element at this (row,col,model,localindex)
+                pm = elements_base[first(pm_db[key])].pm
+                push!(out, ElementCoupledFull(row, col, IndexCoupledFull(model, k), pm))
+            end
+        end
+    end
+    return out
 end
 
 #### Experimental

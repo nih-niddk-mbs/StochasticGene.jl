@@ -281,6 +281,38 @@ function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindic
     return r, rates[couplingindices]
 end
 
+"""
+    prepare_rates_coupled_full(rates::Vector, nrates::Vector{Int},
+                               couplingindices::Vector{Int},
+                               target_flat_indices::Vector{Int})
+
+Split a flat parameter vector into per-unit base rates and precomputed coupling
+rates for the full coupled stack.
+
+- `rates`: Flat parameter vector (base rates followed by coupling strengths).
+- `nrates`: Number of base rates per unit (same convention as `prepare_rates_coupled`).
+- `couplingindices`: Flat indices into `rates` selecting the coupling strengths γₖ.
+- `target_flat_indices`: Flat indices into the base-rate part of `rates` giving,
+   for each coupling k, the associated target base rate index.
+
+Returns `(unit_rates, coupling_rates)` where:
+
+- `unit_rates::Vector{Vector{Float64}}`: Per-unit base rates, as in `prepare_rates_coupled`.
+- `coupling_rates::Vector{Float64}`: Length `length(couplingindices)`, with
+  `coupling_rates[k] = rates[couplingindices[k]] * rates[target_flat_indices[k]]`.
+"""
+function prepare_rates_coupled_full(rates::Vector, nrates::Vector{Int},
+                                    couplingindices, targets)
+    # Per-unit base rates (same layout as prepare_rates_coupled)
+    model_rates, couplingStrengths = prepare_rates_coupled(rates, nrates, couplingindices)
+    coupling_rates = similar(couplingStrengths, Float64)
+    @inbounds for k in eachindex(couplingStrengths)
+        coupling_rates[k] = couplingStrengths[k] * model_rates[targets[k][1]][targets[k][2]]
+    end
+
+    return model_rates, coupling_rates
+end
+
 function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]

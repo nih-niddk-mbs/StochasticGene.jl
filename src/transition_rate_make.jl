@@ -355,14 +355,10 @@ You can also build TCoupledFullComponents from elements set directly in the full
 """
 function TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
     unit_model = coupling[1]
-    connections = length(coupling) >= 2 ? coupling[2] : Int[]
-    n_coupling = length(connections)
     nT = collect(T_dimension(G, R, S, unit_model))
     N = prod(nT)
-    n_rates_per_model = [num_rates(transitions[m], R[m], S[m], insertstep[m]) for m in 1:length(G)]
-    rate_offset_per_model = rate_offset_per_unit_from_lengths(n_rates_per_model, n_coupling)
-    elements, target_rates = set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model, rate_offset_per_model)
-    return TCoupledFullComponents(N, elements, target_rates, n_coupling)
+    elements_base, elements_coupling = set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model)
+    return TCoupledFullComponents(N, elements_base, elements_coupling)
 end
 
 function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
@@ -1219,22 +1215,15 @@ Build the full N×N coupled transition matrix from precomputed full-matrix eleme
 `rates` is the full parameter vector (model order, then coupling constants). Element
 indices refer into this vector; coupling strengths are at rates[end - n_coupling + 1 : end].
 """
-function make_mat_TC(components::TCoupledFullComponents, rates)
+function make_mat_TC(components::TCoupledFullComponents,
+                     rates::Vector{Vector{Float64}},
+                     coupling_rates::Vector{Float64})
     T = spzeros(Float64, components.N, components.N)
-    n_c = components.n_coupling
-    coupling_start = n_c == 0 ? length(rates) : length(rates) - n_c
-    for e in components.elements
-        idx = e.idx
-        if idx.kind == 0x00
-            # Base/unit rate: slot holds flat rate index.
-            r_idx = Int(idx.slot)
-            T[e.a, e.b] += e.pm * rates[r_idx]
-        else
-            # Coupling element: slot holds flat γ index (legacy semantics for now).
-            γ_idx = Int(idx.slot)
-            ck = γ_idx - coupling_start
-            T[e.a, e.b] += rates[γ_idx] * e.pm * rates[components.target_rates[ck]]
-        end
+    for e in components.elements_base
+        T[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
+    end
+    for e in components.elements_coupling
+        T[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
     end
     return T
 end
@@ -1503,7 +1492,7 @@ function expand_unit_elements_to_full(α::Int, elements::Vector{Element}, nT::Ve
 end
 
 """
-    expand_coupling_to_full(U, elementsTarget, β, α, nT, gamma_index)
+    expand_coupling_to_full(U, elementsTarget, β, α, nT, gamma_index, uncoupled_elements, uncoupled_pos_index)
 
 Compute full N×N transition elements for one coupling (source operator U at slot β,
 target elements at slot α). Each element stores `index = gamma_index`, pointing
@@ -1516,11 +1505,19 @@ is tracked separately (per-connection) in `components.target_rates`.
 - `β`, `α`: Source and target slot indices (1-based).
 - `nT`: Slot dimensions.
 - `gamma_index`: Index of the coupling parameter γ_k in the flat rate vector.
+- `uncoupled_elements`: Full uncoupled elements (used to import `pm` by position).
+- `uncoupled_pos_index`: Fast lookup map `(row,col) -> index` into `uncoupled_elements`.
 
 # Returns
 - `Vector{Element}` with (a,b) in full space 1:N; index = gamma_index for all elements.
 """
-function expand_coupling_to_full(U::SparseMatrixCSC, elementsTarget::Vector{Element}, β::Int, α::Int, nT::Vector{Int}, gamma_index::Int)
+function expand_coupling_to_full(U::SparseMatrixCSC,
+                                 elementsTarget::Vector{Element},
+                                 β::Int, α::Int,
+                                 nT::Vector{Int},
+                                 gamma_index::Int,
+                                 uncoupled_elements::Vector{ElementCoupledFull},
+                                 uncoupled_pos_index::Dict{Tuple{Int,Int},Int})
     n = length(nT)
     N = prod(nT)
     block_other = N ÷ (nT[β] * nT[α])
@@ -1548,9 +1545,13 @@ function expand_coupling_to_full(U::SparseMatrixCSC, elementsTarget::Vector{Elem
                 col_state[α] = e.b
                 row = full_state_index(row_state, nT)
                 col = full_state_index(col_state, nT)
-                pm = u_sign * e.pm
-                pm == 0 && continue
-                idx = IndexCoupledFull(0x01, Int32(gamma_index), Int32(0))
+                # Import sign from uncoupled element at same matrix position.
+                # This enforces "coupling modifies existing transition rate with same sign".
+                pos = (row, col)
+                haskey(uncoupled_pos_index, pos) || continue
+                base_idx = uncoupled_pos_index[pos]
+                pm = uncoupled_elements[base_idx].pm
+                idx = IndexCoupledFull(0, gamma_index)
                 push!(out, ElementCoupledFull(row, col, idx, Int8(pm)))
             end
         end

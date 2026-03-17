@@ -157,106 +157,45 @@ function test_nullspace_solvers(M; nrep=10, verbose=true)
     return result
 end
 
-"""
-    test_nullspace_full_3unit(; r, transitions, G, R, S, insertstep, coupling, nrep, verbose)
-
-Build both RG and full 3-unit transition matrices (same parameters as
-`test_compare_RG_vs_Full` extended to 3 units) and run QR vs SVD nullspace
-solvers on each. Matrix comparison uses zero coupling so that uncoupled
-full-matrix expansion is compared to uncoupled RG (Kronecker) build.
-
-Returns a NamedTuple with fields:
-- `RG`:   result from `test_nullspace_solvers` on T_RG
-- `full`: result from `test_nullspace_solvers` on T_full
-- `same_shape`, `diff_max`, `matrices_match`
-"""
-function test_nullspace_full_3unit(;
-    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
-       0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
-       0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7],
-    transitions=(([1, 2], [2, 1]),
-                 ([1, 2], [2, 1]),
-                 ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])),
-    G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0),
-    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free]),
-    nrep::Int=10, verbose::Bool=true,
-)
-    # RG and full components for the 3-unit coupled case
-    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
-
-    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
-    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
-    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
-
-    T_RG   = make_mat_TC(comp_rg,   rates, couplingStrength)
-    T_full = make_mat_TC(comp_full, r)
-
-    # Nullspace tests
-    res_RG   = test_nullspace_solvers(T_RG;   nrep=nrep, verbose=verbose)
-    res_full = test_nullspace_solvers(T_full; nrep=nrep, verbose=verbose)
-
-    # Matrix agreement diagnostics
-    M_RG   = Matrix(T_RG)
-    M_full = Matrix(T_full)
-    same_shape = size(M_RG) == size(M_full)
-    diff_max  = same_shape ? maximum(abs.(M_RG .- M_full)) : NaN
-    matrices_match = same_shape && isapprox(M_RG, M_full; rtol=1e-12)
-
-    if verbose
-        println("3-unit T matrices: same_shape=$same_shape, max |T_RG - T_full| = $diff_max, match=$matrices_match")
-    end
-
-    return (RG = res_RG,
-            full = res_full,
-            same_shape = same_shape,
-            diff_max = diff_max,
-            matrices_match = matrices_match,
-            M_RG=M_RG,
-            M_full=M_full)
-end
-
-function test_matrices_3unit(;
-    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
-       0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
-       0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7],
-    transitions=(([1, 2], [2, 1]),
-                 ([1, 2], [2, 1]),
-                 ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])),
-    G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0),
-    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free]),
-    nrep::Int=10, verbose::Bool=true,
-)
-    # RG and full components for the 3-unit coupled case
-    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
-
-    return comp_rg, comp_full
-end
-
-
-function test_3unit(;
+function test_set(;
     r=[0.38, 0.1, 0.23, 0.2, 1.0,
        0.45, 0.2, 0.43, 0.3, 1.0,
        0.11, 0.12, 0.13, 1.0, 
-       0.1, 0.1, 0.1, 0.1, -.9, -.7],
+       -.9, -.7],
     transitions=(([1, 2], [2, 1]),
                  ([1, 2], [2, 1]),
                  ([1, 2], [2, 1])),
     G=(2, 2, 2), R=(1, 1, 0), S=(0, 0, 0), insertstep=(1, 1, 0),
     coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 2, 2, 1)], [:free, :free]),
+)
+return r, transitions, G, R, S, insertstep, coupling
+end
+
+
+function test_3unit(;
+    r=[0.37, 0.1, 0.23, 0.21, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
+       0.71, 0.23, 0.43, 0.31, 0.2, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
+       0.11, 0.12, 0.13, 0.14, 0.15, 1.0, 
+        -.9, -.7],
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]),
+                 ([1, 2], [2, 1], [2, 3], [3, 2]),
+                 ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3, 3), R=(3, 3, 0), S=(2, 2, 0), insertstep=(1, 1, 0),
+    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 2, 2, 1)], [:free, :free]),
     verbose::Bool=true,
 )
-    # RG and full components for the 3-unit coupled case
+    # RG and full components for the 3-unit coupled case (legacy argument structure)
     comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
 
     nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
     couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
     rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
-
     T_RG   = make_mat_TC(comp_rg,   rates, couplingStrength)
-    T_full = make_mat_TC(comp_full, r)
+
+    couplingindices, targets = coupling_indices_full(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, coupling_rates = prepare_rates_coupled_full(r, nrates, couplingindices, targets)
+    T_full = make_mat_TC(comp_full, rates, coupling_rates)
 
 
     # Matrix agreement diagnostics
@@ -276,32 +215,6 @@ function test_3unit(;
             M_RG=M_RG,
             M_full=M_full)
 end
-"""
-    test_nullspace_coupled_2unit(; r, transitions, G, R, S, insertstep, coupling, nrep, verbose)
-
-Build the 2-unit coupled transition matrix used in `test_compare_RG_vs_Full`
-for the RG stack and compare QR vs SVD nullspace solvers on it in one call.
-
-Returns the same NamedTuple as `test_nullspace_solvers`.
-"""
-function test_nullspace_coupled_2unit(;
-    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
-       0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5],
-    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]),
-                 ([1, 2], [2, 1], [2, 3], [3, 2])),
-    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
-    coupling=((1, 2), [(1, 2, 2, 3)]),
-    nrep::Int=10, verbose::Bool=true,
-)
-    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
-    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
-    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
-    comp_rg = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    T_coupled = make_mat_TC(comp_rg, rates, couplingStrength)
-    return test_nullspace_solvers(T_coupled; nrep=nrep, verbose=verbose)
-end
-
-
 function test_sim_coupled(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 0.0, 0.2, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 0.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [2], [2]], [Int[], Int[], [2], [2]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), [(1, 2, 2, 2)]), total=10000000, tol=1e-6, verbose=false)
     simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol, verbose=verbose)
 end
@@ -503,29 +416,22 @@ function test_compare_T_matrix_RG_vs_Full(;
     verbose=true,
     uncoupled_only=false)
     nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
-    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
-    rates, coupling_strength = prepare_rates_coupled(r, nrates, couplingindices)
+    couplingindices, targets = coupling_indices_full(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, coupling_rates = prepare_rates_coupled_full(r, nrates, couplingindices, targets)
     if uncoupled_only
-        coupling_strength = zeros(size(coupling_strength))
+        coupling_rates = zeros(length(coupling_rates))
     end
-    comp_rg = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
-    unit_model = coupling[1]
-    T_RG = make_mat_TC(comp_rg, rates, coupling_strength)
-    T_full = make_mat_TC(comp_full, r)
+    # RG path uses raw coupling strengths (γ), full path uses precomputed coupling_rates (γ * base_rate)
+    rg_coupling = uncoupled_only ? zeros(length(couplingindices)) : r[couplingindices]
+    T_RG   = make_mat_TC(comp_rg,   rates, rg_coupling)
+    T_full = make_mat_TC(comp_full, rates, coupling_rates)
     match = isapprox(Matrix(T_RG), Matrix(T_full); rtol=rtol)
     if verbose
         diff = maximum(abs.(Matrix(T_RG) - Matrix(T_full)))
         println("max |T_RG - T_full| = $diff" * (uncoupled_only ? " (uncoupled only)" : ""))
         println("Match (rtol=$rtol): $match")
-        if !match && uncoupled_only
-            # Diagnostic: where is the largest error and what are the contributions?
-            D = Matrix(T_RG) - Matrix(T_full)
-            i, j = Tuple(CartesianIndex(argmax(abs.(D))))
-            nT_vec = collect(StochasticGene.T_dimension(G, R, S, unit_model))
-            state_ij = StochasticGene.full_state_from_index(i, nT_vec)
-            println("Max diff at linear ($i, $j) -> slot state $state_ij: T_RG=$((T_RG[i,j])), T_full=$((T_full[i,j])), diff=$(D[i,j])")
-        end
     end
     return T_RG, T_full, match
 end
