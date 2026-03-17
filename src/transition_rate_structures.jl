@@ -283,6 +283,47 @@ struct TCoupledComponents{ModelType} <: AbstractComponents
     connections::Union{Nothing,Vector{ConnectionRecord}}
 end
 
+"""
+    TCoupledFullComponents
+
+Coupled transition matrix represented by full N×N matrix elements (no Kronecker
+at compute time). Single `elements` vector; `coupling_k[i]` is 0 for uncoupled,
+1..n_coupling for connection k (γ = rates[coupling_start + k]).
+
+- `N::Int`: Full state dimension.
+- `elements::Vector{Element}`: All T elements (uncoupled then coupling); `index` into flat rate vector.
+- `coupling_k::Vector{Int}`: Same length as elements; 0 = uncoupled, k = connection.
+- `n_coupling::Int`: Number of coupling strengths (at end of flat vector).
+"""
+struct TCoupledFullComponents <: AbstractComponents
+    N::Int
+    elements::Vector{Element}
+    target_rates::Vector{Int}
+    n_coupling::Int
+end
+
+"""
+    TDCoupledFullComponents
+
+Coupled dwell-time components in full N×N state space (no Kronecker at compute time).
+Same flat rate layout as TCoupledFullComponents. One dwell matrix (stored as elements)
+per sojourn set; sojourn sets are in full-state indices.
+
+- `N::Int`: Full state dimension.
+- `unit_model`: Tuple ordering units (same as legacy).
+- `elements::Vector{Element}`: Uncoupled full T elements (same as TCoupledFullComponents.elements).
+- `rate_offset_per_unit::Vector{Int}`: length n_units+1; flat rate layout.
+- `n_coupling::Int`: Number of coupling strength parameters.
+- `sojourn_full`: Nested [unit][dtype] → Vector{Int} of full-state indices (matches reporter structure).
+- `elementsTD`: Nested [unit][dtype] → Vector{Element} for dwell matrix (optional; if empty, TCD is built from T and sojourn).
+"""
+struct TDCoupledFullComponents <: AbstractComponents
+    N::Int
+    elementsT::Vector{Element}
+    elementsTD::Vector{Vector{Element}}
+    TDdims::Vector{Int}
+end
+
 struct TForcedComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}

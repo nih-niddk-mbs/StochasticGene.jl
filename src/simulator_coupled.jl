@@ -83,7 +83,7 @@ Simulate any GRSM model. Returns steady state mRNA histogram. If bins not a null
 - `coupling=tuple()`: if nonempty, `(unit_model, connections)` where `unit_model` is a tuple of model indices per unit (e.g. (1, 2)) and `connections` is a vector of `(β, s, α, t)` (source unit, source state, target unit, target transition). Use `make_coupling` / `make_coupling_reciprocal` in io.jl to build from a coupling field string. Empty `connections` is valid (no interaction terms).
 - `nalleles`: Number of alleles
 - `nhist::Int`: Size of mRNA histogram
-- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set
+- `onstates::Vector`: a vector of vector of ON states (use empty set for any R step is ON), ON and OFF time distributions are computed for each ON state set. **Dwell-time histograms do not distinguish alleles**: they aggregate over alleles (uncoupled: both alleles contribute to the same histograms; coupled: sojourn is evaluated on allele 1 only).
 - `probfn`=prob_Gaussian: reporter distribution
 - `reporterfn`=sum: how individual reporters are combined
 - `splicetype`::String: splice action
@@ -242,7 +242,46 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
     return results
 end
 
+"""
+    simulator_dwell_specs(rin, transitions, G, R, S, insertstep; dwell_specs, coupling=tuple(), ...)
 
+Entry point when using dwell_specs: parses specs into (onstates, bins) in model order,
+calls `simulator(...)` with those, then reorders dwell results to dwell_specs order.
+Keeps all dwell_specs logic out of the core simulator().
+
+Coupled path: the simulator produces ON and OFF histograms for every onstate. dwell_specs gives
+the onstate (and dttype) for each requested histogram type. We return only the histograms
+requested—one per (unit, dt type)—selecting ON or OFF per dttype (e.g. ON/ONG → ON histogram,
+OFF/OFFG → OFF histogram).
+"""
+function simulator_dwell_specs(rin, transitions, G, R, S, insertstep; dwell_specs, warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
+    isempty(dwell_specs) && throw(ArgumentError("simulator_dwell_specs requires non-empty dwell_specs"))
+    onstates, bins = parse_dwell_specs_for_simulator(dwell_specs, coupling)
+    results = simulator(rin, transitions, G, R, S, insertstep; warmupsteps=warmupsteps, coupling=coupling, nalleles=nalleles, nhist=nhist, onstates=onstates, bins=bins, traceinterval=traceinterval, probfn=probfn, noiseparams=noiseparams, totalsteps=totalsteps, totaltime=totaltime, tol=tol, reporterfn=reporterfn, splicetype=splicetype, a_grid=a_grid, verbose=verbose, ejectnumber=ejectnumber)
+    # Coupled: return only the histograms requested (one per dt type), not both ON and OFF for each onstate.
+    if !isempty(coupling)
+        n_dwell = length(dwell_specs)
+        offset = nhist > 0 ? 1 : 0
+        new_results = offset > 0 ? [results[1]] : []
+        for i in 1:n_dwell
+            v = results[offset + i]
+            length(v) == 8 || error("simulator_dwell_specs: expected 8 histograms per unit, got $(length(v))")
+            spec = dwell_specs[i]
+            dttype = spec.dttype
+            selected = Vector{Float64}[]
+            for j in eachindex(dttype)
+                # ON/ONG → use ON histogram (index 2j-1); OFF/OFFG → use OFF histogram (index 2j)
+                use_on = (dttype[j] == "ON" || dttype[j] == "ONG")
+                idx = use_on ? (2j - 1) : 2j
+                push!(selected, Float64.(v[idx]))
+            end
+            push!(new_results, selected)
+        end
+        append!(new_results, results[offset + n_dwell + 1:end])
+        return new_results
+    end
+    return results
+end
 
 """
     simulator_ss(r, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false)
@@ -1194,6 +1233,12 @@ end
     initiate!(tau, state, index::Tuple, t, m, r, allele, G, R, S, insertstep, disabled, enabled, initial, final)
     initiate!(tau, state, index::Int, t, m, r, allele, G, R, S, disabled, enabled, initial, final,nsertstep)
 
+# R-step state encoding. R-step positions are state[G+1:G+R, allele]. Only 0, 1, 2 are written (by initiate!, transitionR!, splice!, eject!):
+#   0 = unoccupied
+#   1 = occupied with RNA but no reporter (e.g. before insertstep, or after splice)
+#   2 = occupied with RNA with reporter (at insertstep, not yet spliced)
+# num_reporters uses slice state[G+insertstep:G+R, allele] and predicate >(1) to detect 2. Do not change that slice or predicate without updating both the writers (below) and num_reporters.
+
 """
 function initiate!(tau::Vector, state, index::Tuple, t, m, r, allele, G::Tuple, R::Tuple, S, insertstep, disabled, enabled, initial, final)
     initiate!(tau[index[1]], state[index[1]], index[2], t, m[index[1]], r[index[1]], 1, G[index[1]], R[index[1]], S[index[1]], insertstep[index[1]], disabled, enabled, initial, final)
@@ -1401,6 +1446,78 @@ function prune_mhist(mhist, nhist)
 end
 
 """
+    UnitMappedOnstates
+
+Coupled-case onstates where each row carries the model unit index. Row i corresponds to
+dwell_specs order; `rows[i].unit` is the index into G, state, R, insertstep; `rows[i].lists`
+is the per-dt-type ON-state sets (same structure as legacy onstates[i]).
+"""
+struct UnitMappedOnstates
+    rows::Vector  # each element (unit=Int, lists=Vector{Vector{Vector{Int}}} or similar)
+end
+
+Base.length(om::UnitMappedOnstates) = length(om.rows)
+Base.eachindex(om::UnitMappedOnstates) = eachindex(om.rows)
+
+# Index by unit (model index): return lists for that unit (for make_trace which does onstates[i] per unit).
+function Base.getindex(om::UnitMappedOnstates, unit_index::Int)
+    r = findfirst(row -> row.unit == unit_index, om.rows)
+    if r === nothing
+        return Vector{Vector{Int}}()
+    end
+    return om.rows[r].lists
+end
+
+"""
+    parse_dwell_specs_for_simulator(dwell_specs, coupling)
+
+Parse dwell_specs into (onstates, bins). Uncoupled: legacy (onstates, bins) with one row.
+Coupled: (UnitMappedOnstates(rows), bins) in dwell_specs order; each row (unit=spec.unit, lists=spec.onstates).
+"""
+function parse_dwell_specs_for_simulator(dwell_specs, coupling)
+    if isempty(coupling)
+        length(dwell_specs) >= 1 || throw(ArgumentError("dwell_specs must have at least one entry when coupling is empty"))
+        spec = dwell_specs[1]
+        onstates = [spec.onstates]
+        bins = [spec.bins]
+        return onstates, bins
+    end
+    rows = [(unit=Int(spec.unit), lists=spec.onstates) for spec in dwell_specs]
+    bins = [spec.bins for spec in dwell_specs]
+    return UnitMappedOnstates(rows), bins
+end
+
+"""
+    set_onoff(onstates::UnitMappedOnstates, bins, nalleles, coupling)
+
+Coupled path with unit-mapped onstates. Uses rows[i].lists and bins[i]; returns same onstates so set_before/set_after get unit mapping.
+"""
+function set_onoff(onstates::UnitMappedOnstates, bins, nalleles, coupling)
+    isempty(coupling) && throw(ArgumentError("UnitMappedOnstates requires non-empty coupling"))
+    length(bins) == length(onstates) || throw(ArgumentError("bins length ($(length(bins))) does not match onstates rows ($(length(onstates)))"))
+    tIA = Vector[]
+    tAI = Vector[]
+    before = Vector[]
+    after = Vector[]
+    ndt = Vector[]
+    dt = Vector[]
+    histofftdd = Vector[]
+    histontdd = Vector[]
+    for i in eachindex(onstates)
+        b, a, nndt, ddt, off, on, IA, AI = set_onoff(onstates.rows[i].lists, bins[i], 1)
+        push!(before, b)
+        push!(after, a)
+        push!(ndt, nndt)
+        push!(dt, ddt)
+        push!(histofftdd, off)
+        push!(histontdd, on)
+        push!(tIA, IA)
+        push!(tAI, AI)
+    end
+    return onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI
+end
+
+"""
     set_onoff(onstates, bins, nalleles, coupling)
 
 TBW
@@ -1458,8 +1575,8 @@ function set_onoff(onstates, bins, nalleles)
     nn = length(onstates)
     tIA = Vector{Float64}[]
     tAI = Vector{Float64}[]
-    before = Vector{Int}(undef, nn)
-    after = Vector{Int}(undef, nn)
+    before = Vector{Bool}(undef, nn)
+    after = Vector{Bool}(undef, nn)
     ndt = Int[]
     dt = Float64[]
     histofftdd = Vector{Int}[]
@@ -1477,13 +1594,14 @@ end
 
 
 """
-    set_before(onstates, state, allele, G, R, inserstep)
+    set_before(before, onstates, state, allele, G, R, insertstep)
 
-find before and after states for the same allele to define dwell time histograms
+Find before/after sojourn status to define dwell time histograms. Uncoupled: uses the given allele.
+Coupled (G::Tuple): sojourn is evaluated on allele 1 only; dwell histograms do not separate by allele.
 """
 function set_before(before, onstates, state, allele, G::Int, R, insertstep)
     for i in eachindex(onstates)
-        before[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+        before[i] = isempty(onstates[i]) ? (num_reporters(state, allele, G, R, insertstep) > 0) : (gstate(G, state, allele) ∈ onstates[i])
     end
     before
 end
@@ -1491,7 +1609,18 @@ end
 function set_before(before, onstates, state, allele, G::Tuple, R, insertstep)
     for i in eachindex(onstates)
         for j in eachindex(onstates[i])
-            before[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+            before[i][j] = isempty(onstates[i][j]) ? (num_reporters(state[i], 1, G[i], R[i], insertstep[i]) > 0) : (gstate(G[i], state[i], 1) ∈ onstates[i][j])
+        end
+    end
+    before
+end
+
+function set_before(before, onstates::UnitMappedOnstates, state, allele, G::Tuple, R, insertstep)
+    for i in eachindex(onstates)
+        u = onstates.rows[i].unit
+        lists = onstates.rows[i].lists
+        for j in eachindex(lists)
+            before[i][j] = isempty(lists[j]) ? (num_reporters(state[u], 1, G[u], R[u], insertstep[u]) > 0) : (gstate(G[u], state[u], 1) ∈ lists[j])
         end
     end
     before
@@ -1504,7 +1633,7 @@ TBW
 """
 function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Int, R, insertstep, verbose)
     for i in eachindex(onstates)
-        after[i] = isempty(onstates[i]) ? num_reporters(state, allele, G, R, insertstep) : Int(gstate(G, state, allele) ∈ onstates[i])
+        after[i] = isempty(onstates[i]) ? (num_reporters(state, allele, G, R, insertstep) > 0) : (gstate(G, state, allele) ∈ onstates[i])
         firstpassagetime!(histofftdd[i], histontdd[i], tAI[i], tIA[i], t, dt[i], ndt[i], allele, before[i], after[i], verbose)
     end
     verbose && println(tAI)
@@ -1519,7 +1648,20 @@ TBW
 function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates, state, allele, G::Tuple, R, insertstep, verbose)
     for i in eachindex(onstates)
         for j in eachindex(onstates[i])
-            after[i][j] = isempty(onstates[i][j]) ? num_reporters(state[i], 1, G[i], R[i], insertstep[i]) : Int(gstate(G[i], state[i], 1) ∈ onstates[i][j])
+            after[i][j] = isempty(onstates[i][j]) ? (num_reporters(state[i], 1, G[i], R[i], insertstep[i]) > 0) : (gstate(G[i], state[i], 1) ∈ onstates[i][j])
+            firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i][j], tIA[i][j], t, dt[i][j], ndt[i][j], 1, before[i][j], after[i][j], verbose)
+        end
+    end
+    verbose && println(tAI)
+    verbose && println(tIA)
+end
+
+function set_after!(histofftdd, histontdd, tAI, tIA, dt, ndt, before, after, t, onstates::UnitMappedOnstates, state, allele, G::Tuple, R, insertstep, verbose)
+    for i in eachindex(onstates)
+        u = onstates.rows[i].unit
+        lists = onstates.rows[i].lists
+        for j in eachindex(lists)
+            after[i][j] = isempty(lists[j]) ? (num_reporters(state[u], 1, G[u], R[u], insertstep[u]) > 0) : (gstate(G[u], state[u], 1) ∈ lists[j])
             firstpassagetime!(histofftdd[i][j], histontdd[i][j], tAI[i][j], tIA[i][j], t, dt[i][j], ndt[i][j], 1, before[i][j], after[i][j], verbose)
         end
     end
@@ -1529,10 +1671,13 @@ end
 
 
 
+# R-step encoding: see comment block above initiate!. num_reporters uses >(1) on that slice; do not change.
 """
     num_reporters(state, allele, G::Int, R, insertstep)
 
-return number of states with R steps > 1
+Count of R-step positions (state[G+insertstep:G+R, allele]) with value > 1. Encoding: 0 = unoccupied,
+1 = occupied with RNA but no reporter, 2 = occupied with RNA with reporter; > 1 selects 2. Used for sojourn
+logic (count > 0) and for consistency with num_reporters_per_index in transition_rate_functions.
 """
 num_reporters(state, allele, G::Int, R, insertstep) = count(>(1), @view state[G+insertstep:G+R, allele])
 
@@ -1543,12 +1688,12 @@ num_reporters(state, allele, G::Int, R, insertstep) = count(>(1), @view state[G+
 decide if transition exits or enters sojourn states then in place update appropriate histogram
 """
 function firstpassagetime!(histofftdd, histontdd, tAI, tIA, t, dt, ndt, allele, before, after, verbose)
-    if before == 1 && after == 0  # turn off
+    if before && !after  # turn off
         firstpassagetime!(histontdd, tAI, tIA, t, dt, ndt, allele)
         if verbose
             println("off:", allele)
         end
-    elseif before == 0 && after == 1 # turn on
+    elseif !before && after  # turn on
         firstpassagetime!(histofftdd, tIA, tAI, t, dt, ndt, allele)
         if verbose
             println("on:", allele)

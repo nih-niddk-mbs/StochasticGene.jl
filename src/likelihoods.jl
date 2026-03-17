@@ -922,6 +922,35 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
     return hists
 end
 
+# Full stack: single full T, sojourn in full-state indices; one loop over elements at build time.
+# Sinit: same formula as old stack (init_S(sojourn, TC, pss) = entrance to sojourn). Old stack uses
+# per-unit TC and pss: make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, ...) and normalized_nullspace(TC)
+# (see compute_dwelltime!), so pss is from that unit's TC, not the full T. Full stack uses full T and its pss.
+function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype)
+    T = make_mat_TD(components, r, coupling_strength)
+    pss = normalized_nullspace(T)
+    if any(!isfinite.(pss))
+        throw(ArgumentError("full coupled T produced invalid steady state (NaN/Inf); T may be singular or ill-conditioned (e.g. hidden-unit placeholder or rate structure). Old stack uses per-unit TC and pss (make_mat_TC(unit, T[unit], ...)) for Sinit."))
+    end
+    hists = Vector{Vector}[]
+    for α in eachindex(components.sojourn_full)
+        h = Vector[]
+        for i in eachindex(components.sojourn_full[α])
+            sojourn = components.sojourn_full[α][i]
+            TCD = make_mat_TCD(T, sojourn)
+            sub = TCD[sojourn, sojourn]
+            dtype = dttype[α][i]
+            init = init_S(sojourn, T, pss, dtype)[sojourn]
+            s = sum(init)
+            (iszero(s) || !isfinite(s)) && throw(ArgumentError("dwell-time init_S sums to $s for unit α=$α dtype $dtype (sojourn length $(length(sojourn))); check full T, pss, and sojourn construction for hidden/placeholder units"))
+            init = init / s
+            push!(h, dwelltimePDF(bins[α][i], sub, 1:length(sojourn), init))
+        end
+        push!(hists, h)
+    end
+    return hists
+end
+
 # AD-friendly version (no in-place mutation)
 function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
     sojourn, nonzeros = reporter

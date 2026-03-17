@@ -120,6 +120,111 @@ function inverse_state(i::Vector{Vector{Int}}, G::Int, R, S, insertstep)
     return g, z, zdigits, r
 end
 
+"""
+    full_state_index_unit(unit_state, G::Tuple, R::Tuple, S::Tuple, unit_model)
+
+Linear index (1-based) for a joint state given per-unit states in `unit_model` order.
+Uses T_dimension(G, R, S, unit_model) for the slot dimensions.
+"""
+function full_state_index_unit(unit_state::AbstractVector{Int},
+                               G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple)
+    nT = collect(T_dimension(G, R, S, unit_model))  # slot dims in unit_model order
+    n = length(nT)
+    idx = 1
+    for i in 1:n
+        stride = prod(nT[i+1:end])
+        idx += (unit_state[i] - 1) * stride
+    end
+    return idx
+end
+
+"""
+    full_state_from_index_unit(linear_index, G::Tuple, R::Tuple, S::Tuple, unit_model)
+
+Inverse of `full_state_index_unit`: return per-unit state vector (in unit_model order)
+for a given full linear index.
+"""
+function full_state_from_index_unit(linear_index::Int,
+                                    G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple)
+    nT = collect(T_dimension(G, R, S, unit_model))
+    n  = length(nT)
+    state = Vector{Int}(undef, n)
+    rest = linear_index - 1
+    for i in n:-1:1
+        d = nT[i]
+        state[i] = mod(rest, d) + 1
+        rest = div(rest, d)
+    end
+    return state
+end
+
+"""
+    full_state_index(state, nT)
+
+Linear index (1-based) for a joint state in Kronecker (row-major) order. Same convention as
+[`state_index`](@ref) for the single-unit case; for coupled systems, [`unit_state`](@ref)(i, G, R, S, unit_model)
+uses the inverse of this mapping when nT = T_dimension(G, R, S, unit_model) and unit_model is (1,2,…,n).
+
+# Arguments
+- `state`: Vector or tuple of length n; state[i] is the state index of slot i in 1:nT[i].
+- `nT`: Vector of slot dimensions (length n). Slot order matches unit_model in coupled constructors.
+
+# Returns
+- `Int` in 1:prod(nT).
+
+# See also
+- [`full_state_from_index`](@ref) for the inverse.
+- [`unit_state`](@ref), [`inverse_state`](@ref).
+"""
+function full_state_index(state, nT::Vector{Int})
+    n = length(nT)
+    idx = 1
+    for i in 1:n
+        idx += (state[i] - 1) * prod(nT[i+1:end])
+    end
+    return idx
+end
+
+"""
+    full_state_from_index(linear_index, nT)
+
+Inverse of [`full_state_index`](@ref): return the slot-ordered state vector for a given linear index.
+[`unit_state`](@ref) uses this internally and converts the result to unit-indexed tuple.
+
+# Arguments
+- `linear_index`: Int in 1:prod(nT).
+- `nT`: Vector of slot dimensions (length n).
+
+# Returns
+- `Vector{Int}` of length n; result[i] is the state of slot i in 1:nT[i].
+"""
+function full_state_from_index(linear_index::Int, nT::Vector{Int})
+    n = length(nT)
+    state = Vector{Int}(undef, n)
+    rest = linear_index - 1
+    for i in n:-1:1
+        d = nT[i]
+        state[i] = mod(rest, d) + 1
+        rest = div(rest, d)
+    end
+    return state
+end
+
+"""
+    full_state_indices_for_unit_sojourn(α::Int, sojourn_set::Vector{Int}, nT::Vector{Int})
+
+Return all full-state linear indices for which the slot-α state is in sojourn_set.
+Used to build sojourn sets in full space for TDCoupledFullComponents.
+"""
+function full_state_indices_for_unit_sojourn(α::Int, sojourn_set::Vector{Int}, nT::Vector{Int})
+    N = prod(nT)
+    out = Int[]
+    for i in 1:N
+        state = full_state_from_index(i, nT)
+        state[α] in sojourn_set && push!(out, i)
+    end
+    return out
+end
 
 """
     unit_state(i::Int, G::Tuple, R, S, unit_model)
@@ -137,12 +242,12 @@ Return the unit state for a given state index.
 - `Tuple`: Unit state.
 """
 function unit_state(i::Int, G::Tuple, R, S, unit_model)
-    nT = T_dimension(G, R, S, unit_model)
-    rem = i
+    nT = collect(T_dimension(G, R, S, unit_model))
+    state_slot = full_state_from_index(i, nT)
+    # state_slot[k] = state of slot k; slot k = unit unit_model[k]. Return (unit[1], unit[2], ...).
     unit = Vector{Int}(undef, length(unit_model))
-    for j in reverse(unit_model)
-        unit[j] = mod(rem - 1, nT[j]) + 1
-        rem = div(rem - unit[j], nT[j]) + 1
+    for j in 1:length(unit_model)
+        unit[j] = state_slot[findfirst(isequal(j), unit_model)]
     end
     Tuple(unit)
 end
@@ -436,6 +541,11 @@ function coupled_states(sojourn, coupling, components, G)
         end
     end
     coupled
+end
+
+# Full stack: sojourn already in full-state indices
+function coupled_states(sojourn, coupling, components::TDCoupledFullComponents, G)
+    return components.sojourn_full
 end
 
 """

@@ -16,7 +16,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
+- `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -867,6 +867,15 @@ function get_units(dwell_specs, trace_specs)
         return Int[]
     end
 end
+
+"""
+    observed_units_from_dwell_specs(dwell_specs)
+
+Return the vector of observed unit indices from dwell_specs (same order as dwell_specs).
+Convenience alias for get_units(dwell_specs, []).
+"""
+observed_units_from_dwell_specs(dwell_specs) = get_units(dwell_specs, Int[])
+
 """
     set_trace_background(traceinfo)
 
@@ -1328,10 +1337,44 @@ Create reporter components for coupled dwell time analysis.
 """
 function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, onstates, dttype, coupling)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
+    if splicetype == "full"
+        components = TDCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
+        sojourn_c = coupled_states(sojourn, coupling, components, G)
+        nonzeros = sojourn_c  # full stack uses sojourn_full from components; keep shape for API
+        return (sojourn_c, nonzeros), components
+    end
     components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     sojourn = coupled_states(sojourn, coupling, components, G)
     nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
     return (sojourn, nonzeros), components
+end
+
+"""
+    make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, dwell_specs, coupling)
+
+Coupled dwell time reporter components from per-unit dwell_specs.
+
+dwell_specs lists only observed units (hidden units may be omitted). Builds full
+per-unit onstates and dttype in unit_model order; for units not in dwell_specs uses
+a valid placeholder (R=0 needs explicit G-state onstates).
+"""
+function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, dwell_specs, coupling)
+    unit_model = coupling[1]
+    n_units = length(unit_model)
+    placeholder = dwell_specs[1]
+    onstates_full = Vector{typeof(placeholder.onstates)}(undef, n_units)
+    dttype_full = Vector{typeof(placeholder.dttype)}(undef, n_units)
+    for k in 1:n_units
+        j = findfirst(s -> s.unit == unit_model[k], dwell_specs)
+        if j !== nothing
+            onstates_full[k] = dwell_specs[j].onstates
+            dttype_full[k] = dwell_specs[j].dttype
+        else
+            dttype_full[k] = placeholder.dttype
+            onstates_full[k] = R[k] == 0 ? [[G[k]] for _ in 1:length(placeholder.dttype)] : placeholder.onstates
+        end
+    end
+    make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates_full, dttype_full, coupling)
 end
 
 """

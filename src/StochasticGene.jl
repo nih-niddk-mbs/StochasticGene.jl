@@ -213,6 +213,7 @@ export
     simulate_trace_vector,
     simulate_trials,
     simulator,
+    simulator_dwell_specs,
     source_states,
     sparse,
     summarize_model_scores,

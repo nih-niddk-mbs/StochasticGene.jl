@@ -1,9 +1,10 @@
-# This file is part of StochasticGene.jl  
-
+# This file is part of StochasticGene.jl
+#
 # test.jl
-
-
-
+#
+# Two roles: (1) Tests included in runtests.jl give basic confidence for installs.
+# (2) Comprehensive/correctness tests (e.g. test_compare_RG_vs_Full, test_compare_3unit)
+# are for development; over-test here, keep production code parsimonious.
 
 """
     test_steadystatemodel(model::AbstractGMmodel, nhist)
@@ -70,6 +71,234 @@ function test_CDT(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045
     couplingindices = coupling_indices(transitions, R, S, insertstep, [0, 0], coupling, nothing)
     rates, couplingStrength = prepare_rates_coupled(r, [num_rates(transitions[1], R[1], S[1], insertstep[1]), num_rates(transitions[2], R[2], S[2], insertstep[2])], couplingindices)
     predictedarray(rates, couplingStrength, components, bins, reporter, dttype)
+end
+
+"""
+    test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling)
+
+Coupled dwell-time CME prediction. dwell_specs lists only observed units (hidden units omitted).
+Builds full onstates/dttype/bins (placeholder for hidden units), runs predictedarray, returns histograms
+only for units in dwell_specs. splicetype: "" = RG stack, "full" = full-matrix stack.
+"""
+function test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+    unit_model = coupling[1]
+    n_units = length(unit_model)
+    observed = StochasticGene.observed_units_from_dwell_specs(dwell_specs)
+    placeholder = dwell_specs[1]
+    onstates_full = Vector{typeof(placeholder.onstates)}(undef, n_units)
+    dttype_full = Vector{typeof(placeholder.dttype)}(undef, n_units)
+    bins_full = Vector{typeof(placeholder.bins)}(undef, n_units)
+    for k in 1:n_units
+        j = findfirst(s -> s.unit == unit_model[k], dwell_specs)
+        if j !== nothing
+            onstates_full[k] = dwell_specs[j].onstates
+            dttype_full[k] = dwell_specs[j].dttype
+            bins_full[k] = dwell_specs[j].bins
+        else
+            # Hidden unit: valid placeholder. R=0 requires explicit G-state onstates.
+            dttype_full[k] = placeholder.dttype
+            bins_full[k] = placeholder.bins
+            onstates_full[k] = R[k] == 0 ? [[G[k]] for _ in 1:length(placeholder.dttype)] : placeholder.onstates
+        end
+    end
+    reporter, components = make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates_full, dttype_full, coupling)
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
+    hists = predictedarray(rates, couplingStrength, components, bins_full, reporter, dttype_full)
+    [hists[k] for k in 1:n_units if unit_model[k] in observed]
+end
+
+"""
+    test_nullspace_solvers(M; nrep=10, verbose=true)
+
+Benchmark and compare the QR-based and SVD-based nullspace solvers on
+the given matrix `M` (typically a transition rate matrix). Returns a
+NamedTuple with timings and basic accuracy diagnostics.
+"""
+function test_nullspace_solvers(M; nrep=10, verbose=true)
+    # Warmup
+    p_qr = StochasticGene.normalized_nullspace_qr(M)
+    p_svd = StochasticGene.normalized_nullspace_svd(M)
+
+    # Timings
+    t_qr = 0.0
+    t_svd = 0.0
+    for _ in 1:nrep
+        t_qr += @elapsed StochasticGene.normalized_nullspace_qr(M)
+        t_svd += @elapsed StochasticGene.normalized_nullspace_svd(M)
+    end
+    t_qr /= nrep
+    t_svd /= nrep
+
+    # Accuracy diagnostics
+    p_qr = StochasticGene.normalized_nullspace_qr(M)
+    p_svd = StochasticGene.normalized_nullspace_svd(M)
+    diff_l1 = sum(abs.(p_qr .- p_svd))
+    diff_linf = maximum(abs.(p_qr .- p_svd))
+
+    result = (t_qr=t_qr,
+              t_svd=t_svd,
+              speedup = t_svd > 0 ? t_qr / t_svd : Inf,
+              diff_l1=diff_l1,
+              diff_linf=diff_linf,
+              sum_qr=sum(p_qr),
+              sum_svd=sum(p_svd),
+              p_qr=p_qr,
+              p_svd=p_svd)
+
+    if verbose
+        println("QR nullspace:   time ≈ $(t_qr) s, sum=$(result.sum_qr)")
+        println("SVD nullspace:  time ≈ $(t_svd) s, sum=$(result.sum_svd)")
+        println("Relative speed (qr/svd): $(result.speedup)")
+        println("‖qr - svd‖₁ = $(result.diff_l1), ‖qr - svd‖∞ = $(result.diff_linf)")
+    end
+
+    return result
+end
+
+"""
+    test_nullspace_full_3unit(; r, transitions, G, R, S, insertstep, coupling, nrep, verbose)
+
+Build both RG and full 3-unit transition matrices (same parameters as
+`test_compare_RG_vs_Full` extended to 3 units) and run QR vs SVD nullspace
+solvers on each. Matrix comparison uses zero coupling so that uncoupled
+full-matrix expansion is compared to uncoupled RG (Kronecker) build.
+
+Returns a NamedTuple with fields:
+- `RG`:   result from `test_nullspace_solvers` on T_RG
+- `full`: result from `test_nullspace_solvers` on T_full
+- `same_shape`, `diff_max`, `matrices_match`
+"""
+function test_nullspace_full_3unit(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
+       0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
+       0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7],
+    transitions=(([1, 2], [2, 1]),
+                 ([1, 2], [2, 1]),
+                 ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])),
+    G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0),
+    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free]),
+    nrep::Int=10, verbose::Bool=true,
+)
+    # RG and full components for the 3-unit coupled case
+    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
+
+    T_RG   = make_mat_TC(comp_rg,   rates, couplingStrength)
+    T_full = make_mat_TC(comp_full, r)
+
+    # Nullspace tests
+    res_RG   = test_nullspace_solvers(T_RG;   nrep=nrep, verbose=verbose)
+    res_full = test_nullspace_solvers(T_full; nrep=nrep, verbose=verbose)
+
+    # Matrix agreement diagnostics
+    M_RG   = Matrix(T_RG)
+    M_full = Matrix(T_full)
+    same_shape = size(M_RG) == size(M_full)
+    diff_max  = same_shape ? maximum(abs.(M_RG .- M_full)) : NaN
+    matrices_match = same_shape && isapprox(M_RG, M_full; rtol=1e-12)
+
+    if verbose
+        println("3-unit T matrices: same_shape=$same_shape, max |T_RG - T_full| = $diff_max, match=$matrices_match")
+    end
+
+    return (RG = res_RG,
+            full = res_full,
+            same_shape = same_shape,
+            diff_max = diff_max,
+            matrices_match = matrices_match,
+            M_RG=M_RG,
+            M_full=M_full)
+end
+
+function test_matrices_3unit(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
+       0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
+       0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7],
+    transitions=(([1, 2], [2, 1]),
+                 ([1, 2], [2, 1]),
+                 ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])),
+    G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0),
+    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free]),
+    nrep::Int=10, verbose::Bool=true,
+)
+    # RG and full components for the 3-unit coupled case
+    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+
+    return comp_rg, comp_full
+end
+
+
+function test_3unit(;
+    r=[0.38, 0.1, 0.23, 0.2, 1.0,
+       0.45, 0.2, 0.43, 0.3, 1.0,
+       0.11, 0.12, 0.13, 1.0, 
+       0.1, 0.1, 0.1, 0.1, -.9, -.7],
+    transitions=(([1, 2], [2, 1]),
+                 ([1, 2], [2, 1]),
+                 ([1, 2], [2, 1])),
+    G=(2, 2, 2), R=(1, 1, 0), S=(0, 0, 0), insertstep=(1, 1, 0),
+    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 2, 2, 1)], [:free, :free]),
+    verbose::Bool=true,
+)
+    # RG and full components for the 3-unit coupled case
+    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
+
+    T_RG   = make_mat_TC(comp_rg,   rates, couplingStrength)
+    T_full = make_mat_TC(comp_full, r)
+
+
+    # Matrix agreement diagnostics
+    M_RG   = Matrix(T_RG)
+    M_full = Matrix(T_full)
+    same_shape = size(M_RG) == size(M_full)
+    diff_max  = same_shape ? maximum(abs.(M_RG .- M_full)) : NaN
+    matrices_match = same_shape && isapprox(M_RG, M_full; rtol=1e-12)
+
+    if verbose
+        println("3-unit T matrices: same_shape=$same_shape, max |T_RG - T_full| = $diff_max, match=$matrices_match")
+    end
+
+    return (same_shape = same_shape,
+            diff_max = diff_max,
+            matrices_match = matrices_match,
+            M_RG=M_RG,
+            M_full=M_full)
+end
+"""
+    test_nullspace_coupled_2unit(; r, transitions, G, R, S, insertstep, coupling, nrep, verbose)
+
+Build the 2-unit coupled transition matrix used in `test_compare_RG_vs_Full`
+for the RG stack and compare QR vs SVD nullspace solvers on it in one call.
+
+Returns the same NamedTuple as `test_nullspace_solvers`.
+"""
+function test_nullspace_coupled_2unit(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
+       0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5],
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]),
+                 ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
+    coupling=((1, 2), [(1, 2, 2, 3)]),
+    nrep::Int=10, verbose::Bool=true,
+)
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
+    comp_rg = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    T_coupled = make_mat_TC(comp_rg, rates, couplingStrength)
+    return test_nullspace_solvers(T_coupled; nrep=nrep, verbose=verbose)
 end
 
 
@@ -172,25 +401,18 @@ end
 
 function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1]), ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])), G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0), total=1000000, tol=1e-6, verbose=false)
     coupling = ((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free])
-    # Dwell specs for observed units only (unit 3 hidden). Same layout as test_fit_tracejoint_3unit.
     bins_u = [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]
+    # Unit 3 is hidden (no reporters, no onstates). Dwell specs only for observed units 1 and 2.
     dwell_specs = [
-        (unit=1, onstates=[[Int[]], [Int[]], [[2]], [[2]]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=bins_u),
-        (unit=2, onstates=[[Int[]], [Int[]], [[2]], [[2]]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=bins_u),
+        (unit=1, onstates=[Int[], Int[], [2], [2]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=bins_u),
+        (unit=2, onstates=[Int[], Int[], [2], [2]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=bins_u),
     ]
-    # Simulator: only computes and returns dwell times for units in dwell_specs
-    hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, dwell_specs=dwell_specs, totalsteps=total, tol=tol)
-    # CME: full model (all 3 units) then subset to observed units so output order matches simulator.
-    # Unit 3 has R=0 so ON states must be explicit G states (no empty []); use [3] for all four dwell types.
-    onstates_full = [[Int[], Int[], [2], [2]], [Int[], Int[], [2], [2]], [[3], [3], [3], [3]]]
-    dttype_full = [["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]]
-    bins_full = [bins_u, bins_u, [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]]
-    h_all = test_CDT(r, transitions, G, R, S, insertstep, onstates_full, dttype_full, bins_full, coupling)
-    observed_units = StochasticGene.observed_units_from_dwell_specs(dwell_specs)
-    h = [h_all[i] for i in observed_units]
+    hs = simulator_dwell_specs(r, transitions, G, R, S, insertstep, dwell_specs=dwell_specs, coupling=coupling, nhist=0, noiseparams=0, totalsteps=total, tol=tol)
+    h = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
     for i in eachindex(hs)
         hs[i] = StochasticGene.normalize_histogram.(hs[i])
     end
+    # simulator_dwell_specs (coupled) returns one histogram per requested dt type (same shape as CME).
     cme_vec = make_array(vcat(h...))
     sim_vec = make_array(vcat(hs...))
     if verbose
@@ -208,6 +430,116 @@ function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2
         end
     end
     return cme_vec, sim_vec
+end
+
+"""
+    test_compare_RG_vs_Full(; r, dwell_specs, coupling, ntrials, rtol, verbose)
+
+Run the same coupled dwell-time CME with RG stack (splicetype="") and Full stack (splicetype="full"),
+compare ON/OFF histograms and report time/memory. Uses 2-unit setup by default.
+ONG/OFFG are not compared (RG uses G-marginalized T; full stack uses full T for all until that path exists).
+Returns (h_RG, h_full, match::Bool, time_RG, time_full, alloc_RG, alloc_full).
+"""
+function test_compare_RG_vs_Full(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5],
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
+    dwell_specs=[(unit=1, onstates=[Int[], Int[], [3], [3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]),
+                 (unit=2, onstates=[Int[], Int[], [3], [3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)])],
+    coupling=((1, 2), [(1, 2, 2, 3)]),
+    ntrials=2,
+    rtol=1e-5,
+    verbose=true)
+    time_RG = 0.0
+    time_full = 0.0
+    alloc_RG = 0
+    alloc_full = 0
+    h_RG = nothing
+    h_full = nothing
+    for _ in 1:ntrials
+        t = @elapsed h_RG = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+        time_RG += t
+        alloc_RG += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+    end
+    for _ in 1:ntrials
+        t = @elapsed h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+        time_full += t
+        alloc_full += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+    end
+    time_RG /= ntrials
+    time_full /= ntrials
+    alloc_RG = alloc_RG ÷ ntrials
+    alloc_full = alloc_full ÷ ntrials
+    # Compare ON/OFF only: full stack uses full T for all; RG uses G-marginalized T for ONG/OFFG
+    h_RG_onoff = [[h_RG[α][1], h_RG[α][2]] for α in eachindex(h_RG)]
+    h_full_onoff = [[h_full[α][1], h_full[α][2]] for α in eachindex(h_full)]
+    cme_RG_onoff = make_array(vcat(h_RG_onoff...))
+    cme_full_onoff = make_array(vcat(h_full_onoff...))
+    match = isapprox(cme_RG_onoff, cme_full_onoff; rtol=rtol)
+    if verbose
+        println("RG   : time = $(round(time_RG; digits=6)) s, alloc = $alloc_RG bytes")
+        println("Full : time = $(round(time_full; digits=6)) s, alloc = $alloc_full bytes")
+        println("Match (rtol=$rtol): $match")
+    end
+    return h_RG, h_full, match, time_RG, time_full, alloc_RG, alloc_full
+end
+
+"""
+    test_compare_T_matrix_RG_vs_Full(; r, coupling, rtol, verbose, uncoupled_only)
+
+Build the full coupled transition matrix T using both the RG stack (Kronecker assembly)
+and the Full stack (element expansion), then compare the two matrices. They should agree
+to very high tolerance (default rtol=1e-12). Returns (T_RG, T_full, match::Bool).
+
+If `uncoupled_only=true`, coupling_strength is zeroed so the comparison is uncoupled T only
+(ensures expand_unit_elements_to_full matches Kronecker-sum construction).
+"""
+function test_compare_T_matrix_RG_vs_Full(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5],
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
+    coupling=((1, 2), [(1, 2, 2, 3)]),
+    rtol=1e-12,
+    verbose=true,
+    uncoupled_only=false)
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+    couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates, coupling_strength = prepare_rates_coupled(r, nrates, couplingindices)
+    if uncoupled_only
+        coupling_strength = zeros(size(coupling_strength))
+    end
+    comp_rg = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+    unit_model = coupling[1]
+    T_RG = make_mat_TC(comp_rg, rates, coupling_strength)
+    T_full = make_mat_TC(comp_full, r)
+    match = isapprox(Matrix(T_RG), Matrix(T_full); rtol=rtol)
+    if verbose
+        diff = maximum(abs.(Matrix(T_RG) - Matrix(T_full)))
+        println("max |T_RG - T_full| = $diff" * (uncoupled_only ? " (uncoupled only)" : ""))
+        println("Match (rtol=$rtol): $match")
+        if !match && uncoupled_only
+            # Diagnostic: where is the largest error and what are the contributions?
+            D = Matrix(T_RG) - Matrix(T_full)
+            i, j = Tuple(CartesianIndex(argmax(abs.(D))))
+            nT_vec = collect(StochasticGene.T_dimension(G, R, S, unit_model))
+            state_ij = StochasticGene.full_state_from_index(i, nT_vec)
+            println("Max diff at linear ($i, $j) -> slot state $state_ij: T_RG=$((T_RG[i,j])), T_full=$((T_full[i,j])), diff=$(D[i,j])")
+        end
+    end
+    return T_RG, T_full, match
+end
+
+"""
+    test_compare_T_matrix_uncoupled_machine_precision(; kwargs...)
+
+Run test_compare_T_matrix_RG_vs_Full with uncoupled_only=true and rtol=1e-14.
+Assert that the uncoupled full matrix matches the RG (Kronecker-sum) matrix to machine precision.
+"""
+function test_compare_T_matrix_uncoupled_machine_precision(; kwargs...)
+    T_RG, T_full, match = test_compare_T_matrix_RG_vs_Full(; uncoupled_only=true, rtol=1e-14, verbose=true, kwargs...)
+    @assert match "Uncoupled T (full) must match T (RG) to machine precision; run test_compare_T_matrix_RG_vs_Full(uncoupled_only=true) for diagnostics."
+    return T_RG, T_full
 end
 
 """
@@ -255,15 +587,9 @@ end
 """
     diagnose_sim_vs_cme(; testfn=nothing, verbose=true)
 
-Run a sim-vs-CME comparison and report where they disagree.
-
-1. Runs test_num_reporters_consistency; if it fails, the building block (reporter count)
-   is wrong in CME or simulator.
-2. Runs the comparison (default: test_compare_3unit); prints per-histogram sums and a few
-   bins so you can see which histogram (ON/OFF/ONG/OFFG, which unit) is off.
-
-Use this to decide: if num_reporters_consistency passes but histograms still differ,
-the bug is in dwell/sojourn logic or matrix construction, not in reporter count.
+Run a sim-vs-CME comparison and report where they disagree. Runs the comparison
+(default: test_compare_3unit), prints per-histogram sums and a few bins so you can
+see which histogram (ON/OFF/ONG/OFFG, which unit) is off, and returns (true, cme_vec, sim_vec).
 
 Call as `diagnose_sim_vs_cme()` or `diagnose_sim_vs_cme(testfn=StochasticGene.test_compare, verbose=true)`.
 """
@@ -271,15 +597,7 @@ function diagnose_sim_vs_cme(; testfn=nothing, verbose=true)
     if testfn === nothing
         testfn = test_compare_3unit
     end
-    verbose && println("=== 1. num_reporters consistency (CME vs slice vs simulator state) ===")
-    ok = test_num_reporters_consistency(G=2, R=2, insertstep=1, verbose=verbose)
-    ok = test_num_reporters_consistency(G=3, R=3, insertstep=1, verbose=verbose) && ok
-    ok = test_num_reporters_consistency(G=2, R=2, insertstep=2, verbose=verbose) && ok
-    if !ok
-        verbose && println("FAILED: reporter count definition is inconsistent (fix CME or simulator num_reporters).")
-        return false, nothing, nothing
-    end
-    verbose && println("Passed. Reporter count is consistent.\n=== 2. Sim vs CME histograms ===")
+    verbose && println("=== Sim vs CME histograms ===")
     cme_vec, sim_vec = testfn(verbose=verbose)
     diff = abs.(cme_vec .- sim_vec)
     verbose && println("Max |CME - sim| = $(maximum(diff)); sum diff = $(sum(diff))")

@@ -36,6 +36,9 @@
 - [`Utilities`](utilities.md): Data processing, model construction, and utility functions
 - [`Analysis`](analysis.md): Post-fitting analysis, model comparison, and visualization functions
 
+### Concepts (coupled systems)
+- [Units and models](../concepts/units_and_models.md): Units vs models, the unit–model map (`coupling[1]`), and flat rate vector order
+
 ## Data Types
 
 ### RNA Data Structures

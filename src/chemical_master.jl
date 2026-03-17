@@ -108,7 +108,8 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss)
             Sinit[e.a] += pss[e.b] * r[e.index]
         end
     end
-    Sinit / sum(Sinit)
+    s = sum(Sinit)
+    (iszero(s) || !isfinite(s)) ? Sinit : Sinit / s
 end
 
 function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
@@ -122,6 +123,13 @@ function init_S(r::Vector, sojourn::Vector, elements::Vector, pss, nonzeros)
     # Sinit / sum(Sinit)
 end
 
+"""
+    init_S(sojourn::Vector, T::SparseMatrixCSC, pss)
+
+Initial distribution for dwell time: **ON** = entrance to sojourn (flux from barrier into sojourn).
+**OFF** = stationary distribution of exit states of the previous sojourn, mapped to entrance of
+current sojourn (same net formula: flux from complement into sojourn). T(i,j) = rate from j to i.
+"""
 function init_S(sojourn::Vector, T::SparseMatrixCSC, pss)
     Sinit = zeros(length(pss))
     rows, cols, vals = findnz(T)
@@ -130,13 +138,37 @@ function init_S(sojourn::Vector, T::SparseMatrixCSC, pss)
             Sinit[rows[i]] += pss[cols[i]] * vals[i]
         end
     end
-    Sinit / sum(Sinit)
+    s = sum(Sinit)
+    (iszero(s) || !isfinite(s)) ? Sinit : Sinit / s
+end
+
+"""
+    init_S(sojourn::Vector, T::SparseMatrixCSC, pss, dttype::String)
+
+Dwell-time initial distribution by type.
+- ON/ONG: entrance to sojourn = flux from barrier into sojourn. Sinit[to] += pss[from] * T(to, from).
+- OFF/OFFG: entrance to sojourn (OFF) = exit-state distribution of previous sojourn (ON) mapped by
+  transition; same net formula (flux from complement into sojourn). T(i,j) = rate from j to i.
+"""
+function init_S(sojourn::Vector, T::SparseMatrixCSC, pss, dttype::String)
+    Sinit = zeros(length(pss))
+    rows, cols, vals = findnz(T)
+    for i in eachindex(rows)
+        cols[i] == rows[i] && continue
+        if rows[i] ∈ sojourn && cols[i] ∉ sojourn
+            # Entrance to sojourn: flux from col (outside) to row (inside). T(row,col) = rate col→row.
+            Sinit[rows[i]] += pss[cols[i]] * vals[i]
+        end
+    end
+    s = sum(Sinit)
+    (iszero(s) || !isfinite(s)) ? Sinit : Sinit / s
 end
 
 
-function init_S(sojourn::Vector, T::SparseMatrixCSC, pss, nonzeros) 
+function init_S(sojourn::Vector, T::SparseMatrixCSC, pss, nonzeros)
     Sinit = init_S(sojourn, T, pss)[nonzeros]
-    Sinit / sum(Sinit)
+    s = sum(Sinit)
+    (iszero(s) || !isfinite(s)) ? Sinit : Sinit / s
 end
 
 """
@@ -280,14 +312,16 @@ function time_evolve_eig(t::Vector, vals::Vector, vects::Matrix, weights::Vector
 end
 
 """
-normalized_nullspace(M::SparseMatrixCSC)
-Compute the normalized null space of a nxn matrix
-of rank n-1 using QR decomposition with pivoting
+normalized_nullspace_qr(M::SparseMatrixCSC)
+
+Fast QR-based nullspace used historically in this package.
+Assumes an irreducible rate matrix of rank n-1; may be fragile
+when the matrix is close to singular beyond rank n-1.
 """
-function normalized_nullspace(M::SparseMatrixCSC)
+function normalized_nullspace_qr(M::SparseMatrixCSC)
     m = size(M, 1)
     p = zeros(m)
-    F = qr(M)   #QR decomposition
+    F = qr(M)   # QR decomposition
     R = Matrix(F.R)  # convert to dense once to avoid repeated sparse slicing in back substitution
     # Back substitution to solve R*p = 0
     p[end] = 1.0
@@ -300,7 +334,40 @@ function normalized_nullspace(M::SparseMatrixCSC)
         pp[F.pcol[i]] = p[i]
     end
     max.(pp / sum(pp), 0)
+end
 
+"""
+normalized_nullspace_svd(M::SparseMatrixCSC)
+
+Robust nullspace via SVD. Computes the right singular vector
+associated with the smallest singular value and normalizes it.
+More expensive than QR but numerically safer; useful as a
+fallback and for benchmarking.
+"""
+function normalized_nullspace_svd(M::SparseMatrixCSC)
+    Md = Matrix(M)
+    Fsvd = svd(Md)
+    v = Fsvd.V[:, end]  # smallest singular value (svd sorts descending)
+    s = sum(v)
+    if s != 0 && isfinite(s)
+        v ./= s
+    end
+    max.(v, 0)
+end
+
+"""
+normalized_nullspace(M::SparseMatrixCSC)
+
+Default steady-state solver. Tries the fast QR-based method first
+and falls back to SVD if the QR path produces a non-finite or
+ill-normalized vector.
+"""
+function normalized_nullspace(M::SparseMatrixCSC)
+    v = normalized_nullspace_qr(M)
+    if all(isfinite, v) && (s = sum(v); isfinite(s) && s != 0)
+        return v
+    end
+    normalized_nullspace_svd(M)
 end
 
 function normalized_nullspace_ad(M::SparseMatrixCSC)

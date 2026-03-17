@@ -52,6 +52,7 @@ fits, stats, measures, data, model, options = fit(nchains=4)
 - [Installation](installation.md): How to install StochasticGene.jl
 - [Getting Started](getting_started.md): Basic usage and examples
 - [API Reference](api/index.md): Detailed documentation of all functions and types
+- [Concepts: Units and models](concepts/units_and_models.md): Units vs models and the unit–model map in coupled systems
 - [Examples](examples/index.md): More complex usage examples
 - [Contributing](contributing.md): How to contribute to the project
 

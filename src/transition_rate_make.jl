@@ -335,6 +335,35 @@ function TCoupledComponents(coupling::Tuple, transitions::Tuple, G, R, S, insert
     TCoupledComponents{typeof(comp)}(prod(T_dimension(G, R, S, unit_model)), unit_model, sources_t, comp, connection_data)
 end
 
+"""
+    TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+
+Build full-matrix coupled components from the same arguments as TCoupledComponents.
+Uncoupled part: expand each unit's elements to full (row,col) with rate indices in flat layout.
+Coupling: expand each ConnectionRecord to full elements with coupling rate indices.
+Legacy TCoupledComponents and make_mat_TC are unchanged.
+
+# Building from hand-set full-space elements
+
+You can also build TCoupledFullComponents from elements set directly in the full coupled space:
+
+1. `nT = T_dimension(G, R, S, unit_model)` (or your slot dimensions); `N = prod(nT)`.
+2. `rate_offset_per_unit = rate_offset_per_unit_from_lengths(n_rates_per_unit, n_coupling)`.
+3. `elements = Element[]`; fill via [`set_elements_full_uncoupled!`](@ref) / [`set_elements_full_coupling!`](@ref) (from unit data) or
+   `add_element_full!` for single entries (see [`full_state_index`](@ref) / [`full_state_from_index`](@ref)).
+4. `TCoupledFullComponents(N, elements)`.
+"""
+function TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+    unit_model = coupling[1]
+    connections = length(coupling) >= 2 ? coupling[2] : Int[]
+    n_coupling = length(connections)
+    nT = collect(T_dimension(G, R, S, unit_model))
+    N = prod(nT)
+    n_rates_per_model = [num_rates(transitions[m], R[m], S[m], insertstep[m]) for m in 1:length(G)]
+    rate_offset_per_model = rate_offset_per_unit_from_lengths(n_rates_per_model, n_coupling)
+    elements, target_rates = set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model, rate_offset_per_model)
+    return TCoupledFullComponents(N, elements, target_rates, n_coupling)
+end
 
 function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)
     indices = set_indices(length(transitions), R, S, insertstep)
@@ -1184,6 +1213,48 @@ function make_mat_T(components::TCoupledComponents{Vector{TCoupledUnitComponents
 end
 
 """
+    make_mat_T(components::TCoupledFullComponents, rates)
+
+Build the full N×N coupled transition matrix from precomputed full-matrix elements.
+`rates` is the full parameter vector (model order, then coupling constants). Element
+indices refer into this vector; coupling strengths are at rates[end - n_coupling + 1 : end].
+"""
+function make_mat_TC(components::TCoupledFullComponents, rates)
+    T = spzeros(Float64, components.N, components.N)
+    n_c = components.n_coupling
+    coupling_start = n_c == 0 ? length(rates) : length(rates) - n_c
+    for e in components.elements
+        if e.index <= coupling_start
+            T[e.a, e.b] += e.pm * rates[e.index]
+        else
+            ck = e.index - coupling_start
+            T[e.a, e.b] += rates[e.index] * e.pm * rates[components.target_rates[ck]]
+        end
+    end
+    return T
+end
+
+"""
+    make_mat_TD(components::TDCoupledFullComponents, rates, coupling_strength)
+
+Dwell-time full components: flat in model order, no coupling elements yet.
+Build dwell-time transition matrix from full-state elements and a flat rate vector
+augmented with `coupling_strength`.
+"""
+function make_mat_TCD(components::TDCoupledFullComponents, rates, coupling_strength)
+    unit_model = components.unit_model
+    flat = Float64[]
+    for m in 1:maximum(unit_model)
+        u = findfirst(isequal(m), unit_model)
+        append!(flat, rates[u])
+    end
+    append!(flat, coupling_strength)
+    T = spzeros(Float64, components.N, components.N)
+    make_mat!(T, components.elements, flat)
+    return T
+end
+
+"""
     make_mat_TC_gene_full(coupling_strength, Gm, Gs, Gt, IG, sources, model)
 
 Gene-level coupled transition matrix (G-only, no R): builds N_gene×N_gene with correct
@@ -1377,4 +1448,177 @@ function make_mat_TCD_full(unit::Int, TD::Vector, T, Gm, Gs, Gt, IT, IG, IR, cou
         make_mat_TCD!(TCD[i], sojourn[i])
     end
     return dropzeros.(TCD)
+end
+
+# ---- TCoupledFullComponents: full-matrix element expansion (parallel to legacy TCoupledComponents) ----
+
+"""
+    expand_unit_elements_to_full(α::Int, elements::Vector{Element}, nT::Vector{Int}, rate_base::Int)
+
+Compute full N×N transition elements for one uncoupled unit from its local elements.
+
+For each local element (a,b) in the unit and each state of the other units, produces
+one full-space element with row/col in 1:N and rate index offset by rate_base.
+
+# Arguments
+- `α`: Slot index (1-based).
+- `elements`: Unit's local `Vector{Element}` (a,b in 1:nT[α]).
+- `nT`: Slot dimensions (length n).
+- `rate_base`: First rate index for this unit in the flat rate vector.
+
+# Returns
+- `Vector{Element}` with (a,b) in full space 1:N.
+"""
+function expand_unit_elements_to_full(α::Int, elements::Vector{Element}, nT::Vector{Int}, rate_base::Int)
+    n = length(nT)
+    N = prod(nT)
+    block = N ÷ nT[α]
+    out = Element[]
+    positions = [1:(α-1); (α+1):n]
+    println(">>> expand_unit_elements_to_full called for unit $α with rate_base $rate_base")
+    for e in elements
+        rate_idx = rate_base + e.index - 1
+        for other_k in 1:block
+            state = zeros(Int, n)
+            r = other_k - 1
+            # Decode other_k-1 so slot n varies fastest (match full_state_index convention)
+            for pos in reverse(positions)
+                d = nT[pos]
+                state[pos] = mod(r, d) + 1
+                r = div(r, d)
+            end
+            state[α] = e.a
+            row = full_state_index(state, nT)
+            state[α] = e.b
+            col = full_state_index(state, nT)
+            push!(out, Element(row, col, rate_idx, e.pm))
+        end
+    end
+    return out
+end
+
+"""
+    expand_coupling_to_full(U, elementsTarget, β, α, nT, gamma_index)
+
+Compute full N×N transition elements for one coupling (source operator U at slot β,
+target elements at slot α). Each element stores `index = gamma_index`, pointing
+into the coupling part of the flat rate vector; the associated target rate index
+is tracked separately (per-connection) in `components.target_rates`.
+
+# Arguments
+- `U`: Source unit's operator matrix (nT[β]×nT[β]).
+- `elementsTarget`: Target unit's transition elements (local indices).
+- `β`, `α`: Source and target slot indices (1-based).
+- `nT`: Slot dimensions.
+- `gamma_index`: Index of the coupling parameter γ_k in the flat rate vector.
+
+# Returns
+- `Vector{Element}` with (a,b) in full space 1:N; index = gamma_index for all elements.
+"""
+function expand_coupling_to_full(U::SparseMatrixCSC, elementsTarget::Vector{Element}, β::Int, α::Int, nT::Vector{Int}, gamma_index::Int)
+    n = length(nT)
+    N = prod(nT)
+    block_other = N ÷ (nT[β] * nT[α])
+    positions = [1:(β-1); (β+1):(α-1); (α+1):n]
+    other_dims = nT[positions]
+    out = Element[]
+    Urows, Ucols, Uvals = findnz(U)
+    for o in 1:block_other
+        state = zeros(Int, n)
+        r = o - 1
+        for (ii, pos) in enumerate(reverse(positions))
+            state[pos] = mod(r, other_dims[ii]) + 1
+            r = div(r, other_dims[ii])
+        end
+        for k in eachindex(Urows)
+            iβ, jβ = Urows[k], Ucols[k]
+            u_sign = sign(Uvals[k])
+            u_sign == 0 && continue
+            for e in elementsTarget
+                row_state = copy(state)
+                row_state[β] = jβ
+                row_state[α] = e.a
+                col_state = copy(state)
+                col_state[β] = iβ
+                col_state[α] = e.b
+                row = full_state_index(row_state, nT)
+                col = full_state_index(col_state, nT)
+                pm = u_sign * e.pm
+                pm == 0 && continue
+                push!(out, Element(row, col, gamma_index, pm))
+            end
+        end
+    end
+    return out
+end
+
+"""
+    rate_offset_per_unit_from_lengths(n_rates_per_unit::Vector{Int}, n_coupling::Int)
+
+Build `rate_offset_per_unit` for TCoupledFullComponents from per-unit rate counts.
+
+# Arguments
+- `n_rates_per_unit`: Length n_units; n_rates_per_unit[i] = number of rate indices for slot i.
+- `n_coupling`: Number of coupling strength parameters.
+
+# Returns
+- `Vector{Int}` of length n_units+1: rate_offset_per_unit[i] = last index of slot i-1
+  (with rate_offset_per_unit[1] = 0). Base-rate indices for slot i are then
+  (rate_offset_per_unit[i] + 1) : rate_offset_per_unit[i] + n_rates_per_unit[i],
+  and the first coupling index is rate_offset_per_unit[end] + 1.
+"""
+function rate_offset_per_unit_from_lengths(n_rates_per_unit::Vector{Int}, n_coupling::Int)
+    offsets = Int[0]
+    for r in n_rates_per_unit
+        push!(offsets, offsets[end] + r)
+    end
+    return offsets
+end
+
+"""
+    TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
+
+Build full-matrix coupled components from the same arguments as TCoupledComponents.
+Uncoupled part: expand each unit's elements to full (row,col) with rate indices in flat layout.
+Coupling: expand each ConnectionRecord to full elements with coupling rate indices.
+Legacy TCoupledComponents and make_mat_TC are unchanged.
+
+# Building from hand-set full-space elements
+
+You can also build TCoupledFullComponents from elements set directly in the full coupled space:
+
+1. `nT = T_dimension(G, R, S, unit_model)` (or your slot dimensions); `N = prod(nT)`.
+2. `rate_offset_per_unit = rate_offset_per_unit_from_lengths(n_rates_per_unit, n_coupling)`.
+3. `elements = Element[]`; fill via [`set_elements_full_uncoupled!`](@ref) / [`set_elements_full_coupling!`](@ref) (from unit data) or
+   `add_element_full!` for single entries (see [`full_state_index`](@ref) / [`full_state_from_index`](@ref)).
+4. `TCoupledFullComponents(N, elements)`.
+"""
+
+
+"""
+    TDCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype)
+
+Build dwell-time coupled components in full state space. Full T elements from legacy
+TCoupledComponents (splicetype=""); sojourn_full in full-state indices; elementsTD
+stub (empty) so TCD is built from T and sojourn in predictedarray.
+"""
+function TDCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype)
+    full_T = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+    unit_model = coupling[1]
+    nT_vec = collect(T_dimension(G, R, S, unit_model))
+    n_units = length(unit_model)
+    n_rates_per_unit = [num_rates(transitions[unit_model[i]], R[unit_model[i]], S[unit_model[i]], insertstep[unit_model[i]]) for i in 1:n_units]
+    n_coupling = length(coupling[2])
+    rate_offset_per_unit = rate_offset_per_unit_from_lengths(n_rates_per_unit, n_coupling)
+    sojourn_full = Vector{Vector{Vector{Int}}}(undef, n_units)
+    elementsTD = Vector{Vector{Vector{Element}}}(undef, n_units)
+    for k in 1:n_units
+        α = unit_model[k]
+        sojourn_full[k] = [full_state_indices_for_unit_sojourn(k, sojourn[α][i], nT_vec) for i in eachindex(sojourn[α])]
+        elementsTD[k] = [Element[] for i in eachindex(sojourn[α])]
+    end
+    return TDCoupledFullComponents(
+        full_T.N, unit_model, full_T.elements, rate_offset_per_unit, n_coupling,
+        sojourn_full, elementsTD
+    )
 end
