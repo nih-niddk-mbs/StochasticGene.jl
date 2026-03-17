@@ -391,9 +391,14 @@ function off_states(reporters)
 end
 
 """
-    sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
+    sojourn_states(onstates, G, R, S, insertstep, dttype)
 
-TBW
+Convert an on-state specification into sojourn state indices for a given dwell-time type.
+`dttype == "OFF"` or `"OFFG"` inverts the set; `"ON"`/`"ONG"` keeps `onstates` as-is.
+If `onstates` is empty the full on-state set from `on_states` is used.
+
+Three methods handle `Vector{Int}` (single model), `Vector{Vector{Int}}` (per-dtype),
+and `Vector{Vector{Vector{Int}}}` (per-unit per-dtype for coupled models).
 """
 function sojourn_states(onstates::Vector{Int}, G::Int, R, S, insertstep, dttype)
     sojourn = copy(onstates)
@@ -543,10 +548,6 @@ function coupled_states(sojourn, coupling, components, G)
     coupled
 end
 
-# Full stack: sojourn already in full-state indices
-function coupled_states(sojourn, coupling, components::TDCoupledFullComponents, G)
-    return components.sojourn_full
-end
 
 """
     nonzero_rows(elements::Vector{Element})
@@ -565,10 +566,21 @@ returns the unique, sorted list of rows that contain nonzero elements.
 """
 nonzero_rows(elements::Vector{Element}) = sort(union(map(s -> getfield(s, fieldnames(Element)[1]), elements)))
 
+"""
+    nonzero_rows(components::AbstractTDComponents)
+
+Return per-dtype lists of nonzero row indices by calling `nonzero_rows` on each
+`elementsTD` entry.
+"""
 function nonzero_rows(components::AbstractTDComponents)
     [nonzero_rows(e) for e in components.elementsTD]
 end
 
+"""
+    nonzero_rows(components::TCoupledComponents)
+
+Return per-unit nonzero row lists by delegating to each unit's model component.
+"""
 function nonzero_rows(components::TCoupledComponents)
     [nonzero_rows(c) for c in components.modelcomponents]
 end
@@ -856,6 +868,12 @@ function kron_left(T, M::Vector, unit_model, first, last)
     T
 end
 
+"""
+    indices_kron_left(index, dimension, right_dimension)
+
+Expand state `index` vector leftward in the Kronecker product. Replicates
+`index` for each offset `0, dimension, 2*dimension, …` up to the total size.
+"""
 function indices_kron_left(index::Vector, dimension::Int, right_dimension::Int)
     indices = Int[]
     total = dimension * right_dimension
@@ -865,6 +883,12 @@ function indices_kron_left(index::Vector, dimension::Int, right_dimension::Int)
     indices
 end
 
+"""
+    indices_kron_right(index, dimension)
+
+Expand state `index` vector rightward in the Kronecker product. Maps each
+index `k` to `1 + dimension*(k-1), 2 + dimension*(k-1), …`.
+"""
 function indices_kron_right(index::Vector, dimension::Int)
     indices = Int[]
     for i in 1:dimension
@@ -873,6 +897,12 @@ function indices_kron_right(index::Vector, dimension::Int)
     indices
 end
 
+"""
+    set_base(S, splicetype)
+
+Return `(S, base)` where `base` is 2 (binary R states) or 3 (ternary for splicing).
+Forces `S = 0, base = 2` for `splicetype == "offeject"`.
+"""
 function set_base(S, splicetype)
     if splicetype == "offeject"
         S = 0
@@ -886,6 +916,13 @@ function set_base(S, splicetype)
     return S, base
 end
 
+"""
+    source_Rstates(nS, base, R)
+
+Return the R-state indices (1-based, in a `base^R` space) for which at least
+one of the digit positions in `nS` is nonzero. Used to identify source states
+for coupling in the RNA chain.
+"""
 function source_Rstates(nS, base, R)
     sources = Int[]
     for z in 1:base^R
@@ -896,6 +933,16 @@ function source_Rstates(nS, base, R)
     sources
 end
 
+"""
+    classify_states(state, G, R, S, splicetype)
+
+Partition a list of state indices into G-states (`≤ G`) and R-states (`> G`).
+R-state indices are mapped to the corresponding RNA digit positions via
+`source_Rstates`.
+
+# Returns
+- `(Gstates, Rstates)`: unique sorted G and R state indices.
+"""
 function classify_states(state, G, R, S, splicetype)
     Gstates = Int[]
     Rsteps = Int[]
@@ -910,6 +957,15 @@ function classify_states(state, G, R, S, splicetype)
     unique(Gstates), unique(Rsteps)
 end
 
+"""
+    classify_transitions(target, indices)
+
+Partition a set of rate indices into three groups: G transitions (in `indices.gamma`),
+RNA initiation (`indices.nu[1]`), and RNA elongation/splice transitions (> `nu[1]`).
+
+# Returns
+- `(Gts, Init, Rts)`: unique sorted indices for each class.
+"""
 function classify_transitions(target, indices)
     Gts = Int[]
     Init = Int[]

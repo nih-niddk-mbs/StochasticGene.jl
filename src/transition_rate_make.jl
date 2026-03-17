@@ -195,35 +195,19 @@ function TRGCoupledUnitComponents(source_state, target_transition, transitions, 
 end
 
 """
-    make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
-    make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
+    make_components_TRGCoupled(coupling, transitions, G, R, S, insertstep, splicetype="")
+    make_components_TRGCoupled(unit_model, sources, source_state, target_transition, transitions, G, R, S, insertstep, splicetype)
 
-Create TCoupledComponents structure for coupled models.
-
-# Description
-This function creates a TCoupledComponents structure for coupled models, which includes
-matrix components for fitting traces, mRNA histograms, and reporter gene data. It handles
-the construction of coupled systems with multiple interacting units.
+Build a `TCoupledComponents{Vector{TRGCoupledUnitComponents}}` for the RG-stack coupled path.
 
 # Arguments
-- `coupling::Tuple`: `(unit_model, connections::Vector{ConnectionSpec})`; each connection is `(β, s, α, t)`. Empty `connections` is valid (uncoupled T only).
-- `transitions::Tuple`: Tuple of transition rates
-- `G`: Total number of gene states
-- `R`: Number of reporter steps
-- `S`: Number of splice sites
-- `insertstep`: Insert step for RNA processing
-- `splicetype`: Splice type (default is an empty string)
-- `unit_model`: Unit model specification
-- `sources`: Source units for each unit
-- `source_state`: Source state specification
-- `target_transition`: Target transition specification
-
-# Methods
-- `make_components_TCoupled(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")`: Creates a TCoupledComponents structure from coupling parameters and transition rates.
-- `make_components_TCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)`: Creates a TCoupledComponents structure from unit model and other parameters.
+- `coupling::Tuple`: `(unit_model, connections)` where each connection is `(β, s, α, t)`.
+- `transitions::Tuple`: per-model gene-state transition tuples.
+- `G`, `R`, `S`, `insertstep`: per-model geometry (Tuples for the multi-unit form).
+- `splicetype::String`: splicing model variant (default `""`).
 
 # Returns
-- `TCoupledComponents`: The created TCoupledComponents structure
+- `TCoupledComponents`: assembled coupled components.
 """
 
 function make_components_TRGCoupled(unit_model, sources, source_state, target_transition, transitions, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype)
@@ -435,53 +419,26 @@ function MTAIComponents(transitions::Tuple, G, R, S, insertstep, onstates, nhist
 end
 
 """
-    make_components_MTD(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="")
+    MTDComponents(transitions, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype="", ejectnumber=1)
 
-Make MTD structure for GRS models.
-
-# Description
-This function creates an MTD structure for GRS models, which is used for various types of data fitting.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of gene states.
-- `R`: Number of reporter steps.
-- `S`: Number of splice sites.
-- `insertstep`: Insert step.
-- `onstates`: Vector of on states.
-- `dttype`: Data type.
-- `nhist`: Number of histograms.
-- `decay`: Decay rates.
-- `splicetype`: Splice type (default is an empty string).
+Construct `MTDComponents` for dwell-time GRS models: builds `MComponents` for the
+mRNA matrix and `TDComponents` for the T and filtered TD matrices.
 
 # Returns
-- `MTDComponents`: The created MTD structure.
+- `MTDComponents`: combined M and TD components.
 """
-
 function MTDComponents(transitions::Tuple, G, R, S, insertstep, onstates, dttype, nhist, decay, splicetype::String="", ejectnumber=1)
     MTDComponents(MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber), TDComponents(transitions, G, R, S, insertstep, onstates, dttype, splicetype, ejectnumber))
 end
 
 """
-    make_components_MT(transitions, G, R, S, insertstep, nhist, decay, splicetype="")
+    MTComponents(transitions, G, R, S, insertstep, nhist, decay, splicetype="", ejectnumber=1)
 
-Return MTComponents structure for GRS models.
-
-# Description
-This function returns an MTComponents structure for GRS models, which is used for fitting traces and mRNA histograms.
-
-# Arguments
-- `transitions`: Transition rates.
-- `G`: Total number of gene states.
-- `R`: Number of reporter steps.
-- `S`: Number of splice sites.
-- `insertstep`: Insert step.
-- `nhist`: Number of histograms.
-- `decay`: Decay rates.
-- `splicetype`: Splice type (default is an empty string).
+Construct `MTComponents` for GRS models: combines `MComponents` (mRNA matrix)
+with `TComponents` (transition matrix).
 
 # Returns
-- `MTComponents`: The created MTComponents structure.
+- `MTComponents`: combined M and T components.
 """
 MTComponents(transitions::Tuple, G, R, S, insertstep, nhist, decay, splicetype="", ejectnumber=1) = MTComponents(MComponents(transitions, G, R, nhist, decay, splicetype, ejectnumber), TComponents(transitions, G, R, S, insertstep, splicetype))
 
@@ -1209,11 +1166,18 @@ function make_mat_T(components::TCoupledComponents{Vector{TCoupledUnitComponents
 end
 
 """
-    make_mat_T(components::TCoupledFullComponents, rates)
+    make_mat_TC(components::TCoupledFullComponents, rates, coupling_rates)
 
-Build the full N×N coupled transition matrix from precomputed full-matrix elements.
-`rates` is the full parameter vector (model order, then coupling constants). Element
-indices refer into this vector; coupling strengths are at rates[end - n_coupling + 1 : end].
+Build the full N×N coupled transition matrix from `TCoupledFullComponents` elements.
+Iterates `elements_base` (indexed by `rates[model][localindex]`) and
+`elements_coupling` (indexed by `coupling_rates[localindex]`).
+
+# Arguments
+- `rates::Vector{Vector{Float64}}`: per-model rate vectors.
+- `coupling_rates::Vector{Float64}`: precomputed `γ_k * base_rate_k` for each coupling.
+
+# Returns
+- `SparseMatrixCSC{Float64}`: the assembled T matrix.
 """
 function make_mat_TC(components::TCoupledFullComponents,
                      rates::Vector{Vector{Float64}},
@@ -1229,23 +1193,39 @@ function make_mat_TC(components::TCoupledFullComponents,
 end
 
 """
-    make_mat_TD(components::TDCoupledFullComponents, rates, coupling_strength)
+    make_mat_TC(components::TDCoupledFullComponents, rates, coupling_rates)
 
-Dwell-time full components: flat in model order, no coupling elements yet.
-Build dwell-time transition matrix from full-state elements and a flat rate vector
-augmented with `coupling_strength`.
+Build the full T matrix from a `TDCoupledFullComponents` (same element loop as `TCoupledFullComponents`).
 """
-function make_mat_TCD(components::TDCoupledFullComponents, rates, coupling_strength)
-    unit_model = components.unit_model
-    flat = Float64[]
-    for m in 1:maximum(unit_model)
-        u = findfirst(isequal(m), unit_model)
-        append!(flat, rates[u])
-    end
-    append!(flat, coupling_strength)
+function make_mat_TC(components::TDCoupledFullComponents,
+                     rates::Vector{Vector{Float64}},
+                     coupling_rates::Vector{Float64})
     T = spzeros(Float64, components.N, components.N)
-    make_mat!(T, components.elements, flat)
+    for e in components.elements_base
+        T[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
+    end
+    for e in components.elements_coupling
+        T[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
+    end
     return T
+end
+
+"""
+    make_mat_TCD(components::TDCoupledFullComponents, unit, dtype, rates, coupling_rates)
+
+Build the TD matrix for `unit` and `dtype` index from pre-filtered elements. The TD matrix
+is T restricted to sojourn-state columns (transitions to non-sojourn states are absent).
+"""
+function make_mat_TCD(components::TDCoupledFullComponents, unit::Int, dtype::Int,
+                      rates::Vector{Vector{Float64}}, coupling_rates::Vector{Float64})
+    TD = spzeros(Float64, components.N, components.N)
+    for e in components.elementsTD_base[unit][dtype]
+        TD[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
+    end
+    for e in components.elementsTD_coupling[unit][dtype]
+        TD[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
+    end
+    return TD
 end
 
 """
@@ -1469,7 +1449,6 @@ function expand_unit_elements_to_full(α::Int, elements::Vector{Element}, nT::Ve
     block = N ÷ nT[α]
     out = Element[]
     positions = [1:(α-1); (α+1):n]
-    println(">>> expand_unit_elements_to_full called for unit $α with rate_base $rate_base")
     for e in elements
         rate_idx = rate_base + e.index - 1
         for other_k in 1:block
@@ -1583,49 +1562,30 @@ function rate_offset_per_unit_from_lengths(n_rates_per_unit::Vector{Int}, n_coup
 end
 
 """
-    TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype="")
-
-Build full-matrix coupled components from the same arguments as TCoupledComponents.
-Uncoupled part: expand each unit's elements to full (row,col) with rate indices in flat layout.
-Coupling: expand each ConnectionRecord to full elements with coupling rate indices.
-Legacy TCoupledComponents and make_mat_TC are unchanged.
-
-# Building from hand-set full-space elements
-
-You can also build TCoupledFullComponents from elements set directly in the full coupled space:
-
-1. `nT = T_dimension(G, R, S, unit_model)` (or your slot dimensions); `N = prod(nT)`.
-2. `rate_offset_per_unit = rate_offset_per_unit_from_lengths(n_rates_per_unit, n_coupling)`.
-3. `elements = Element[]`; fill via [`set_elements_full_uncoupled!`](@ref) / [`set_elements_full_coupling!`](@ref) (from unit data) or
-   `add_element_full!` for single entries (see [`full_state_index`](@ref) / [`full_state_from_index`](@ref)).
-4. `TCoupledFullComponents(N, elements)`.
-"""
-
-
-"""
     TDCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype)
 
-Build dwell-time coupled components in full state space. Full T elements from legacy
-TCoupledComponents (splicetype=""); sojourn_full in full-state indices; elementsTD
-stub (empty) so TCD is built from T and sojourn in predictedarray.
+Build dwell-time coupled components in full state space. Shares element construction
+with `TCoupledFullComponents`; sojourn sets are expanded to full-state indices.
 """
 function TDCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, sojourn, dttype)
-    full_T = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
     unit_model = coupling[1]
     nT_vec = collect(T_dimension(G, R, S, unit_model))
     n_units = length(unit_model)
-    n_rates_per_unit = [num_rates(transitions[unit_model[i]], R[unit_model[i]], S[unit_model[i]], insertstep[unit_model[i]]) for i in 1:n_units]
-    n_coupling = length(coupling[2])
-    rate_offset_per_unit = rate_offset_per_unit_from_lengths(n_rates_per_unit, n_coupling)
-    sojourn_full = Vector{Vector{Vector{Int}}}(undef, n_units)
-    elementsTD = Vector{Vector{Vector{Element}}}(undef, n_units)
+    elements_base, elements_coupling = set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, "", unit_model)
+    N = prod(nT_vec)
+    elementsTD_base = Vector{Vector{Vector{ElementCoupledFull}}}(undef, n_units)
+    elementsTD_coupling = Vector{Vector{Vector{ElementCoupledFull}}}(undef, n_units)
     for k in 1:n_units
         α = unit_model[k]
-        sojourn_full[k] = [full_state_indices_for_unit_sojourn(k, sojourn[α][i], nT_vec) for i in eachindex(sojourn[α])]
-        elementsTD[k] = [Element[] for i in eachindex(sojourn[α])]
+        n_dtype = length(sojourn[α])
+        elementsTD_base[k] = Vector{Vector{ElementCoupledFull}}(undef, n_dtype)
+        elementsTD_coupling[k] = Vector{Vector{ElementCoupledFull}}(undef, n_dtype)
+        for i in 1:n_dtype
+            soj = full_state_indices_for_unit_sojourn(k, sojourn[α][i], nT_vec)
+            elementsTD_base[k][i] = filter(e -> e.b ∈ soj, elements_base)
+            elementsTD_coupling[k][i] = filter(e -> e.b ∈ soj, elements_coupling)
+        end
     end
-    return TDCoupledFullComponents(
-        full_T.N, unit_model, full_T.elements, rate_offset_per_unit, n_coupling,
-        sojourn_full, elementsTD
-    )
+    targets = [(unit_model[c[3]], c[4]) for c in coupling[2]]
+    return TDCoupledFullComponents(N, elements_base, elements_coupling, elementsTD_base, elementsTD_coupling, targets)
 end

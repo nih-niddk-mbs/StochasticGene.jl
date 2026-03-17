@@ -1339,9 +1339,12 @@ function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, 
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
     if splicetype == "full"
         components = TDCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
-        sojourn_c = coupled_states(sojourn, coupling, components, G)
-        nonzeros = sojourn_c  # full stack uses sojourn_full from components; keep shape for API
-        return (sojourn_c, nonzeros), components
+        unit_model = coupling[1]
+        nT_vec = collect(T_dimension(G, R, S, unit_model))
+        sojourn_c = [[full_state_indices_for_unit_sojourn(k, sojourn[unit_model[k]][i], nT_vec)
+                      for i in eachindex(sojourn[unit_model[k]])]
+                     for k in eachindex(unit_model)]
+        return (sojourn_c, sojourn_c), components
     end
     components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
     sojourn = coupled_states(sojourn, coupling, components, G)

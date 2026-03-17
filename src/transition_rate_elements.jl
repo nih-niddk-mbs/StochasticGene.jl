@@ -23,12 +23,17 @@
 # the complete transition matrices needed for various types of stochastic gene expression analyses.
 
 """
-	set_elements_G!(elements,transitions,G,R,base,gamma)
+    set_elements_G!(elements, transitions, G, gamma, nT)
 
-	return G transition matrix elements
+In-place accumulation of G-state (promoter) transition elements tiled across
+all RNA/R blocks. Calls the two-argument form for each block offset `j`.
 
--`elements`: Vector of Element structures
--`transitions`: tupe of G state transitions
+# Arguments
+- `elements`: vector to append `Element` structures to (modified in-place).
+- `transitions`: tuple of `(from, to)` gene-state transitions.
+- `G::Int`: number of gene states.
+- `gamma`: vector of rate indices for each transition.
+- `nT::Int`: total T matrix dimension (determines number of G-blocks).
 """
 function set_elements_G!(elements, transitions, G::Int, gamma, nT)
     for j = 0:G:nT-1
@@ -67,9 +72,21 @@ function set_elements_G(transitions, gamma::Vector)
 end
 
 """
-    set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
+    set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu, eta, splicetype="")
 
-inplace update to RG and RGbar matrix elements
+In-place construction of RNA-gene block elements split into two vectors:
+`elementsRGbar` (elongation/splicing transitions) and `elementsRG` (RNA initiation).
+Only has effect when `R > 0`.
+
+# Arguments
+- `elementsRGbar`: vector for non-initiation RNA transitions (modified in-place).
+- `elementsRG`: vector for RNA initiation transitions (modified in-place).
+- `R::Int`: number of RNA elongation steps.
+- `S::Int`: number of splice sites.
+- `insertstep::Int`: step at which RNA is inserted.
+- `nu::Vector{Int}`: rate indices for R transitions.
+- `eta::Vector{Int}`: rate indices for splice transitions.
+- `splicetype::String`: splicing model variant (`""` or `"offeject"`).
 """
 function set_elements_RS!(elementsRGbar, elementsRG, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
@@ -183,6 +200,12 @@ function set_elements_GRS(transitions, G, R, S, insertstep, indices::Indices, sp
     end
 end
 
+"""
+    elements_TG!(elements, elementsG, G, nT)
+
+Tile G-block elements across all RNA blocks. Each G element `(a, b)` is
+replicated at offsets `j = 0, G, 2G, …` up to `nT - 1`.
+"""
 function elements_TG!(elements, elementsG, G, nT)
     for e in elementsG
         for j in 0:G:nT-1
@@ -192,6 +215,12 @@ function elements_TG!(elements, elementsG, G, nT)
 
 end
 
+"""
+    elements_TR!(elements, elementsR, G)
+
+Expand RNA-block (R) elements into the full T matrix by replicating each
+element across all `G` gene-state rows.
+"""
 function elements_TR!(elements, elementsR, G::Int)
     for e in elementsR
         for j in 1:G
@@ -200,12 +229,27 @@ function elements_TR!(elements, elementsR, G::Int)
     end
 end
 
+"""
+    elements_RG!(elements, elementsR, G)
+
+Map RNA initiation elements (acting on the last R slot) into the full T
+matrix. Uses the convention `row = G * a`, `col = G * b`.
+"""
 function elements_RG!(elements, elementsR, G::Int)
     for e in elementsR
         push!(elements, Element(G * e.a, G * e.b, e.index, e.pm))
     end
 end
 
+"""
+    set_elements_TGRS(elementsG, elementsRGbar, elementsRG, G, nT)
+
+Assemble the full T matrix element list from pre-built G, RGbar, and RG
+sub-element vectors by tiling/expanding each part.
+
+# Returns
+- `(elements, nT)`: assembled element list and matrix dimension.
+"""
 function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
     elements = []
     elements_TG!(elements, elementsG, G, nT)
@@ -214,6 +258,12 @@ function set_elements_TGRS(elementsG::Vector, elementsRGbar, elementsRG, G, nT)
     elements, nT
 end
 
+"""
+    set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
+
+Build the full T matrix element list from model spec. Returns `(elements, nT)`.
+Dispatches through `set_elements_GRS` for `R > 0` or falls back to gene-only.
+"""
 function set_elements_TGRS(transitions::Tuple, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
         elementsG, elementsRGbar, elementsRG, _, nT = set_elements_GRS(transitions, G, R, S, insertstep, indices, splicetype)
@@ -313,9 +363,10 @@ function set_elements_T!(elementsT, G, R, S, insertstep, nu::Vector{Int}, eta::V
 end
 
 """
-    set_elements_T(transitions, G, R, S, indices::Indices, splicetype::String)
+    set_elements_T(transitions, G, R, S, insertstep, indices, splicetype)
 
-return T matrix elements (Element structure) and size of matrix
+Build the full T matrix element list and return `(elementsT, nT)`.
+Combines G-state tile elements with RNA elongation and splice elements.
 """
 function set_elements_T(transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     if R > 0
@@ -336,6 +387,12 @@ end
 #     elementsT
 # end
 
+"""
+    set_elements_TD!(elements_TD, elementsT, sojourn)
+
+In-place filter: keep only elements whose source column `b` is in `sojourn`.
+Used to build dwell-time (TD) element sets from full T elements.
+"""
 function set_elements_TD!(elements_TD, elementsT, sojourn::Vector)
     for e in elementsT
         if e.b ∈ sojourn
@@ -343,15 +400,23 @@ function set_elements_TD!(elements_TD, elementsT, sojourn::Vector)
         end
     end
 end
+
+"""
+    set_elements_TD(elementsT, sojourn)
+
+Return a filtered copy of `elementsT` containing only elements whose source
+column `b` is in `sojourn`. Non-mutating wrapper around `set_elements_TD!`.
+"""
 function set_elements_TD(elementsT, sojourn::Vector)
     elementsTD = Vector{Element}(undef, 0)
     set_elements_TD!(elementsTD, elementsT, sojourn::Vector)
     elementsTD
 end
 """
-    set_elements_TX!(elementsTX, elementsT, onstates::Vector,f)
+    set_elements_TX!(elementsTX, elementsT, onstates, f)
 
-add elements to elementsTX if column element satisfies f (∈ or ∉)
+In-place filter: keep elements from `elementsT` whose source column `b`
+satisfies `f(b, onstates)`. Used with `∈` (for active states) or `∉` (for inactive).
 """
 function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
     for e in elementsT
@@ -361,9 +426,10 @@ function set_elements_TX!(elementsTX, elementsT, onstates::Vector, f)
     end
 end
 """
-    set_elements_TX(elementsT, onstates::Vector{Int},f!)
+    set_elements_TX(elementsT, onstates::Vector{Int}, f!)
 
-set on or off state elements for onstates
+Return a filtered element vector from `elementsT` using in-place filter `f!`.
+Single sojourn-set variant.
 """
 function set_elements_TX(elementsT, onstates::Vector{Int}, f!)
     elementsTX = Vector{Element}(undef, 0)
@@ -372,9 +438,10 @@ function set_elements_TX(elementsT, onstates::Vector{Int}, f!)
 end
 
 """
-    set_elements_TX(elementsT, onstates::Vector{Vector{Int}},f!)
+    set_elements_TX(elementsT, onstates::Vector{Vector{Int}}, f!)
 
-set on or off state elements for vector if onstates by calling f! (set_elements_TA! or set_elements_TI!)
+Return a vector of filtered element vectors, one per sojourn set in `onstates`.
+Multi-dtype variant; calls `f!` for each entry.
 """
 function set_elements_TX(elementsT, onstates::Vector{Vector{Int}}, f!)
     elementsTX = Vector{Vector{Element}}(undef, length(onstates))
@@ -387,29 +454,30 @@ function set_elements_TX(elementsT, onstates::Vector{Vector{Int}}, f!)
 end
 
 """
-    set_elements_TA!(elementsTA, elementsT, onstates::Vector)
+    set_elements_TA!(elementsTA, elementsT, onstates)
 
-in place set onstate elements
+In-place: keep elements whose source column is in `onstates` (active/on states).
 """
 set_elements_TA!(elementsTA, elementsT, onstates) = set_elements_TX!(elementsTA, elementsT, onstates, ∈)
 
 """
-    set_elements_TA(elementsT,onstates)
+    set_elements_TA(elementsT, onstates)
 
-set onstate elements
+Return elements restricted to active (on) states. Non-mutating wrapper.
 """
 set_elements_TA(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TA!)
-"""
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
 
-in place set off state elements
+"""
+    set_elements_TI!(elementsTI, elementsT, onstates)
+
+In-place: keep elements whose source column is NOT in `onstates` (inactive/off states).
 """
 set_elements_TI!(elementsTI, elementsT, onstates) = set_elements_TX!(elementsTI, elementsT, onstates, ∉)
 
 """
-    set_elements_TI!(elementsTI, elementsT, onstates::Vector)
+    set_elements_TI(elementsT, onstates)
 
-set off state elements
+Return elements restricted to inactive (off) states. Non-mutating wrapper.
 """
 set_elements_TI(elementsT, onstates) = set_elements_TX(elementsT, onstates, set_elements_TI!)
 
@@ -448,6 +516,15 @@ function set_elements_TDvec(elementsT, elementsG, onstates::Vector{Vector{Int}},
     c
 end
 
+"""
+    set_elements_TDvec(elementsT, elementsG, sojourn, dttype, nT, nG)
+
+Build per-dtype TD element sets filtered by `sojourn`. G-type dtypes use
+`elementsG` (dimension `nG`); T-type dtypes use `elementsT` (dimension `nT`).
+
+# Returns
+- `(c, d)`: vector of filtered element sets and corresponding matrix dimensions.
+"""
 function set_elements_TDvec(elementsT, elementsG, sojourn::Vector{Vector{Int}}, dttype, nT, nG)
     c = Vector{Element}[]
     d = Int[]
@@ -466,7 +543,8 @@ end
 """
     set_elements_B(G, ejectindex)
 
-return B matrix elements
+Return the single boundary element for RNA ejection in a gene-only (R=0) model.
+Places the ejection rate at position `(G, G)` with sign `+1`.
 """
 set_elements_B(G, ejectindex) = [Element(G, G, ejectindex, 1)]
 
@@ -613,6 +691,13 @@ function set_elements_Gs(nS::Vector{Int})
     return elementsGs
 end
 
+"""
+    set_elements_Source(nS)
+
+Return diagonal source indicator elements for coupling. Each state index in
+`nS` contributes a `(nS, nS, 0, +1)` element. Zero or empty inputs return
+an empty vector.
+"""
 function set_elements_Source(nS::Int)
     if nS > 0
         return [Element(nS, nS, 0, 1)]
@@ -629,6 +714,12 @@ function set_elements_Source(nS::Vector{Int})
     return elementsSource
 end
 
+"""
+    set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu, eta, splicetype="")
+
+In-place: add RNA elongation and splice elements whose rate index is in `target`.
+Variant of `set_elements_RS!` restricted to a specific target transition set.
+"""
 function set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     if R > 0
         S, base = set_base(S, splicetype)
@@ -694,12 +785,23 @@ function set_elements_Rt!(elementsRGbar, target, R, S, insertstep, nu::Vector{In
     end
 end
 
+"""
+    set_elements_Rt(target, R, S, insertstep, nu, eta, splicetype="")
+
+Non-mutating wrapper around `set_elements_Rt!`. Returns the filtered element vector.
+"""
 function set_elements_Rt(target, R, S, insertstep, nu::Vector{Int}, eta::Vector{Int}, splicetype="")
     elements = Element[]
     set_elements_Rt!(elements, target, R, S, insertstep, nu, eta, splicetype)
     elements
 end
 
+"""
+    set_elements_Init!(elementsRG, target, R, S, nu, splicetype="")
+
+In-place: add RNA initiation elements (first elongation step, rate `nu[1]`)
+whose rate index is in `target`.
+"""
 function set_elements_Init!(elementsRG, target, R, S, nu::Vector{Int}, splicetype="")
     if R > 0
         S, base = set_base(S, splicetype)
@@ -719,6 +821,11 @@ function set_elements_Init!(elementsRG, target, R, S, nu::Vector{Int}, splicetyp
     end
 end
 
+"""
+    set_elements_Init(target, R, S, nu, splicetype="")
+
+Non-mutating wrapper around `set_elements_Init!`. Returns the element vector.
+"""
 function set_elements_Init(target, R, S, nu::Vector{Int}, splicetype="")
     elements = Element[]
     set_elements_Init!(elements, target, R, S, nu, splicetype)
@@ -813,6 +920,15 @@ function set_elements_TRGCoupled(source_state, target_transition, transitions, G
     return elementsG, elementsGt, elementsGs, elementsRGbar, elementsRG, nR, nT
 end
 
+"""
+    set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices, splicetype)
+
+Build per-unit element sets for a coupled T matrix: full T elements plus source
+and target elements derived from the coupling specification.
+
+# Returns
+- `(elementsT, elementsSource, elementsTarget, nT)`
+"""
 function set_elements_TCoupledUnit(source_state, target_transition, transitions, G, R, S, insertstep, indices::Indices, splicetype::String)
     elementsT, nT = set_elements_TGRS(transitions, G, R, S, insertstep, indices, splicetype)
     # No coupling for this unit: empty source/target elements (do not build interaction matrices)
@@ -828,6 +944,16 @@ end
 # Full state-space (slot-order) element setters using unit_model and full_state_index_unit /
 # full_state_from_index_unit so Kronecker ordering matches TCoupledComponents.
 
+"""
+    set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model)
+
+Build the full-space element lists for `TCoupledFullComponents`. Expands per-unit
+T elements into the full N×N state space, then constructs coupling elements by
+calling `set_elements_coupling_full!`.
+
+# Returns
+- `(elements_base, elements_coupling)`: base and coupling `ElementCoupledFull` vectors.
+"""
 function set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model)
     n_units = length(unit_model)
     nT = collect(T_dimension(G, R, S, unit_model))
@@ -851,11 +977,14 @@ function set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, s
 end
 
 """
-    set_elements_coupling_full!(elements_coupling, pm_db, coupling, transitions, G, R, S, insertstep, splicetype, unit_model, nT)
+    set_elements_coupling_full!(elements_coupling, pm_db, coupling, transitions, G, R, S, insertstep, splicetype, unit_model, nT, elements_base)
 
-Build full-space coupling elements. For each connection k, finds the target model and
-local rate index, then looks up matching base elements in pm_db to import their sign.
-Coupling elements have idx.localindex = k (connection index) pointing into coupling_rates.
+In-place construction of full-space coupling elements. For each connection `k`:
+1. Identifies the target model `α` and its target transition elements.
+2. Builds the source indicator matrix `U` for unit `β`.
+3. Calls `expand_coupling_to_full_model` to generate full-space elements with
+   `idx = IndexCoupledFull(model, k)` (localindex `k` → `coupling_rates[k]`).
+   Signs are inherited from `pm_db` (base element at the same position).
 """
 function set_elements_coupling_full!(elements_coupling::Vector{ElementCoupledFull},
                                      pm_db::Dict{NTuple{4,Int}, Vector{Int}},
@@ -885,7 +1014,18 @@ end
 """
     expand_unit_elements_to_full(slot, model, unit_elements, G, R, S, unit_model)
 
-Expand per-unit elements into full space, tagging each with (model, localindex).
+Expand per-unit `Element` list into the full N×N coupled state space. Each unit
+element `(a, b, index, pm)` is replicated across all combinations of other slots,
+and tagged with `IndexCoupledFull(model, index)`.
+
+# Arguments
+- `slot::Int`: position of this unit in the Kronecker product ordering.
+- `model::Int`: model index (used to key the `IndexCoupledFull`).
+- `unit_elements::Vector`: per-unit `Element` structures.
+- `G`, `R`, `S`, `unit_model`: model geometry (used for full-state indexing).
+
+# Returns
+- `Vector{ElementCoupledFull}`: full-space elements for this unit.
 """
 function expand_unit_elements_to_full(slot::Int, model::Int, unit_elements::Vector,
                                       G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple)
@@ -907,10 +1047,28 @@ function expand_unit_elements_to_full(slot::Int, model::Int, unit_elements::Vect
 end
 
 """
-    expand_coupling_to_full_model(U, elementsTarget, β, α, nT, model, localindex, pm_db, k)
+    expand_coupling_to_full_model(U, elementsTarget, β, α, nT, model, localindex, pm_db, elements_base, k)
 
-Compute full-space coupling elements for connection k. Imports pm from pm_db at
-(row, col, model, localindex). Coupling element idx.localindex = k (→ coupling_rates[k]).
+Generate full-space `ElementCoupledFull` entries for coupling connection `k`.
+Iterates over all combinations of "other" slots (not `β` or `α`), source states
+from `U`, and target elements from `elementsTarget`. The sign (`pm`) is inherited
+from the matching base element in `pm_db` at `(row, col, model, localindex)`.
+The resulting elements have `idx = IndexCoupledFull(model, k)` so that
+`make_mat_TC` multiplies by `coupling_rates[k]`.
+
+# Arguments
+- `U::SparseMatrixCSC`: source indicator matrix for unit `β`.
+- `elementsTarget::Vector`: target transition elements for unit `α`.
+- `β::Int`, `α::Int`: source and target slot indices.
+- `nT::Vector{Int}`: per-slot state dimensions.
+- `model::Int`: model index of the target unit.
+- `localindex::Int`: local rate index of the target transition.
+- `pm_db::Dict`: maps `(row, col, model, localindex)` → base element indices.
+- `elements_base::Vector{ElementCoupledFull}`: base elements for sign lookup.
+- `k::Int`: connection index (used as `idx.localindex` in coupling elements).
+
+# Returns
+- `Vector{ElementCoupledFull}`: full-space coupling elements for connection `k`.
 """
 function expand_coupling_to_full_model(U::SparseMatrixCSC,
                                        elementsTarget::Vector,

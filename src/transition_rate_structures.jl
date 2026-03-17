@@ -22,15 +22,15 @@
 # transition matrices and perform various analyses in the StochasticGene.jl framework.
 
 """
-	struct Element
+    Element
 
-structure for T transition matrix elements
-fields: 
-- `a`: row, 
-- `b`: column
-- `index`: rate vector index
-- `pm`: sign of elements
+Single entry of a transition rate matrix, parameterized by position and sign.
 
+# Fields
+- `a::Int`: row index.
+- `b::Int`: column index.
+- `index::Int`: index into the flat rate vector `r`.
+- `pm::Int`: sign (`+1` or `-1`); off-diagonal entries are `+1`, diagonal accumulation uses `-1`.
 """
 struct Element
     a::Int
@@ -40,14 +40,15 @@ struct Element
 end
 
 """
-	struct Indices
+    Indices
 
-index ranges for rates
-gamma: G transitions
-nu: R transitions
-eta: splice transitions
-decay: mRNA decay rate
+Index ranges into the flat rate vector `r` for each class of transition.
 
+# Fields
+- `gamma::Vector{Int}`: indices for G-state (promoter) transitions.
+- `nu::Vector{Int}`: indices for R-state (RNA/elongation) transitions.
+- `eta::Vector{Int}`: indices for splice transitions.
+- `decay::Int`: index for the mRNA decay rate.
 """
 struct Indices
     gamma::Vector{Int}
@@ -56,33 +57,66 @@ struct Indices
     decay::Int
 end
 
+"""
+    CoupledDTCache
+
+Mutable cache for reusing per-unit coupled transition matrices and steady-state
+distributions across dwell-time computations within a single likelihood evaluation.
+
+# Fields
+- `TC::Dict`: cached coupled transition matrices keyed by unit index.
+- `pss::Dict`: cached steady-state distributions keyed by unit index.
+"""
 mutable struct CoupledDTCache
     TC::Dict
     pss::Dict
 end
 
+"""
+    AbstractComponents
+
+Root abstract type for all model component structures that store pre-built
+matrix elements and metadata for constructing transition matrices.
+"""
 abstract type AbstractComponents end
 
 """
-	AbstractTComponents
+    AbstractTComponents
 
-abstract type for components of transition matrices 
+Abstract type for components that produce a single transition matrix T.
 """
 abstract type AbstractTComponents <: AbstractComponents end
 
+"""
+    AbstractTDComponents
+
+Abstract type for components that produce both a transition matrix T and one or
+more dwell-time matrices TD (T restricted to sojourn-state transitions).
+"""
 abstract type AbstractTDComponents <: AbstractTComponents end
 
+"""
+    AbstractMComponents
+
+Abstract type for components that produce an mRNA birth-death matrix M.
+"""
 abstract type AbstractMComponents <: AbstractComponents end
 
+"""
+    AbstractMTComponents
+
+Abstract type for components that produce both an M matrix and a T matrix.
+"""
 abstract type AbstractMTComponents <: AbstractComponents end
 
 """
-	struct TComponents
+    TComponents
 
-fields:
-    nT::Int
-    elementsT::Vector
+Components for a single GRS transition matrix.
 
+# Fields
+- `nT::Int`: dimension of the transition matrix.
+- `elementsT::Vector`: element list for building T via `make_mat`.
 """
 struct TComponents <: AbstractTComponents
     nT::Int
@@ -112,14 +146,16 @@ end
 
 
 """
-struct TAIComponents{elementType} <: AbstractTComponents
+    TAIComponents{elementType}
 
-fields:
-    nT::Int
-    elementsT::Vector{Element}
-    elementsTA::Vector{elementType}
-    elementsTI::Vector{elementType}
+Transition matrix components with separate element sets for active (A) and
+inactive (I) reporter states, used for on/off dwell-time and trace analysis.
 
+# Fields
+- `nT::Int`: dimension of the full transition matrix.
+- `elementsT::Vector{Element}`: elements for the full T matrix.
+- `elementsTA::Vector{elementType}`: elements restricted to active (on) states.
+- `elementsTI::Vector{elementType}`: elements restricted to inactive (off) states.
 """
 struct TAIComponents{elementType} <: AbstractTComponents
     nT::Int
@@ -128,11 +164,18 @@ struct TAIComponents{elementType} <: AbstractTComponents
     elementsTI::Vector{elementType}
 end
 """
-struct TDComponents <: AbstractTComponents
+    TDComponents
 
-fields:
-nT, elementsT, elementsTD:: Vector{Vector{Element}}
+Transition matrix components for dwell-time analysis. Stores both the full T
+elements and pre-filtered TD element sets (one per sojourn/dtype pair).
 
+# Fields
+- `nT::Int`: dimension of the T matrix.
+- `nG::Int`: dimension of the G (promoter) sub-matrix.
+- `elementsT::Vector{Element}`: elements for the full T matrix.
+- `elementsG::Vector{Element}`: elements for the G-only sub-matrix (used for G-state dwell times).
+- `elementsTD::Vector{Vector{Element}}`: per-dtype filtered element sets; each produces a TD matrix of size `TDdims[i]`.
+- `TDdims::Vector{Int}`: matrix dimension for each TD element set.
 """
 struct TDComponents <: AbstractTDComponents
     nT::Int
@@ -144,20 +187,22 @@ struct TDComponents <: AbstractTDComponents
 end
 
 """
- 	TRGCoupledComponents
+    TRGCoupledUnitComponents
 
-fields:
-    nT::Int
-    nG::Int
-    nR::Int
-    sourceState::Union{Int, Vector{Int}}
-    targetTransition::Union{Int, Vector{Int}}
-    elementsG::Vector{Element}
-    elementsGt::Vector{Element}
-    elementsGs::Vector{Element}
-    elementsRGbar::Vector{Element}
-    elementsRG::Vector{Element}
+Per-unit components for the RG-stack coupled transition matrix. Stores separate
+element sets for the gene, source, target, and RNA-gene sub-matrices.
 
+# Fields
+- `nT::Int`: dimension of the full unit transition matrix.
+- `nG::Int`: dimension of the G (promoter) sub-matrix.
+- `nR::Int`: number of RNA/elongation steps.
+- `sourceState::Union{Int, Vector{Int}}`: source state index(es) for coupling.
+- `targetTransition::Union{Int, Vector{Int}}`: target transition index(es) for coupling.
+- `elementsG::Vector{Element}`: elements for the bare G matrix.
+- `elementsGt::Vector{Element}`: elements for the target-modified G matrix.
+- `elementsGs::Vector{Element}`: elements for the source indicator matrix.
+- `elementsRGbar::Vector{Element}`: elements for the RNA-gene matrix without coupling.
+- `elementsRG::Vector{Element}`: elements for the full RNA-gene matrix with coupling.
 """
 struct TRGCoupledUnitComponents <: AbstractTComponents
     nT::Int
@@ -171,6 +216,20 @@ struct TRGCoupledUnitComponents <: AbstractTComponents
     elementsRGbar::Vector{Element}
     elementsRG::Vector{Element}
 end
+"""
+    TCoupledUnitComponents{sourceType, targetType}
+
+Per-unit components for a general coupled transition matrix. Parameterized on the
+source/target types to accommodate scalar, vector, and empty coupling specs.
+
+# Fields
+- `nT::Int`: dimension of the unit transition matrix.
+- `sourceState::sourceType`: source state(s) for coupling (can be `Int`, `Vector{Int}`, etc.).
+- `targetTransition::targetType`: target transition(s) for coupling.
+- `elementsT::Vector{Element}`: elements for the uncoupled T matrix.
+- `elementsSource::Vector{Element}`: elements for the source indicator.
+- `elementsTarget::Vector{Element}`: elements for the target transition modifier.
+"""
 struct TCoupledUnitComponents{sourceType, targetType} <: AbstractTComponents
     nT::Int
     sourceState::sourceType
@@ -180,6 +239,22 @@ struct TCoupledUnitComponents{sourceType, targetType} <: AbstractTComponents
     elementsTarget::Vector{Element}
 end
 
+"""
+    TDCoupledUnitComponents
+
+Per-unit dwell-time components for the RG-stack coupled system. Extends
+`TRGCoupledUnitComponents` with filtered TD element sets.
+
+# Fields
+- `nT::Int`: dimension of the full unit transition matrix.
+- `nG::Int`: dimension of the G sub-matrix.
+- `elementsSource::Vector{Element}`: source indicator elements.
+- `elementsTarget::Vector{Element}`: target transition elements.
+- `elementsT::Vector{Element}`: elements for the full T matrix.
+- `elementsG::Vector{Element}`: elements for the G sub-matrix.
+- `elementsTD::Vector{Vector{Element}}`: per-dtype filtered element sets.
+- `TDdims::Vector{Int}`: matrix dimension for each TD element set.
+"""
 struct TDCoupledUnitComponents <: AbstractTDComponents
     nT::Int
     nG::Int
@@ -263,18 +338,18 @@ end
 
 
 """
- 	TCoupledComponents
+    TCoupledComponents{ModelType}
 
-fields:
-    N, model, sources, modelcomponents: as before.
-    connections: optional precomputed per-connection data (e.g. `Vector{ConnectionRecord}`),
-        built from model-level coupling `(unit_model, connections::Vector{ConnectionSpec})`.
-    Per-unit source/target are derived from the connection list (e.g. `source_states_for_unit`,
-    `target_transition_for_unit`) and stored in modelcomponents[α].sourceState and .targetTransition.
+Top-level coupled transition matrix components for the RG-stack (Kronecker) path.
+Holds per-unit component structs and coupling metadata.
 
-Note: Coupling is supplied as `(unit_model, connections)`; empty `connections` is valid (Tc = uncoupled T).
-Higher-level code builds per-connection data from these; matrix constructors in `transition_rate_make.jl`
-depend only on the pre-built components.
+# Fields
+- `N::Int`: full coupled state-space dimension.
+- `model::Tuple`: unit model ordering (indices into the model parameter arrays).
+- `sources::Tuple`: per-unit source state lists derived from the connection list.
+- `modelcomponents::ModelType`: per-unit component structs (e.g. `Vector{TCoupledUnitComponents}`).
+- `connections::Union{Nothing, Vector{ConnectionRecord}}`: optional precomputed per-connection
+  data; `nothing` when using the legacy per-unit path.
 """
 struct TCoupledComponents{ModelType} <: AbstractComponents
     N::Int
@@ -286,21 +361,35 @@ end
 
 
 """
-IndexCoupledFull, ElementCoupledFull
-Typed index + element for full-space coupled stacks.
-`IndexCoupledFull` encodes the model and local rate index. This leaves the
-legacy `Element` unchanged and is only used by `TCoupledFullComponents` and
-related full-matrix constructors.
-"""
+    IndexCoupledFull
 
+Typed rate index for the full-space coupled stack. Identifies a rate by its
+model and local position within that model's rate vector.
+
+# Fields
+- `model::Int`: model index (indexes into the per-unit `rates` vector-of-vectors).
+- `localindex::Int`: position within `rates[model]`.
+"""
 struct IndexCoupledFull
-    model::Int        # model index in transitions tuple
-    localindex::Int   # local rate index within that model
+    model::Int
+    localindex::Int
 end
 
+"""
+    ElementCoupledFull
+
+Single entry of a full-space coupled transition matrix, with typed rate indexing.
+Used exclusively by `TCoupledFullComponents` and `TDCoupledFullComponents`.
+
+# Fields
+- `a::Int`: row index.
+- `b::Int`: column index.
+- `idx::IndexCoupledFull`: identifies which rate vector and position to use.
+- `pm::Int8`: sign (`+1` or `-1`).
+"""
 struct ElementCoupledFull
-    a::Int        # row
-    b::Int        # col
+    a::Int
+    b::Int
     idx::IndexCoupledFull
     pm::Int8
 end
@@ -325,25 +414,37 @@ end
 """
     TDCoupledFullComponents
 
-Coupled dwell-time components in full N×N state space (no Kronecker at compute time).
-Same flat rate layout as TCoupledFullComponents. One dwell matrix (stored as elements)
-per sojourn set; sojourn sets are in full-state indices.
+Coupled dwell-time components in full N×N state space. Extends `TCoupledFullComponents`
+with dwell-time element subsets: each TD matrix is T with transitions to non-sojourn
+states removed, stored as filtered element vectors at construction time.
 
 - `N::Int`: Full state dimension.
-- `unit_model`: Tuple ordering units (same as legacy).
-- `elements::Vector{Element}`: Uncoupled full T elements (same as TCoupledFullComponents.elements).
-- `rate_offset_per_unit::Vector{Int}`: length n_units+1; flat rate layout.
-- `n_coupling::Int`: Number of coupling strength parameters.
-- `sojourn_full`: Nested [unit][dtype] → Vector{Int} of full-state indices (matches reporter structure).
-- `elementsTD`: Nested [unit][dtype] → Vector{Element} for dwell matrix (optional; if empty, TCD is built from T and sojourn).
+- `elements_base::Vector{ElementCoupledFull}`: Uncoupled T elements (model, localindex).
+- `elements_coupling::Vector{ElementCoupledFull}`: Coupling T elements (localindex = k).
+- `elementsTD_base::Vector{Vector{Vector{ElementCoupledFull}}}`: [unit][dtype] filtered base elements.
+- `elementsTD_coupling::Vector{Vector{Vector{ElementCoupledFull}}}`: [unit][dtype] filtered coupling elements.
+- `targets::Vector{Tuple{Int,Int}}`: For coupling k: `(model, localindex)` of target base rate;
+  used to compute `coupling_rates[k] = γ_k * rates[model][localindex]`.
 """
 struct TDCoupledFullComponents <: AbstractComponents
     N::Int
-    elementsT::Vector{Element}
-    elementsTD::Vector{Vector{Element}}
-    TDdims::Vector{Int}
+    elements_base::Vector{ElementCoupledFull}
+    elements_coupling::Vector{ElementCoupledFull}
+    elementsTD_base::Vector{Vector{Vector{ElementCoupledFull}}}
+    elementsTD_coupling::Vector{Vector{Vector{ElementCoupledFull}}}
+    targets::Vector{Tuple{Int,Int}}
 end
 
+"""
+    TForcedComponents
+
+Transition matrix components for a model with externally forced transitions.
+
+# Fields
+- `nT::Int`: dimension of the transition matrix.
+- `elementsT::Vector{Element}`: elements for the base T matrix.
+- `targets::Tuple`: target state/transition specifications for the forced transitions.
+"""
 struct TForcedComponents <: AbstractTComponents
     nT::Int
     elementsT::Vector{Element}
@@ -354,17 +455,18 @@ end
 
 
 """
-	struct MComponents
+    MComponents
 
-structure for matrix components for matrix M
+Components for the mRNA birth-death matrix M used in steady-state RNA
+distribution calculations.
 
-fields:
-    elementsT::Vector{Element}
-    elementsB::Vector{Element}
-    nT::Int
-    U::SparseMatrixCSC
-    Uminus::SparseMatrixCSC
-    Uplus::SparseMatrixCSC
+# Fields
+- `elementsT::Vector{Element}`: elements for the promoter/gene transition sub-matrix.
+- `elementsB::Vector{Element}`: elements for the burst/birth sub-matrix.
+- `nT::Int`: dimension of the T sub-matrix.
+- `U::SparseMatrixCSC`: full mRNA coupling matrix.
+- `Uminus::SparseMatrixCSC`: degradation part of U.
+- `Uplus::SparseMatrixCSC`: production part of U.
 """
 struct MComponents <: AbstractMComponents
     elementsT::Vector{Element}
@@ -377,19 +479,29 @@ end
 
 
 
+"""
+    MTComponents{MType, Ttype}
+
+Generic combined M and T components. Parameterized to support any compatible
+pair of M and T component types.
+
+# Fields
+- `mcomponents::MType`: components for the M (mRNA) matrix.
+- `tcomponents::Ttype`: components for the T (transition) matrix.
+"""
 struct MTComponents{MType,Ttype} <: AbstractMTComponents
     mcomponents::MType
     tcomponents::Ttype
 end
 
 """
- 	MT0Components
+    MT0Components
 
- structure for M and T components
+Combined M and T components for the base GRS model (no on/off state separation).
 
-fields:
-mcomponents::MComponents
-tcomponents::TComponents
+# Fields
+- `mcomponents::MComponents`: components for the M matrix.
+- `tcomponents::TComponents`: components for the T matrix.
 """
 struct MT0Components <: AbstractMTComponents
     mcomponents::MComponents
@@ -397,26 +509,27 @@ struct MT0Components <: AbstractMTComponents
 end
 
 """
- 	MTAIComponents
+    MTAIComponents{elementType}
 
- structure for M and TAI components
+Combined M and TAI components for models with separate active/inactive reporter states.
 
-fields:
-mcomponents::MComponents
-tcomponents::TAIComponents
+# Fields
+- `mcomponents::MComponents`: components for the M matrix.
+- `tcomponents::TAIComponents{elementType}`: components for the T matrix with A/I separation.
 """
 struct MTAIComponents{elementType} <: AbstractMTComponents
     mcomponents::MComponents
     tcomponents::TAIComponents{elementType}
 end
+
 """
- 	MTDComponents
+    MTDComponents
 
- structure for M and TD components
+Combined M and TD components for dwell-time analysis models.
 
-fields:
-mcomponents::MComponents
-tcomponents::TDComponents
+# Fields
+- `mcomponents::MComponents`: components for the M matrix.
+- `tcomponents::TDComponents`: components for the T and TD matrices.
 """
 struct MTDComponents <: AbstractMTComponents
     mcomponents::MComponents

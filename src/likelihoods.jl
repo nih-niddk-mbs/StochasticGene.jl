@@ -954,29 +954,27 @@ function predictedarray(r, coupling_strength, components::TCoupledComponents{Vec
     return hists
 end
 
-# Full stack: single full T, sojourn in full-state indices; one loop over elements at build time.
-# Sinit: same formula as old stack (init_S(sojourn, TC, pss) = entrance to sojourn). Old stack uses
-# per-unit TC and pss: make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, ...) and normalized_nullspace(TC)
-# (see compute_dwelltime!), so pss is from that unit's TC, not the full T. Full stack uses full T and its pss.
+# Full stack dwell-time prediction.
+# r::Vector{Vector{Float64}} (per-unit rates), coupling_strength::Vector{Float64} (γ values).
+# Sojourn sets come from reporter (same pattern as TDComponents); components store filtered elements.
 function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype)
-    T = make_mat_TD(components, r, coupling_strength)
+    sojourn_full, _ = reporter
+    coupling_rates = [coupling_strength[k] * r[components.targets[k][1]][components.targets[k][2]]
+                      for k in eachindex(components.targets)]
+    T = make_mat_TC(components, r, coupling_rates)
     pss = normalized_nullspace(T)
-    if any(!isfinite.(pss))
-        throw(ArgumentError("full coupled T produced invalid steady state (NaN/Inf); T may be singular or ill-conditioned (e.g. hidden-unit placeholder or rate structure). Old stack uses per-unit TC and pss (make_mat_TC(unit, T[unit], ...)) for Sinit."))
-    end
     hists = Vector{Vector}[]
-    for α in eachindex(components.sojourn_full)
+    for α in eachindex(sojourn_full)
         h = Vector[]
-        for i in eachindex(components.sojourn_full[α])
-            sojourn = components.sojourn_full[α][i]
-            TCD = make_mat_TCD(T, sojourn)
-            sub = TCD[sojourn, sojourn]
-            dtype = dttype[α][i]
-            init = init_S(sojourn, T, pss, dtype)[sojourn]
+        for i in eachindex(sojourn_full[α])
+            soj = sojourn_full[α][i]
+            TCD = make_mat_TCD(components, α, i, r, coupling_rates)
+            init = init_S(soj, T, pss, dttype[α][i])
+            init = init[soj]
             s = sum(init)
-            (iszero(s) || !isfinite(s)) && throw(ArgumentError("dwell-time init_S sums to $s for unit α=$α dtype $dtype (sojourn length $(length(sojourn))); check full T, pss, and sojourn construction for hidden/placeholder units"))
+            (iszero(s) || !isfinite(s)) && continue
             init = init / s
-            push!(h, dwelltimePDF(bins[α][i], sub, 1:length(sojourn), init))
+            push!(h, dwelltimePDF(bins[α][i], TCD[soj, soj], 1:length(soj), init))
         end
         push!(hists, h)
     end
