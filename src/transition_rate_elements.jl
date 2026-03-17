@@ -831,13 +831,13 @@ end
 function set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model, rate_offset_per_unit)
     n_units = length(unit_model)
     nT = collect(T_dimension(G, R, S, unit_model))
-    elements = Element[]
+    elements = ElementCoupledFull[]
     for slot in 1:n_units
         model = unit_model[slot]
         indices = set_indices(length(transitions[model]), R[model], S[model], insertstep[model])
         unit_elements, _ = set_elements_TGRS(transitions[model], G[model], R[model], S[model], insertstep[model], indices, splicetype)
-        element = expand_unit_elements_to_full(slot, unit_elements, G, R, S, unit_model, rate_offset_per_unit)
-        append!(elements, element)
+        full_elems = expand_unit_elements_to_full(slot, unit_elements, G, R, S, unit_model, rate_offset_per_unit)
+        append!(elements, full_elems)
     end
     target_rates = set_elements_coupling!(elements, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_unit, nT, splicetype)
     return elements, target_rates
@@ -851,7 +851,7 @@ length n_coupling. For connection k, all appended elements use the same coupling
 parameter index γ_k (encoded in their `index` field); `target_rates[k]` stores the
 flat index of the associated target base rate in the model block.
 """
-function set_elements_coupling!(elements::Vector{Element}, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_unit, nT::Vector{Int}, splicetype="")
+function set_elements_coupling!(elements::Vector{ElementCoupledFull}, coupling, transitions, G, R, S, insertstep, unit_model, rate_offset_per_unit, nT::Vector{Int}, splicetype="")
     connections = length(coupling) >= 2 ? coupling[2] : Int[]
     target_rates = Int[]
     coupling_start = rate_offset_per_unit[end]
@@ -882,11 +882,12 @@ end
 
 """
 Expand one unit's transition elements to full N×N state space. For each unit element (a,b,rate,pm),
-emits one full-space element for each full state k where slot i has state a: row=k, col=full state
-with slot i = b (others unchanged). Rate index uses model order: rate_offset_per_model[unit_model[i]] + local rate - 1.
+emits one full-space `ElementCoupledFull` for each full state k where slot i has state a: row=k, col=full
+state with slot i = b (others unchanged). Rate index is encoded in `IndexCoupledFull` with
+kind = 0 (base/unit rate) and `slot` = flat base-rate index.
 """
 function expand_unit_elements_to_full(i, unit_elements, G::Tuple, R::Tuple, S::Tuple, unit_model::Tuple, rate_offset_per_model::Vector{Int})
-    elements = Element[]
+    elements = ElementCoupledFull[]
     nT = collect(T_dimension(G, R, S, unit_model))
     N = prod(nT)
     rate_base = rate_offset_per_model[unit_model[i]]
@@ -898,7 +899,8 @@ function expand_unit_elements_to_full(i, unit_elements, G::Tuple, R::Tuple, S::T
             col_state = collect(state)
             col_state[i] = e.b
             col = full_state_index_unit(col_state, G, R, S, unit_model)
-            push!(elements, Element(k, col, flat_idx, e.pm))
+            idx = IndexCoupledFull(0x00, Int32(flat_idx), Int32(0))
+            push!(elements, ElementCoupledFull(k, col, idx, Int8(e.pm)))
         end
     end
     return elements

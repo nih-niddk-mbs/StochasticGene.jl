@@ -1224,11 +1224,16 @@ function make_mat_TC(components::TCoupledFullComponents, rates)
     n_c = components.n_coupling
     coupling_start = n_c == 0 ? length(rates) : length(rates) - n_c
     for e in components.elements
-        if e.index <= coupling_start
-            T[e.a, e.b] += e.pm * rates[e.index]
+        idx = e.idx
+        if idx.kind == 0x00
+            # Base/unit rate: slot holds flat rate index.
+            r_idx = Int(idx.slot)
+            T[e.a, e.b] += e.pm * rates[r_idx]
         else
-            ck = e.index - coupling_start
-            T[e.a, e.b] += rates[e.index] * e.pm * rates[components.target_rates[ck]]
+            # Coupling element: slot holds flat γ index (legacy semantics for now).
+            γ_idx = Int(idx.slot)
+            ck = γ_idx - coupling_start
+            T[e.a, e.b] += rates[γ_idx] * e.pm * rates[components.target_rates[ck]]
         end
     end
     return T
@@ -1521,7 +1526,7 @@ function expand_coupling_to_full(U::SparseMatrixCSC, elementsTarget::Vector{Elem
     block_other = N ÷ (nT[β] * nT[α])
     positions = [1:(β-1); (β+1):(α-1); (α+1):n]
     other_dims = nT[positions]
-    out = Element[]
+    out = ElementCoupledFull[]
     Urows, Ucols, Uvals = findnz(U)
     for o in 1:block_other
         state = zeros(Int, n)
@@ -1545,7 +1550,8 @@ function expand_coupling_to_full(U::SparseMatrixCSC, elementsTarget::Vector{Elem
                 col = full_state_index(col_state, nT)
                 pm = u_sign * e.pm
                 pm == 0 && continue
-                push!(out, Element(row, col, gamma_index, pm))
+                idx = IndexCoupledFull(0x01, Int32(gamma_index), Int32(0))
+                push!(out, ElementCoupledFull(row, col, idx, Int8(pm)))
             end
         end
     end

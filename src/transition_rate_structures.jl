@@ -262,6 +262,27 @@ struct ConnectionRecord
 end
 
 """
+    IndexCoupledFull, ElementCoupledFull
+
+Typed index + element for full-space coupled stacks. `IndexCoupledFull` encodes where to
+look up the rate (base/unit, coupling, noise, etc.). This leaves the legacy
+`Element` unchanged (flat Int index), and is only used by `TCoupledFullComponents`
+and related full-matrix constructors.
+"""
+struct IndexCoupledFull
+    kind::UInt8   # 0 = base/unit rate, 1 = coupling, 2 = noise, etc.
+    slot::Int32   # unit slot or connection index
+    local::Int32  # local index within that slot/container (0 if unused)
+end
+
+struct ElementCoupledFull
+    a::Int        # row
+    b::Int        # col
+    idx::IndexCoupledFull
+    pm::Int8
+end
+
+"""
  	TCoupledComponents
 
 fields:
@@ -291,13 +312,13 @@ at compute time). Single `elements` vector; `coupling_k[i]` is 0 for uncoupled,
 1..n_coupling for connection k (γ = rates[coupling_start + k]).
 
 - `N::Int`: Full state dimension.
-- `elements::Vector{Element}`: All T elements (uncoupled then coupling); `index` into flat rate vector.
-- `coupling_k::Vector{Int}`: Same length as elements; 0 = uncoupled, k = connection.
+- `elements::Vector{ElementCoupledFull}`: All T elements (uncoupled then coupling) with typed indices.
+- `target_rates::Vector{Int}`: Length n_coupling; flat base-rate index per connection.
 - `n_coupling::Int`: Number of coupling strengths (at end of flat vector).
 """
 struct TCoupledFullComponents <: AbstractComponents
     N::Int
-    elements::Vector{Element}
+    elements::Vector{ElementCoupledFull}
     target_rates::Vector{Int}
     n_coupling::Int
 end
