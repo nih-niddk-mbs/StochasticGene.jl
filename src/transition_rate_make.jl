@@ -1581,7 +1581,11 @@ function TDCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, i
         elementsTD_base[k] = Vector{Vector{ElementCoupledFull}}(undef, n_dtype)
         elementsTD_coupling[k] = Vector{Vector{ElementCoupledFull}}(undef, n_dtype)
         for i in 1:n_dtype
-            soj = full_state_indices_for_unit_sojourn(k, sojourn[α][i], nT_vec)
+            soj_unit = sojourn[α][i]
+            if occursin("G", dttype[α][i])
+                soj_unit = g_sojourn_to_T_sojourn(soj_unit, G[α], R[α], S[α])
+            end
+            soj = full_state_indices_for_unit_sojourn(k, soj_unit, nT_vec)
             elementsTD_base[k][i] = filter(e -> e.b ∈ soj, elements_base)
             elementsTD_coupling[k][i] = filter(e -> e.b ∈ soj, elements_coupling)
         end

@@ -227,6 +227,28 @@ function full_state_indices_for_unit_sojourn(α::Int, sojourn_set::Vector{Int}, 
 end
 
 """
+    g_sojourn_to_T_sojourn(g_sojourn, G, R, S, splicetype="")
+
+Expand a G-state sojourn set (as returned by `sojourn_states` for ONG/OFFG dtypes)
+into the corresponding per-unit T-state sojourn set. For each G-state `g`, all
+`nR = base^R` T-states of the form `g + G*r` (r = 0, …, nR-1) are included.
+
+For R=0 (gene-only models) the input is returned unchanged.
+"""
+function g_sojourn_to_T_sojourn(g_sojourn::Vector{Int}, G::Int, R::Int, S::Int, splicetype::String="")
+    R == 0 && return g_sojourn
+    _, base = set_base(S, splicetype)
+    nR = base^R
+    T_states = Int[]
+    for g in g_sojourn
+        for r in 0:nR-1
+            push!(T_states, g + G * r)
+        end
+    end
+    return sort(T_states)
+end
+
+"""
     unit_state(i::Int, G::Tuple, R, S, unit_model)
 
 Return the unit state for a given state index.
