@@ -1498,7 +1498,11 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
         weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
         push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
     end
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    if splicetype == "full"
+        components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    else
+        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    end
     return reporter, components
 end
 

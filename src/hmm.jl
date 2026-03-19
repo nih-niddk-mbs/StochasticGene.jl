@@ -462,6 +462,11 @@ function make_ap(rates, couplingStrength, interval, components::TCoupledComponen
     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 end
 
+function make_ap(rates, coupling_rates, interval, components::TCoupledFullComponents, method=Tsit5())
+    Qtr = make_mat_TC(components, rates, coupling_rates)
+    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+end
+
 function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=Tsit5())
     r, couplingStrength = r
     Qtr = make_mat_TC(components, r, couplingStrength)
@@ -1617,6 +1622,10 @@ function ll_off(trace::Tuple, noiseparams, reporter, components, a::Matrix, p0)
     end
 end
 
+function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components::TCoupledFullComponents, method; observed_units=nothing)
+    0.0
+end
+
 function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, components, method; observed_units=nothing)
     l = 0.0
     components = components.modelcomponents
@@ -1839,6 +1848,24 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    if observed_units !== nothing
+        noiseparams_obs = [noiseparams[i] for i in observed_units]
+        reporter_obs = reporter[observed_units]
+        d = set_d(noiseparams_obs, reporter_obs)
+    else
+        d = set_d(noiseparams, reporter)
+    end
+    ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
+    lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units)
+    ll + lb, logpredictions
+end
+
+# full coupled matrix
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    coupling_rates = [couplingStrength[k] * rates[components.targets[k][1]][components.targets[k][2]]
+                      for k in eachindex(components.targets)]
+    a, p0 = make_ap(rates, coupling_rates, interval, components, method)
     if observed_units !== nothing
         noiseparams_obs = [noiseparams[i] for i in observed_units]
         reporter_obs = reporter[observed_units]

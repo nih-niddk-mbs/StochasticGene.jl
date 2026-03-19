@@ -293,23 +293,98 @@ function test_compare_coupling(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 
 end
 
 """
-    test_compare_reciprocal(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, total, tol)
+    test_compare_coupling_full(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, total, tol, verbose)
 
-Standalone test for reciprocal coupling: compares simulated and chemical master equation
-histograms with two-way coupling (unit 1 ↔ unit 2). Uses coupling ((1, 2), [(2, 3, 1, 3), (1, 3, 2, 3)])
-with two coupling parameters in canonical order.
+Compare RG-stack (`TCoupledComponents`) and Full-stack (`TCoupledFullComponents`) for reciprocal
+coupling with mixed source types (connections in canonical α-first order):
+- unit 2 → unit 1: R-step 2 specific (s = G₂+2), γ = r[21]
+- unit 1 → unit 2: "any R occupied" sentinel (s = G₁+R₁+1), γ = r[22]
+
+Checks:
+1. T-matrix: RG vs Full (should match to machine precision). The "any R occupied" sentinel
+   expands to all non-empty R-chain states via `classify_states`, so both stacks agree.
+2. CME dwell-time histograms (Full-stack only) vs simulator. The RG dwell-time path uses
+   a G×G source matrix and cannot represent R-state sentinels (s > G), so only the
+   Full-stack (`TDCoupledFullComponents`) is used for histogram validation.
 
 # Returns
-- Tuple of (chemical master histogram, array of simulated histograms).
+NamedTuple with fields `T_match`, `T_diff`, `cme_full`, `sim`.
 """
-function test_compare_reciprocal(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 3.0, -.7], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], total=1000000, tol=1e-6)
-    coupling = ((1, 2), [(2, 3, 1, 3), (1, 3, 2, 3)], [:activate, :inhibit])
-    hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol)
-    h = test_CDT(r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
+function test_compare_coupling_full(;
+    r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
+       0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 3.0, -0.7],
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1),
+    onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]],
+    dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]],
+    bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)],
+          [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]],
+    total=1000000, tol=1e-6, verbose=true)
+    # Canonical (α-first) order required so prepare_rates_sim and prepare_rates_coupled
+    # assign γ values to the same connections:
+    #   connection 1 (α=1, β=2): unit 2→unit 1, R-step 2 source (s = G₂+2), γ = r[21] = 3.0
+    #   connection 2 (α=2, β=1): unit 1→unit 2, "any R occupied" sentinel (s = G₁+R₁+1), γ = r[22] = -0.7
+    coupling = ((1, 2), [(2, G[2]+2, 1, 3), (1, G[1]+R[1]+1, 2, 3)], [:free, :free])
+
+    nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
+
+    # 1. T-matrix: RG stack vs Full stack
+    ci_rg = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates_rg, γ_rg = prepare_rates_coupled(r, nrates, ci_rg)
+    ci_full, targets = coupling_indices_full(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
+    rates_full, coupling_rates = prepare_rates_coupled_full(r, nrates, ci_full, targets)
+
+    comp_rg   = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    comp_full = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, "")
+    M_RG   = Matrix(make_mat_TC(comp_rg,   rates_rg,   γ_rg))
+    M_full = Matrix(make_mat_TC(comp_full, rates_full, coupling_rates))
+    T_diff  = maximum(abs.(M_RG .- M_full))
+    T_match = isapprox(M_RG, M_full; rtol=1e-12)
+    verbose && println("T matrix: max|T_RG - T_full| = $T_diff, match = $T_match")
+
+    # 2. CME dwell-time histograms (Full-stack only).
+    # The RG dwell-time path uses a G×G source matrix (set_elements_Gs) that cannot
+    # represent R-state source sentinels (s > G); only the Full-stack handles this.
+    dwell_specs = [
+        (unit=1, onstates=onstates[1], dttype=dttype[1], bins=bins[1]),
+        (unit=2, onstates=onstates[2], dttype=dttype[2], bins=bins[2]),
+    ]
+    h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+    cme_full = make_array(vcat(h_full...))
+    verbose && println("CME Full: $(length(cme_full)) histogram bins computed")
+
+    # 3. CME Full vs simulator
+    # warmupsteps ensures steady-state initial conditions match the CME's pss-based init
+    hs = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0,
+                   onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol,
+                   warmupsteps=100000)
     for i in eachindex(hs)
         hs[i] = StochasticGene.normalize_histogram.(hs[i])
     end
-    return make_array(vcat(h...)), make_array(vcat(hs...))
+    sim_vec = make_array(vcat(hs...))
+    verbose && println("CME Full vs Simulator: len_cme=$(length(cme_full)), len_sim=$(length(sim_vec))")
+
+    if verbose
+        dtnames = ["ON", "OFF", "ONG", "OFFG"]
+        for u in 1:length(h_full)
+            for k in 1:length(h_full[u])
+                cme_hist = h_full[u][k]
+                sim_hist = hs[u][k]
+                nm = k <= length(dtnames) ? dtnames[k] : "dt$k"
+                bins_k = collect(1:length(cme_hist))
+                mean_cme = sum(bins_k .* cme_hist)
+                mean_sim = sum(bins_k .* sim_hist)
+                println("Unit $u $nm: mean CME=$(round(mean_cme;digits=3)) sim=$(round(mean_sim;digits=3)) (ratio=$(round(mean_sim/mean_cme;digits=3)))")
+                println("  CME head: ", round.(cme_hist[1:min(3,end)]; digits=5), " ... tail: ", round.(cme_hist[max(1,end-1):end]; digits=5))
+                println("  sim head: ", round.(sim_hist[1:min(3,end)]; digits=5), " ... tail: ", round.(sim_hist[max(1,end-1):end]; digits=5))
+                maxdiff = maximum(abs.(cme_hist .- sim_hist))
+                println("  max|cme-sim|=$(round(maxdiff;digits=5))")
+            end
+        end
+    end
+
+    return (T_match=T_match, T_diff=T_diff,
+            cme_full=cme_full, sim=sim_vec)
 end
 
 function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1]), ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])), G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0), total=1000000, tol=1e-6, verbose=false)
@@ -343,6 +418,44 @@ function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2
         end
     end
     return cme_vec, sim_vec
+end
+
+"""
+    test_trace_full(; coupling, G, R, S, insertstep, transitions, rtarget, noisepriors,
+                    interval, totaltime, ntrials, method)
+
+Compare log-likelihoods from the RG-stack (`TCoupledComponents`, splicetype="") and the
+full-stack (`TCoupledFullComponents`, splicetype="full") trace/HMM paths on the same
+simulated traces. The two paths must agree to machine precision.
+
+Returns a NamedTuple with fields `ll_rg`, `ll_full`, `diff`, `match`.
+"""
+function test_trace_full(;
+    coupling=((1, 2), [(1, 2, 2, 1)]),
+    G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),
+    rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20,
+             0.02, 0.05, 0.2, 0.2, 0.1, 50, 30, 100, 20, -0.5],
+    noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]),
+    interval=1.0, totaltime=200.0, ntrials=3,
+    method=Tsit5())
+
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; verbose=false)
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), Int[])
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], coupling)
+    fittedparam = StochasticGene.set_fittedparam(Int[], data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
+
+    model_rg   = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "",     1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    model_full = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+
+    ll_rg   = loglikelihood(get_param(model_rg),   data, model_rg)[1]
+    ll_full = loglikelihood(get_param(model_full), data, model_full)[1]
+    diff = abs(ll_rg - ll_full)
+    match = diff < 1e-8
+    println("Trace ll: RG=$ll_rg, Full=$ll_full, |diff|=$diff, match=$match")
+    return (ll_rg=ll_rg, ll_full=ll_full, diff=diff, match=match,
+            components_rg=model_rg.components, components_full=model_full.components)
 end
 
 """

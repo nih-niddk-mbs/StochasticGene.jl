@@ -958,12 +958,19 @@ end
 """
     classify_states(state, G, R, S, splicetype)
 
-Partition a list of state indices into G-states (`≤ G`) and R-states (`> G`).
-R-state indices are mapped to the corresponding RNA digit positions via
-`source_Rstates`.
+Partition a list of source-state spec indices into G-states and R-chain states:
+
+- `s ≤ G`: G-state indicator — fire when gene is in state s.
+- `G < s ≤ G+R`: specific R-step indicator — fire when R-step `s-G` is occupied.
+  Using one connection per step (s=G+1, G+2, …) produces "sum over R" semantics
+  because multi-occupied chains match multiple connections.
+- `s > G+R`: **"any R occupied" sentinel** — fire whenever ANY R-step is occupied,
+  regardless of how many. Set `s = G_β + R_β + 1` in the connection spec `(β, s, α, t)`
+  to use this mode.
 
 # Returns
-- `(Gstates, Rstates)`: unique sorted G and R state indices.
+- `(Gstates, Rstates)`: unique G-state indices and unique R-chain indices z (1-based in
+  the `base^R` space) where the source condition is satisfied.
 """
 function classify_states(state, G, R, S, splicetype)
     Gstates = Int[]
@@ -972,6 +979,11 @@ function classify_states(state, G, R, S, splicetype)
     for s in state
         if s <= G
             append!(Gstates, s)
+        elseif s > G + R
+            # "any R occupied" sentinel (s = G+R+1 or larger): all non-empty R-chain states.
+            # Using 3 separate connections (one per R-step) gives "sum over R" (steps overlap);
+            # this sentinel gives a single indicator = 1 whenever ANY R-step is occupied.
+            append!(Rsteps, collect(2:base^R))
         else
             append!(Rsteps, source_Rstates(s - G, base, R))
         end

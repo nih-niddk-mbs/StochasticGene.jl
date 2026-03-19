@@ -313,6 +313,28 @@ function prepare_rates_coupled_full(rates::Vector, nrates::Vector{Int},
     return model_rates, coupling_rates
 end
 
+"""
+    prepare_rates_coupled_full(r, nrates, reporter, couplingindices, targets)
+
+Split a flat parameter vector into per-unit base rates, per-unit noise params, and
+pre-multiplied coupling rates for the full coupled stack (TCoupledFullComponents).
+
+- `r`: Flat parameter vector (base rates, noise params, then coupling strengths).
+- `nrates`: Number of base rates per unit.
+- `reporter`: Reporter structure (used to determine noise-param layout).
+- `couplingindices`: Flat indices selecting the coupling strengths γₖ.
+- `targets`: `Vector{Tuple{Int,Int}}` — for coupling k: `(model, localindex)` of the
+  target base rate used to compute `coupling_rates[k] = γₖ * rates[model][localindex]`.
+
+Returns `(unit_rates, noiseparams, coupling_rates)`.
+"""
+function prepare_rates_coupled_full(r, nrates, reporter, couplingindices, targets)
+    rates, noiseparams, couplingStrengths = prepare_rates_coupled(r, nrates, reporter, couplingindices)
+    coupling_rates = [couplingStrengths[k] * rates[targets[k][1]][targets[k][2]]
+                      for k in eachindex(couplingStrengths)]
+    return rates, noiseparams, coupling_rates
+end
+
 function prepare_rates_coupled(rates, sourceStates, transitions, R::Tuple, S, insertstep, n_noise)
     r = Vector{Float64}[]
     noiseparams = Vector{Float64}[]

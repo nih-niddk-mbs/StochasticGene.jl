@@ -1106,7 +1106,7 @@ function update!(tau, state, index, t, m, r, allele, G, R, S, insertstep, disabl
         end
     end
     # println("taup: ",tau)
-    !isempty(coupling) && update_coupling!(tau, state, index[1], t, r, enabled, initialstate, coupling, verbose)
+    !isempty(coupling) && update_coupling!(tau, state, index, t, r, enabled, initialstate, coupling, G, R, S, verbose)
     return m
 end
 
@@ -1116,12 +1116,47 @@ end
 TBW
 """
 
-function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, coupling, verbose=false)
+"""
+    _source_occupied(state_indices, sstate, G_unit, R_unit, base)
+
+Check whether `state_indices` (from `findall(!iszero, state_vector)`) satisfies the
+source condition encoded in `sstate`, using the same semantics as `classify_states` in
+the CME:
+
+- `s ≤ G_unit`: G-state check — the unit's G-component equals `s` (any R-chain state).
+- `G_unit < s ≤ G_unit + R_unit`: R-step check — R-step `s - G_unit` is nonzero.
+- `s > G_unit + R_unit`: "any R occupied" sentinel — any R-step is occupied
+  (equivalent to state_index > G_unit). Use `s = G_β + R_β + 1` in the connection
+  spec `(β, s, α, t)` to request this mode.
+
+`base = 3` when S > 0, `base = 2` otherwise.
+"""
+function _source_occupied(state_indices, sstate, G_unit::Int, R_unit::Int, base::Int)
+    if any(s > G_unit + R_unit for s in sstate)
+        # Sentinel: any R-step occupied — any position index > G_unit is nonzero
+        return any(i > G_unit for i in state_indices)
+    end
+    # G-state check (s ≤ G_unit): position s is 1 iff in that G-state.
+    # R-step check (G_unit < s ≤ G_unit+R_unit): position s is nonzero iff R-step s-G_unit occupied.
+    # Both cases: just check if position s itself is in state_indices.
+    for s in sstate
+        s ∈ state_indices && return true
+    end
+    return false
+end
+
+function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupling, G::Tuple, R::Tuple, S::Tuple, verbose=false)
+    unit = index[1]
+    reaction = index[2]
     sources = coupling[2][unit]
     connections = coupling[3]  # derive source states via source_states_for_unit(connections, unit)
     ttrans = coupling[4]
     targets = coupling[6][unit]
     sstate_unit = source_states_for_unit(connections, unit)
+    model_unit = coupling[1][unit]
+    G_unit = G[model_unit]
+    R_unit = R[model_unit]
+    base_unit = S[model_unit] > 0 ? 3 : 2
     # Canonical (β, α) order: same as transition_rate_make and prepare_rates_sim
     coupling_pairs = Tuple{Int,Int}[(β, α) for α in eachindex(coupling[1]) for β in coupling[2][α]]
     coupling_strength = r[end]  # Vector of length ncoupling
@@ -1132,27 +1167,38 @@ function update_coupling!(tau, state, unit::Int, t, r, enabled, initialstate, co
     verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate_unit, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
-    # unit as source: for each target, use coupling param for (unit, target)
+    # unit as source: for each target, rescale target's coupling-transition tau when source occupancy changes
+    old_occupied = _source_occupied(oldstate, sstate_unit, G_unit, R_unit, base_unit)
+    new_occupied = _source_occupied(newstate, sstate_unit, G_unit, R_unit, base_unit)
     for target in targets
-        verbose && println(isdisjoint(oldstate, sstate_unit), " : ", !isdisjoint(newstate, sstate_unit))
+        verbose && println(!old_occupied, " : ", new_occupied)
         if isfinite(tau[target][ttrans[target], 1])
             idx = findfirst(isequal((unit, target)), coupling_pairs)
             γc = idx === nothing ? 0.0 : coupling_strength[idx]
-            if isdisjoint(oldstate, sstate_unit) && !isdisjoint(newstate, sstate_unit)
+            if !old_occupied && new_occupied
                 tau[target][ttrans[target], 1] = 1 / (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
-            elseif !isdisjoint(oldstate, sstate_unit) && isdisjoint(newstate, sstate_unit)
+            elseif old_occupied && !new_occupied
                 tau[target][ttrans[target], 1] = (1 + γc) * (tau[target][ttrans[target], 1] - t) + t
             end
         end
     end
 
-    # unit as target: for each source, use coupling param for (source, unit)
-    for source in sources
-        verbose && println(ttrans[unit] ∈ enabled, ": ", tau[unit][ttrans[unit], 1])
-        if ttrans[unit] ∈ enabled
+    # unit as target: rescale ttrans[unit] whenever its tau has been freshly drawn from the base rate:
+    #  1. reaction == ttrans[unit]: the coupling target just fired and was redrawn.
+    #  2. ttrans[unit] ∈ enabled: the coupling target was just re-enabled (e.g. unit re-entered G=2
+    #     from G=1 or G=3), so transitionG!/deactivateG! drew a fresh base-rate tau for it.
+    if reaction == ttrans[unit] || ttrans[unit] ∈ enabled
+        for source in sources
             sstate_source = source_states_for_unit(connections, source)
-            verbose && println(sstate_source, " : ", !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate_source))
-            if !isdisjoint(findall(!iszero, vec(state[source, 1])), sstate_source)
+            model_source = coupling[1][source]
+            G_source = G[model_source]
+            R_source = R[model_source]
+            base_source = S[model_source] > 0 ? 3 : 2
+            source_state_indices = findall(!iszero, vec(state[source, 1]))
+            verbose && println("s2 unit=$unit src=$source sstate=$sstate_source occ=",
+                _source_occupied(source_state_indices, sstate_source, G_source, R_source, base_source),
+                " tau=", tau[unit][ttrans[unit], 1])
+            if _source_occupied(source_state_indices, sstate_source, G_source, R_source, base_source)
                 idx = findfirst(isequal((source, unit)), coupling_pairs)
                 γc = idx === nothing ? 0.0 : coupling_strength[idx]
                 tau[unit][ttrans[unit], 1] = 1 / (1 + γc) * (tau[unit][ttrans[unit], 1] - t) + t
