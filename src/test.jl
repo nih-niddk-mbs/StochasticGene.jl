@@ -459,6 +459,135 @@ function test_trace_full(;
 end
 
 """
+    test_trace_specs(; coupling, G, R, S, insertstep, transitions, rtarget, noisepriors,
+                     interval, totaltime, ntrials, method)
+
+Test that `trace_specs` / `observed_units` limits the HMM likelihood to the observed
+unit only. Uses the same 2-unit coupled setup as `test_trace_full` with `units=[1]`
+(unit 2 is hidden). The key invariant: changing unit 2 noise params does NOT change
+the log-likelihood when only unit 1 is observed via `data.units`.
+
+Returns a NamedTuple with fields `ll`, `ll_perturbed`, `diff`, `match`.
+"""
+function test_trace_specs(;
+    coupling=((1, 2), [(1, 2, 2, 1)]),
+    G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),
+    rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20,
+             0.02, 0.05, 0.2, 0.2, 0.1, 50, 30, 100, 20, -0.5],
+    noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]),
+    interval=1.0, totaltime=200.0, ntrials=3,
+    method=Tsit5())
+
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; verbose=false)
+
+    # Only unit 1 is observed; unit 2 is hidden
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), [1])
+    rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], coupling)
+    fittedparam = StochasticGene.set_fittedparam(Int[], data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
+
+    model = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep,
+                       "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    ll = loglikelihood(get_param(model), data, model)[1]
+
+    # Locate unit 2 noise params and perturb them: LL must be invariant
+    n1 = num_rates(transitions[1], R[1], S[1], insertstep[1])
+    n2 = num_rates(transitions[2], R[2], S[2], insertstep[2])
+    noise2_start = n1 + length(noisepriors[1]) + n2 + 1
+    noise2_end   = noise2_start + length(noisepriors[2]) - 1
+    rtarget2 = copy(rtarget)
+    rtarget2[noise2_start:noise2_end] .*= 10.0
+
+    model2 = load_model(data, rtarget2, rm, fittedparam, tuple(), transitions, G, R, S, insertstep,
+                        "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    ll_perturbed = loglikelihood(get_param(model2), data, model2)[1]
+
+    diff = abs(ll - ll_perturbed)
+    match = diff < 1e-8
+    println("trace_specs: ll=$ll, ll_perturbed_unit2=$ll_perturbed, |diff|=$diff, match=$match")
+    return (ll=ll, ll_perturbed=ll_perturbed, diff=diff, match=match)
+end
+
+"""
+    test_correlation_functions(; r, transitions, G, R, S, insertstep, coupling, lags, probfn, verbose)
+
+Compute `correlation_functions` for both the RG-stack (`splicetype=""`) and the full-stack
+(`splicetype="full"`) and compare results. Because both stacks produce equivalent transition
+matrices the outputs must agree to machine precision.
+
+Returns a NamedTuple with fields `result_rg`, `result_full`, `diff_cc`, `diff_ac1`, `diff_ac2`,
+`diff_ccON`, `match`.
+"""
+function test_correlation_functions(;
+    coupling=((1, 2), [(1, 2, 2, 1)]),
+    G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),
+    r=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20,
+       0.02, 0.05, 0.2, 0.2, 0.1, 50, 30, 100, 20, -0.5],
+    lags=collect(0:1:20),
+    probfn=prob_Gaussian,
+    verbose=true)
+
+    res_rg   = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="")
+    res_full = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="full")
+
+    tau_rg, cc_rg, ac1_rg, ac2_rg, _, _, _, _, ccON_rg = res_rg[1:9]
+    _,      cc_full, ac1_full, ac2_full, _, _, _, _, ccON_full = res_full[1:9]
+
+    diff_cc   = maximum(abs.(cc_rg   .- cc_full))
+    diff_ac1  = maximum(abs.(ac1_rg  .- ac1_full))
+    diff_ac2  = maximum(abs.(ac2_rg  .- ac2_full))
+    diff_ccON = maximum(abs.(ccON_rg .- ccON_full))
+    match = diff_cc < 1e-8 && diff_ac1 < 1e-8 && diff_ac2 < 1e-8 && diff_ccON < 1e-8
+
+    if verbose
+        println("correlation_functions RG vs full:")
+        println("  max|cc_rg   - cc_full|   = $diff_cc")
+        println("  max|ac1_rg  - ac1_full|  = $diff_ac1")
+        println("  max|ac2_rg  - ac2_full|  = $diff_ac2")
+        println("  max|ccON_rg - ccON_full| = $diff_ccON")
+        println("  match = $match")
+    end
+    return (result_rg=res_rg, result_full=res_full,
+            diff_cc=diff_cc, diff_ac1=diff_ac1, diff_ac2=diff_ac2, diff_ccON=diff_ccON,
+            match=match)
+end
+
+"""
+    test_predict_traces(; rtarget, transitions, G, R, S, insertstep, coupling, noisepriors,
+                         splicetype, interval, totaltime, ntrials, method)
+
+Simulate coupled traces then compute predicted state sequences and observation distributions
+via the full HMM decode path (`make_traces_dataframe`). Returns a NamedTuple with the
+resulting DataFrames for both the RG-stack and the full-stack so the caller can compare.
+
+No files are written; this is the "given the info, compute" equivalent of `write_traces_key`.
+"""
+function test_predict_traces(;
+    coupling=((1, 2), [(1, 2, 2, 1)]),
+    G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),
+    rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 50, 30, 100, 20,
+             0.02, 0.05, 0.2, 0.2, 0.1, 50, 30, 100, 20, -0.5],
+    noisepriors=([50, 30, 100, 20], [50, 30, 100, 20]),
+    interval=1.0, totaltime=200.0, ntrials=3,
+    method=Tsit5())
+
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; verbose=false)
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), Int[])
+
+    df_rg   = StochasticGene.make_traces_dataframe(data, rtarget, transitions, G, R, S, insertstep,
+                                                    prob_Gaussian, 4, "",     true, false, coupling)
+    df_full = StochasticGene.make_traces_dataframe(data, rtarget, transitions, G, R, S, insertstep,
+                                                    prob_Gaussian, 4, "full", true, false, coupling)
+
+    println("test_predict_traces: df_rg rows=$(nrow(df_rg)), df_full rows=$(nrow(df_full))")
+    return (df_rg=df_rg, df_full=df_full)
+end
+
+"""
     test_compare_RG_vs_Full(; r, dwell_specs, coupling, ntrials, rtol, verbose)
 
 Run the same coupled dwell-time CME with RG stack (splicetype="") and Full stack (splicetype="full"),
@@ -865,6 +994,55 @@ function test_fit_tracejoint(; coupling=((1, 2), [(1, 2, 2, 1)], [:free]), G=(2,
     return lower, rtarget[fittedparam], upper
 end
 
+
+"""
+    test_fit_tracejoint_full(; coupling, G, R, S, insertstep, transitions, rtarget, rinit,
+                              nsamples, trace_specs, totaltime, ntrials, fittedparam,
+                              propcv, interval, noisepriors, maxtime, method)
+
+Full-stack (`TCoupledFullComponents`) version of `test_fit_tracejoint`. Uses `trace_specs`
+to declare observed units: each spec is a NamedTuple `(unit, interval, start, end, zeromedian)`.
+The observed-unit indices are extracted from `trace_specs` and stored in `data.units`, so the
+HMM likelihood correctly restricts emission to those units only.
+
+Fits the coupling strength (last parameter) and checks that `rtarget[fittedparam]` falls
+within the posterior credible interval.
+
+Returns `(lower, target, upper)` where `lower` and `upper` are the 2.5/97.5 percentiles.
+"""
+function test_fit_tracejoint_full(;
+    coupling=((1, 2), [(1, 2, 2, 1)], [:free]),
+    G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),
+    rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., .05, 1.0, .05,
+             0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, -0.4],
+    rinit=Float64[],
+    nsamples=10000,
+    trace_specs=[(unit=1, interval=1.0, start=0.0, zeromedian=false),
+                 (unit=2, interval=1.0, start=0.0, zeromedian=false)],
+    totaltime=2000.0, ntrials=10,
+    fittedparam=Int[21],
+    propcv=0.2, interval=1.0,
+    noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]),
+    maxtime=60.0, method=Tsit5())
+
+    units = [spec.unit for spec in trace_specs]
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials)
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units)), 1), units)
+    priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors,
+                              mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
+    rinit = rtarget
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep,
+                       "full", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)],
+                       propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options)
+    println(fits.accept, " ", fits.total)
+    lower = stats.qparam[1, :]
+    upper = stats.qparam[3, :]
+    return lower, rtarget[fittedparam], upper
+end
 
 ### end of functions used in runtest
 

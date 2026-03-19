@@ -342,7 +342,8 @@ function TCoupledFullComponents(coupling::Tuple, transitions::Tuple, G, R, S, in
     nT = collect(T_dimension(G, R, S, unit_model))
     N = prod(nT)
     elements_base, elements_coupling = set_elements_TCoupledFull(coupling, transitions, G, R, S, insertstep, splicetype, unit_model)
-    return TCoupledFullComponents(N, elements_base, elements_coupling)
+    targets = [(unit_model[c[3]], c[4]) for c in coupling[2]]
+    return TCoupledFullComponents(N, elements_base, elements_coupling, targets)
 end
 
 function TForcedComponents(coupling::Tuple, transitions::Tuple, G, R, S, insertstep, splicetype, f=set_elements_TGRS)

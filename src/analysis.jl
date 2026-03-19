@@ -2359,7 +2359,8 @@ function write_traces_key(folder::String;
         col      = isnothing(datacol)    ? info[:datacol]    : datacol
         zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
         data = load_data_trace(dp, "", "", dc, (dt, start, stop, 1.0, 0.0), :trace, col, zm)
-        df = make_traces_dataframe_key(data, r, info; state=state, splicetype=splicetype, grid=grid)
+        sp = splicetype == "" ? get(info, :splicetype, "") : splicetype
+        df = make_traces_dataframe_key(data, r, info; state=state, splicetype=sp, grid=grid)
         CSV.write(outfile, df)
     end
 end
@@ -3070,7 +3071,7 @@ result = simulate_trials(r, transitions, G, R, S, (1, 1), coupling, 100,
 println("L2 norm: ", result.l2_norm)
 ```
 """
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000, splicetype::String="")
     # If lags is a single integer, treat it as max lag (backward compatibility)
     if lags isa Integer
         positive_lags = collect(0:lags)
@@ -3082,7 +3083,7 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Get both intensity and ON/OFF cross-covariances and autocovariances
     # Use same offset as in covariance_functions to ensure theory and empirical match
     # Note: interval is now inferred from lags, so we don't pass it
-    full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, positive_lags, offset=offset)
+    full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, positive_lags; offset=offset, splicetype=splicetype)
     # Pack into NamedTuple
     theory = (
         ac1=ac1, ac2=ac2, cc=cc,
@@ -3531,11 +3532,11 @@ Compute theoretical correlation functions for a single rate file and return the 
 - All cross-correlations and auto-correlations are unnormalized (E[xy] - E[x]E[y])
 - ON states are binary (1 if reporter count > 0, 0 otherwise)
 """
-function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml")
+function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml"; splicetype::String="")
     r = readrates(file, get_row(ratetype))
     coupling_field = extract_source_target(pattern, file)
     coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
-    correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags)
+    correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype=splicetype)
 end
 
 """
@@ -3558,9 +3559,9 @@ Write correlation functions to a CSV file.
 # Returns
 - `nothing`: Returns nothing
 """
-function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median")
+function write_correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern::String="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype::String="median"; splicetype::String="")
 
-    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
+    tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters = correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; splicetype=splicetype)
     parts = fields(basename(file))
     new_model = create_modelstring(G, R, S, insertstep)
     out = joinpath(dirname(file), "crosscorrelation_" * parts.label * "_" * parts.cond * "_" * parts.gene * "_" * new_model * "_" * parts.nalleles * ".csv")
@@ -3711,12 +3712,12 @@ write_correlation_functions(
 - `score_models_from_traces`: Scores theoretical predictions against empirical data
 - `readrates`: Loads rate parameters from text files
 """
-function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median")
+function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="median", splicetype::String="")
     for (root, _, files) in walkdir(folder)
         for f in files
             if occursin("rates", f) && occursin("tracejoint", f)
                 file = joinpath(root, f)
-                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype)
+                write_correlation_functions_file(file, transitions, G, R, S, insertstep, pattern, lags, probfn, ratetype; splicetype=splicetype)
             end
         end
     end
@@ -3731,8 +3732,9 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
                 ratefile = joinpath(root, "rates_" * key * ".txt")
                 @info "computing correlations for $ratefile"
                 r = readrates(ratefile, get_row(ratetype))
+                splicetype = get(info, :splicetype, "")
                 tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
-                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], info[:insertstep], info[:probfn], info[:coupling], lags)
+                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], info[:insertstep], info[:probfn], info[:coupling], lags; splicetype=splicetype)
                 write_correlation_csv(joinpath(root, "crosscorrelation_" * key * ".csv"), tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
             end
         end

@@ -570,20 +570,7 @@ function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransiti
     return sum(logpredictions), logpredictions
 end
 
-# Helper to get the right component
-get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
-get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
-# (Add more as needed)
 
-function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
-    r = prepare_rates(param, model)
-    components = get_components(model, data)
-    if !isnothing(model.trait) && haskey(model.trait, :grid)
-        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method)
-    else
-        ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method)
-    end
-end
 
 function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
     ll_hmm_trace(param, data, model)
@@ -609,6 +596,22 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
     logpredictions = log.(max.(predictions, eps()))
     hist = datahistogram(data)
     return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
+end
+
+# Helper to get the right component
+get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
+get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
+# (Add more as needed)
+
+function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
+    r = prepare_rates(param, model)
+    components = get_components(model, data)
+    observed_units = isempty(data.units) ? nothing : data.units
+    if !isnothing(model.trait) && haskey(model.trait, :grid)
+        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method)
+    else
+        ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units)
+    end
 end
 
 

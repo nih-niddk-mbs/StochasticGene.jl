@@ -2211,6 +2211,15 @@ function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledComponents, repor
     _predict_trace(a, p0, d, trace[1])
 end
 
+function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
+    rates, noiseparams, couplingStrength = r
+    coupling_rates = [couplingStrength[k] * rates[components.targets[k][1]][components.targets[k][2]]
+                      for k in eachindex(components.targets)]
+    a, p0 = make_ap(rates, coupling_rates, interval, components, method)
+    d = set_d(noiseparams, reporter)
+    _predict_trace(a, p0, d, trace[1])
+end
+
 # hierarchical
 function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
     rshared, rindividual, noiseshared, noiseindividual, _, _ = r
@@ -2752,9 +2761,12 @@ to be handled via eigendecomposition.
 - **Lag convention**: Positive τ in input `lags` means first unit leads second unit
 - **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0)
-    components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
-    # components = TRGCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="")
+    if splicetype == "full"
+        components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    else
+        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+    end
     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, [4, 4])
     num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
     mean_intensity = Vector[]
@@ -2799,7 +2811,13 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
     step_indices = round.(Int, lags ./ lag_interval)
 
     # transition matrix a and steady state probabilities p0
-    a, p0 = make_ap(r, couplingStrength, lag_interval, components)
+    if splicetype == "full"
+        coupling_rates = [couplingStrength[k] * r[components.targets[k][1]][components.targets[k][2]]
+                          for k in eachindex(components.targets)]
+        a, p0 = make_ap(r, coupling_rates, lag_interval, components)
+    else
+        a, p0 = make_ap(r, couplingStrength, lag_interval, components)
+    end
 
     # Cross-correlations
     cc12 = crosscorfn_hmm(a, p0, mean_intensity[1], mean_intensity[2], step_indices) 
@@ -2901,8 +2919,8 @@ Compute theoretical centered correlation functions for coupled HMM model.
 Returns centered correlation functions (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
 See `correlation_functions` for detailed argument descriptions and return value structure.
 """
-function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0)
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset)
+function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="")
+    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset, splicetype=splicetype)
     return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 

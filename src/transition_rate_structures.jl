@@ -409,6 +409,7 @@ struct TCoupledFullComponents <: AbstractComponents
     N::Int
     elements_base::Vector{ElementCoupledFull}
     elements_coupling::Vector{ElementCoupledFull}
+    targets::Vector{Tuple{Int,Int}}
 end
 
 """
