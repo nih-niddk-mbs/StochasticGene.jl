@@ -2830,7 +2830,10 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
         any(isinf.(r)) && println("r contains Inf, set rate to prior")
         length(r) < total_expected && !isempty(r) && println("Rate file too short ($(length(r)) < $total_expected), expanding from prior")
         # Seed individual inits from loaded rates when available, else fall back to priormean
-        seed = (length(r) >= n_all_params && !any(isnan.(r[1:n_all_params]))) ? r[1:n_all_params] : priormean[1:n_all_params]
+        seed = Vector{Float64}(
+            (length(r) >= n_all_params && !any(isnan.(Float64.(r[1:n_all_params])))) ?
+            r[1:n_all_params] : priormean[1:n_all_params]
+        )
         # Clamp coupling parameters to valid bounds for their sign mode
         if c > 0
             modes = coupling_ranges(coupling)
@@ -2848,7 +2851,7 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
                 end
             end
         end
-        r = copy(priormean)
+        r = Vector{Float64}(copy(priormean))
         r[1:n_all_params] = seed
         for i in 1:nindividuals
             append!(r, seed)
