@@ -2819,17 +2819,21 @@ Set initial parameters for hierarchical models.
 - Used for hierarchical model initialization
 """
 function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
-    if isempty(r) || any(isnan.(r)) || any(isinf.(r))
+    c = ncoupling(coupling)
+    g = isnothing(grid) ? 0 : 1
+    n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
+    total_expected = length(priormean) + nindividuals * n_all_params
+    if isempty(r) || any(isnan.(r)) || any(isinf.(r)) || length(r) < total_expected
         isempty(r) && println("No rate file, set rate to prior")
         any(isnan.(r)) && println("r contains NaN, set rate to prior")
         any(isinf.(r)) && println("r contains Inf, set rate to prior")
+        length(r) < total_expected && !isempty(r) && println("Rate file too short ($(length(r)) < $total_expected), expanding from prior")
+        # Seed individual inits from loaded rates when available, else fall back to priormean
+        seed = (length(r) >= n_all_params && !any(isnan.(r[1:n_all_params]))) ? r[1:n_all_params] : priormean[1:n_all_params]
         r = copy(priormean)
-        c = ncoupling(coupling)
-        g = isnothing(grid) ? 0 : 1
-        # n_all_params = num_rates(transitions, R, S, insertstep) + length(noisepriors)
-        n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
+        r[1:n_all_params] = seed
         for i in 1:nindividuals
-            append!(r, priormean[1:n_all_params])
+            append!(r, seed)
         end
     end
     r
