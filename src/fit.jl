@@ -2791,7 +2791,7 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
         r = priormean
     end
     println("initial: ", r)
-    r
+    Vector{Float64}(r)
 end
 
 """
