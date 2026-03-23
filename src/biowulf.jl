@@ -256,6 +256,74 @@ function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell,
 end
 
 """
+    write_fitfile_coupled(fitfile, gene::String, nchains, ...)
+
+Like `write_fitfile_genes` but with `gene` hardcoded in the script instead of `ARGS[1]`.
+Used for coupled-model scripts where one gene is fixed per script.
+`trace_specs` and `dwell_specs` are interpolated directly — when non-empty they override
+the legacy `traceinfo`/`zeromedian` inside `fit`.
+"""
+function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
+    fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[])
+    s = '"'
+    transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
+    f = open(fitfile, "w")
+    write_prolog(f, src)
+    typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
+    typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $annealsteps, $temp, $tempanneal, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)\n")
+    close(f)
+end
+
+"""
+    makeswarm_coupled(; gene, inlabel, label, nchains, ..., trace_specs=[], dwell_specs=[], ...)
+
+Write one fit script for a coupled model (gene hardcoded, not ARGS[1]) and append one
+swarm line. Intended for coupled models where each label/coupling gets its own script.
+`trace_specs` is written directly into the script so `fit` uses it instead of the legacy
+`traceinfo`/`zeromedian` path for determining interval and per-unit zero-centering.
+"""
+function makeswarm_coupled(; gene::String, inlabel::String, label::String,
+    nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript",
+    filedir=".", project="", sysimage="", src="",
+    datatype::String="tracejoint", dttype=String[], datapath="", cell::String="HBEC",
+    datacond=[], traceinfo=(1.0, 1.0, -1.0), infolder::String="", resultfolder::String="",
+    fittedparam=Int[], fixedeffects=tuple(), transitions=tuple(), G=2, R=0, S=0, insertstep=1,
+    coupling=tuple(), grid=nothing, root=".", maxtime=60.0, elongationtime=6.0,
+    priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0,
+    splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(),
+    ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0,
+    annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false,
+    optimize=false, writesamples=false, method="Tsit5()", zeromedian=false,
+    datacol=3, ejectnumber=1, yieldfactor::Float64=1.0,
+    trace_specs=[], dwell_specs=[], kwargs...)
+    if !isempty(filedir) && !isdir(filedir)
+        mkpath(filedir)
+    end
+    script_key = sanitize_for_filename(label)
+    scriptfile = juliafile * "_" * script_key * ".jl"
+    scriptpath = joinpath(filedir, scriptfile)
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    open(joinpath(filedir, sfile), "a") do f
+        if isempty(project)
+            writedlm(f, ["julia -t $nthreads -p" nchains scriptfile])
+        elseif isempty(sysimage)
+            writedlm(f, ["julia --project=$project -t $nthreads -p" nchains scriptfile])
+        else
+            writedlm(f, ["julia --project=$project --sysimage=$sysimage -t $nthreads -p" nchains scriptfile])
+        end
+    end
+    write_fitfile_coupled(scriptpath, gene, nchains, datatype, dttype, datapath, cell,
+        datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects,
+        transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime,
+        priormean, nalleles, priorcv, onstates, decayrate, splicetype, probfn, noisepriors,
+        hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp,
+        tempanneal, temprna, burst, optimize, writesamples, method, src, zeromedian,
+        datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+end
+
+"""
     write_prolog(f, src)
 
 Writes the prolog for the fitfile.

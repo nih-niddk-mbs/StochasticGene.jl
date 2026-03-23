@@ -16,7 +16,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
-- `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
+- `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. For **three units** with a **hidden latent** third unit (G=3, fully connected G-only dynamics) modulating observed units 1–2 from hidden states **1** and **3**, use `make_coupling_hidden_latent(t1, t2)` or `make_coupling_hidden_latent("H3#t1-t2")` and `transitions_hidden_g3_all_pairs()` for unit 3; see docs *Units and models — hidden latent unit*. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
 - `datacol=3`: column of data to use, default is 3 for rna data
 - `datatype::String=""`: String that describes data type, choices are "rna", "rnaonoff", "rnadwelltime", "trace", "tracerna", "tracejoint", "tracegrid"
 - `datacond=""`: string or vector of strings describing data, e.g. "WT", "DMSO" or ["DMSO","AUXIN"], ["gene","enhancer"]
@@ -58,7 +58,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `end`, `zeromedian` (and optionally `active_fraction`, `background`). When non-empty, used for observation-first traces (enables hidden units). Legacy `traceinfo`/`zeromedian` apply when `trace_specs` is empty.
+- `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via `default_trace_specs_for_coupled` so `data.units` lists observed units (required for correct HMM emission masking with hidden units / Rany).
 - `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, dttype). When non-empty, used for dwell-time data with multiple units or observation mapping. Legacy dwell data uses single-unit defaults when empty.
 - `traceinfo=(1.0, 1., -1, 1., 0.5)`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
     for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
@@ -798,7 +798,7 @@ Create and configure data, model, and options structures for fitting.
 - `zeromedian`: Whether to zero median (default: false)
 - `datacol`: Data column (default: 3)
 - `ejectnumber`: Ejection number (default: 1)
-- `trace_specs`: Container of trace specs for observation-first traces (default: empty); each spec has at least `unit`, `interval`, `start`, `end`, `zeromedian`. Not used until translation layer is implemented.
+- `trace_specs`: Per-unit observation windows for `tracejoint` (default: empty). For **coupled** `tracejoint`, if left empty and `dwell_specs` is empty, defaults are built from `traceinfo` and `zeromedian` (see `default_trace_specs_for_coupled`) so observed units are set on `TraceData`.
 - `dwell_specs`: Container of dwell-time specs per unit (default: empty); used for multi-unit or observation-mapped dwell data when non-empty. Legacy single-unit when empty.
 
 # Returns
@@ -822,31 +822,50 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
-    isempty(dwell_specs) && (units = Int[])
-    units = get_units(dwell_specs, trace_specs)
-    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, units)
-    # For dwelltime with dwell_specs and coupling: build full onstates/dttype (so coupled TD matrices include hidden units) and set data.units
-    dwell_dttype_full = nothing
-    if (datatype == "dwelltime" || datatype == "dwell") && !isempty(dwell_specs) && !isempty(coupling)
-        n_units = length(coupling[1])
-        full_onstates, full_dttype = full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
-        onstates = full_onstates
-        dwell_dttype_full = full_dttype
-        if data isa DwellTimeData
-            data = DwellTimeData(data.label, data.gene, data.bins, data.DwellTimes, data.DTtypes, observed_units_from_dwell_specs(dwell_specs))
-        end
-    end
+    data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, dwell_dttype_full=dwell_dttype_full)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     else
         throw(ArgumentError("samplesteps must be greater than 0"))
     end
     return data, model, options
+end
+
+"""
+    n_observed_trace_units(coupling)
+
+Number of units with observed fluorescence traces, for building `trace_specs` / `data.units`.
+For a 3-unit hidden-latent layout (`unit_model` = `(1,2,3)`), returns `2` (enhancer + gene only).
+"""
+function n_observed_trace_units(coupling::Tuple)
+    length(coupling) < 1 && return 0
+    um = coupling[1]
+    if length(um) == 3 && um == (1, 2, 3)
+        return 2
+    end
+    return length(um)
+end
+
+"""
+    default_trace_specs_for_coupled(traceinfo, zeromedian, n_units::Int)
+
+Construct `trace_specs` for coupled `tracejoint` when the caller omits them: one NamedTuple per
+observed unit (`unit`, `interval`, `start`, `t_end`, `zeromedian`), using `traceinfo[1]` as the
+sampling interval and `traceinfo[3]` as the trace end time (or a large upper bound if `< 0`).
+"""
+function default_trace_specs_for_coupled(traceinfo, zeromedian, n_units::Int)
+    n_units >= 1 || throw(ArgumentError("n_units must be >= 1"))
+    interval = Float64(traceinfo[1])
+    tracetime = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
+    t_end = tracetime < 0 ? 1.0e30 : tracetime
+    zm_vec = zeromedian isa AbstractVector ? zeromedian : fill(zeromedian, n_units)
+    length(zm_vec) >= n_units || throw(ArgumentError("zeromedian vector length must be >= n_units ($n_units)"))
+    return [NamedTuple{(:unit, :interval, :start, :t_end, :zeromedian)}((u, interval, 0.0, t_end, zm_vec[u])) for u in 1:n_units]
 end
 
 """
@@ -1091,35 +1110,45 @@ Load and process trace data from files.
 - Supports single and joint trace data types
 - Throws error if no traces are found
 """
-function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0, units=Int[])
-    if typeof(datapath) <: String
-        tracer = read_tracefiles(datapath, datacond, traceinfo, col)
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0, trace_specs=[])
+    # When trace_specs is provided, override interval, zeromedian, and units from specs.
+    # When empty, use legacy traceinfo / zeromedian parameters unchanged.
+    if !isempty(trace_specs)
+        interval_eff = trace_specs[1].interval
+        zm_eff = [spec.zeromedian for spec in trace_specs]
+        length(zm_eff) == 1 && (zm_eff = zm_eff[1])  # scalar for single-unit
+        traceinfo_eff = (interval_eff, traceinfo[2:end]...)
+        units_out = [spec.unit for spec in trace_specs]
     else
-        tracer = read_tracefiles(datapath[1], datacond, traceinfo, col)
+        traceinfo_eff = traceinfo
+        zm_eff = zeromedian
+        units_out = Int[]
+    end
+    if typeof(datapath) <: String
+        tracer = read_tracefiles(datapath, datacond, traceinfo_eff, col)
+    else
+        tracer = read_tracefiles(datapath[1], datacond, traceinfo_eff, col)
     end
     (length(tracer) == 0) && throw("No traces")
-    trace, tracescale = zero_median(tracer, zeromedian)
+    trace, tracescale = zero_median(tracer, zm_eff)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)
     println("datacond: ", datacond)
-    println("traceinfo: ", traceinfo)
+    println("traceinfo: ", traceinfo_eff)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
-    # weight = set_trace_weight(traceinfo)
-    # background = set_trace_background(traceinfo)
-    if length(traceinfo) < 4
+    if length(traceinfo_eff) < 4
         weight = 0.0
         background = 0.0
     else
-        weight = set_trace_weight(traceinfo)
-        background = set_trace_background(traceinfo)
+        weight = set_trace_weight(traceinfo_eff)
+        background = set_trace_background(traceinfo_eff)
     end
     if datatype == :trace || datatype == :tracejoint
-        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo[1], (trace, background, weight, nframes, tracescale), Int[])
+        return TraceData{typeof(label),typeof(gene),Tuple}(label, gene, traceinfo_eff[1], (trace, background, weight, nframes, tracescale), units_out)
     elseif datatype == :tracerna
         len, h = read_rna(gene, datacond, datapath[2])
-        # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
-        return TraceRNAData{typeof((trace, background, weight, nframes)),typeof(h)}(label, gene, traceinfo[1], (trace, background, weight, nframes), len, h, yield, units)
+        return TraceRNAData{typeof((trace, background, weight, nframes)),typeof(h)}(label, gene, traceinfo_eff[1], (trace, background, weight, nframes), len, h, yield, units_out)
     else
         throw(ArgumentError("Unsupported datatype '$datatype'"))
     end
@@ -1202,18 +1231,18 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 # Throws
 - `ArgumentError` if `datatype` is unsupported
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false, yieldfactor::Float64=1.0, units=Int[])
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     dt = normalize_datatype(datatype)
+    # Units for non-trace data types come from dwell_specs; for trace types they come from trace_specs.
+    units = get_units(dwell_specs, trace_specs)
 
     if dt == :rna
         len, h = read_rna(gene, datacond, datapath)
-        # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNAData{typeof(len),typeof(h)}(label, gene, len, h, yield, units)
 
     elseif dt == :rnacount
         countsRNA, yield_vec, nRNA = read_rnacount(gene, datacond, datapath)
-        # Compute nRNA using nhist_loss if any yield < 1.0 (use minimum for most conservative)
         min_yield = minimum(yield_vec)
         nRNA_computed = min_yield < 1.0 ? nhist_loss(nRNA, min_yield) : nRNA
         return RNACountData(label, gene, nRNA_computed, countsRNA, yield_vec, units)
@@ -1222,7 +1251,6 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         LC = readfile(gene, datacond, datapath[2])
-        # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3], yield, units)
 
@@ -1230,19 +1258,19 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
-        # Compute nRNA_true if yieldfactor < 1.0, otherwise just store yieldfactor
         yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield, units)
 
     elseif dt == :dwelltime
         bins, DT = read_dwelltimes(datapath)
-        return DwellTimeData(label, gene, bins, DT, dttype)
+        du = isempty(dwell_specs) ? units : observed_units_from_dwell_specs(dwell_specs)
+        return DwellTimeData(label, gene, bins, DT, dttype, du)
 
     elseif dt ∈ TRACE_DATATYPES
         if dt == :tracegrid
             return load_data_tracegrid(datapath, label, gene, datacond, traceinfo)
         else
-            return load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian, yieldfactor, units)
+            return load_data_trace(datapath, label, gene, datacond, traceinfo, dt, datacol, zeromedian, yieldfactor, trace_specs)
         end
 
     else
@@ -1644,9 +1672,13 @@ Create reporter components for dwell time data analysis.
 - Creates appropriate components for dwell time distribution modeling
 - Used for analyzing time spent in different model states
 """
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing)
-    dtype = (dttype_full !== nothing) ? dttype_full : data.DTtypes
-    make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, dtype, coupling)
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[])
+    if !isempty(dwell_specs)
+        make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, dwell_specs, coupling)
+    else
+        dtype = (dttype_full !== nothing) ? dttype_full : data.DTtypes
+        make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, dtype, coupling)
+    end
 end
 
 """
@@ -2129,10 +2161,17 @@ When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_specs=[])
+    dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
+    # For coupled dwell models, extract full onstates from dwell_specs here.
+    if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
+        n_units = length(coupling[1])
+        full_onstates, _ = full_onstates_dttype_from_dwell_specs(dwell_specs, n_units)
+        onstates = full_onstates
+    end
     insertstep = normalize_insertstep(R, insertstep)
-    reporter, components = if data isa DwellTimeData && dwell_dttype_full !== nothing
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dttype_full=dwell_dttype_full)
+    reporter, components = if data isa DwellTimeData
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs)
     else
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     end
