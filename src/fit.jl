@@ -2142,17 +2142,18 @@ function make_ratetransforms(data, nrates, transitions, G, R, S, insertstep, rep
         end
     end
     if !isempty(hierarchical)
-        fset = ftransforms
-        iset = invtransforms
+        fset = copy(ftransforms)
+        iset = copy(invtransforms)
+        sset = copy(sigmatransforms)
         nindividuals = length(data.trace[1])
         for i in 1:hierarchical[1]-1
-            ftransforms = vcat(ftransforms, repeat([log], length(fset)))
-            invtransforms = vcat(invtransforms, repeat([exp], length(iset)))
-            sigmatransforms = vcat(sigmatransforms, repeat([sigmalognormal], length(fset)))
+            ftransforms = vcat(ftransforms, fset)
+            invtransforms = vcat(invtransforms, iset)
+            sigmatransforms = vcat(sigmatransforms, sset)
         end
         ftransforms = vcat(ftransforms, repeat(fset, nindividuals))
         invtransforms = vcat(invtransforms, repeat(iset, nindividuals))
-        sigmatransforms = vcat(sigmatransforms, repeat(sigmatransforms, nindividuals))
+        sigmatransforms = vcat(sigmatransforms, repeat(sset, nindividuals))
     end
     Transformation(ftransforms, invtransforms, sigmatransforms)
 end
@@ -2830,6 +2831,23 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
         length(r) < total_expected && !isempty(r) && println("Rate file too short ($(length(r)) < $total_expected), expanding from prior")
         # Seed individual inits from loaded rates when available, else fall back to priormean
         seed = (length(r) >= n_all_params && !any(isnan.(r[1:n_all_params]))) ? r[1:n_all_params] : priormean[1:n_all_params]
+        # Clamp coupling parameters to valid bounds for their sign mode
+        if c > 0
+            modes = coupling_ranges(coupling)
+            coupling_start = n_all_params - g - c + 1
+            for k in 1:c
+                idx = coupling_start + k - 1
+                mode = k <= length(modes) ? modes[k] : :free
+                γ = seed[idx]
+                if mode === :activate && γ <= 0.0
+                    seed[idx] = 0.1
+                elseif mode === :inhibit && (γ >= 0.0 || γ <= -1.0)
+                    seed[idx] = -0.1
+                elseif mode === :free && γ <= -1.0
+                    seed[idx] = 0.0
+                end
+            end
+        end
         r = copy(priormean)
         r[1:n_all_params] = seed
         for i in 1:nindividuals
