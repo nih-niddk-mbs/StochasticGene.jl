@@ -235,6 +235,7 @@ export
     coupling_ranges,
     default_coupling_prior_mean,
     default_coupling_prior_means,
+    make_coupling_hidden_latent,
     default_trace_specs_for_coupled,
     coupling_parameter_labels,
     TComponents,

@@ -751,6 +751,33 @@ function coupling_ranges(coupling)
     end
 end
 
+"""
+    default_coupling_prior_mean(mode::Symbol) -> Float64
+
+Return a sensible prior mean for a single coupling parameter based on its sign mode.
+
+- `:activate` → `0.1`  (weak positive activation)
+- `:inhibit`  → `-0.5` (weak inhibition; value is in the logit-space parameter)
+- `:free`     → `0.0`  (no preferred direction)
+"""
+function default_coupling_prior_mean(mode::Symbol)
+    m = _normalize_coupling_mode(mode)
+    m === :activate && return 0.1
+    m === :inhibit  && return -0.5
+    return 0.0
+end
+
+"""
+    default_coupling_prior_means(coupling) -> Vector{Float64}
+
+Return a vector of default prior means (one per coupling connection) based on the
+sign modes embedded in `coupling` (via `coupling_ranges`).
+"""
+function default_coupling_prior_means(coupling)
+    modes = coupling_ranges(coupling)
+    return [default_coupling_prior_mean(m) for m in modes]
+end
+
 
 """
     make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[], dwell_specs=[])
@@ -1518,7 +1545,15 @@ Create reporter components for coupled trace analysis.
 """
 function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
     reporter = HMMReporter[]
-    !(probfn isa Union{Tuple,Vector}) && (probfn = fill(probfn, length(coupling[1])))
+    nunits = length(G)
+    if probfn isa Union{Tuple,Vector}
+        # Pad to nunits if shorter (hidden units at the end have nnoise=0 so probfn is unused)
+        if length(probfn) < nunits
+            probfn = [probfn..., fill(probfn[end], nunits - length(probfn))...]
+        end
+    else
+        probfn = fill(probfn, nunits)
+    end
     n_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1], onstates)
     for i in eachindex(G)
         nnoise = length(noisepriors[i])
@@ -3294,7 +3329,8 @@ end
 function printinfo(gene, G::Tuple, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     println("Gene: ", gene)
     for i in eachindex(G)
-        println("datacond: ", datacond[i], ", GRSinsertstep: ", G[i], R[i], S[i], insertstep[i], ", nalleles: ", nalleles)
+        cond = i <= length(datacond) ? datacond[i] : "(hidden)"
+        println("datacond: ", cond, ", GRSinsertstep: ", G[i], R[i], S[i], insertstep[i], ", nalleles: ", nalleles)
     end
     println("data: ", datapath)
     println("in: ", infolder, " out: ", resultfolder)

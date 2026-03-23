@@ -1903,9 +1903,25 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
 end
 
 # coupled, hierarchical
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    if method[2]
+        ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
+    else
+        ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+    end
+    lb = ll_off(trace, rshared[1], noiseshared[1], reporter, interval, components, method[1])
+    lhp = ll_hierarchy(pindividual, rhyper)
+    ll + lb + sum(lhp), vcat(logpredictions, lhp)
+end
+
+# full coupled matrix, hierarchical
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
+    coupling_rates = [couplingshared[1][k] * rshared[1][components.targets[k][1]][components.targets[k][2]]
+                      for k in eachindex(components.targets)]
+    a, p0 = make_ap(rshared[1], coupling_rates, interval, components, method[1])
     if method[2]
         ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else

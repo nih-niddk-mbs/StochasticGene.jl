@@ -221,13 +221,13 @@ make_coupling("R5", 3, 4)  # returns ((1, 2), [(1, 4, 2, 5), (1, 5, 2, 5), ...])
 - Otherwise: single source state → target transition (target from last character)
 - Empty connections is valid when building manually: use `(unit_model, ConnectionSpec[])`.
 """
-function make_coupling(coupling_field::String, G, R)
+function make_coupling(coupling_field::String, G, R; coupling_ranges=nothing)
     if isempty(coupling_field)
         return tuple()
     elseif length(coupling_field) == 4
         Gt = G isa Tuple ? G : (G, G)
         Rt = R isa Tuple ? R : (R, R)
-        return make_coupling_reciprocal(coupling_field, Gt, Rt)
+        c = make_coupling_reciprocal(coupling_field, Gt, Rt)
     else
         if startswith(coupling_field, "R")
             source = collect(G[1]+1:G[1]+R[1])
@@ -237,8 +237,10 @@ function make_coupling(coupling_field::String, G, R)
         target = parse(Int, coupling_field[2:end])
         unit_model = (1, 2)
         connections = ConnectionSpec[(1, s, 2, target) for s in (source isa AbstractVector ? source : [source])]
-        return (unit_model, connections)
+        c = (unit_model, connections)
     end
+    isnothing(coupling_ranges) && return c
+    return (c[1], c[2], coupling_ranges)
 end
 
 """
@@ -286,6 +288,44 @@ function make_coupling_reciprocal(coupling_field::String, G, R)
         push!(connections, (1, s, 2, t1))
     end
     return (unit_model, connections)
+end
+
+"""
+    make_coupling_hidden_latent(t1::Int, t2::Int; coupling_ranges=(:free, :free))
+    make_coupling_hidden_latent(spec::String; coupling_ranges=(:free, :free))
+
+Construct a 3-unit coupling structure for a hidden-latent model where unit 3 (G=3,
+fully connected, no observations) modulates observed units 1 and 2.
+
+Unit 3 state 1 activates unit 1 at transition `t1`, and unit 3 state 3 activates
+unit 2 at transition `t2`.  The returned tuple is
+`(unit_model, connections, sign_modes)` with `unit_model = (1, 2, 3)` and two
+connections `(3, 1, 1, t1)` and `(3, 3, 2, t2)`.
+
+`coupling_ranges` sets the sign mode for each connection: a 2-element tuple of
+Symbols (`:free`, `:activate`, or `:inhibit`).
+
+The string form parses `"H3#t1-t2"`, e.g. `make_coupling_hidden_latent("H3#3-5")`.
+
+# Examples
+```julia
+make_coupling_hidden_latent(3, 5)
+make_coupling_hidden_latent(3, 5; coupling_ranges=(:activate, :activate))
+make_coupling_hidden_latent("H3#3-5")
+```
+"""
+function make_coupling_hidden_latent(t1::Int, t2::Int; coupling_ranges=(:free, :free))
+    unit_model = (1, 2, 3)
+    connections = ConnectionSpec[(3, 1, 1, t1), (3, 3, 2, t2)]
+    return (unit_model, connections, coupling_ranges)
+end
+
+function make_coupling_hidden_latent(spec::String; coupling_ranges=(:free, :free))
+    m = match(r"H3#(\d+)-(\d+)", spec)
+    m === nothing && throw(ArgumentError("Invalid hidden-latent spec \"$spec\"; expected format \"H3#t1-t2\""))
+    t1 = parse(Int, m[1])
+    t2 = parse(Int, m[2])
+    return make_coupling_hidden_latent(t1, t2; coupling_ranges=coupling_ranges)
 end
 
 # raterow_dict() = Dict([("ml", 1), ("mean", 2), ("median", 3), ("last", 4)])
