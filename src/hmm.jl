@@ -1902,12 +1902,22 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::
     ll + lb + sum(lhp), vcat(logpredictions, lhp)
 end
 
+# Helper: filter reporter and per-individual noiseparams to observed units only.
+# When observed_units is nothing, falls back to filtering by reporter.n > 0.
+function _filter_observed(reporter::Vector{HMMReporter}, noiseindividual, observed_units)
+    units = observed_units !== nothing ? observed_units : findall(r -> r.n > 0, reporter)
+    reporter_eff = reporter[units]
+    noise_eff = [[ni[u] for u in units] for ni in noiseindividual]
+    return reporter_eff, noise_eff
+end
+
 # coupled, hierarchical
 function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
     if method[2]
-        ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
+        reporter_eff, noise_eff = _filter_observed(reporter, noiseindividual, observed_units)
+        ll, logpredictions = _ll_hmm(noise_eff, a, p0, reporter_eff, trace[1])
     else
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
@@ -1923,7 +1933,8 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullCompo
                       for k in eachindex(components.targets)]
     a, p0 = make_ap(rshared[1], coupling_rates, interval, components, method[1])
     if method[2]
-        ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
+        reporter_eff, noise_eff = _filter_observed(reporter, noiseindividual, observed_units)
+        ll, logpredictions = _ll_hmm(noise_eff, a, p0, reporter_eff, trace[1])
     else
         ll, logpredictions = _ll_hmm(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
     end
