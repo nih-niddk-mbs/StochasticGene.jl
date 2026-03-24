@@ -2834,7 +2834,7 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
             (length(r) >= n_all_params && !any(isnan.(Float64.(r[1:n_all_params])))) ?
             r[1:n_all_params] : priormean[1:n_all_params]
         )
-        # Clamp coupling parameters to valid bounds for their sign mode
+        # Validate coupling parameters match their specified sign mode
         if c > 0
             modes = coupling_ranges(coupling)
             coupling_start = n_all_params - g - c + 1
@@ -2842,12 +2842,13 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
                 idx = coupling_start + k - 1
                 mode = k <= length(modes) ? modes[k] : :free
                 γ = seed[idx]
+                # Check if initial coupling parameter sign matches the specified mode
                 if mode === :activate && γ <= 0.0
-                    seed[idx] = 0.1
+                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be > 0"))
                 elseif mode === :inhibit && (γ >= 0.0 || γ <= -1.0)
-                    seed[idx] = -0.1
+                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be in (-1, 0)"))
                 elseif mode === :free && γ <= -1.0
-                    seed[idx] = 0.0
+                    throw(ArgumentError("Coupling parameter $k (value $γ) is invalid for mode $mode; must be > -1"))
                 end
             end
         end
