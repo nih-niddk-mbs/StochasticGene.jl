@@ -2851,8 +2851,7 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
                 end
             end
         end
-        r = Vector{Float64}(copy(priormean))
-        r[1:n_all_params] = seed
+        r = Vector{Float64}(copy(priormean[1:n_all_params]))
         for i in 1:nindividuals
             append!(r, seed)
         end
