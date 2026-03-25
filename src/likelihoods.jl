@@ -610,7 +610,12 @@ function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
     if !isnothing(model.trait) && haskey(model.trait, :grid)
         ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method)
     else
-        ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units)
+        # Only pass observed_units for CoupledFull stack; legacy Coupled and single-unit don't support it
+        if components isa TCoupledFullComponents
+            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units)
+        else
+            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method)
+        end
     end
 end
 

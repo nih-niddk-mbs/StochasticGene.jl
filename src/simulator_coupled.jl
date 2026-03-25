@@ -104,7 +104,7 @@ julia> h=simulator([.1, .1, .1, .1, .1, .1, .1, .1, .1, .01],([1,2],[2,1],[2,3],
  [593, 519, 560, 512, 492, 475, 453, 468, 383, 429  …  84, 73, 85, 92, 73, 81, 85, 101, 79, 78]
 
 """
-function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1)
+function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, coupling=tuple(), nalleles=1, nhist=20, onstates=Int[], bins=Float64[], traceinterval::Float64=0.0, probfn=prob_Gaussian, noiseparams=4, totalsteps::Int=100000000, totaltime::Float64=0.0, tol::Float64=1e-6, reporterfn=sum, splicetype="", a_grid=nothing, verbose::Bool=false, ejectnumber=1, trace_specs=nothing, observed_units=nothing)
 
     r = copy(rin)
     if !isempty(coupling)
@@ -125,6 +125,19 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
     reactions = set_reactions(transitions, G, R, S, insertstep)
     tau, state = initialize(r, G, R, reactions, nalleles)
 
+    # Handle trace_specs: determines which units are observable
+    # Important: we ALWAYS simulate all units (including hidden), but only trace observable units
+    if isnothing(observed_units)
+        if !isnothing(trace_specs)
+            observed_units = [spec.unit for spec in trace_specs]
+            # trace_specs may specify traceinterval
+            if traceinterval == 0.0 && !isempty(trace_specs) && haskey(first(trace_specs), :interval)
+                traceinterval = first(trace_specs).interval
+            end
+        end
+    end
+
+    # Set up onoff pathway for dwell time analysis if bins provided
     if length(bins) < 1
         onoff = false
     else
@@ -132,12 +145,16 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
         onstates, bins, before, after, ndt, dt, histofftdd, histontdd, tIA, tAI = set_onoff(onstates, bins, nalleles, coupling)
     end
 
+    # Set up onstates for coupled models if not already set by set_onoff
+    if isempty(onstates) && !isempty(coupling)
+        onstates = fill(Int64[], length(state))
+    end
+    
+    # Set up trace logging if tracing is enabled
+    # This happens for ALL units; filtering to observed units happens in make_trace
     if traceinterval > 0
         par = set_par(r, noiseparams)
         tracelog = initialize_tracelog(t, state)
-        if isempty(onstates) && !isempty(coupling)
-            onstates = fill(Int64[], length(state))
-        end
     end
 
     if verbose
@@ -231,9 +248,9 @@ function simulator(rin, transitions, G, R, S, insertstep; warmupsteps=0, couplin
     end
     if traceinterval > 0.0
         if isnothing(a_grid)
-            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn))
+            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, observed_units=observed_units))
         else
-            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, a_grid))
+            push!(results, make_trace(tracelog, G, R, S, insertstep, onstates, traceinterval, par, probfn, reporterfn, a_grid, observed_units=observed_units))
         end
         if verbose
             push!(results, tracelog)
@@ -549,7 +566,8 @@ function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles
         throw(ArgumentError("all coupling strengths must be > -1.0"))
     end
     if noiseparams isa Number
-        noiseparams = fill(noiseparams, length(G))
+        # Only create noise parameters for observable units (R > 0); hidden units (R=0) have 0 noise params
+        noiseparams = [R[i] > 0 ? noiseparams : 0 for i in eachindex(G)]
     end
     coupling_6 = _coupling_from_connections(unit_model, connections)
     return coupling_6, nalleles, noiseparams, prepare_rates_sim(r, coupling_6, transitions, R, S, insertstep, noiseparams)
@@ -680,7 +698,7 @@ end
 TBW
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
-function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Int=100)
+function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Int=100, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)
     trace = Array{Array{Float64}}(undef, ntrials)
     r = copy(rin)
     if verbose
@@ -695,37 +713,96 @@ function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, cou
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
-        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, verbose=verbose)[1]
+        t = simulator(r, transitions, G, R, S, insertstep, coupling=coupling, onstates=onstates, traceinterval=interval, totaltime=totaltime, totalsteps=totalsteps, nhist=0, reporterfn=reporterfn, warmupsteps=warmupsteps, verbose=verbose, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)[1]
         if col isa Vector
             # When col is a vector, extract multiple columns and combine them
             tr = Vector[]
             for t in t
                 extracted = t[1:end-1, col]  # This is a Matrix when col is a vector
-                # Convert each column to a vector and push them
-                for j in 1:size(extracted, 2)
-                    push!(tr, extracted[:, j])
+                # Skip empty matrices (from hidden units)
+                if !isempty(extracted)
+                    # Convert each column to a vector and push them
+                    for j in 1:size(extracted, 2)
+                        push!(tr, extracted[:, j])
+                    end
                 end
             end
-            trace[i] = hcat(tr...)
+            # Only combine if there are traces
+            if !isempty(tr)
+                trace[i] = hcat(tr...)
+            else
+                # If all traces are empty (all hidden units), create empty matrix
+                trace[i] = Matrix{Float64}(undef, 0, 0)
+            end
         else
             # When col is a scalar, extract single column
             tr = Vector[]
             for t in t
-                push!(tr, t[1:end-1, col])
+                if !isempty(t)  # Skip empty matrices from hidden units
+                    push!(tr, t[1:end-1, col])
+                end
             end
-            trace[i] = hcat(tr...)
+            if !isempty(tr)
+                trace[i] = hcat(tr...)
+            else
+                trace[i] = Matrix{Float64}(undef, 0, 0)
+            end
         end
     end
     trace
 end
 
-
 """
-    make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
+    select_traces_by_specs(trace_array::Vector, trace_specs::Vector) -> Vector
 
-TBW
+Extract traces for specific units from a coupled simulation result based on trace_specs.
+
+# Arguments
+- `trace_array`: Output from `simulate_trace_vector` for coupled models; Vector of matrices where
+  each matrix has one row per unit and one column per time point.
+- `trace_specs`: Vector of NamedTuples `(unit=u, interval=..., start=..., zeromedian=...)` 
+  specifying which units to extract and how to timestamp them.
+
+# Returns
+- Vector of matrices (one per trial) where each matrix contains only the specified units as rows,
+  suitable for passing as the trace part of a TraceData object.
+
+# Example
+```julia
+# Simulate coupled 3-unit model
+rtarget = [0.05, 0.15, 0.1, 1.0, 0.05, 0.15, 0.2, 1.0, 0.1, 0.1, 0.1, 0.1, -0.2, -0.2]
+traces = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, 
+                               1.0, 2000.0, 10; onstates=[Int[], Int[], Int[]])
+
+# Keep only units 1 and 2
+specs = [(unit=1, interval=1.0, start=0.0, zeromedian=false),
+         (unit=2, interval=1.0, start=0.0, zeromedian=false)]
+selected = select_traces_by_specs(traces, specs)
+```
 """
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
+function select_traces_by_specs(trace_array::Vector, trace_specs::Vector)
+    units_to_keep = [spec.unit for spec in trace_specs]
+    
+    # Process each trial's traces
+    selected_traces = similar(trace_array)
+    for trial in eachindex(trace_array)
+        raw_trace = trace_array[trial]  # Matrix: units × timepoints
+        
+        # Extract rows for the specified units
+        selected_rows = raw_trace[units_to_keep, :]
+        selected_traces[trial] = selected_rows
+    end
+    
+    return selected_traces
+end
+
+
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn; observed_units=nothing)
+    # Handle hidden units (R=0) - skip reporter computation
+    if R == 0
+        return Matrix{Float64}(undef, 0, 4)
+    end
+    
     n = length(tracelog)
     trace = Matrix{Float64}(undef, 0, 4)
     state = tracelog[1][2]
@@ -746,20 +823,23 @@ function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, i
 end
 
 """
-    make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
+    make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum; observed_units=nothing)
 
-Return array of frame times and intensities
+Return array of frame times and intensities for observed units only
 
-- `tracelog`: Vector if Tuples of (time,state of allele 1)
+- `tracelog`: Vector of tracelog arrays (one per unit, all units simulated)
 - `interval`: Number of minutes between frames
-- `onstates`: Vector of G on states, empty for GRS models
-- `G` and `R` as defined in simulator
-
+- `onstates`: Vector of G on states (one per unit)
+- `G`, `R`, `S`, `insertstep`: Tuples for all units
+- `observed_units`: Optional vector of unit indices to include; if nothing, include all
 """
-function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum)
+function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn=sum; observed_units=nothing)
     trace = Matrix[]
     for i in eachindex(tracelog)
-        push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn))
+        # Skip units not in observed_units (for hidden units with no reporters)
+        if isnothing(observed_units) || i in observed_units
+            push!(trace, make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn))
+        end
     end
     trace
 end
@@ -768,10 +848,10 @@ end
 
 TBW
 """
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn)
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Vector{Int}}, interval, par, probfn, reporterfn; observed_units=nothing)
     traces = Matrix[]
     for o in onstates
-        push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn))
+        push!(traces, make_trace(tracelog, G, R, S, insertstep, o, interval, par, probfn, reporterfn, observed_units=observed_units))
     end
     traces
 end
@@ -807,9 +887,26 @@ function make_trace_grid(trace::Vector{Float64}, a_grid, d_background)
     tracematrix
 end
 
-function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn, a_grid)
+function make_trace(tracelog, G::Int, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn, a_grid; observed_units=nothing)
     trace = make_trace(tracelog, G, R, S, insertstep, onstates::Vector{Int}, interval, par, probfn, reporterfn)
     make_trace_grid(trace, a_grid, probfn(par, 0))
+end
+
+"""
+    make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn, a_grid; observed_units=nothing)
+
+Coupled model trace with a_grid - filters to observed units
+"""
+function make_trace(tracelog, G::Tuple, R, S, insertstep, onstates, interval, par, probfn, reporterfn, a_grid; observed_units=nothing)
+    trace = Matrix[]
+    for i in eachindex(tracelog)
+        # Skip units not in observed_units (for hidden units with no reporters)
+        if isnothing(observed_units) || i in observed_units
+            single_trace = make_trace(tracelog[i], G[i], R[i], S[i], insertstep[i], onstates[i], interval, par[i], probfn, reporterfn)
+            push!(trace, make_trace_grid(single_trace, a_grid, probfn(par[i], 0)))
+        end
+    end
+    trace
 end
 """
     intensity(state, G, R, S, d)
@@ -1504,6 +1601,8 @@ end
 
 Base.length(om::UnitMappedOnstates) = length(om.rows)
 Base.eachindex(om::UnitMappedOnstates) = eachindex(om.rows)
+Base.iterate(om::UnitMappedOnstates) = iterate(om.rows)
+Base.iterate(om::UnitMappedOnstates, state) = iterate(om.rows, state)
 
 # Index by unit (model index): return lists for that unit (for make_trace which does onstates[i] per unit).
 function Base.getindex(om::UnitMappedOnstates, unit_index::Int)

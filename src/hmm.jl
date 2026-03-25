@@ -2788,23 +2788,66 @@ to be handled via eigendecomposition.
 - **Lag convention**: Positive τ in input `lags` means first unit leads second unit
 - **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="")
+function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="", observed_units=nothing, noise_per_unit=nothing)
     if splicetype == "full"
         components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     else
         components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
     end
-    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, [4, 4])
-    num_per_state = num_reporters_per_state(G, R, S, insertstep, coupling[1])
+    # Default observed_units to [1, 2] for backward compatibility; noise_per_unit defaults to [4, 4]
+    if isnothing(observed_units)
+        observed_units = [1, 2]
+    end
+    if isnothing(noise_per_unit)
+        noise_per_unit = [4, 4]
+    end
+    r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, noise_per_unit)
+    
+    # For hidden units (R[i]=0), create placeholder reporter vectors
+    # For observed units, compute normally but account for coupling
+    num_per_state_all = Vector{Int}[]
+    for i in eachindex(G)
+        if R[i] == 0
+            # Hidden units have no reporters
+            base = S[i] > 0 ? 3 : 2
+            num_states = G[i] * (base^R[i])
+            push!(num_per_state_all, zeros(Int, num_states))
+        else
+            # Observable units - compute normally
+            rep = num_reporters_per_state(G[i], R[i], S[i], insertstep[i], Int[], sum)
+            push!(num_per_state_all, rep)
+        end
+    end
+    
+    # Now expand to account for coupling - only for observed units
+    unit_model = coupling[1]
+    nT = T_dimension.(G, R, S)
+    num_per_state = Vector{Int}[]
+    for m in unit_model
+        if m in observed_units
+            # Use the computed reporter vector for observed units
+            rep = num_per_state_all[m]
+            # Expand to full coupled state space
+            for j in 1:m-1
+                rep = repeat(rep, outer=(nT[unit_model[j]],))
+            end
+            for j in m+1:length(unit_model)
+                rep = repeat(rep, inner=(nT[unit_model[j]],))
+            end
+            push!(num_per_state, rep)
+        end
+    end
+    
     mean_intensity = Vector[]
     second_moment_intensity = Vector[]  # E[O^2|state] for each state
     ON = Vector[]
     reporters = Vector[]
-    for i in eachindex(noiseparams)
+    # Only compute statistics for observed units
+    for (idx, i) in enumerate(observed_units)
         if typeof(probfn) <: Tuple
-            dists = probfn[i](noiseparams[i], num_per_state[i], components.N)
+            dists = probfn[i](noiseparams[i], num_per_state[idx], components.N)
         else
-            dists = probfn(noiseparams[i], num_per_state[i], components.N)
+            dists = probfn(noiseparams[i], num_per_state[idx], components.N)
         end
         mi = mean.(dists)  # E[O|state]
         vi = var.(dists)   # Var(O|state)
@@ -2812,8 +2855,8 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
         push!(mean_intensity, mi)
         push!(second_moment_intensity, second_moment)
 
-        push!(ON, float(num_per_state[i] .> 0.0) .+ offset)
-        push!(reporters, Float64.(num_per_state[i]) .+ offset)
+        push!(ON, float(num_per_state[idx] .> 0.0) .+ offset)
+        push!(reporters, Float64.(num_per_state[idx]) .+ offset)
     end
 
     # Infer lag interval from lags vector
@@ -2946,8 +2989,8 @@ Compute theoretical centered correlation functions for coupled HMM model.
 Returns centered correlation functions (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
 See `correlation_functions` for detailed argument descriptions and return value structure.
 """
-function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="")
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset, splicetype=splicetype)
+function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="", observed_units=nothing, noise_per_unit=nothing)
+    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset, splicetype=splicetype, observed_units=observed_units, noise_per_unit=noise_per_unit)
     return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 

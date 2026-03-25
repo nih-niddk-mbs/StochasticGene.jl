@@ -3011,12 +3011,127 @@ split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond
 
 
 ################################################################################
+# DEFAULT PARAMETER SETS FOR simulate_trials
+################################################################################
+
+"""
+    get_3unit_model_params()
+
+Returns a NamedTuple with default parameters for the 3-unit coupled model with hidden unit.
+
+This is a reference model used in test_fit_tracejoint_full_3unit() featuring:
+- Unit 1 (observable): G=2, R=1 (1 reporter, observable)
+- Unit 2 (observable): G=2, R=1 (1 reporter, observable)  
+- Unit 3 (hidden): G=3, R=0 (no reporters, hidden from observation)
+- Coupling: Unit 3 inhibits both units 1 and 2
+
+# Returns
+NamedTuple with fields:
+- `transitions::Tuple`: State transitions for each unit
+- `G, R, S, insertstep`: Model structure parameters
+- `coupling::Tuple`: Coupling structure (unit 3 → units 1,2)
+- `r::Vector{Float64}`: Default rate parameters (28 elements)
+- `observed_units::Vector{Int}`: Which units are observable ([1, 2])
+- `noiseparams::Vector{Int}`: Noise parameters per unit ([4, 4, 0])
+- `trial_time::Float64`: Default simulation time per trial (720.0 minutes)
+- `ntrials::Int`: Default number of trials (100)
+- `lags::Vector{Int}`: Default lags for correlation (0:60)
+
+# Example
+```julia
+params = get_3unit_model_params()
+result = simulate_trials(params.r, params.transitions, params.G, params.R, params.S, 
+                         params.insertstep, params.coupling, params.ntrials; 
+                         trial_time=params.trial_time, lags=params.lags,
+                         observed_units=params.observed_units, noiseparams=params.noiseparams)
+```
+"""
+function get_3unit_model_params()
+    # Model structure: 3 units, unit 3 is hidden (R=0)
+    transitions = (([1, 2], [2, 1]), ([1, 2], [2, 1]), ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1]))
+    G = (2, 2, 3)
+    R = (1, 1, 0)  # Unit 3 is hidden
+    S = (0, 0, 0)
+    insertstep = (1, 1, 0)
+    
+    # Coupling: Unit 3 inhibits units 1 and 2
+    # Format: (units, [(α, β_sentinel, β_unit, β_index), ...], [:inhibit, :inhibit])
+    coupling = ((1, 2, 3), [(3, 1, 1, 2), (3, 2, 2, 1)], [:inhibit, :inhibit])
+    
+    # Rate parameters (28 total)
+    # Unit 1 (9): 2 transitions + initiation + eject + decay + 4 noise
+    r_u1 = [0.1, 0.2, 0.5, 0.3, 1.0, 50, 30, 100, 20]
+    # Unit 2 (9): 2 transitions + initiation + eject + decay + 4 noise
+    r_u2 = [0.15, 0.25, 0.6, 0.4, 1.0, 50, 30, 100, 20]
+    # Unit 3 (8): 6 transitions + eject + decay (no noise, R=0)
+    r_u3 = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3, 0.01]
+    # Coupling (2): inhibition strengths
+    r_coupling = [-0.5, -0.7]
+    r = vcat(r_u1, r_u2, r_u3, r_coupling)
+    
+    # Observable units (unit 3 is hidden)
+    observed_units = [1, 2]
+    
+    # Noise parameters: 4 for observable units, 0 for hidden
+    noiseparams = [4, 4, 0]
+    
+    # Simulation parameters
+    trial_time = 720.0
+    ntrials = 100
+    lags = collect(0:60)
+    
+    return (
+        transitions=transitions,
+        G=G, R=R, S=S, insertstep=insertstep,
+        coupling=coupling,
+        r=r,
+        observed_units=observed_units,
+        noiseparams=noiseparams,
+        trial_time=trial_time,
+        ntrials=ntrials,
+        lags=lags
+    )
+end
+
+"""
+    simulate_trials_3unit(; ntrials=100, trial_time=720.0, lags=collect(0:60), kwargs...)
+
+Convenience wrapper to run simulate_trials with the default 3-unit model parameters.
+
+# Arguments
+- `ntrials::Int=100`: Number of simulation trials
+- `trial_time::Float64=720.0`: Length of each trial (minutes)
+- `lags::Vector{Int}=collect(0:60)`: Time lags for correlation
+- Additional keyword arguments passed to simulate_trials (e.g., offset, correlation_algorithm, warmupsteps)
+
+# Returns
+Same as simulate_trials() - NamedTuple with theoretical and empirical correlation results
+
+# Example
+```julia
+result = simulate_trials_3unit(ntrials=50, trial_time=500.0)
+println("CC theory: ", result.cc)
+println("CC empirical: ", result.empirical.cc)
+println("L2 norm: ", result.l2_norm)
+```
+"""
+function simulate_trials_3unit(; ntrials=100, trial_time=720.0, lags=collect(0:60), kwargs...)
+    params = get_3unit_model_params()
+    return simulate_trials(params.r, params.transitions, params.G, params.R, params.S, 
+                          params.insertstep, params.coupling, ntrials, trial_time, lags;
+                          observed_units=params.observed_units, 
+                          noiseparams=params.noiseparams,
+                          kwargs...)
+end
+
+
+################################################################################
 # simulate_trials function
 ################################################################################
 
 
 """
-    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lags=collect(0:60), probfn=prob_Gaussian, correlation_algorithm=StandardCorrelation(), warmupsteps=1000)
+    simulate_trials(r, transitions, G, R, S, insertstep, coupling, ntrials; trial_time=720.0, lags=collect(0:60), probfn=prob_Gaussian, correlation_algorithm=StandardCorrelation(), warmupsteps=1000, dwell_specs=nothing, observed_units=nothing, noiseparams=nothing)
 
 Simulate multiple trials and compute empirical correlation functions from simulated traces, comparing to theoretical predictions.
 
@@ -3037,27 +3152,18 @@ This function integrates simulation with empirical covariance computation:
 - `coupling::Tuple`: Coupling structure for coupled models
 - `ntrials::Int`: Number of simulation trials to run
 - `trial_time::Float64=720.0`: Length of each simulated trace (minutes)
-- `lag::Int=60`: Maximum lag for cross-covariance computation
-- `stride::Int=1`: Step size for lags (default: 1 for every lag)
+- `lags=collect(0:60)`: Time lags for correlation computation
 - `probfn::Function=prob_Gaussian`: Probability function for noise
+- `offset::Float64=0.0`: Offset for ON state computation
+- `correlation_algorithm::CorrelationTrait=StandardCorrelation()`: Algorithm for computing correlations
+- `warmupsteps::Int=1000`: Number of warmup steps for simulation
+- `splicetype::String=""`: Splicing type for model (default: empty for no splicing)
+- `dwell_specs::Vector=nothing`: Dwell specifications for simulator_dwell_specs (new format)
+- `observed_units::Vector{Int}=nothing`: Which units are observed (hidden units have R[i]=0)
+- `noiseparams::Vector=nothing`: Noise parameters per unit (auto-generated if not provided)
 
 # Returns
-NamedTuple with:
-- `cc_theory`, `cc_mean`: Theoretical and empirical intensity cross-covariance
-- `ccON_theory`, `ccON_mean`: Theoretical and empirical ON state cross-covariance
-- `ac1_mean`, `ac2_mean`: Empirical autocovariances
-- `ac1ON_mean`, `ac2ON_mean`: Empirical ON state autocovariances
-- `linf_norm`, `l2_norm`: Norms comparing theory vs empirical
-- `mean1`, `mean2`, `m1`, `m2`: Mean values
-- `v1`, `v2`, `v1_empirical`, `v2_empirical`: Variance values
-- `lags`: Time lags used
-- Bootstrap confidence intervals if available (`cc_se`, `cc_lower`, etc.)
-
-# Notes
-- Uses `compute_correlation_functions` internally to compute empirical cross-correlations from simulated traces
-- Performs bootstrap resampling for error estimation
-- Compares theoretical predictions (from `covariance_functions`) with empirical results from simulations
-- Useful for validating model predictions and assessing finite-sample effects
+NamedTuple with theoretical and empirical correlation functions comparision results.
 
 # Example
 ```julia
@@ -3067,11 +3173,11 @@ G, R, S = (3, 3), (3, 3), (0, 0)
 coupling = tuple()  # No coupling
 
 result = simulate_trials(r, transitions, G, R, S, (1, 1), coupling, 100, 
-                         trial_time=720.0, lag=60)
+                         trial_time=720.0, lags=collect(0:60))
 println("L2 norm: ", result.l2_norm)
 ```
 """
-function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000, splicetype::String="")
+function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, ntrials, trial_time=720.0, lags=collect(0:60); probfn=prob_Gaussian, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000, splicetype::String="", dwell_specs=nothing, observed_units=nothing, noiseparams=nothing)
     # If lags is a single integer, treat it as max lag (backward compatibility)
     if lags isa Integer
         positive_lags = collect(0:lags)
@@ -3083,7 +3189,7 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Get both intensity and ON/OFF cross-covariances and autocovariances
     # Use same offset as in covariance_functions to ensure theory and empirical match
     # Note: interval is now inferred from lags, so we don't pass it
-    full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, positive_lags; offset=offset, splicetype=splicetype)
+    full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, positive_lags; offset=offset, splicetype=splicetype, observed_units=observed_units, noise_per_unit=noiseparams)
     # Pack into NamedTuple
     theory = (
         ac1=ac1, ac2=ac2, cc=cc,
@@ -3096,39 +3202,38 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Use ccON (ON/OFF cross-covariance) and ac1ON/ac2ON (ON/OFF autocovariances) for comparison
     # Use the provided lags (or convert if it was an integer)
     actual_lags = lags isa Integer ? full_lags : lags_vec
-    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, actual_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps)
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, actual_lags, ntrials, trial_time, offset, correlation_algorithm, warmupsteps, dwell_specs, observed_units, nothing, noiseparams, splicetype)
 end
 
 """
-    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, lags_ac, lags; ntrials=1, trial_time=720.0, offset=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps=1000)
+    simulate_trials(theory, r, transitions, G, R, S, insertstep, coupling, lags_ac, lags; ntrials=1, trial_time=720.0, offset=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps=1000, dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing)
 
 Internal method that performs the actual simulation and comparison.
 
 This is the lower-level method called by the main `simulate_trials` function.
 It takes precomputed theoretical covariances and performs simulations.
 
+Supports hidden units: units with R[i] = 0 will have noiseparams[i] = 0 and are not included in trace output.
+
 # Arguments
-- `theory::NamedTuple`: NamedTuple containing all theoretical correlation functions and means:
-  - `ac1, ac2, cc`: Theoretical autocovariances and cross-covariance for intensity
-  - `m1, m2, v1, v2`: Theoretical means and variances for intensity
-  - `ccON, ac1ON, ac2ON`: Theoretical cross-covariance and autocovariances for ON states
-  - `m1ON, m2ON`: Theoretical mean ON state probabilities
-  - `ccReporters, ac1Reporters, ac2Reporters`: Theoretical cross-covariance and autocovariances for reporter counts
-  - `m1Reporters, m2Reporters`: Theoretical mean reporter counts
-  - `full_lags`: Full lag vector (symmetric)
+- `theory::NamedTuple`: NamedTuple containing all theoretical correlation functions and means
 - `r::Vector{Float64}`: Rate parameters (used for simulation)
 - `transitions, G, R, S, insertstep, coupling`: Model structure parameters
-- `lags_ac, lags::Vector{Int}`: Time lags for autocovariance and cross-covariance
+- `lags::Vector{Int}`: Time lags for correlation computation
 - `ntrials::Int=1`: Number of simulation trials
 - `trial_time::Float64=720.0`: Length of each simulated trace (minutes)
 - `offset::Float64=0.0`: Offset for ON state computation
 - `correlation_algorithm::CorrelationTrait`: Correlation algorithm to use for empirical computation
 - `warmupsteps::Int=1000`: Number of warmup steps for simulation
+- `dwell_specs::Vector=nothing`: Optional dwell_specs for simulator_dwell_specs (new format). If not provided, uses default onstates.
+- `observed_units::Vector{Int}=nothing`: Which units are observed (default: all units with R[i] > 0)
+- `trace_specs::Vector=nothing`: Trace specifications for filtering units (auto-generated if not provided)
+- `noiseparams::Vector=nothing`: Noise parameters per unit (auto-generated if not provided)
 
 # Returns
 NamedTuple with theoretical and empirical results (see main `simulate_trials` docstring).
 """
-function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000)
+function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000, dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing, splicetype="")
     # Extract theory values from NamedTuple
     ac1 = theory.ac1
     ac2 = theory.ac2
@@ -3149,21 +3254,84 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     ac2Reporters = theory.ac2Reporters
     n_bootstrap = min(1000, max(50, ntrials * 10))
 
+    # Determine which units are observed (not hidden)
+    # Hidden units have R[i] = 0
+    if isnothing(observed_units)
+        observed_units = [i for i in eachindex(R) if R[i] > 0]
+    end
+    n_observed = length(observed_units)
+    
+    # Build noiseparams vector if not provided: 0 for hidden units, length of noisepriors otherwise
+    # For now, assume 4 noise parameters per observable unit (standard Gaussian model)
+    if isnothing(noiseparams)
+        noiseparams = [R[i] > 0 ? 4 : 0 for i in eachindex(R)]
+    end
+    
+    # Build trace_specs if not provided - use default dwell_specs format
+    if isnothing(trace_specs) && isnothing(dwell_specs)
+        # Default: ON/OFF dwell times for all observable units
+        dwell_specs = [
+            (unit=u, onstates=[Int[], Int[], [2], [2]], dttype=["ON", "OFF", "ONG", "OFFG"], 
+             bins=[collect(1.0:300.0), collect(1.0:300.0), collect(1.0:300.0), collect(1.0:300.0)])
+            for u in observed_units
+        ]
+    elseif isnothing(trace_specs) && !isnothing(dwell_specs)
+        trace_specs = dwell_specs
+    end
+
+    # Preallocate trace matrices for each observed unit: [unit, time]
     intensity_traces = Vector{Matrix{Float64}}(undef, ntrials)
-    reporter_traces = Vector{Matrix{Float64}}(undef, ntrials)
+    reporter_traces = Vector{Matrix{Float64}}(undef, ntrials) 
+    # Preall ocate trace matrices for each observed unit: [unit, time]
+    intensity_traces = Vector{Matrix{Float64}}(undef, ntrials)
+    reporter_traces = Vector{Matrix{Float64}}(undef, ntrials) 
     on_traces = Vector{Matrix{Float64}}(undef, ntrials)
 
+    # Build trace_specs from observed_units if not already built
+    if isnothing(trace_specs) && isnothing(dwell_specs)
+        # Use observed_units to build trace_specs
+        trace_specs = [
+            (unit=u,) for u in observed_units
+        ]
+    end
+
     Threads.@threads for i in 1:ntrials
-        # Warmup is handled by simulator's warmupsteps parameter (converted from warmup_time)
-        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, col=[2, 3], warmupsteps=warmupsteps)
-        # Warmup is already handled by simulator, so use all the trace data
-        trace_data = t[1]
-        # trace_data columns: [intensity1, reporters1, intensity2, reporters2]
-        intensity_traces[i] = hcat(Float64.(trace_data[:, 1]), Float64.(trace_data[:, 3]))
-        reporter_traces[i] = hcat(Float64.(trace_data[:, 2]), Float64.(trace_data[:, 4]))
-        # Apply same offset as theory: ON states = (binary > 0) + offset
-        # This matches covariance_functions which computes: ON = float(num_per_state .> 0.0) .+ offset
-        on_traces[i] = hcat(Float64.(trace_data[:, 2] .> 0.0) .+ offset, Float64.(trace_data[:, 4] .> 0.0) .+ offset)
+        # Simulate with proper parameters supporting hidden units
+        t = simulate_trace_vector(r, transitions, G, R, S, insertstep, coupling, 1.0, trial_time, 1, 
+                                warmupsteps=warmupsteps, trace_specs=trace_specs, noiseparams=noiseparams, splicetype=splicetype, observed_units=observed_units)
+        
+        # Extract traces for observed units
+        # For coupled models: columns from make_trace are [time, intensity, reporters, state] per unit
+        # When combined with hcat for 2 observed units: [int1, rep1, int2, rep2] if col=[2,3]
+        # or [col1_unit1, col1_unit2] if col scalar
+        if n_observed == 2
+            ncols = size(trace_data, 2)
+            if ncols == 4
+                # Standard case: [intensity1, reporters1, intensity2, reporters2]
+                intensity_traces[i] = hcat(Float64.(trace_data[:, 1]), Float64.(trace_data[:, 3]))
+                reporter_traces[i] = hcat(Float64.(trace_data[:, 2]), Float64.(trace_data[:, 4]))
+                on_traces[i] = hcat(Float64.(trace_data[:, 2] .> 0.0) .+ offset, Float64.(trace_data[:, 4] .> 0.0) .+ offset)
+            elseif ncols == 2
+                # Only intensity columns (col=2 was scalar)
+                intensity_traces[i] = trace_data
+                reporter_traces[i] = Matrix{Float64}(undef, size(trace_data, 1), 0)
+                on_traces[i] = Matrix{Float64}(undef, size(trace_data, 1), 0)
+            else
+                error("Unexpected trace_data structure: $(size(trace_data)) columns")
+            end
+        elseif n_observed == 1
+            # Single observable unit
+            intensity_traces[i] = Float64.(trace_data[:, 1:1])
+            reporter_traces[i] = size(trace_data, 2) >= 2 ? Float64.(trace_data[:, 2:2]) : Matrix{Float64}(undef, size(trace_data, 1), 0)
+            on_traces[i] = size(trace_data, 2) >= 2 ? Float64.(trace_data[:, 2:2] .> 0.0) .+ offset : ones(size(trace_data, 1), 0)
+        else
+            # General case: extract pairs of (intensity, reporters) for each observed unit
+            intensity_cols = collect(1:2:2*n_observed)
+            reporter_cols = collect(2:2:2*n_observed)
+            intensity_traces[i] = Float64.(trace_data[:, intensity_cols])
+            reporter_traces[i] = Float64.(trace_data[:, reporter_cols])
+            on_traces[i] = Float64.(trace_data[:, reporter_cols] .> 0.0) .+ offset
+        end
     end
 
     # Compute empirical correlations using compute_covariance directly
