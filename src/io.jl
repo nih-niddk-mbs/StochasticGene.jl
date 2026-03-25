@@ -1904,13 +1904,17 @@ function rlabels_GRSM(transitions, R, S, reporter, unit=:"")
     for t in transitions
         push!(labels, "Rate$(unit)_$(t[1])$(t[2])")
     end
-    push!(labels, "Initiate$unit")
-    for i in 1:R-1
-        push!(labels, "Rshift$(unit)_$i")
+    if R > 0
+        push!(labels, "Initiate$unit")
+        for i in 1:R-1
+            push!(labels, "Rshift$(unit)_$i")
+        end
     end
     push!(labels, "Eject$unit")
-    for i in 1:S
-        push!(labels, "Splice$(unit)_$i")
+    if R > 0
+        for i in 1:S
+            push!(labels, "Splice$(unit)_$i")
+        end
     end
     push!(labels, "Decay$unit")
     if typeof(reporter) == HMMReporter
