@@ -14,6 +14,166 @@ Use when building swarm/.jl filenames from label or coupling spec (e.g. "24,35|3
 sanitize_for_filename(s::AbstractString) = replace(replace(string(s), "," => "-"), "|" => "-")
 
 """
+    default_model_key(G, R, S, insertstep)
+
+Filename-safe key from [`create_modelstring`](@ref) (same default naming as model grids). Override with
+`key=...` in each model row when you want arbitrary unique labels.
+"""
+default_model_key(G, R, S, insertstep) = sanitize_for_filename(create_modelstring(G, R, S, insertstep))
+
+"""
+    COUPLING_MODE_RECIPROCAL_DEFAULT
+
+Default coupling sign modes (`:activate` / `:inhibit` / `:free`, or tuples per connection) keyed by
+reciprocal coupling spec strings (e.g. `"3333"`, `"24,33|33"`). Used with `make_coupling` /
+`makeswarm_coupled_reciprocal`-style workflows.
+"""
+const COUPLING_MODE_RECIPROCAL_DEFAULT = Dict{String,Union{Symbol,Tuple{Vararg{Symbol}}}}(
+    "3333" => :inhibit,
+    "3434" => :activate,
+    "3535" => :inhibit,
+    "R5R5" => :inhibit,
+    "R4R4" => :activate,
+    "R3R3" => :inhibit,
+    "2424" => :activate,
+    "2323" => :inhibit,
+    "24,33|33" => (:inhibit, :activate, :inhibit),
+    "24,35|35" => (:inhibit, :activate, :inhibit),
+    "23,33|33" => :inhibit,
+    "23,35|35" => :inhibit,
+    "24R4" => (:activate, :activate),
+    "2434" => (:activate, :activate),
+    "24R5" => (:inhibit, :activate),
+    "2435" => (:inhibit, :activate),
+    "24R3" => (:inhibit, :activate),
+    "2433" => (:inhibit, :activate),
+    "23R4" => (:activate, :inhibit),
+    "2334" => (:activate, :inhibit),
+    "23R5" => (:inhibit, :inhibit),
+    "2335" => (:inhibit, :inhibit),
+    "23R3" => (:inhibit, :inhibit),
+    "2333" => (:inhibit, :inhibit),
+)
+
+const _SWARM_ONLY_KEYS = (:nthreads, :nchains, :swarmfile, :juliafile, :filedir, :project, :sysimage, :src)
+
+function _split_swarm_fit_kwargs(kwargs::Dict{Symbol,Any})
+    swarm = Dict{Symbol,Any}()
+    fit = Dict{Symbol,Any}()
+    for (k, v) in kwargs
+        if k in _SWARM_ONLY_KEYS
+            swarm[k] = v
+        else
+            fit[k] = v
+        end
+    end
+    return swarm, fit
+end
+
+"""
+    write_run_spec_preset(resultfolder, key, run_spec; root=".")
+
+Write `results/.../info_<key>.jld2` via [`write_run_spec_jld2`](@ref) (required for [`fit`](@ref)`(;
+key=...)`) and a short `info_<key>.toml` marker. `run_spec` should contain the same keyword fields you
+would pass to `fit`, including `resultfolder` and `root`.
+
+# Notes
+- [`read_run_spec`](@ref) loads the **JLD2** companion; keep complex types (e.g. `method`, `probfn`) in
+  the dict so restarts match an interactive `fit` call.
+"""
+function write_run_spec_preset(resultfolder::AbstractString, key::AbstractString, run_spec; root::AbstractString=".")
+    rr = folder_path(resultfolder, root, "results")
+    mkpath(rr)
+    path_toml = joinpath(rr, "info_" * string(key) * ".toml")
+    write_run_spec_jld2(path_toml, run_spec)
+    j2 = basename(info_jld2_path(path_toml))
+    open(path_toml, "w") do io
+        println(io, "# Pre-generated run specification. Machine-readable state is in `", j2, "` (read by `fit(; key=...)`).")
+        println(io, "key = ", repr(string(key)))
+    end
+    return path_toml
+end
+
+"""
+    makeswarm_modelgrid(models::Vector{<:NamedTuple}; transitions=nothing, kwargs...)
+    makeswarm_modelgrid(Gvec, Rvec, Svec, insertvec; combine=:product, kwargs...)
+
+Batch workflow for **many models, few genes**: merge `fit_default_spec` with shared kwargs (leave
+`priormean` empty to use `fit` defaults: for trace single-unit models, `make_structures` applies
+`prior_ratemean_trace` / structured `priorcv` automatically), write one `write_run_spec_preset` per
+model, then call `makeswarm` with the resulting keys.
+
+Each element of `models` should include `G`, `R`, `S`, `insertstep` and usually `transitions` (or pass
+`transitions=...` once for all rows). Optional `key` in a row overrides [`default_model_key`](@ref).
+
+The `combine=:product` form iterates `Base.product(Gvec, Rvec, Svec, insertvec)`; `combine=:zip` requires
+four vectors of equal length.
+
+# Keyword split
+Keywords `nthreads`, `nchains`, `swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, `src` are
+passed to `makeswarm`; all others are merged into each run spec (and into `fit_default_spec()`).
+
+# Coupled follow-up
+For slow coupled fits, fit single units first, combine rates with [`create_combined_file`](@ref), then
+run coupled models using those starts (see README Workflow 2).
+"""
+function makeswarm_modelgrid(models::AbstractVector{<:NamedTuple}; transitions=nothing, kwargs...)
+    swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
+    base = merge(fit_default_spec(), fit_kw)
+    if transitions !== nothing && !haskey(base, :transitions)
+        base[:transitions] = transitions
+    end
+    keys_out = String[]
+    for m in models
+        spec = merge(copy(base), Dict{Symbol,Any}(pairs(m)))
+        if !haskey(spec, :transitions) || spec[:transitions] === nothing
+            throw(ArgumentError("each model needs transitions= or pass transitions= for all"))
+        end
+        key = if get(spec, :key, nothing) !== nothing
+            string(spec[:key])
+        else
+            default_model_key(spec[:G], spec[:R], spec[:S], spec[:insertstep])
+        end
+        spec[:key] = key
+        push!(keys_out, key)
+        write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
+    end
+    mk = merge(Dict{Symbol,Any}(
+        :nchains => get(swarm_kw, :nchains, 2),
+        :nthreads => get(swarm_kw, :nthreads, 1),
+        :swarmfile => get(swarm_kw, :swarmfile, "fit"),
+        :juliafile => get(swarm_kw, :juliafile, "fitscript"),
+        :filedir => get(swarm_kw, :filedir, "."),
+        :project => get(swarm_kw, :project, ""),
+        :sysimage => get(swarm_kw, :sysimage, ""),
+        :src => get(swarm_kw, :src, ""),
+        :resultfolder => get(base, :resultfolder, ""),
+        :root => get(base, :root, "."),
+    ), fit_kw)
+    makeswarm(keys_out; pairs(mk)...)
+end
+
+function makeswarm_modelgrid(
+    Gvec::AbstractVector{<:Integer},
+    Rvec::AbstractVector{<:Integer},
+    Svec::AbstractVector{<:Integer},
+    insertvec::AbstractVector{<:Integer};
+    combine::Symbol=:product,
+    kwargs...,
+)
+    if combine == :product
+        models = [(G=gs[1], R=gs[2], S=gs[3], insertstep=gs[4]) for gs in Base.product(Gvec, Rvec, Svec, insertvec)]
+    elseif combine == :zip
+        n = length(Gvec)
+        length(Rvec) == length(Svec) == length(insertvec) == n || throw(ArgumentError("combine=:zip requires equal-length Gvec, Rvec, Svec, insertvec"))
+        models = [(G=Gvec[i], R=Rvec[i], S=Svec[i], insertstep=insertvec[i]) for i in 1:n]
+    else
+        throw(ArgumentError("combine must be :product or :zip"))
+    end
+    makeswarm_modelgrid(models; kwargs...)
+end
+
+"""
     makeswarm(keys::Vector{String}; <keyword arguments>)
     makeswarm(; key::String, <keyword arguments>)
 

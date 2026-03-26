@@ -212,6 +212,18 @@ This writes:
 This replaces older patterns that passed model layout via custom structs; all model configuration
 is now driven by the run‑spec files plus keyword overrides.
 
+**Batching many models (same gene, grid over G/R/S/insertstep):** use `makeswarm_modelgrid` to merge
+`fit_default_spec` with your shared options (leave `priormean` empty so `fit` uses `prior_ratemean_trace`
+and structured `priorcv` for trace single-unit models), write one `info_<key>.jld2` per model with
+`write_run_spec_preset`, and emit the swarm plus `fitscript_<key>.jl` files. Keys default to
+`default_model_key` (from `create_modelstring`, filename-sanitized) or set `key` in each model row.
+
+**Coupled models (slow):** fit each transcribing unit separately first, then stack per-unit rate files
+with `create_combined_file` (or `create_combined_file_mult` for more than two units), and use that
+combined file as a starting point for a coupled run that estimates coupling (and hidden units).
+Reciprocal coupling presets for sign modes live in `COUPLING_MODE_RECIPROCAL_DEFAULT` (see `make_coupling`
+and coupling documentation).
+
 ### Correlation functions from fitted coupled models
 
 Given a coupled model with trace data and a saved `rates_<key>.txt` and `info_<key>.jld2`, you can

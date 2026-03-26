@@ -4101,4 +4101,208 @@ Remove two substrings from a string.
 """
 remove_string(str, str1, str2) = replace(remove_string(str, str1), str2 => "")
 
+# -----------------------------------------------------------------------------
+# Coupled rate files: table I/O, merge engines, key helpers (hierarchical vs not)
+# -----------------------------------------------------------------------------
+
+function _rates_header_to_strings(h)
+    if h isa AbstractMatrix && size(h, 1) == 1
+        return [string(h[1, j]) for j in 1:size(h, 2)]
+    elseif h isa AbstractVector
+        return [string(x) for x in h]
+    else
+        return [string(x) for x in vec(h)]
+    end
+end
+
+"""
+    read_rates_table(path::AbstractString) -> (Matrix{Float64}, Vector{String})
+
+Read a `rates_*.txt`-style CSV (comma-separated): one header row, then MCMC summary rows (e.g. ML,
+mean, median, last sample). Returns numeric data and column names. Used by [`merge_coupled_two_unit_rates`](@ref)
+and [`merge_coupled_stacked_units`](@ref); higher-level scripts can compose these with coupling metadata.
+"""
+function read_rates_table(path::AbstractString)
+    data, hdr = readdlm(String(path), ',', header=true)
+    return Matrix{Float64}(data), _rates_header_to_strings(hdr)
+end
+
+"""
+    write_rates_table(path::AbstractString, data::AbstractMatrix{<:Real}, header::AbstractVector{<:AbstractString})
+
+Write header + numeric rows in the same convention as [`read_rates_table`](@ref). Sets file mode `0o644`.
+"""
+function write_rates_table(path::AbstractString, data::AbstractMatrix{<:Real}, header::AbstractVector{<:AbstractString})
+    open(String(path), "w") do io
+        println(io, join(header, ","))
+        writedlm(io, data, ',')
+    end
+    chmod(String(path), 0o644)
+    return path
+end
+
+"""
+    combined_rates_key(base::AbstractString; hierarchical::Bool=false, extra_suffix::AbstractString="") -> String
+
+Build a **key-based** filename stem only: for `rates_<key>.txt`, `info_<key>.toml`, and `fit(; key=key)`.
+This is **not** for legacy result naming (label/cond/model paths); use the key workflow so names stay
+unambiguous without supporting old patterns.
+
+Spaces → hyphens; if `hierarchical`, appends `\"-h\"` so hierarchical and non-hierarchical combined
+starts do not collide under the same base key. Optional `extra_suffix` is appended last for callers that
+encode variants in the key itself (e.g. `\"-Rsum\"`).
+"""
+function combined_rates_key(base::AbstractString; hierarchical::Bool=false, extra_suffix::AbstractString="")
+    s = replace(strip(string(base)), " " => "-")
+    hierarchical && (s *= "-h")
+    s *= String(extra_suffix)
+    return s
+end
+
+"""
+    merge_coupled_two_unit_rates(enhancer_data, gene_data, enh_header, gene_header, Nenh::Int, Ngene::Int; ncoupling::Int=1, default_coupling=nothing) -> (Matrix{Float64}, Vector{String})
+
+**Core engine** for two-unit coupled starts: each input matrix has rows = MCMC rows (e.g. 4) and columns =
+flat rate vector (possibly **multiple consecutive “sets”** of width `Nenh` / `Ngene`, e.g. hierarchical
+hyper + individual blocks). For each set index `1:num_sets`, concatenates enhancer block, gene block, then
+`ncoupling` columns filled from `default_coupling` (or zeros). Column counts must partition evenly into
+`Nenh` and `Ngene` per set; enhancer and gene must agree on `num_sets`.
+
+`Nenh` / `Ngene` encode how wide each **set** is (use larger widths for hierarchical rate files when those
+files have more parameters per set). This function does not read files; use [`read_rates_table`](@ref) first.
+"""
+function merge_coupled_two_unit_rates(
+    enhancer_data::AbstractMatrix{<:Real},
+    gene_data::AbstractMatrix{<:Real},
+    enh_header::AbstractVector{<:AbstractString},
+    gene_header::AbstractVector{<:AbstractString},
+    Nenh::Int,
+    Ngene::Int;
+    ncoupling::Int=1,
+    default_coupling=nothing,
+)
+    nrows = size(enhancer_data, 1)
+    size(gene_data, 1) == nrows || throw(ArgumentError("enhancer and gene row counts must match"))
+    ne, ng = size(enhancer_data, 2), size(gene_data, 2)
+    ne % Nenh != 0 && throw(ArgumentError("enhancer width $ne not divisible by Nenh=$Nenh"))
+    ng % Ngene != 0 && throw(ArgumentError("gene width $ng not divisible by Ngene=$Ngene"))
+    num_sets_e = div(ne, Nenh)
+    num_sets_g = div(ng, Ngene)
+    num_sets_e == num_sets_g || throw(ArgumentError("set count mismatch: enhancer has $num_sets_e sets (cols=$ne, Nenh=$Nenh), gene has $num_sets_g (cols=$ng, Ngene=$Ngene)"))
+    num_sets = num_sets_e
+    length(enh_header) == ne || throw(ArgumentError("enhancer header length $(length(enh_header)) != $ne"))
+    length(gene_header) == ng || throw(ArgumentError("gene header length $(length(gene_header)) != $ng"))
+    γ_base = default_coupling !== nothing && length(default_coupling) == ncoupling ? collect(Float64, default_coupling) : fill(0.0, ncoupling)
+    output_data = zeros(Float64, nrows, 0)
+    output_header = String[]
+    ed = Matrix{Float64}(enhancer_data)
+    gd = Matrix{Float64}(gene_data)
+    for set in 1:num_sets
+        enhancer_cols = ed[:, (set - 1) * Nenh + 1:set * Nenh]
+        enhancer_names = enh_header[(set - 1) * Nenh + 1:set * Nenh]
+        output_data = hcat(output_data, enhancer_cols)
+        append!(output_header, String.(enhancer_names))
+        gene_cols = gd[:, (set - 1) * Ngene + 1:set * Ngene]
+        gene_names = gene_header[(set - 1) * Ngene + 1:set * Ngene]
+        output_data = hcat(output_data, gene_cols)
+        append!(output_header, String.(gene_names))
+        for c in 1:ncoupling
+            coupling_col = fill(γ_base[c], nrows, 1)
+            coupling_name = ncoupling == 1 ? "Coupling_$set" : "Coupling_$(c)_$set"
+            output_data = hcat(output_data, coupling_col)
+            push!(output_header, coupling_name)
+        end
+    end
+    return output_data, output_header
+end
+
+"""
+    merge_coupled_stacked_units(unit_data, unit_headers, Ncols::AbstractVector{Int}; ncoupling::Int=1, default_coupling=nothing, pad_value::Float64=0.01) -> (Matrix{Float64}, Vector{String})
+
+**Core engine** for `N` units in fixed order (e.g. enhancer, gene, latent): take the leading `Ncols[u]`
+columns from each unit matrix (padding with `pad_value` if the file is shorter), concatenate, then append
+`ncoupling` coupling columns. One coupling block for the whole row (names `Coupling_1`, …). Does not read files.
+"""
+function merge_coupled_stacked_units(
+    unit_data::AbstractVector{<:AbstractMatrix{<:Real}},
+    unit_headers::AbstractVector{<:AbstractVector{<:AbstractString}},
+    Ncols::AbstractVector{Int};
+    ncoupling::Int=1,
+    default_coupling=nothing,
+    pad_value::Float64=0.01,
+)
+    length(unit_data) == length(Ncols) || throw(ArgumentError("unit_data and Ncols length mismatch"))
+    length(unit_data) == length(unit_headers) || throw(ArgumentError("unit_data and unit_headers length mismatch"))
+    isempty(unit_data) && throw(ArgumentError("unit_data must be non-empty"))
+    nrows = size(unit_data[1], 1)
+    γ_base = default_coupling !== nothing && length(default_coupling) == ncoupling ? collect(Float64, default_coupling) : fill(0.0, ncoupling)
+    output_data = zeros(Float64, nrows, 0)
+    output_header = String[]
+    for (ui, d) in enumerate(unit_data)
+        size(d, 1) == nrows || throw(ArgumentError("unit $ui row count $(size(d,1)) != $nrows"))
+        h = unit_headers[ui]
+        N = Int(Ncols[ui])
+        cols = min(N, size(d, 2))
+        block = Matrix{Float64}(d[:, 1:cols])
+        hdr = [String(x) for x in h[1:cols]]
+        if cols < N
+            block = hcat(block, fill(pad_value, nrows, N - cols))
+            append!(hdr, ["unit$(ui)_pad_$j" for j in cols + 1:N])
+        end
+        output_data = hcat(output_data, block)
+        append!(output_header, hdr)
+    end
+    for c in 1:ncoupling
+        coupling_col = fill(γ_base[c], nrows, 1)
+        cname = ncoupling == 1 ? "Coupling_1" : "Coupling_$c"
+        output_data = hcat(output_data, coupling_col)
+        push!(output_header, cname)
+    end
+    return output_data, output_header
+end
+
+"""
+    create_combined_file(enhancer_file, gene_file, output_file, Nenh::Integer, Ngene::Integer; ncoupling::Int=1, default_coupling=nothing)
+
+Stack per-unit MCMC rate files (e.g. separate enhancer and gene **single-unit** fits) into one joint
+`rates_*.txt`-style file with `ncoupling` placeholder column(s) for subsequent **coupled** fits.
+
+Delegates to [`read_rates_table`](@ref), [`merge_coupled_two_unit_rates`](@ref), [`write_rates_table`](@ref).
+For each MCMC row, columns are concatenated in order: enhancer block, gene block, then `Coupling_*`
+columns filled with `default_coupling` (or zeros). Use `Nenh`/`Ngene` as the **width of one set** per file
+(larger for hierarchical templates when each set includes hyperparameters).
+
+See also: [`create_combined_file_mult`](@ref) for more than two units.
+"""
+function create_combined_file(enhancer_file::AbstractString, gene_file::AbstractString, output_file::AbstractString, Nenh::Integer, Ngene::Integer; ncoupling::Int=1, default_coupling=nothing)
+    ed, eh = read_rates_table(enhancer_file)
+    gd, gh = read_rates_table(gene_file)
+    out, hout = merge_coupled_two_unit_rates(ed, gd, eh, gh, Int(Nenh), Int(Ngene); ncoupling=ncoupling, default_coupling=default_coupling)
+    write_rates_table(output_file, out, hout)
+    return output_file
+end
+
+"""
+    create_combined_file_mult(unit_rate_files, Ncols, output_file; ncoupling::Int=1, default_coupling=nothing)
+
+Generalization of [`create_combined_file`](@ref): stack any number of per-unit rate files (column
+counts `Ncols[u]` each) and append `ncoupling` coupling columns per MCMC row (e.g. enhancer + gene +
+latent unit). Delegates to [`read_rates_table`](@ref), [`merge_coupled_stacked_units`](@ref), [`write_rates_table`](@ref).
+"""
+function create_combined_file_mult(unit_rate_files::AbstractVector{<:AbstractString}, Ncols::AbstractVector{<:Integer}, output_file::AbstractString; ncoupling::Int=1, default_coupling=nothing)
+    length(unit_rate_files) == length(Ncols) || throw(ArgumentError("unit_rate_files and Ncols must have same length"))
+    isempty(unit_rate_files) && throw(ArgumentError("unit_rate_files must be non-empty"))
+    unit_data = Matrix{Float64}[]
+    unit_headers = Vector{String}[]
+    for fp in unit_rate_files
+        d, h = read_rates_table(fp)
+        push!(unit_data, d)
+        push!(unit_headers, h)
+    end
+    Nc = Int.(Ncols)
+    out, hout = merge_coupled_stacked_units(unit_data, unit_headers, Nc; ncoupling=ncoupling, default_coupling=default_coupling)
+    write_rates_table(output_file, out, hout)
+    return output_file
+end
+
 

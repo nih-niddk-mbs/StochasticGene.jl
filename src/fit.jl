@@ -177,6 +177,21 @@ const _FIT_DEFAULTS = (
     dwell_specs=[],
 )
 
+"""
+    fit_default_spec() -> Dict{Symbol,Any}
+
+Return a copy of default `fit` keyword arguments as a `Dict`, with `probfn` resolved to `prob_Gaussian`
+when the default would be `nothing`. Used by batch utilities (e.g. `makeswarm_modelgrid`) to build
+run specs consumed by `write_run_spec_preset` / `fit(; key=...)`.
+"""
+function fit_default_spec()
+    d = Dict{Symbol, Any}(pairs(_FIT_DEFAULTS))
+    if d[:probfn] === nothing
+        d[:probfn] = prob_Gaussian
+    end
+    return d
+end
+
 function fit(; key=nothing, kwargs...)
     defaults = Dict{Symbol, Any}(pairs(_FIT_DEFAULTS))
     if defaults[:probfn] === nothing
@@ -837,7 +852,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     datapath = folder_path(datapath, root, "data")
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
     decayrate = set_decayrate(decayrate, gene, cell, root)
-    priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+    priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
@@ -2453,6 +2468,61 @@ function prior_ratemean_grid(priormean)
 end
 
 """
+    AbstractPriorContext
+
+Supertype for which **default prior mean recipe** applies given data (`datatype`) and model layout
+(`coupling`, `R` scalar vs tuple, `grid`, `hierarchical`, `transitions`). Used by [`prior_context`](@ref)
+and [`set_priormean_empty`](@ref). You may add subtypes and methods to `set_priormean_empty` for custom
+workflows.
+"""
+abstract type AbstractPriorContext end
+
+"""Coupled multi-unit model: use `prior_ratemean(..., coupling)`."""
+struct PriorContextCoupled <: AbstractPriorContext end
+
+"""Trace-like single-unit GRSM (`datatype` contains `\"trace\"`), no grid/hierarchical, ≥2 transition pairs: use `prior_ratemean_trace`."""
+struct PriorContextTraceSingleUnit <: AbstractPriorContext end
+
+"""Default single-unit GRSM prior (`prior_ratemean`): RNA, hierarchical trace, grid, short transition list, etc."""
+struct PriorContextGenericSingle <: AbstractPriorContext end
+
+"""
+    prior_context(datatype, coupling, R, grid, hierarchical, transitions) -> AbstractPriorContext
+
+Classify data + model for default **base** prior means (before grid append and hierarchical hyper
+rows). **Order:** (1) coupled; (2) trace single-unit recipe; (3) generic single-unit.
+
+See also: [`set_priormean`](@ref), [`set_priormean_empty`](@ref).
+"""
+function prior_context(datatype::String, coupling, R, grid, hierarchical, transitions)
+    if !isempty(coupling)
+        return PriorContextCoupled()
+    end
+    if occursin("trace", datatype) && R isa Int && isnothing(grid) && isempty(hierarchical) && length(transitions) >= 2
+        return PriorContextTraceSingleUnit()
+    end
+    return PriorContextGenericSingle()
+end
+
+"""
+    set_priormean_empty(ctx, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
+
+Build the **base** prior mean vector for empty `priormean`; `set_priormean` then appends grid and
+hierarchical blocks. Extend by adding methods on new `AbstractPriorContext` subtypes.
+"""
+function set_priormean_empty(::PriorContextTraceSingleUnit, transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
+    prior_ratemean_trace(transitions, R, S, insertstep, Float64(decayrate), noisepriors, Float64(elongationtime))
+end
+
+function set_priormean_empty(::PriorContextCoupled, transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors, elongationtime, coupling, grid)
+    prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
+end
+
+function set_priormean_empty(::PriorContextGenericSingle, transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
+    prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
+end
+
+"""
     prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
 
 Generate default prior means for rate parameters.
@@ -2476,11 +2546,115 @@ Generate default prior means for rate parameters.
 - Calculates RNA processing rates from elongation time
 - Uses 0.1 for splicing, provided decay rate, and noise priors
 - Used for model initialization when no prior means provided
+- For **trace** single-unit fits with empty `priormean`, `set_priormean` uses
+  `prior_ratemean_trace` instead (see `datatype` in `make_structures`).
 """
 function prior_ratemean(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
     [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.1, max(0, S - insertstep + 1)); decayrate; noisepriors]
 end
 
+"""
+    prior_ratemean_trace(transitions, R::Int, S::Int, insertstep, decayrate, noisepriors, elongationtime, initprior=0.1)
+
+Default **prior means** for single-unit **trace** GRSM fits (MS2-style live traces): first two G
+transition edges at `0.001`, remaining edges at `0.01`, then initiation, elongation, splicing, decay,
+and noise blocks matching the legacy `set_variables` / `trace_prior_variables` recipe.
+
+This is used automatically by `set_priormean` when `priormean` is empty, `datatype` contains
+`"trace"`, and the model is a non-coupled, non-hierarchical, non-grid single unit with at least two
+transition pairs. Otherwise `prior_ratemean` (generic GRSM) is used.
+
+Coupled (`tracejoint`), hierarchical trace, or grid models keep the previous generic `prior_ratemean`
+path unless you pass explicit `priormean`.
+"""
+function prior_ratemean_trace(transitions, R::Int, S::Int, insertstep, decayrate::Float64, noisepriors::Vector, elongationtime::Float64, initprior::Float64=0.1)
+    n_t = length(transitions)
+    if n_t < 2
+        return prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, initprior)
+    end
+    [fill(0.001, 2); fill(0.01, n_t - 2); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); decayrate; noisepriors]
+end
+
+"""
+    priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
+
+Structured **prior CV** vector matching `prior_ratemean_trace` (same block layout). Applied inside
+[`set_priormean`](@ref) when `priorcv` is still a scalar and `priormean` was auto-filled for a trace
+single-unit fit (`priorcv` keyword passed).
+"""
+function priorcv_trace_grsm(transitions, R::Int, S::Int, insertstep, noisepriors::Vector)
+    nn = length(noisepriors)
+    noise_cv = nn == 4 ? [0.2, 0.2, 0.1, 0.1] : fill(0.2, nn)
+    [fill(1.0, length(transitions)); 0.2; fill(0.2, R); fill(0.2, max(0, S - insertstep + 1)); 0.1; noise_cv]
+end
+
+"""
+    trace_prior_variables(transitions, R, S, insertstep, hierarchical, fixed, noisepriors, elongationtime, propcv;
+        initprior=0.1, ejectprior=0.05, nfitted=[1, 3], coupling=false, fitcoupling=false)
+
+Construct prior means, prior CVs, fitted-parameter indices, fixed-effects tuple, hierarchical spec, ODE
+`method` (`Tsit5()` or `(Tsit5(), true)`), and proposal CV for **trace-oriented GRSM** single-unit models (common for live-cell
+traces and single-gene batches). For **non-hierarchical, non-coupling** cases, `priormean` and `priorcv`
+match the same `prior_ratemean_trace` / `priorcv_trace_grsm` construction used automatically by
+`fit(...)` when `priormean` is empty (see `set_priormean`). For hierarchical or fixed-rates recipes,
+this helper still fills `fittedparam`, `fixedeffects`, and hyperparameter blocks.
+
+**Prefer** calling `fit` with empty `priormean` for standard trace fits so defaults stay in one place.
+
+# Returns
+`(priormean, priorcv, fittedparam, fixedeffects, hierarchical, method, propcv)` where `hierarchical` is
+`tuple()` or a 3-tuple compatible with the `fit` keyword `hierarchical`.
+
+# Notes
+- `ejectprior` is reserved for compatibility with older scripts; the current prior vector uses the
+  fixed decay constant `0.03165055618995184` in the same position as generic `prior_ratemean` trace priors.
+- Does not set `samplesteps`; choose `samplesteps` in your run spec (e.g. `1_000_000` non-hierarchical,
+  `100_000` hierarchical) to match your cluster budget.
+"""
+function trace_prior_variables(transitions, R::Int, S::Int, insertstep, hierarchical::Bool, fixed::Bool, noisepriors, elongationtime, propcv, initprior=0.1, ejectprior=0.05, nfitted=[1, 3], coupling=false, fitcoupling=false)
+    n = num_rates(transitions, R, S, insertstep)
+    if hierarchical
+        method = (Tsit5(), true)
+        propcv == 0.0 && (propcv = 0.001)
+    else
+        method = Tsit5()
+        propcv == 0.0 && (propcv = 0.005)
+    end
+    if fixed
+        if hierarchical
+            fitted = [collect(1:length(transitions) + 2); collect(length(transitions) + R + 1:n - 1 - max(0, S - 1))]
+        else
+            fitted = [collect(1:length(transitions) + 2); collect(length(transitions) + R + 1:n - 1 - max(0, S - 1)); n .+ nfitted]
+        end
+        f = R > 2 ? (collect(length(transitions) + 2:length(transitions) + R),) : tuple()
+    else
+        if hierarchical
+            fitted = collect(1:n - 1 - max(0, S - 1))
+        else
+            fitted = [collect(1:n - 1 - max(0, S - 1)); n .+ nfitted]
+        end
+        f = tuple()
+    end
+    if fitcoupling
+        fitted = vcat(fitted, [n + 5])
+    end
+    priormean = prior_ratemean_trace(transitions, R, S, insertstep, 0.03165055618995184, noisepriors, elongationtime, initprior)
+    priorcv = priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
+    if coupling
+        priormean = vcat(priormean, [0.0])
+        priorcv = vcat(priorcv, [2.0])
+    end
+    if hierarchical
+        hypercv = [fill(1.0, length(transitions)); 1.0; fill(0.25, R - 1); 1.0; fill(1.0, max(0, S - insertstep + 1)); 1.0; fill(0.25, 4)]
+        coupling && (hypercv = vcat(hypercv, [1.0]))
+        priormean = [priormean; hypercv]
+        priorcv = [priorcv; fill(2.0, length(priorcv))]
+        h = (2, n .+ nfitted, tuple())
+    else
+        h = tuple()
+    end
+    return priormean, priorcv, fitted, f, h, method, propcv
+end
 
 """
     prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, decayrate, noisepriors::Union{Vector,Tuple}, elongationtime::Union{Vector,Tuple}, coupling, initprior=[0.1, 0.1])
@@ -2526,46 +2700,44 @@ function prior_ratemean(transitions, R::Tuple, S::Tuple, insertstep::Tuple, deca
 end
 
 """
-    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
+    set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype=""; ctx=nothing, priorcv=nothing)
 
-Set prior means if empty, using default values.
+Set default prior means (and optionally prior CVs) when the user left them at defaults.
 
 # Arguments
-- `priormean`: Prior means (if empty, will be generated)
-- `transitions, R, S, insertstep`: Model structure parameters
-- `decayrate`: Decay rate
-- `noisepriors`: Noise priors
-- `elongationtime`: RNA elongation time
-- `hierarchical`: Hierarchical structure
-- `coupling`: Coupling structure
-- `grid`: Grid parameter
+- `priormean`: Prior means (if empty, filled via [`prior_context`](@ref) and [`set_priormean_empty`](@ref))
+- `transitions, R, S, insertstep`, `decayrate`, `noisepriors`, `elongationtime`, `hierarchical`, `coupling`, `grid`, `datatype`: Same role as in [`make_structures`](@ref).
+- `ctx`: Optional [`AbstractPriorContext`](@ref); when `nothing`, `prior_context(datatype, coupling, R, grid, hierarchical, transitions)` is used.
+- `priorcv`: When `nothing` (default), only prior means are considered and the return value is just `priormean`.
+  When passed (e.g. scalar default from `make_structures`), returns `(priormean, priorcv)`; if `priormean` was
+  empty and `priorcv` is still a scalar and the context is [`PriorContextTraceSingleUnit`](@ref), `priorcv`
+  is replaced by [`priorcv_trace_grsm`](@ref) to match the filled `priormean`.
 
 # Returns
-- `Vector{Float64}`: Prior means for all parameters
+- If `priorcv === nothing`: `Vector{Float64}` prior means only.
+- Otherwise: `(priormean, priorcv)` with the same conventions as above.
 
 # Notes
-- Generates default prior means if priormean is empty
-- Handles coupled, grid, and hierarchical models
-- Applies appropriate modifications based on model type
-- Used for model initialization and setup
+- All branching on empty `priormean`, model/data context, and trace structured CV lives here, not in callers.
 """
-function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    if !isempty(priormean)
-        return priormean
-    else
-        if !isempty(coupling)
-            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling)
-        else
-            priormean = prior_ratemean(transitions, R, S, insertstep, decayrate, noisepriors, elongationtime)
-        end
-        if !isnothing(grid)
-            priormean = prior_ratemean_grid(priormean)
-        end
-        if !isempty(hierarchical)
-            priormean = prior_ratemean_hierarchical(priormean, prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid), hierarchical[1])
-        end
+function set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype::String=""; ctx=nothing, priorcv=nothing)
+    adjust_priorcv = priorcv !== nothing
+    priormean_was_empty = isempty(priormean)
+    ctx = ctx === nothing ? prior_context(datatype, coupling, R, grid, hierarchical, transitions) : ctx
+    if !priormean_was_empty
+        return adjust_priorcv ? (priormean, priorcv) : priormean
     end
-    priormean
+    priormean = set_priormean_empty(ctx, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, coupling, grid)
+    if !isnothing(grid)
+        priormean = prior_ratemean_grid(priormean)
+    end
+    if !isempty(hierarchical)
+        priormean = prior_ratemean_hierarchical(priormean, prior_hypercv(transitions, R, S, insertstep, noisepriors, coupling, grid), hierarchical[1])
+    end
+    if adjust_priorcv && !(priorcv isa AbstractVector) && ctx isa PriorContextTraceSingleUnit
+        priorcv = priorcv_trace_grsm(transitions, R, S, insertstep, noisepriors)
+    end
+    return adjust_priorcv ? (priormean, priorcv) : priormean
 end
 
 """
