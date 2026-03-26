@@ -280,20 +280,6 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
-
-"""
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene::String, cell::String, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fixedeffects::String, G::String, R::String, S::String, insertstep::String, TransitionType="", grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
-    transitions = get_transitions(G, TransitionType)
-    fixedeffects, fittedparam = make_fixedfitted(datatype, fixedeffects, transitions, parse(Int, R), parse(Int, S), parse(Int, insertstep), length(noisepriors), coupling, grid)
-    println("transitions: ", transitions)
-    println("fixedeffects: ", fixedeffects)
-    println("fittedparam: ", fittedparam)
-    fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, parse(Int, G), parse(Int, R), parse(Int, S), parse(Int, insertstep), tuple(), root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype,
-        propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
-end
-
-"""
     fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
 
 
@@ -1402,34 +1388,28 @@ Create reporter components for coupled dwell time analysis.
 - `Tuple`: (coupled sojourn states, coupled nonzero rows), components
 
 # Notes
-- Creates TDCoupledComponents for multi-unit dwell time analysis
+- Creates `TDCoupledFullComponents` for multi-unit dwell time analysis (default coupled stack)
 - Applies coupling to sojourn states and nonzero rows
 - Handles interactions between different model units
 - Used for coupled dwell time distribution modeling
 """
 function make_reporter_components_DT(transitions, G::Tuple, R::Tuple, S::Tuple, insertstep, splicetype, onstates, dttype, coupling)
     sojourn = sojourn_states(onstates, G, R, S, insertstep, dttype)
-    if splicetype == "full"
-        components = TDCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
-        unit_model = coupling[1]
-        nT_vec = collect(T_dimension(G, R, S, unit_model))
-        sojourn_c = [
-            [begin
-                 soj_unit = sojourn[unit_model[k]][i]
-                 if occursin("G", dttype[unit_model[k]][i])
-                     α = unit_model[k]
-                     soj_unit = g_sojourn_to_T_sojourn(soj_unit, G[α], R[α], S[α])
-                 end
-                 full_state_indices_for_unit_sojourn(k, soj_unit, nT_vec)
+    components = TDCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype)
+    unit_model = coupling[1]
+    nT_vec = collect(T_dimension(G, R, S, unit_model))
+    sojourn_c = [
+        [begin
+             soj_unit = sojourn[unit_model[k]][i]
+             if occursin("G", dttype[unit_model[k]][i])
+                 α = unit_model[k]
+                 soj_unit = g_sojourn_to_T_sojourn(soj_unit, G[α], R[α], S[α])
              end
-             for i in eachindex(sojourn[unit_model[k]])]
-            for k in eachindex(unit_model)]
-        return (sojourn_c, sojourn_c), components
-    end
-    components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype, splicetype)
-    sojourn = coupled_states(sojourn, coupling, components, G)
-    nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
-    return (sojourn, nonzeros), components
+             full_state_indices_for_unit_sojourn(k, soj_unit, nT_vec)
+         end
+         for i in eachindex(sojourn[unit_model[k]])]
+        for k in eachindex(unit_model)]
+    return (sojourn_c, sojourn_c), components
 end
 
 """
@@ -1557,7 +1537,7 @@ Create reporter components for coupled trace analysis.
 # Notes
 - Creates HMMReporter for each unit in coupled model
 - Handles different probability functions per unit
-- Creates TCoupledComponents for multi-unit trace analysis
+- Creates `TCoupledFullComponents` for multi-unit trace analysis (default coupled stack)
 - Used for coupled fluorescence trace data modeling
 """
 function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
@@ -1578,11 +1558,7 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
         weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
         push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
     end
-    if splicetype == "full"
-        components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-    else
-        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
-    end
+    components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
     return reporter, components
 end
 

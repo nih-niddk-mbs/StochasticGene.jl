@@ -1262,7 +1262,6 @@ function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupli
     connections = coupling[3]  # derive source states via source_states_for_unit(connections, unit)
     ttrans = coupling[4]
     targets = coupling[6][unit]
-    sstate_unit = source_states_for_unit(connections, unit)
     model_unit = coupling[1][unit]
     G_unit = G[model_unit]
     R_unit = R[model_unit]
@@ -1274,14 +1273,18 @@ function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupli
     oldstate = findall(!iszero, vec(initialstate))
     newstate = findall(!iszero, vec(state[unit, 1]))
 
-    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sstate: ", sstate_unit, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
+    verbose && println("unit: ", unit, ", oldstate: ", oldstate, ", newstate: ", newstate, ", sources: ", sources, ", targets: ", targets, ", ttrans: ", ttrans)
     verbose && println("tau1: ", tau)
 
-    # unit as source: for each target, rescale target's coupling-transition tau when source occupancy changes
-    old_occupied = _source_occupied(oldstate, sstate_unit, G_unit, R_unit, base_unit)
-    new_occupied = _source_occupied(newstate, sstate_unit, G_unit, R_unit, base_unit)
+    # unit as source: for each target, rescale target's coupling-transition tau when source occupancy changes.
+    # IMPORTANT: source gating must be connection-specific (β, α), not aggregated across all targets.
+    # If source unit β controls α1 from state s1 and α2 from state s2, using s=[s1,s2] for both targets
+    # incorrectly activates both couplings whenever either source state is occupied.
     for target in targets
-        verbose && println(!old_occupied, " : ", new_occupied)
+        sstate_pair = [Int(s) for (β, s, α, _) in connections if β == unit && α == target]
+        old_occupied = _source_occupied(oldstate, sstate_pair, G_unit, R_unit, base_unit)
+        new_occupied = _source_occupied(newstate, sstate_pair, G_unit, R_unit, base_unit)
+        verbose && println("src=", unit, " -> tgt=", target, " sstate=", sstate_pair, " ", !old_occupied, " : ", new_occupied)
         if isfinite(tau[target][ttrans[target], 1])
             idx = findfirst(isequal((unit, target)), coupling_pairs)
             γc = idx === nothing ? 0.0 : coupling_strength[idx]
@@ -1299,7 +1302,7 @@ function update_coupling!(tau, state, index, t, r, enabled, initialstate, coupli
     #     from G=1 or G=3), so transitionG!/deactivateG! drew a fresh base-rate tau for it.
     if reaction == ttrans[unit] || ttrans[unit] ∈ enabled
         for source in sources
-            sstate_source = source_states_for_unit(connections, source)
+            sstate_source = [Int(s) for (β, s, α, _) in connections if β == source && α == unit]
             model_source = coupling[1][source]
             G_source = G[model_source]
             R_source = R[model_source]

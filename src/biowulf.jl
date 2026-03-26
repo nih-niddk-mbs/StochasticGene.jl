@@ -5,34 +5,6 @@
 
 
 """
-struct ModelArgs
-
-For passing model information to fit function from swarmfile (limited to numbers and strings (i.e. no vectors or tuples))
-
-#Fields
-`inlabel::String`
-`label::String`
-`G::Int`
-`R::Int`
-`S::Int`
-`insertstep::Int`
-`TransitionType::String`: type of model, e.g. "nstate", "KP", "cyclic"
-`fixedeffects::String`: two numbers separated by a hyphen, e.g. "3-4", indicating parameters 3 and 4 are fixed to each other
-
-"""
-
-struct ModelArgs
-    inlabel::String
-    label::String
-    G::Int
-    R::Int
-    S::Int
-    insertstep::Int
-    TransitionType::String
-    fixedeffects::String
-end
-
-"""
     sanitize_for_filename(s::AbstractString)
 
 Replace characters that are unsafe in shell filenames (e.g. `,` and `|`) with `-`.

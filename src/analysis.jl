@@ -3113,7 +3113,7 @@ Coupled runs use the same `trace_specs` layout as [`default_trace_specs_for_coup
 # Returns
 NamedTuple with theoretical and empirical results (see main `simulate_trials` docstring).
 """
-function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000; dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing, splicetype="", interval::Float64=1.0, zeromedian=false)
+function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, insertstep, coupling, lags, ntrials=1, trial_time::Float64=720.0, offset::Float64=0.0, correlation_algorithm=StandardCorrelation(), warmupsteps::Int=1000; dwell_specs=nothing, observed_units=nothing, trace_specs=nothing, noiseparams=nothing, splicetype::String="", interval::Float64=1.0, zeromedian=false)
     # Extract theory values from NamedTuple
     ac1 = theory.ac1
     ac2 = theory.ac2
@@ -3199,6 +3199,8 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         ccReporters=reporter_result.cc,
         ac1Reporters=reporter_result.ac1,
         ac2Reporters=reporter_result.ac2,
+        m1_empirical=isnothing(intensity_result) ? 0.0 : intensity_result.mean1,
+        m2_empirical=isnothing(intensity_result) ? 0.0 : intensity_result.mean2,
         mON1=on_result.mean1,
         mON2=on_result.mean2,
         mR1=reporter_result.mean1,
@@ -3414,6 +3416,26 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     # Compute norms comparing theory and empirical (both should have same length: symmetric lags)
     linf_norm = [maximum(abs.(cc .- empirical.cc))]
     l2_norm = [sqrt(sum((cc .- empirical.cc) .^ 2))]
+    ccON_max_abs_diff = maximum(abs.(ccON .- empirical.ccON))
+    ccReporters_max_abs_diff = isnothing(ccReporters) ? NaN : maximum(abs.(ccReporters .- empirical.ccReporters))
+
+    # CI coverage diagnostics: fraction/count of lags where theory is within empirical bootstrap CI.
+    # Useful for assessing whether apparent discrepancies exceed empirical uncertainty.
+    cc_inside_ci = if !isnothing(empirical.cc_lower) && !isnothing(empirical.cc_upper)
+        (empirical.cc_lower .<= cc) .& (cc .<= empirical.cc_upper)
+    else
+        fill(false, length(cc))
+    end
+    ccON_inside_ci = if !isnothing(empirical.ccON_lower) && !isnothing(empirical.ccON_upper)
+        (empirical.ccON_lower .<= ccON) .& (ccON .<= empirical.ccON_upper)
+    else
+        fill(false, length(ccON))
+    end
+    ccReporters_inside_ci = if !isnothing(empirical.ccReporters_lower) && !isnothing(empirical.ccReporters_upper) && !isnothing(ccReporters)
+        (empirical.ccReporters_lower .<= ccReporters) .& (ccReporters .<= empirical.ccReporters_upper)
+    else
+        fill(false, length(cc))
+    end
 
     # Diagnostic: Print summary statistics for theory vs empirical comparison
     # Check zero-lag values for ON state autocovariance (should match if uncentered)
@@ -3499,6 +3521,17 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         # Other statistics
         linf_norm=linf_norm, l2_norm=l2_norm,
         lags=lags,  # Symmetric lags (full_lags from covariance_functions) - same for theory and empirical
+        m1_empirical=empirical.m1_empirical, m2_empirical=empirical.m2_empirical,
+        mON1_empirical=empirical.mON1, mON2_empirical=empirical.mON2,
+        cc_max_abs_diff=linf_norm[1],
+        ccON_max_abs_diff=ccON_max_abs_diff,
+        ccReporters_max_abs_diff=ccReporters_max_abs_diff,
+        theory_within_ci_fraction_cc=mean(cc_inside_ci),
+        theory_within_ci_fraction_ccON=mean(ccON_inside_ci),
+        theory_within_ci_fraction_ccReporters=mean(ccReporters_inside_ci),
+        theory_within_ci_count_cc=sum(cc_inside_ci),
+        theory_within_ci_count_ccON=sum(ccON_inside_ci),
+        theory_within_ci_count_ccReporters=sum(ccReporters_inside_ci),
         mean1=empirical.mON1, mean2=empirical.mON2,
         m1=m1, m2=m2, v1=v1, v2=v2, v1_empirical=empirical.v1_empirical, v2_empirical=empirical.v2_empirical,
         m1ON=m1ON, m2ON=m2ON, mR1_empirical=empirical.mR1, mR2_empirical=empirical.mR2, m1Reporters=m1Reporters, m2Reporters=m2Reporters,
@@ -3549,9 +3582,24 @@ Compute theoretical correlation functions for a single rate file and return the 
 """
 function correlation_functions_file(file, transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(3, 3), S=(1, 0), insertstep=(1, 1), pattern="gene", lags=collect(0:1:200), probfn=prob_Gaussian, ratetype="ml"; splicetype::String="")
     r = readrates(file, get_row(ratetype))
-    coupling_field = extract_source_target(pattern, file)
-    coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
-    correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype=splicetype)
+    run_spec = read_run_spec_for_rates_file(file)
+
+    if !isnothing(run_spec)
+        transitions = get(run_spec, :transitions, transitions)
+        G = get(run_spec, :G, G)
+        R = get(run_spec, :R, R)
+        S = get(run_spec, :S, S)
+        insertstep = get(run_spec, :insertstep, insertstep)
+        probfn = get(run_spec, :probfn, probfn)
+        coupling = get(run_spec, :coupling, tuple())
+        sp = String(get(run_spec, :splicetype, ""))
+    else
+        coupling_field = extract_source_target(pattern, file)
+        coupling = isnothing(coupling_field) ? tuple() : make_coupling(coupling_field, G, R)
+        sp = splicetype
+    end
+
+    correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype=sp)
 end
 
 """
@@ -3747,7 +3795,7 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
                 ratefile = joinpath(root, "rates_" * key * ".txt")
                 @info "computing correlations for $ratefile"
                 r = readrates(ratefile, get_row(ratetype))
-                splicetype = get(info, :splicetype, "")
+                splicetype = String(get(info, :splicetype, ""))
                 tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
                     correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], info[:insertstep], info[:probfn], info[:coupling], lags; splicetype=splicetype)
                 write_correlation_csv(joinpath(root, "crosscorrelation_" * key * ".csv"), tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)

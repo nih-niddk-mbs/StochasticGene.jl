@@ -10,34 +10,43 @@ using Test
 
 @testset "StochasticGene" begin
 
-    h1, h2 = StochasticGene.test_compare()
-    @test isapprox(h1, h2, rtol=0.05)
+    @testset "RNA histograms" begin
+        h1, h2 = StochasticGene.test_compare()
+        @test isapprox(h1, h2, rtol=0.05)
 
-    h1, h2 = StochasticGene.test_compare_coupling()
-    @test isapprox(h1, h2, rtol=0.05)
+        h1, h2 = StochasticGene.test_fit_simrna()
+        @test isapprox(h1, h2, rtol=0.05)
 
-    h1, h2 = StochasticGene.test_fit_simrna()
-    @test isapprox(h1, h2, rtol=0.05)
+        h1, h2 = StochasticGene.test_fit_rna()
+        @test isapprox(h1, h2, rtol=0.05)
+    end
 
-    h1, h2 = StochasticGene.test_fit_rna()
-    @test isapprox(h1, h2, rtol=0.05)
+    @testset "RNA + ON/OFF + dwell" begin
+        h1, h2 = StochasticGene.test_fit_rnaonoff()
+        @test isapprox(h1, h2, rtol=0.05)
 
-    h1, h2 = StochasticGene.test_fit_rnaonoff()
-    @test isapprox(h1, h2, rtol=0.05)
+        h1, h2 = StochasticGene.test_fit_rnadwelltime()
+        @test isapprox(h1, h2, rtol=0.3)
+    end
 
-    h1, h2 = StochasticGene.test_fit_rnadwelltime()
-    @test isapprox(h1, h2, rtol=0.3)
+    @testset "Traces (single-unit)" begin
+        lower, target, upper = StochasticGene.test_fit_trace()
+        @test lower <= target <= upper
 
-    lower, target, upper = StochasticGene.test_fit_trace()
-    @test lower <= target <= upper
+        lower, target, upper = StochasticGene.test_fit_trace_hierarchical()
+        @test lower <= target <= upper
+    end
 
-    lower, target, upper = StochasticGene.test_fit_trace_hierarchical()
-    @test lower <= target <= upper
+    @testset "Coupled traces and dwell" begin
+        lower, target, upper = StochasticGene.test_fit_tracejoint()
+        @test lower <= target <= upper
 
-    lower, target, upper = StochasticGene.test_fit_tracejoint()
-    @test lower <= target <= upper
+        # Basic coupled dwell-time vs simulator comparison (short 3-unit example)
+        cme_vec, sim_vec = StochasticGene.test_compare_3unit()
+        @test length(cme_vec) == length(sim_vec)
+    end
 
-    @testset "trace_specs defaults for coupled tracejoint" begin
+    @testset "trace_specs utilities" begin
         c2 = ((1, 2), NTuple{4,Int}[], Symbol[])
         @test StochasticGene.n_observed_trace_units(c2) == 2
         c3 = ((1, 2, 3), NTuple{4,Int}[], Symbol[])

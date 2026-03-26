@@ -2788,11 +2788,30 @@ to be handled via eigendecomposition.
 - **Lag convention**: Positive τ in input `lags` means first unit leads second unit
 - **Cross-covariance symmetry**: `cc` is computed as `cc12` (unit 1 leads) for positive lags and `cc21` (unit 2 leads) for negative lags, then symmetrized
 """
-function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="", observed_units=nothing, noise_per_unit=nothing)
-    if splicetype == "full"
-        components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+function correlation_functions(
+    rin,
+    transitions,
+    G::Tuple,
+    R,
+    S,
+    insertstep,
+    probfn,
+    coupling,
+    lags::Vector;
+    offset::Float64=0.0,
+    splicetype::String="",
+    coupled_stack::Symbol=:full,
+    observed_units=nothing,
+    noise_per_unit=nothing,
+)
+    # `splicetype` is a splicing-model element parameter (e.g. "offeject").
+    sp_norm = splicetype
+    components = if coupled_stack === :full
+        TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sp_norm)
+    elseif coupled_stack === :legacy
+        TCoupledComponents(coupling, transitions, G, R, S, insertstep, sp_norm)
     else
-        components = TCoupledComponents(coupling, transitions, G, R, S, insertstep, "")
+        throw(ArgumentError("coupled_stack must be :full or :legacy (got $(coupled_stack))"))
     end
     # Default observed_units to [1, 2] for backward compatibility; noise_per_unit defaults to [4, 4]
     if isnothing(observed_units)
@@ -2881,7 +2900,7 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
     step_indices = round.(Int, lags ./ lag_interval)
 
     # transition matrix a and steady state probabilities p0
-    if splicetype == "full"
+    if coupled_stack === :full
         coupling_rates = [couplingStrength[k] * r[components.targets[k][1]][components.targets[k][2]]
                           for k in eachindex(components.targets)]
         a, p0 = make_ap(r, coupling_rates, lag_interval, components)
@@ -2898,15 +2917,21 @@ function correlation_functions(rin, transitions, G::Tuple, R, S, insertstep, pro
     ac1 = autocorfn_hmm(a, p0, mean_intensity[1], second_moment_intensity[1], step_indices) 
     ac2 = autocorfn_hmm(a, p0, mean_intensity[2], second_moment_intensity[2], step_indices)
     
-    # ON state 
-    ccON = crosscorfn_hmm(a, p0, ON[2], ON[1], step_indices)
-    ccON = vcat(reverse(ccON), ccON[2:end])
+    # ON state cross-correlation
+    # For signals from two different units, cross-correlation is not generally symmetric:
+    # C_xy(-tau) = C_yx(tau).
+    # Match the empirical convention (x=unit1, y=unit2, with negative lags computing y(t)*x(t+|tau|))
+    # by computing both lead/lag directions and then assembling the full symmetric lag grid.
+    ccON12 = crosscorfn_hmm(a, p0, ON[1], ON[2], step_indices)
+    ccON21 = crosscorfn_hmm(a, p0, ON[2], ON[1], step_indices)
+    ccON = vcat(reverse(ccON21), ccON12[2:end])
     ac1ON = crosscorfn_hmm(a, p0, ON[1], ON[1], step_indices)
     ac2ON = crosscorfn_hmm(a, p0, ON[2], ON[2], step_indices)
 
-    # Reporter
-    ccReporters = crosscorfn_hmm(a, p0, reporters[2], reporters[1], step_indices)
-    ccReporters = vcat(reverse(ccReporters), ccReporters[2:end])
+    # Reporter cross-correlation (same lead/lag convention as ON)
+    ccReporters12 = crosscorfn_hmm(a, p0, reporters[1], reporters[2], step_indices)
+    ccReporters21 = crosscorfn_hmm(a, p0, reporters[2], reporters[1], step_indices)
+    ccReporters = vcat(reverse(ccReporters21), ccReporters12[2:end])
     ac1Reporters = crosscorfn_hmm(a, p0, reporters[1], reporters[1], step_indices)
     ac2Reporters = crosscorfn_hmm(a, p0, reporters[2], reporters[2], step_indices)
 
@@ -2989,8 +3014,27 @@ Compute theoretical centered correlation functions for coupled HMM model.
 Returns centered correlation functions (E[xy] - E[x]E[y]) by calling `correlation_functions` and subtracting means.
 See `correlation_functions` for detailed argument descriptions and return value structure.
 """
-function correlation_functions_centered(rin, transitions, G::Tuple, R, S, insertstep, probfn, coupling, lags::Vector; offset::Float64=0.0, splicetype::String="", observed_units=nothing, noise_per_unit=nothing)
-    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(rin, transitions, G, R, S, insertstep, probfn, coupling, lags; offset=offset, splicetype=splicetype, observed_units=observed_units, noise_per_unit=noise_per_unit)
+function correlation_functions_centered(
+    rin,
+    transitions,
+    G::Tuple,
+    R,
+    S,
+    insertstep,
+    probfn,
+    coupling,
+    lags::Vector;
+    offset::Float64=0.0,
+    splicetype::String="",
+    coupled_stack::Symbol=:full,
+    observed_units=nothing,
+    noise_per_unit=nothing,
+)
+    ac1, ac2, cc, ccON, lags, m1, m2, v1, v2, m1ON, m2ON, ac1ON, ac2ON, ccReporters, m1Reporters, m2Reporters, ac1Reporters, ac2Reporters = correlation_functions(
+        rin, transitions, G, R, S, insertstep, probfn, coupling, lags;
+        offset=offset, splicetype=splicetype, coupled_stack=coupled_stack,
+        observed_units=observed_units, noise_per_unit=noise_per_unit
+    )
     return lags, cc-m1*m2, ac1-m1^2, ac2-m1^2, m1, m2, v1, v2, ccON-m1ON*m2ON, ac1ON-m1ON^2, ac2ON-m2ON^2, m1ON, m2ON, v1ON, v2ON, ccReporters-m1Reporters*m2Reporters,  ac1Reporters-m1Reporters^2, ac2Reporters-m2Reporters^2, m1Reporters, m2Reporters, v1Reporters, v2Reporters
 end
 

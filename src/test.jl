@@ -2,9 +2,12 @@
 #
 # test.jl
 #
-# Two roles: (1) Tests included in runtests.jl give basic confidence for installs.
-# (2) Comprehensive/correctness tests (e.g. test_compare_RG_vs_Full, test_compare_3unit)
-# are for development; over-test here, keep production code parsimonious.
+# Two roles:
+# (1) **Smoke tests** used by `test/runtests.jl` to give basic confidence that the
+#     package installs and runs correctly on a given machine (short, fast tests).
+# (2) **Developer diagnostics** (e.g. detailed RG vs CoupledFull comparisons,
+#     long correlation/simulation checks). These are NOT called from `runtests.jl`
+#     and are intended for algorithm development and debugging.
 
 """
     test_steadystatemodel(model::AbstractGMmodel, nhist)
@@ -48,13 +51,37 @@ function test_model(data::RNAOnOffData, model::AbstractGRSMmodel)
     telegraphsplice0(data.bins, data.nRNA, model.G - 1, model.R, model.rates, 1000000000, 1e-5, model.nalleles)
 end
 
+"""
+    simDT_convert(v)
+
+Convert dwell-time specs from 4-column layout to simulator layout.
+
+Used by coupled dwell-time test helpers where only ON/OFF histogram pairs are
+needed by the simulator path.
+"""
 simDT_convert(v) = [[s[1], s[3]] for s in v]
 
+"""
+    test_DT(; r, transitions, G, R, S, insertstep, onstates, dttype, bins)
+
+Smoke-test dwell-time prediction for a single (uncoupled) model.
+
+Builds dwell-time reporter/components and returns `predictedarray(...)` output.
+"""
 function test_DT(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 1]), G=3, R=2, S=2, insertstep=1, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)])
     reporter, components = make_reporter_components_DT(transitions, G, R, S, insertstep, "", onstates, dttype)
     predictedarray(r, components, bins, reporter, dttype)
 end
 
+##### Developer diagnostics below (not used by `runtests.jl`) #####
+
+"""
+    test_sim(; r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol, ejectnumber)
+
+Run an uncoupled stochastic simulation with dwell-time configuration.
+
+Returns raw `simulator(...)` output for quick parity checks against analytical paths.
+"""
 function test_sim(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nhist=150, nalleles=2, onstates=[Int[], [2, 3]], bins=[collect(5/3:5/3:200), collect(0.1:0.1:20)], total=10000000, tol=1e-6, ejectnumber=1)
     simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol, ejectnumber=ejectnumber)
 end
@@ -140,6 +167,13 @@ function test_simulate_trials(; ntrials=100, trial_time=720.0, lags=collect(0:60
                     interval=1.0, kwargs...)
 end
 
+"""
+    test_cm(; r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins, ejectnumber)
+
+Compute CME predictions for dwell-time test configuration.
+
+Builds `MComponents`/`MTComponents` and returns `predictedarray(...)`.
+"""
 function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], ejectnumber=1)
     reporter, tcomponents = make_reporter_components_DT(transitions, G, R, S, insertstep, "", onstates, dttype)
     mcomponents = MComponents(transitions, G, R, nRNA, r[num_rates(transitions, R, S, insertstep)], "", ejectnumber)
@@ -147,6 +181,13 @@ function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.0002
     predictedarray(r, components, bins, reporter, dttype, nalleles, nRNA)
 end
 
+"""
+    test_CDT(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling)
+
+Coupled dwell-time CME prediction helper (legacy RG stack defaults).
+
+Returns `predictedarray(...)` using coupled reporter/components construction.
+"""
 function test_CDT(r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.045, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [3], [3]], [Int[], Int[], [3], [3]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), [(1, 2, 2, 3)]))
     reporter, components = make_reporter_components_DT(transitions, G, R, S, insertstep, "", onstates, dttype, coupling)
     couplingindices = coupling_indices(transitions, R, S, insertstep, [0, 0], coupling, nothing)
@@ -159,9 +200,9 @@ end
 
 Coupled dwell-time CME prediction. dwell_specs lists only observed units (hidden units omitted).
 Builds full onstates/dttype/bins (placeholder for hidden units), runs predictedarray, returns histograms
-only for units in dwell_specs. splicetype: "" = RG stack, "full" = full-matrix stack.
+only for units in dwell_specs. Coupled stack selection is controlled by `coupled_stack`.
 """
-function test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+function test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="", coupled_stack::Symbol=:full)
     unit_model = coupling[1]
     n_units = length(unit_model)
     observed = StochasticGene.observed_units_from_dwell_specs(dwell_specs)
@@ -182,7 +223,17 @@ function test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, couplin
             onstates_full[k] = R[k] == 0 ? [[G[k]] for _ in 1:length(placeholder.dttype)] : placeholder.onstates
         end
     end
-    reporter, components = make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates_full, dttype_full, coupling)
+    if coupled_stack === :full
+        reporter, components = make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates_full, dttype_full, coupling)
+    elseif coupled_stack === :legacy
+        sojourn = sojourn_states(onstates_full, G, R, S, insertstep, dttype_full)
+        components = TDCoupledComponents(coupling, transitions, G, R, S, insertstep, sojourn, dttype_full, splicetype)
+        sojourn_c = coupled_states(sojourn, coupling, components, G)
+        nonzeros = coupled_states(nonzero_rows(components), coupling, components, G)
+        reporter = (sojourn_c, nonzeros)
+    else
+        throw(ArgumentError("coupled_stack must be :full or :legacy (got $(coupled_stack))"))
+    end
     nrates = [num_rates(transitions[i], R[i], S[i], insertstep[i]) for i in eachindex(R)]
     couplingindices = coupling_indices(transitions, R, S, insertstep, zeros(Int, length(R)), coupling, nothing)
     rates, couplingStrength = prepare_rates_coupled(r, nrates, couplingindices)
@@ -238,6 +289,11 @@ function test_nullspace_solvers(M; nrep=10, verbose=true)
     return result
 end
 
+"""
+    test_set(; r, transitions, G, R, S, insertstep, coupling)
+
+Return a compact default parameter bundle for simple 3-unit coupled tests.
+"""
 function test_set(;
     r=[0.38, 0.1, 0.23, 0.2, 1.0,
        0.45, 0.2, 0.43, 0.3, 1.0,
@@ -253,6 +309,13 @@ return r, transitions, G, R, S, insertstep, coupling
 end
 
 
+"""
+    test_3unit(; r, transitions, G, R, S, insertstep, coupling, verbose=true)
+
+Compare coupled transition matrices built by RG stack and Full stack for a 3-unit model.
+
+Returns shape/magnitude agreement diagnostics and both dense matrices.
+"""
 function test_3unit(;
     r=[0.37, 0.1, 0.23, 0.21, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0,
        0.71, 0.23, 0.43, 0.31, 0.2, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0,
@@ -296,10 +359,21 @@ function test_3unit(;
             M_RG=M_RG,
             M_full=M_full)
 end
+
+"""
+    test_sim_coupled(; r, transitions, G, R, S, insertstep, onstates, dttype, bins, coupling, total, tol, verbose=false)
+
+Run coupled simulator for dwell-time histograms with converted dwell specs.
+"""
 function test_sim_coupled(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 0.0, 0.2, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 0.0, -0.5], transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])), G=(3, 3), R=(2, 2), S=(2, 2), insertstep=(1, 1), onstates=[[Int[], Int[], [2], [2]], [Int[], Int[], [2], [2]]], dttype=[["ON", "OFF", "ONG", "OFFG"], ["ON", "OFF", "ONG", "OFFG"]], bins=[[collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)], [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]], coupling=((1, 2), [(1, 2, 2, 2)]), total=10000000, tol=1e-6, verbose=false)
     simulator(r, transitions, G, R, S, insertstep, coupling=coupling, nhist=0, noiseparams=0, onstates=simDT_convert(onstates), bins=simDT_convert(bins), totalsteps=total, tol=tol, verbose=verbose)
 end
 
+"""
+    sim_grid(; r, p, Ngrid, transitions, G, R, S, insertstep, totaltime, interval, ntrials)
+
+Simulate grid-based traces (a_grid) for quick testing of grid HMM paths.
+"""
 function sim_grid(; r=[0.02, 0.1, 0.5, 0.2, 0.1, 0.01, 50, 15, 200, 70], p=0.2, Ngrid=4, transitions=([1, 2], [2, 1]), G=2, R=1, S=1, insertstep=1, totaltime=1000.0, interval=1.0, ntrials=10)
     Nstate = num_rates(transitions, R, S, insertstep)
     a_grid = StochasticGene.make_a_grid(p, Ngrid)
@@ -333,6 +407,13 @@ function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02,
     return h, make_array(hs)
 end
 
+"""
+    test_fit_simrna_compare(; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, nchains, ejectnumber)
+
+Generate synthetic RNA histogram data, fit the model, and compare predicted vs simulated histograms.
+
+Returns `(hc, h)` where `hc` is the fitted model prediction and `h` is the raw simulator histogram.
+"""
 function test_fit_simrna_compare(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=100000, nchains=1, ejectnumber=1)
     h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles, ejectnumber=ejectnumber)[1]
     data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0,[])  # yield=1.0 (Float64, no inflation needed)
@@ -343,6 +424,13 @@ function test_fit_simrna_compare(; rtarget=[0.33, 0.19, 20.5, 1.0], transitions=
     return hc, h
 end
 
+"""
+    compare_data_model(data, model, parml)
+
+Evaluate a model prediction against normalized RNA histogram data.
+
+Returns `(predicted_hist, normalized_data_hist)`.
+"""
 function compare_data_model(data, model, parml)
     hc = predictedfn(parml, data, model)
     return hc, normalize_histogram(data.histRNA)
@@ -430,7 +518,7 @@ function test_compare_coupling_full(;
         (unit=1, onstates=onstates[1], dttype=dttype[1], bins=bins[1]),
         (unit=2, onstates=onstates[2], dttype=dttype[2], bins=bins[2]),
     ]
-    h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+    h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
     cme_full = make_array(vcat(h_full...))
     verbose && println("CME Full: $(length(cme_full)) histogram bins computed")
 
@@ -468,6 +556,14 @@ function test_compare_coupling_full(;
             cme_full=cme_full, sim=sim_vec)
 end
 
+"""
+    test_compare_3unit(; r, transitions, G, R, S, insertstep, total, tol, verbose=false)
+
+Compare 3-unit coupled dwell-time CME predictions (full stack) against coupled simulator output.
+
+The setup uses two observed units and one hidden unit with unit-specific coupling source states.
+Returns `(cme_vec, sim_vec)` flattened arrays for direct numeric comparison.
+"""
 function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2, 1.0, 0.45, 0.2, 0.43, 0.3, 0.52, 0.31, 0.3, 0.86, 0.5, 1.0, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, -.9, -.7], transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1]), ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1])), G=(2, 2, 3), R=(2, 1, 0), S=(1, 0, 0), insertstep=(1, 1, 0), total=1000000, tol=1e-6, verbose=false)
     coupling = ((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:free, :free])
     bins_u = [collect(1:30), collect(1:30), collect(1.0:30), collect(1.0:30)]
@@ -477,7 +573,7 @@ function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2
         (unit=2, onstates=[Int[], Int[], [2], [2]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=bins_u),
     ]
     hs = simulator_dwell_specs(r, transitions, G, R, S, insertstep, dwell_specs=dwell_specs, coupling=coupling, nhist=0, noiseparams=0, totalsteps=total, tol=tol)
-    h = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+    h = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
     for i in eachindex(hs)
         hs[i] = StochasticGene.normalize_histogram.(hs[i])
     end
@@ -505,9 +601,9 @@ end
     test_trace_full(; coupling, G, R, S, insertstep, transitions, rtarget, noisepriors,
                     interval, totaltime, ntrials, method)
 
-Compare log-likelihoods from the RG-stack (`TCoupledComponents`, splicetype="") and the
-full-stack (`TCoupledFullComponents`, splicetype="full") trace/HMM paths on the same
-simulated traces. The two paths must agree to machine precision.
+Compare log-likelihoods from the legacy coupled stack (`TCoupledComponents`) and the
+default coupled-full trace/HMM paths on the same simulated traces. The two paths must agree
+to machine precision.
 
 Returns a NamedTuple with fields `ll_rg`, `ll_full`, `diff`, `match`.
 """
@@ -528,7 +624,7 @@ function test_trace_full(;
     fittedparam = StochasticGene.set_fittedparam(Int[], data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
 
     model_rg   = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "",     1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
-    model_full = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    model_full = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
 
     ll_rg   = loglikelihood(get_param(model_rg),   data, model_rg)[1]
     ll_full = loglikelihood(get_param(model_full), data, model_full)[1]
@@ -569,7 +665,7 @@ function test_trace_specs(;
     fittedparam = StochasticGene.set_fittedparam(Int[], data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
 
     model = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep,
-                       "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+                       "", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     ll = loglikelihood(get_param(model), data, model)[1]
 
     # Locate unit 2 noise params and perturb them: LL must be invariant
@@ -581,7 +677,7 @@ function test_trace_specs(;
     rtarget2[noise2_start:noise2_end] .*= 10.0
 
     model2 = load_model(data, rtarget2, rm, fittedparam, tuple(), transitions, G, R, S, insertstep,
-                        "full", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+                        "", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     ll_perturbed = loglikelihood(get_param(model2), data, model2)[1]
 
     diff = abs(ll - ll_perturbed)
@@ -593,8 +689,8 @@ end
 """
     test_correlation_functions(; r, transitions, G, R, S, insertstep, coupling, lags, probfn, verbose)
 
-Compute `correlation_functions` for both the RG-stack (`splicetype=""`) and the full-stack
-(`splicetype="full"`) and compare results. Because both stacks produce equivalent transition
+Compute `correlation_functions` for the legacy (`coupled_stack=:legacy`) and default coupled-full
+(`coupled_stack=:full`) paths and compare results. Because both stacks produce equivalent transition
 matrices the outputs must agree to machine precision.
 
 Returns a NamedTuple with fields `result_rg`, `result_full`, `diff_cc`, `diff_ac1`, `diff_ac2`,
@@ -610,8 +706,8 @@ function test_correlation_functions(;
     probfn=prob_Gaussian,
     verbose=true)
 
-    res_rg   = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="")
-    res_full = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="full")
+    res_rg   = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="", coupled_stack=:legacy)
+    res_full = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, lags; splicetype="", coupled_stack=:full)
 
     tau_rg, cc_rg, ac1_rg, ac2_rg, _, _, _, _, ccON_rg = res_rg[1:9]
     _,      cc_full, ac1_full, ac2_full, _, _, _, _, ccON_full = res_full[1:9]
@@ -662,7 +758,7 @@ function test_predict_traces(;
     df_rg   = StochasticGene.make_traces_dataframe(data, rtarget, transitions, G, R, S, insertstep,
                                                     prob_Gaussian, 4, "",     true, false, coupling)
     df_full = StochasticGene.make_traces_dataframe(data, rtarget, transitions, G, R, S, insertstep,
-                                                    prob_Gaussian, 4, "full", true, false, coupling)
+                                                    prob_Gaussian, 4, "", true, false, coupling)
 
     println("test_predict_traces: df_rg rows=$(nrow(df_rg)), df_full rows=$(nrow(df_full))")
     return (df_rg=df_rg, df_full=df_full)
@@ -671,9 +767,9 @@ end
 """
     test_compare_RG_vs_Full(; r, dwell_specs, coupling, ntrials, rtol, verbose)
 
-Run the same coupled dwell-time CME with RG stack (splicetype="") and Full stack (splicetype="full"),
+Run the same coupled dwell-time CME on the legacy coupled stack and the default coupled-full stack,
 compare ON/OFF histograms and report time/memory. Uses 2-unit setup by default.
-ONG/OFFG are not compared (RG uses G-marginalized T; full stack uses full T for all until that path exists).
+ONG/OFFG are not compared (legacy uses G-marginalized T; coupled-full uses expanded full T for all until that path exists).
 Returns (h_RG, h_full, match::Bool, time_RG, time_full, alloc_RG, alloc_full).
 """
 function test_compare_RG_vs_Full(;
@@ -693,14 +789,14 @@ function test_compare_RG_vs_Full(;
     h_RG = nothing
     h_full = nothing
     for _ in 1:ntrials
-        t = @elapsed h_RG = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+        t = @elapsed h_RG = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="", coupled_stack=:legacy)
         time_RG += t
-        alloc_RG += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="")
+        alloc_RG += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="", coupled_stack=:legacy)
     end
     for _ in 1:ntrials
-        t = @elapsed h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+        t = @elapsed h_full = test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="", coupled_stack=:full)
         time_full += t
-        alloc_full += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="full")
+        alloc_full += @allocated test_CDT_full(r, transitions, G, R, S, insertstep, dwell_specs, coupling; splicetype="", coupled_stack=:full)
     end
     time_RG /= ntrials
     time_full /= ntrials
@@ -1058,7 +1154,7 @@ Fit a simulated joint trace dataset for coupled models and compare to the target
 
 # Notes
 - Delegates to [`test_fit_tracejoint_full`](@ref): **full-stack** coupled traces (`TCoupledFullComponents`,
-  `splicetype="full"`), with `trace_specs` / `data.units` for observed units (same path as production fits).
+  coupled-full trace/HMM path, with `trace_specs` / `data.units` for observed units (same path as production fits).
 """
 function test_fit_tracejoint(; kwargs...)
     test_fit_tracejoint_full(; kwargs...)
@@ -1070,7 +1166,7 @@ end
                               nsamples, trace_specs, totaltime, ntrials, fittedparam,
                               propcv, interval, noisepriors, maxtime, method)
 
-Full-stack (`TCoupledFullComponents`, `splicetype="full"`) joint-trace test. Uses `trace_specs`
+Coupled-full (`TCoupledFullComponents`) joint-trace test. Uses `trace_specs`
 (default: [`default_trace_specs_for_coupled`](@ref)) so each spec has `unit`, `interval`, `start`,
 `t_end`, `zeromedian`. Observed-unit indices are stored in `data.units` for correct HMM emission.
 
@@ -1096,7 +1192,7 @@ function test_fit_tracejoint_full(;
 
     trace_specs_eff = trace_specs === nothing ? StochasticGene.default_trace_specs_for_coupled((interval, 1.0, -1.0), [false, false], 2) : trace_specs
     units = [spec.unit for spec in trace_specs_eff]
-    # Coupled simulator uses the RG path; inference uses `TCoupledFullComponents` via `load_model(..., splicetype="full", ...)`.
+    # Coupled simulator uses the legacy path; inference uses `TCoupledFullComponents`.
     # Per-unit noise counts: one entry per unit (hidden units with R=0 use 0).
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
                                   interval, totaltime, ntrials; noiseparams=[4, 4])
@@ -1105,7 +1201,7 @@ function test_fit_tracejoint_full(;
                               mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
     rinit = rtarget
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep,
-                       "full", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)],
+                       "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)],
                        propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
@@ -1140,7 +1236,7 @@ function test_fit_tracejoint_hierarchical(; coupling=((1, 2), [(1, 2, 2, 1)], [:
     priormean = set_priormean([], transitions, R, S, insertstep, decayrate, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, coupling, nothing)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "tracejoint", transitions, R, S, insertstep, noisepriors, coupling, nothing)
-    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     rfit = StochasticGene.get_rates(fits.parml, model)
@@ -1222,7 +1318,7 @@ function test_fit_tracejoint_3unit(;
     block_ends = cumsum([nrates_per_unit[i] + length(noisepriors[i]) for i in eachindex(R)])
     block_starts = vcat(1, block_ends[1:end-1] .+ 1)
     decayrate = tuple((rtarget[block_starts[i] + nrates_per_unit[i] - 1] for i in eachindex(R))...)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], decayrate, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, "", 1, 10.0, Int[], decayrate, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     println(fits.accept," ",fits.total)
@@ -1515,7 +1611,7 @@ end
 
 # grads = Zygote.gradient(ll_wrap, param)
 
-##### scrapyard
+##### Experimental / exploratory helpers (scrapyard; not used by `runtests.jl`) #####
 
 
 

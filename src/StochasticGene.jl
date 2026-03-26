@@ -174,7 +174,6 @@ export
     mean,
     mean_elongationtime,
     metropolis_hastings,
-    ModelArgs,
     norm,
     normalize_histogram,
     num_all_parameters,

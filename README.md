@@ -1,6 +1,6 @@
 # StochasticGene.jl
 
-**Version 1.7.3**
+**Version 1.8.0**
 
 <!-- [![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl) -->
 [![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://nih-niddk-mbs.github.io/StochasticGene.jl)
@@ -17,54 +17,231 @@ The package can be installed using the Julia package manager. From the Julia REP
 pkg> add StochasticGene
 ```
 
-## Quick Start
+## Workflows
+
+StochasticGene is typically used in two ways:
+
+- **High‑throughput scRNA fitting**: one model, **many genes** (e.g. genome‑scale scRNA fits) to capture
+  genome‑wide effects.
+- **Focused single‑gene modeling**: **single genes or small gene sets**, often with live‑cell traces
+  and dwell times, where you test multiple dynamic models per gene (including coupled models for
+  simultaneous traces) and perform Bayesian model comparison.
+
+Both workflows share the same core `fit` engine and file layout.
+
+### Quick Start (single RNA histogram)
 
 ```julia
 using StochasticGene
 
-# Set up a simple two-state model
-fits = fit(
-    G = 2,
-    R = 0,
-    transitions = ([1,2], [2,1]),
-    datatype = "rna",
-    datapath = "data/example_data/",
-    gene = "MYC"
+fits, stats, measures, data, model, options = fit(
+    G         = 2,
+    R         = 0,
+    S         = 0,
+    insertstep= 1,
+    transitions = ([1, 2], [2, 1]),
+    datatype  = "rna",
+    datapath  = "data/HCT116_testdata/",
+    gene      = "MYC",
+    cell      = "HCT116",
+    datacond  = "MOCK",
+    resultfolder = "HCT116_test",
+    infolder     = "HCT116_test",
 )
 ```
 
-## Key Features
+This fits a simple two‑state telegraph model to a mock RNA histogram and writes results into
+`results/HCT116_test/`.
 
-### Model Simulation
-- Generalized telegraph models (GRSM)
-- Multiple gene states (G)
-- Pre-RNA steps (R)
-- Splice sites (S)
-- Reporter insertion
-- Multiple alleles
-- Coupled gene models
+---
 
-### Parameter Inference
-- Bayesian parameter estimation via MCMC
-- Maximum likelihood estimation
-- Hierarchical modeling
-- Parallel processing support
-- Adaptive proposal distributions
+## Workflow 1: High‑Throughput scRNA Fitting (Single Model, Many Genes)
 
-### Data Types
-- mRNA count distributions (smFISH, scRNA-seq)
-- Live cell imaging traces
-- Dwell time distributions
-- Combined data types
-- Time-series data
+This workflow uses a **fixed model specification** (`transitions, G, R, S, insertstep`) to fit
+many genes and study genome‑wide patterns in transcriptional parameters across genes/conditions.
 
-### Analysis Tools
-- Model fitting and comparison
-- Hidden Markov model analysis
-- Burst size analysis
-- ON/OFF state analysis
-- Model diagnostics
-- Posterior analysis
+### Direct `fit` call
+
+The main typed entrypoint is:
+
+```julia
+fits, stats, measures, data, model, options = fit(
+    nchains       = 2,
+    datatype      = "rna",
+    dttype        = String[],
+    datapath      = "data/HCT116_testdata/",
+    gene          = "MYC",
+    cell          = "HCT116",
+    datacond      = "MOCK",
+    traceinfo     = (1.0, 1.0, -1, 1.0),
+    infolder      = "HCT116_test",
+    resultfolder  = "HCT116_test",
+    inlabel       = "",
+    label         = "",
+    fittedparam   = Int[],
+    fixedeffects  = tuple(),
+    transitions   = ([1, 2], [2, 1]),
+    G             = 2,
+    R             = 0,
+    S             = 0,
+    insertstep    = 1,
+    coupling      = tuple(),
+    grid          = nothing,
+    root          = ".",
+    maxtime       = 60.0,
+    elongationtime= 6.0,
+    priormean     = Float64[],
+    priorcv       = 10.0,
+    nalleles      = 1,
+    onstates      = Int[],
+    decayrate     = -1.0,
+    splicetype    = "",
+    probfn        = prob_Gaussian,
+    noisepriors   = [],
+    hierarchical  = tuple(),
+    ratetype      = "median",
+    propcv        = 0.01,
+    samplesteps   = 1_000_000,
+    warmupsteps   = 0,
+    annealsteps   = 0,
+    temp          = 1.0,
+    tempanneal    = 100.0,
+    temprna       = 1.0,
+    burst         = false,
+    optimize      = false,
+    writesamples  = false,
+    method        = Tsit5(),
+    zeromedian    = false,
+    datacol       = 3,
+    ejectnumber   = 1,
+    yieldfactor   = 1.0,
+    trace_specs   = [],
+    dwell_specs   = [],
+)
+```
+
+Existing scripts that already called `fit` with numeric `G, R, S, insertstep` and `transitions`
+continue to work with this API.
+
+### Batch fitting on Biowulf with `makeswarm_genes`
+
+To fit all genes in a folder for a given model on Biowulf:
+
+```julia
+using StochasticGene
+
+makeswarm_genes(
+    cell         = "HCT116",
+    datatype     = "rna",
+    datapath     = "HCT116_testdata/",
+    datacond     = "MOCK",
+    G            = 2,
+    R            = 0,
+    S            = 0,
+    insertstep   = 1,
+    transitions  = ([1, 2], [2, 1]),
+    resultfolder = "HCT_scRNA",
+    root         = ".",
+    nchains      = 8,
+    maxtime      = 600.0,
+)
+```
+
+This generates:
+
+- A swarm file with one line per gene.
+- A shared fit script that calls `fit(...)` with the specified model and data arguments.
+
+Results are written under `results/HCT_scRNA`, and the analysis helpers in `io.jl` and `analysis.jl`
+(`write_dataframes_only`, `write_augmented`, etc.) can be used as before to summarize and compare fits.
+
+---
+
+## Workflow 2: Focused Single‑Gene Modeling (Many Models)
+
+This workflow is for **focused recordings on one or a few genes**, including live‑cell traces,
+dwell times, and histograms, where you want to compare multiple dynamic models per gene:
+
+- single‑unit models with arbitrary G/R/S, splicing, and reporters,
+- coupled models for simultaneous traces (e.g. enhancer–gene, multi‑allele, hidden units),
+- combinations of traces, dwell times, and RNA histograms with shared parameters.
+
+Each model configuration is identified by a **key** (e.g. `"33il"`), with a corresponding run‑spec file:
+
+- `results/<resultfolder>/info_<key>.toml`
+- (optionally) `results/<resultfolder>/info_<key>.jld2`
+
+### Fitting by key
+
+```julia
+fits, stats, measures, data, model, options = fit(; key="33il",
+    resultfolder = "my_results",
+    root         = ".",
+    # Optional overrides (e.g. maxtime, samplesteps) go here
+)
+```
+
+`fit` loads the run‑spec for `"33il"`, merges it with any overrides you provide, and runs the full
+fit. For coupled models, it always builds the **full coupled stack**
+(`TCoupledFullComponents` / `TDCoupledFullComponents`) under the hood. The `splicetype` keyword
+only controls the GRS splicing model and is no longer used to select between stacks.
+
+### Biowulf swarms with keys (`makeswarm`)
+
+```julia
+using StochasticGene
+
+makeswarm(
+    ["33il", "44il"];              # run keys
+    filedir      = "swarm",
+    resultfolder = "my_results",
+    root         = ".",
+    nchains      = 4,
+    nthreads     = 1,
+    maxtime      = 120.0,
+    samplesteps  = 1_000_000,
+    src          = "src",          # optional src path if not using the package
+)
+```
+
+This writes:
+
+- `fit.swarm` with one line per key, each running `fitscript_<key>.jl`.
+- `fitscript_<key>.jl` which calls `fit(; key="<key>", ...)` with the options you specified.
+
+This replaces older patterns that passed model layout via custom structs; all model configuration
+is now driven by the run‑spec files plus keyword overrides.
+
+### Correlation functions from fitted coupled models
+
+Given a coupled model with trace data and a saved `rates_<key>.txt` and `info_<key>.jld2`, you can
+compute theoretical correlation functions via:
+
+```julia
+using StochasticGene
+
+tau, cc, ac1, ac2, m1, m2, v1, v2,
+ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON,
+ccReporters, ac1Reporters, ac2Reporters, mR1, mR2, v1R, v2R =
+    correlation_functions_file("results/my_results/rates_33il.txt")
+```
+
+For batch processing:
+
+```julia
+write_correlation_functions_key("results/my_results";
+    lags    = collect(0:1:200),
+    ratetype= "median",
+)
+```
+
+This:
+
+- Finds `info_<key>.jld2` and `rates_<key>.txt` pairs.
+- Loads the full GRSM/coupled model from the run‑spec.
+- Uses the full coupled stack and `correlation_functions` to compute theoretical ON and reporter
+  correlation functions.
+- Writes `crosscorrelation_<key>.csv` for each run.
 
 ## Module Structure
 
@@ -667,18 +844,6 @@ julia> makeswarm(genes,cell="HBEC")
     - `threhsoldhigh::=Inf`: upper threshold
 
     and all keyword arguments in makeswarm(;<keyword arguments>)
-```
-
-```
-    makeswarm(models::Vector{ModelArgs}; <keyword arguments> )
-
-creates a run for each model
-
-#Arguments
-- `models::Vector{ModelArgs}`: Vector of ModelArgs structures
-
-and all keyword arguments in makeswarm(;<keyword arguments>)
-
 ```
 
 ```

@@ -3247,15 +3247,28 @@ function compute_correlation_functions_traces(traces::Vector{Matrix{Float64}}, l
         mean1 = sum1_total / n_total
         mean2 = sum2_total / n_total
     elseif !need_global_means
-        # For per-trace centering, global means are not needed - use dummy values
+        # For centering/normalization that doesn't require global means,
+        # we still compute per-trace means later; these dummy values are only used
+        # when correlation requires them (e.g. :global_mean centering).
         mean1 = 0.0
         mean2 = 0.0
     end
     # Compute per-trace correlation functions (internal helper)
     per_trace = _compute_per_trace_correlation_functions(traces, lags; mean1=mean1, mean2=mean2, correlation_algorithm=correlation_algorithm, frame_interval=frame_interval)
-    
-    mean1_empirical = mean1
-    mean2_empirical = mean2
+
+    # Even when global means are not required by the correlation computation (StandardCorrelation),
+    # we still want to report empirical means consistent with the trace data.
+    # This avoids misleading audit output like `Empirical mON1: 0.0` when ON is actually nonzero.
+    if need_global_means
+        mean1_empirical = mean1
+        mean2_empirical = mean2
+    else
+        trace_lengths = [size(t, 1) for t in traces]
+        total_len = sum(trace_lengths)
+        # Weighted by trace length to match the conceptual "global mean across all points".
+        mean1_empirical = total_len > 0 ? sum(per_trace.mean1 .* trace_lengths) / total_len : 0.0
+        mean2_empirical = total_len > 0 ? sum(per_trace.mean2 .* trace_lengths) / total_len : 0.0
+    end
     normalization_type = correlation_algorithm.normalization
     
     # Apply normalization and aggregation based on normalization type
