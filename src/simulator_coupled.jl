@@ -554,7 +554,7 @@ Prepare parameters for coupled model simulation. Coupling is (unit_model, connec
 - `coupling::Tuple`: (unit_model, connections) with each connection (β, s, α, t)
 - `transitions::Tuple`: Transition definitions for each gene
 - `G::Tuple`, `R::Tuple`, `S::Tuple`, `insertstep::Tuple`: Model dimensions
-- `nalleles::Int`, `noiseparams`: Alleles and noise param counts
+- `nalleles::Int`, `noiseparams`: Alleles and noise-parameter counts per unit: `Vector{Int}` (length `length(R)`; use `0` for hidden / no-reporter units), a scalar `Int` broadcast with `R[i] > 0`, or `nothing` (default `4` per unit with `R[i] > 0`, else `0`)
 
 # Returns
 - `Tuple`: (coupling_6, nalleles, noiseparams, r_prepared) with internal 6-tuple for simulation
@@ -565,9 +565,11 @@ function prepare_coupled(r, coupling, transitions, G, R, S, insertstep, nalleles
     if length(r) >= ncoupling && any(r[end-ncoupling+1:end] .< -1.0)
         throw(ArgumentError("all coupling strengths must be > -1.0"))
     end
-    if noiseparams isa Number
+    if isnothing(noiseparams)
+        noiseparams = [R[i] > 0 ? 4 : 0 for i in eachindex(R)]
+    elseif noiseparams isa Number
         # Only create noise parameters for observable units (R > 0); hidden units (R=0) have 0 noise params
-        noiseparams = [R[i] > 0 ? noiseparams : 0 for i in eachindex(G)]
+        noiseparams = [R[i] > 0 ? Int(noiseparams) : 0 for i in eachindex(R)]
     end
     coupling_6 = _coupling_from_connections(unit_model, connections)
     return coupling_6, nalleles, noiseparams, prepare_rates_sim(r, coupling_6, transitions, R, S, insertstep, noiseparams)
@@ -676,14 +678,22 @@ end
 - `hierarchical`: tuple of (background mean index, vector of background means)
 """
 function simulate_trace_vector(rin, transitions, G::Int, R, S, insertstep, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), warmupsteps=100, col=2)
-    trace = Vector{Vector{Float64}}(undef, ntrials)
+    # Scalar `col`: one column per trial → Vector{Float64} (legacy TraceData). Vector `col`: submatrix → Matrix{Float64}.
+    trace = col isa AbstractVector ? Vector{Matrix{Float64}}(undef, ntrials) : Vector{Vector{Float64}}(undef, ntrials)
     r = copy(rin)
     for i in eachindex(trace)
         if !isempty(hierarchical)
             r[hierarchical[1]] = hierarchical[2][i]
         end
         if isnothing(a_grid)
-            trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1][1:end-1, col]
+            raw = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1]
+            idxs = col isa AbstractVector ? collect(col) : col
+            sl = raw[1:end-1, idxs]
+            if col isa AbstractVector
+                trace[i] = Matrix{Float64}(sl)
+            else
+                trace[i] = Vector{Float64}(sl)
+            end
         else
             trace[i] = simulator(r, transitions, G, R, S, insertstep, onstates=onstates, traceinterval=interval, totaltime=totaltime, nhist=0, reporterfn=reporterfn, a_grid=a_grid, warmupsteps=warmupsteps)[1]
         end
@@ -693,9 +703,12 @@ end
 
 
 """
-    simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum)
+    simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; kwargs...)
 
-TBW
+Coupled multi-unit trace simulation. Keyword `noiseparams` should be a `Vector{Int}` with one count per unit
+(use `0` for hidden units with no reporter noise); a scalar (broadcast by `R[i] > 0`); or `nothing` for the
+default `[R[i] > 0 ? 4 : 0 for i in eachindex(R)]`. Pass `observed_units` to restrict trace output to
+observed units (e.g. exclude a hidden master unit).
 """
 # function simulate_trace_vector(r, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2)
 function simulate_trace_vector(rin, transitions, G::Tuple, R, S, insertstep, coupling::Tuple, interval, totaltime, ntrials; onstates=Int[], reporterfn=sum, a_grid=nothing, hierarchical=tuple(), col=2, totalsteps=100000, verbose=false, warmupsteps::Int=100, trace_specs=nothing, noiseparams=nothing, splicetype="", observed_units=nothing)

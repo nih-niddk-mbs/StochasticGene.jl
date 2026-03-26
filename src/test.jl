@@ -59,6 +59,87 @@ function test_sim(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000
     simulator(r, transitions, G, R, S, insertstep, nhist=nhist, nalleles=nalleles, onstates=onstates, bins=bins, totalsteps=total, tol=tol, ejectnumber=ejectnumber)
 end
 
+"""
+    get_3unit_model_params()
+
+Returns a NamedTuple with default parameters for the 3-unit coupled model with hidden unit.
+
+This is a reference model used in [`test_fit_tracejoint_3unit`](@ref) featuring:
+- Unit 1 (observable): G=2, R=1 (1 reporter, observable)
+- Unit 2 (observable): G=2, R=1 (1 reporter, observable)
+- Unit 3 (hidden): G=3, R=0 (no reporters, hidden from observation)
+- Coupling: Unit 3 inhibits both units 1 and 2
+
+# Returns
+NamedTuple with fields:
+- `transitions::Tuple`: State transitions for each unit
+- `G, R, S, insertstep`: Model structure parameters
+- `coupling::Tuple`: Coupling structure (unit 3 → units 1,2)
+- `r::Vector{Float64}`: Default rate parameters (28 elements)
+- `observed_units::Vector{Int}`: Which units are observable ([1, 2])
+- `noiseparams::Vector{Int}`: Noise parameters per unit ([4, 4, 0])
+- `trial_time::Float64`: Default simulation time per trial (720.0 minutes)
+- `ntrials::Int`: Default number of trials (100)
+- `lags::Vector{Int}`: Default lags for correlation (0:60)
+
+# Example
+```julia
+params = get_3unit_model_params()
+result = test_simulate_trials(ntrials=params.ntrials, trial_time=params.trial_time, lags=params.lags)
+```
+"""
+function get_3unit_model_params()
+    transitions = (([1, 2], [2, 1]), ([1, 2], [2, 1]), ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1]))
+    G = (2, 2, 3)
+    R = (1, 1, 0)
+    S = (0, 0, 0)
+    insertstep = (1, 1, 0)
+    coupling = ((1, 2, 3), [(3, 1, 1, 2), (3, 2, 2, 1)], [:inhibit, :inhibit])
+    r_u1 = [0.1, 0.2, 0.5, 0.3, 1.0, 5, 3, 10, 2]
+    r_u2 = [0.15, 0.25, 0.6, 0.4, 1.0, 5, 3, 10, 2]
+    r_u3 = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.3, 0.01]
+    r_coupling = [-0.5, -0.7]
+    r = vcat(r_u1, r_u2, r_u3, r_coupling)
+    observed_units = [1, 2]
+    noiseparams = [4, 4, 0]
+    trial_time = 720.0
+    ntrials = 1000
+    lags = collect(0:60)
+    return (
+        transitions=transitions,
+        G=G, R=R, S=S, insertstep=insertstep,
+        coupling=coupling,
+        r=r,
+        observed_units=observed_units,
+        noiseparams=noiseparams,
+        trial_time=trial_time,
+        ntrials=ntrials,
+        lags=lags
+    )
+end
+
+"""
+    test_simulate_trials(; ntrials=100, trial_time=720.0, lags=collect(0:60), kwargs...)
+
+Run [`simulate_trials`](@ref) with the default 3-unit coupled parameters from [`get_3unit_model_params`](@ref)
+(two observed units, one hidden inhibitory unit, coupling, and per-unit `noiseparams`).
+
+`interval=1.0` is passed through for frame timing and default `trace_specs`. Remaining `kwargs...` are forwarded to `simulate_trials`
+(e.g. `warmupsteps`, `offset`, `correlation_algorithm`, `zeromedian`, `trace_specs`).
+
+# Example
+```julia
+res = test_simulate_trials(ntrials=5, trial_time=80.0, warmupsteps=200)
+```
+"""
+function test_simulate_trials(; ntrials=100, trial_time=720.0, lags=collect(0:60), kwargs...)
+    params = get_3unit_model_params()
+    simulate_trials(params.r, params.transitions, params.G, params.R, params.S,
+                    params.insertstep, params.coupling, ntrials, trial_time, lags;
+                    observed_units=params.observed_units, noiseparams=params.noiseparams,
+                    interval=1.0, kwargs...)
+end
+
 function test_cm(r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], ejectnumber=1)
     reporter, tcomponents = make_reporter_components_DT(transitions, G, R, S, insertstep, "", onstates, dttype)
     mcomponents = MComponents(transitions, G, R, nRNA, r[num_rates(transitions, R, S, insertstep)], "", ejectnumber)
@@ -950,7 +1031,7 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     # data = StochasticGene.TraceData("trace", "test", interval, (trace, [], 0.0, 1))(trace, background, weight, nframes, tracescale)
     rinit = []
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, tuple(), nothing)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, tuple(), tuple())
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 0.1, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, tuple(), nothing, zeromedian)
     options = StochasticGene.MHOptions(nsamples, 10000, 0, maxtime, 1.0, 1.0)
@@ -974,24 +1055,13 @@ Fit a simulated joint trace dataset for coupled models and compare to the target
 
 # Returns
 - Tuple of (fitted rates, target rates).
+
+# Notes
+- Delegates to [`test_fit_tracejoint_full`](@ref): **full-stack** coupled traces (`TCoupledFullComponents`,
+  `splicetype="full"`), with `trace_specs` / `data.units` for observed units (same path as production fits).
 """
-function test_fit_tracejoint(; coupling=((1, 2), [(1, 2, 2, 1)], [:free]), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])), rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0., .05, 1.0, .05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, -0.4], rinit=Float64[], nsamples=10000, onstates=Int[], totaltime=2000.0, ntrials=10, fittedparam=Int[21], propcv=0.2, cv=10.0, interval=1.0, noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]), maxtime=60.0, method=Tsit5())
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials)
-    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), Int[])
-    priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
-    println(priormean)
-    rinit = [0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 1.0, 0.0, 0.05, 1.0, 0.05, 0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, 0.05, -0.4]
-    rinit = rtarget
-    # fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, coupling, nothing)
-    fittedparam = [21]
-    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
-    options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
-    fits, stats, measures = run_mh(data, model, options)
-    # return fits, stats, measures, model, data, options
-    println(fits.accept," ",fits.total)
-    lower = stats.qparam[1,:]
-    upper = stats.qparam[3,:]
-    return lower, rtarget[fittedparam], upper
+function test_fit_tracejoint(; kwargs...)
+    test_fit_tracejoint_full(; kwargs...)
 end
 
 
@@ -1000,10 +1070,9 @@ end
                               nsamples, trace_specs, totaltime, ntrials, fittedparam,
                               propcv, interval, noisepriors, maxtime, method)
 
-Full-stack (`TCoupledFullComponents`) version of `test_fit_tracejoint`. Uses `trace_specs`
-to declare observed units: each spec is a NamedTuple `(unit, interval, start, end, zeromedian)`.
-The observed-unit indices are extracted from `trace_specs` and stored in `data.units`, so the
-HMM likelihood correctly restricts emission to those units only.
+Full-stack (`TCoupledFullComponents`, `splicetype="full"`) joint-trace test. Uses `trace_specs`
+(default: [`default_trace_specs_for_coupled`](@ref)) so each spec has `unit`, `interval`, `start`,
+`t_end`, `zeromedian`. Observed-unit indices are stored in `data.units` for correct HMM emission.
 
 Fits the coupling strength (last parameter) and checks that `rtarget[fittedparam]` falls
 within the posterior credible interval.
@@ -1018,17 +1087,19 @@ function test_fit_tracejoint_full(;
              0.03, 0.1, 0.5, 0.2, 1.0, 0.0, 0.05, 1.0, .05, -0.4],
     rinit=Float64[],
     nsamples=10000,
-    trace_specs=[(unit=1, interval=1.0, start=0.0, zeromedian=false),
-                 (unit=2, interval=1.0, start=0.0, zeromedian=false)],
+    trace_specs=nothing,
     totaltime=2000.0, ntrials=10,
     fittedparam=Int[21],
     propcv=0.2, interval=1.0,
     noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]),
     maxtime=60.0, method=Tsit5())
 
-    units = [spec.unit for spec in trace_specs]
+    trace_specs_eff = trace_specs === nothing ? StochasticGene.default_trace_specs_for_coupled((interval, 1.0, -1.0), [false, false], 2) : trace_specs
+    units = [spec.unit for spec in trace_specs_eff]
+    # Coupled simulator uses the RG path; inference uses `TCoupledFullComponents` via `load_model(..., splicetype="full", ...)`.
+    # Per-unit noise counts: one entry per unit (hidden units with R=0 use 0).
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
-                                  interval, totaltime, ntrials)
+                                  interval, totaltime, ntrials; noiseparams=[4, 4])
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units)), 1), units)
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors,
                               mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
@@ -1062,14 +1133,14 @@ Fit a simulated joint trace dataset for coupled models using a hierarchical mode
 # Returns
 - Tuple of (fitted rates, target rates, fits, stats, measures, model, data, options).
 """
-function test_fit_tracejoint_hierarchical(; coupling=((1, 2), [(1, 2, 2, 1)]), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),   rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 0., 0.05, 1., 0.05, 0.03, 0.1, 0.5, 0.2, 0.1, 0., 0.05, 1., 0.05, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., .1, 1., 0.05], [0., 0.1, 1., 0.1]), maxtime=300.0, decayrate=1.0)
+function test_fit_tracejoint_hierarchical(; coupling=((1, 2), [(1, 2, 2, 1)], [:free]), G=(2, 2), R=(2, 1), S=(1, 0), insertstep=(1, 1), transitions=(([1, 2], [2, 1]), ([1, 2], [2, 1])),   rtarget=[0.03, 0.1, 0.5, 0.4, 0.4, 0.01, 0.01, 0., 0.05, 1., 0.05, 0.03, 0.1, 0.5, 0.2, 0.1, 0., 0.05, 1., 0.05, -0.5], rinit=Float64[], hierarchical=(2, [8, 17], tuple()), method=(Tsit5(), true), nsamples=20000, onstates=Int[], totaltime=1000.0, ntrials=20, fittedparam=Int[1, 2, 3, 4, 5, 6, 12, 13, 14, 15, 21], propcv=0.01, cv=100.0, interval=1.0, noisepriors=([0., .1, 1., 0.05], [0., 0.1, 1., 0.1]), maxtime=300.0, decayrate=1.0)
     rh = 50.0 .+ 10 * randn(ntrials)
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials, hierarchical=(6, rh))
-    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), Int[])
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials; hierarchical=(6, rh), noiseparams=[4, 4])
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), [1, 2])
     priormean = set_priormean([], transitions, R, S, insertstep, decayrate, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, coupling, nothing)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "tracejoint", transitions, R, S, insertstep, noisepriors, coupling, nothing)
-    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     rfit = StochasticGene.get_rates(fits.parml, model)
@@ -1109,9 +1180,9 @@ function test_fit_tracejoint_3unit(;
     nsamples=5000,
     onstates=Int[],
     totaltime=1000.0,
-    ntrials=20,
+    ntrials=50,
     fittedparam=Int[],
-    propcv=0.2,
+    propcv=0.05,
     cv=10.0,
     interval=1.0,
     noisepriors=([0.0, 0.1, 1.0, 0.1], [0.0, 0.1, 1.0, 0.1], [0.0, 0.1, 1.0, 0.1]),
@@ -1139,7 +1210,7 @@ function test_fit_tracejoint_3unit(;
             rtarget[coupling_start - 1 + k] = -0.2
         end
     end
-    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials; units=units)
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials; observed_units=units, noiseparams=[4, 4, 0])
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units)), 1), units)
     priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors, mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
     rinit = isempty(rinit) ? copy(rtarget) : rinit
@@ -1151,7 +1222,7 @@ function test_fit_tracejoint_3unit(;
     block_ends = cumsum([nrates_per_unit[i] + length(noisepriors[i]) for i in eachindex(R)])
     block_starts = vcat(1, block_ends[1:end-1] .+ 1)
     decayrate = tuple((rtarget[block_starts[i] + nrates_per_unit[i] - 1] for i in eachindex(R))...)
-    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, "", 1, 10.0, Int[], decayrate, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, "full", 1, 10.0, Int[], decayrate, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 100, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options)
     println(fits.accept," ",fits.total)
@@ -1205,7 +1276,7 @@ function test_fit_trace_grid_hierarchical(; grid=4, G=2, R=1, S=1, insertstep=1,
     traces = sim_grid(r=rtarget[1:end-1], p=rtarget[end], Ngrid=grid, transitions=transitions, G=G, R=R, S=S, insertstep=insertstep, totaltime=totaltime, interval=interval, ntrials=ntrials)
     data = StochasticGene.TraceData("tracegrid", "test", interval, (traces, [], weight, nframes), Int[])
     priormean = set_priormean([], transitions, R, S, insertstep, rtarget[num_rates(transitions, R, S, insertstep)], noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, tuple(), grid)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), grid)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "tracegrid", transitions, R, S, insertstep, noisepriors, tuple(), grid)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian_grid, noisepriors, (Tsit5(), true), hierarchical, tuple(), grid)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)
@@ -1455,7 +1526,7 @@ function test_tracejoint_h(; coupling=((1, 2), [(1, 2, 2, 1)]), G=(2, 2), R=(2, 
     trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling, interval, totaltime, ntrials, hierarchical=(6, rh))
     data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], [0.0, 0.0], 1), Int[])
     priormean = set_priormean([], transitions, R, S, insertstep, decayrate, noisepriors, mean_elongationtime(rtarget, transitions, R), hierarchical, coupling, nothing)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "tracejoint", transitions, R, S, insertstep, noisepriors, coupling, nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, coupling, nothing)
     options = StochasticGene.MHOptions(nsamples, 0, 0, maxtime, 1.0, 1.0)

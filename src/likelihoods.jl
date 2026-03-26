@@ -1097,11 +1097,11 @@ end
 
 
 function apply_transform(p::AbstractVector, f)
-    map((f, x) -> f(x), f, p)
+    Vector{Float64}(map((f, x) -> f(x), f, p))
 end
 
 function apply_transform(p::AbstractMatrix, f)
-    hcat([map((f, x) -> f(x), f, p[:, i]) for i in 1:size(p, 2)]...)
+    hcat([Vector{Float64}(map((f, x) -> f(x), f, p[:, i])) for i in 1:size(p, 2)]...)
 end
 
 """

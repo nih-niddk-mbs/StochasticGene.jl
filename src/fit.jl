@@ -852,7 +852,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid)
-    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid)
+    rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     if samplesteps > 0
@@ -893,6 +893,23 @@ function default_trace_specs_for_coupled(traceinfo, zeromedian, n_units::Int)
     zm_vec = zeromedian isa AbstractVector ? zeromedian : fill(zeromedian, n_units)
     length(zm_vec) >= n_units || throw(ArgumentError("zeromedian vector length must be >= n_units ($n_units)"))
     return [NamedTuple{(:unit, :interval, :start, :t_end, :zeromedian)}((u, interval, 0.0, t_end, zm_vec[u])) for u in 1:n_units]
+end
+
+"""
+    default_trace_specs_for_coupled(traceinfo, zeromedian, observed_units::Vector{Int})
+
+Same as `default_trace_specs_for_coupled(traceinfo, zeromedian, length(observed_units))`, but with
+`unit` set to `observed_units[i]` (for models where observed units are not contiguous `1:n`, e.g. units 1 and 3).
+"""
+function default_trace_specs_for_coupled(traceinfo, zeromedian, observed_units::Vector{Int})
+    n = length(observed_units)
+    n >= 1 || throw(ArgumentError("observed_units must be non-empty"))
+    interval = Float64(traceinfo[1])
+    tracetime = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
+    t_end = tracetime < 0 ? 1.0e30 : tracetime
+    zm_vec = zeromedian isa AbstractVector ? zeromedian : fill(zeromedian, n)
+    length(zm_vec) >= n || throw(ArgumentError("zeromedian vector length must be >= length(observed_units) ($n)"))
+    return [NamedTuple{(:unit, :interval, :start, :t_end, :zeromedian)}((observed_units[i], interval, 0.0, t_end, zm_vec[i])) for i in 1:n]
 end
 
 """
@@ -2795,7 +2812,7 @@ function set_rinit(r, priormean, minval=1e-10, maxval=1e10)
 end
 
 """
-    set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
+    set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing; nhypersets=1, ...)
 
 Set initial parameters for hierarchical models.
 
@@ -2804,9 +2821,10 @@ Set initial parameters for hierarchical models.
 - `priormean`: Prior means
 - `transitions, R, S, insertstep`: Model structure parameters
 - `noisepriors`: Noise priors
-- `nindividuals`: Number of individuals
+- `nindividuals`: Number of individuals (trace trials)
 - `coupling`: Coupling structure (default: empty tuple)
 - `grid`: Grid parameter (default: nothing)
+- `nhypersets`: Number of hyperparameter blocks at the start of `r` (must match `hierarchical[1]` in `load_model`; default `1`)
 - `minval`: Minimum valid value (default: 1e-7)
 - `maxval`: Maximum valid value (default: 300.0)
 
@@ -2814,16 +2832,16 @@ Set initial parameters for hierarchical models.
 - `Vector{Float64}`: Valid initial parameters for hierarchical model
 
 # Notes
-- Extends parameters for hierarchical models with multiple individuals
-- Calculates total parameters including coupling and grid parameters
-- Repeats prior means for each individual
+- Builds `r` with `(nhypersets + nindividuals)` blocks of `n_all_params` each, matching `make_hierarchical`.
+- If `length(priormean) ≥ nhypersets * n_all_params`, hyper blocks are taken from successive slices of `priormean`; otherwise each hyper block is filled from the first block of `priormean` / loaded rates.
 - Used for hierarchical model initialization
 """
-function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing, minval=1e-7, maxval=300.0)
+function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nindividuals, coupling=tuple(), grid=nothing; nhypersets::Int=1, minval=1e-7, maxval=300.0)
     c = ncoupling(coupling)
     g = isnothing(grid) ? 0 : 1
     n_all_params = num_all_parameters(transitions, R, S, insertstep, noisepriors) + c + g
-    total_expected = length(priormean) + nindividuals * n_all_params
+    # Stacked layout matches `make_hierarchical`: nhypersets full blocks + one block per individual
+    total_expected = (nhypersets + nindividuals) * n_all_params
     if isempty(r) || any(isnan.(r)) || any(isinf.(r)) || length(r) < total_expected
         isempty(r) && println("No rate file, set rate to prior")
         any(isnan.(r)) && println("r contains NaN, set rate to prior")
@@ -2852,8 +2870,19 @@ function set_rinit(r, priormean, transitions, R, S, insertstep, noisepriors, nin
                 end
             end
         end
-        r = Vector{Float64}(copy(seed))
-        for i in 1:nindividuals
+        r = Vector{Float64}()
+        if length(priormean) >= nhypersets * n_all_params
+            for b in 1:nhypersets
+                lo = (b - 1) * n_all_params + 1
+                hi = b * n_all_params
+                append!(r, priormean[lo:hi])
+            end
+        else
+            for _ in 1:nhypersets
+                append!(r, seed)
+            end
+        end
+        for _ in 1:nindividuals
             append!(r, seed)
         end
     end

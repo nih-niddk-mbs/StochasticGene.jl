@@ -5,7 +5,7 @@ export GMmodel, GRSMmodel, AbstractGRSMmodel, AbstractGeneTransitionModel, Abstr
 export fit, fit_parallel, loglikelihood, predictedarray, predictedfn
 
 # Model Simulation
-export simulator, simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_trials, get_3unit_model_params, simulate_trials_3unit
+export simulator, simulate_trace, simulate_trace_data, simulate_trace_vector, simulate_trials, get_3unit_model_params, test_simulate_trials
 
 # Data Types
 export RNAData, RNADwellTimeData, RNAOnOffData, TraceData, TraceRNAData
