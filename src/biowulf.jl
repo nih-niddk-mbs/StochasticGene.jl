@@ -95,8 +95,8 @@ function write_run_spec_preset(resultfolder::AbstractString, key::AbstractString
 end
 
 """
-    makeswarm_modelgrid(models::Vector{<:NamedTuple}; transitions=nothing, kwargs...)
-    makeswarm_modelgrid(Gvec, Rvec, Svec, insertvec; combine=:product, kwargs...)
+    makeswarm_models(models::Vector{<:NamedTuple}; transitions=nothing, kwargs...)
+    makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=:product, kwargs...)
 
 Batch workflow for **many models, few genes**: merge `fit_default_spec` with shared kwargs (leave
 `priormean` empty to use `fit` defaults: for trace single-unit models, `make_structures` applies
@@ -117,7 +117,7 @@ passed to `makeswarm`; all others are merged into each run spec (and into `fit_d
 For slow coupled fits, fit single units first, combine rates with [`create_combined_file`](@ref), then
 run coupled models using those starts (see README Workflow 2).
 """
-function makeswarm_modelgrid(models::AbstractVector{<:NamedTuple}; transitions=nothing, kwargs...)
+function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=nothing, kwargs...)
     swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
     base = merge(fit_default_spec(), fit_kw)
     if transitions !== nothing && !haskey(base, :transitions)
@@ -153,7 +153,7 @@ function makeswarm_modelgrid(models::AbstractVector{<:NamedTuple}; transitions=n
     makeswarm(keys_out; pairs(mk)...)
 end
 
-function makeswarm_modelgrid(
+function makeswarm_models(
     Gvec::AbstractVector{<:Integer},
     Rvec::AbstractVector{<:Integer},
     Svec::AbstractVector{<:Integer},
@@ -170,7 +170,7 @@ function makeswarm_modelgrid(
     else
         throw(ArgumentError("combine must be :product or :zip"))
     end
-    makeswarm_modelgrid(models; kwargs...)
+    makeswarm_models(models; kwargs...)
 end
 
 """

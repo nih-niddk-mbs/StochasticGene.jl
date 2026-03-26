@@ -212,7 +212,7 @@ This writes:
 This replaces older patterns that passed model layout via custom structs; all model configuration
 is now driven by the run‑spec files plus keyword overrides.
 
-**Batching many models (same gene, grid over G/R/S/insertstep):** use `makeswarm_modelgrid` to merge
+**Batching many models (same gene, sweep over G/R/S/insertstep):** use `makeswarm_models` to merge
 `fit_default_spec` with your shared options (leave `priormean` empty so `fit` uses `prior_ratemean_trace`
 and structured `priorcv` for trace single-unit models), write one `info_<key>.jld2` per model with
 `write_run_spec_preset`, and emit the swarm plus `fitscript_<key>.jl` files. Keys default to

@@ -175,7 +175,7 @@ export
     make_dataframes,
     make_mat,
     makeswarm,
-    makeswarm_modelgrid,
+    makeswarm_models,
     makeswarm_coupled,
     makeswarm_genes,
     write_fitfile_coupled,

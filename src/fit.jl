@@ -181,7 +181,7 @@ const _FIT_DEFAULTS = (
     fit_default_spec() -> Dict{Symbol,Any}
 
 Return a copy of default `fit` keyword arguments as a `Dict`, with `probfn` resolved to `prob_Gaussian`
-when the default would be `nothing`. Used by batch utilities (e.g. `makeswarm_modelgrid`) to build
+when the default would be `nothing`. Used by batch utilities (e.g. `makeswarm_models`) to build
 run specs consumed by `write_run_spec_preset` / `fit(; key=...)`.
 """
 function fit_default_spec()
