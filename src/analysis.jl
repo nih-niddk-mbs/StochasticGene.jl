@@ -2788,6 +2788,45 @@ function write_residency_G_folder(folder)
 
 end
 
+function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+    _, model = make_trace_datamodel(traces, interval, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    rates, noiseparams, couplingStrength = prepare_rates(get_param(model), model)
+    Qtr = make_mat_TC(model.components, rates, couplingStrength)
+    p0 = normalized_nullspace(Qtr)
+    return p0
+end
+
+function write_joint_residence_prob(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    p0 = make_p0_coupled(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    Gjoint, Rjoint = joint_residence_prob(p0, G, R, S, insertstep, coupling)
+    df = joint_residence_prob_dataframe(Gjoint, Rjoint)
+    CSV.write(outfile, df)
+end
+
+"""
+    write_joint_residence_prob_onoff(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, units=nothing)
+
+Compute stationary ON/OFF joint residence probabilities and write a one-row CSV with:
+`ON_ON`, `ON_OFF`, `OFF_ON`, `OFF_OFF`.
+
+Uses the same `p0` construction path as [`write_joint_residence_prob`](@ref), then projects to ON/OFF
+via [`joint_residence_prob_onoff`](@ref). Output probabilities are normalized to sum to 1.
+"""
+function write_joint_residence_prob_onoff(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, units=nothing)
+    traces = read_tracefiles(datapath, datacond, start, stop)
+    p0 = make_p0_coupled(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
+    pr = joint_residence_prob_onoff(p0, G, R, S, insertstep, coupling; units=units)
+    df = DataFrame(
+        ON_ON=[pr.ON_ON],
+        ON_OFF=[pr.ON_OFF],
+        OFF_ON=[pr.OFF_ON],
+        OFF_OFF=[pr.OFF_OFF],
+    )
+    CSV.write(outfile, df)
+    return outfile
+end
+
 """
     make_trace_histogram(datapath, datacond, start=1, stop=-1)
 

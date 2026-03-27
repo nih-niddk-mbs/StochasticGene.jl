@@ -76,6 +76,127 @@ end
 ##### Developer diagnostics below (not used by `runtests.jl`) #####
 
 """
+    makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
+
+Developer driver that mirrors the old `makeswarmfiles` intent using the package API
+[`makeswarm_models`](@ref): define a batch of model layouts, write `info_<key>.jld2/.toml`,
+and generate swarm + fit scripts.
+
+Use `models` (vector of NamedTuples with `G,R,S,insertstep` and optional `key`) for explicit
+control, or leave `models=nothing` to generate from `Gvec/Rvec/Svec/insertvec`.
+All `kwargs...` are forwarded to [`makeswarm_models`](@ref) (e.g. data paths, fit options,
+`swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, etc.).
+"""
+function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, kwargs...)
+    if models === nothing
+        return makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=combine, transitions=transitions, kwargs...)
+    else
+        return makeswarm_models(models; transitions=transitions, kwargs...)
+    end
+end
+
+function _driver_parse_gamma(v, ncoupling::Int)
+    v === nothing && return nothing
+    if v isa AbstractVector
+        vals = Float64.(collect(v))
+        return length(vals) == ncoupling ? vals : nothing
+    end
+    if v isa Number
+        return fill(Float64(v), ncoupling)
+    end
+    s = strip(String(v))
+    isempty(s) && return nothing
+    s = replace(replace(s, "[" => ""), "]" => "")
+    parts = [strip(x) for x in split(s, ",") if !isempty(strip(x))]
+    vals = Float64[]
+    for p in parts
+        try
+            push!(vals, parse(Float64, p))
+        catch
+            return nothing
+        end
+    end
+    length(vals) == ncoupling ? vals : nothing
+end
+
+"""
+    read_combined_file_specs_csv(csv_path; key_col="Model_name", ncoupling_col="ncoupling", gamma_col="default_coupling", skip_empty=true)
+
+Read a simple CSV into combine-spec rows for [`create_combined_files_driver`](@ref).
+Returns `Vector{NamedTuple}` with fields:
+- `key::String`
+- `ncoupling::Int`
+- `default_coupling::Union{Nothing,Vector{Float64}}`
+
+If `ncoupling_col` is absent, defaults to `1`. If `gamma_col` is absent/unparseable, uses `nothing`
+(so `create_combined_file` fills coupling columns with zeros).
+"""
+function read_combined_file_specs_csv(csv_path::AbstractString; key_col::String="Model_name", ncoupling_col::String="ncoupling", gamma_col::String="default_coupling", skip_empty::Bool=true)
+    df = DataFrame(CSV.File(csv_path))
+    haskey(df, key_col) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
+    rows = NamedTuple[]
+    for row in eachrow(df)
+        key = strip(string(row[Symbol(key_col)]))
+        (skip_empty && isempty(key)) && continue
+        ncoupling = haskey(df, ncoupling_col) ? Int(row[Symbol(ncoupling_col)]) : 1
+        gamma_raw = haskey(df, gamma_col) ? row[Symbol(gamma_col)] : nothing
+        default_coupling = _driver_parse_gamma(gamma_raw, ncoupling)
+        push!(rows, (key=key, ncoupling=ncoupling, default_coupling=default_coupling))
+    end
+    return rows
+end
+
+"""
+    create_combined_files_driver(specs; enhancer_file, gene_file, outfolder, Nenh, Ngene, hierarchical=false)
+    create_combined_files_driver(csv_path::String; enhancer_file, gene_file, outfolder, Nenh, Ngene, hierarchical=false, key_col="Model_name", ncoupling_col="ncoupling", gamma_col="default_coupling", skip_empty=true)
+
+Developer driver for key-based combined starts. For each spec row, writes:
+`joinpath(outfolder, "rates_" * combined_rates_key(key; hierarchical=hierarchical) * ".txt")`
+using [`create_combined_file`](@ref).
+
+This keeps naming key-first (`rates_<key>.txt` with optional `-h`) and avoids legacy label/model filenames.
+"""
+function create_combined_files_driver(
+    specs::AbstractVector{<:NamedTuple};
+    enhancer_file::AbstractString,
+    gene_file::AbstractString,
+    outfolder::AbstractString,
+    Nenh::Integer,
+    Ngene::Integer,
+    hierarchical::Bool=false,
+)
+    isdir(outfolder) || mkpath(outfolder)
+    out = String[]
+    for s in specs
+        key = haskey(s, :key) ? String(s.key) : throw(ArgumentError("each spec needs key"))
+        nc = haskey(s, :ncoupling) ? Int(s.ncoupling) : 1
+        γ = haskey(s, :default_coupling) ? s.default_coupling : nothing
+        key_use = combined_rates_key(key; hierarchical=hierarchical)
+        outfile = joinpath(outfolder, "rates_" * key_use * ".txt")
+        create_combined_file(enhancer_file, gene_file, outfile, Int(Nenh), Int(Ngene); ncoupling=nc, default_coupling=γ)
+        push!(out, outfile)
+    end
+    return out
+end
+
+function create_combined_files_driver(
+    csv_path::AbstractString;
+    enhancer_file::AbstractString,
+    gene_file::AbstractString,
+    outfolder::AbstractString,
+    Nenh::Integer,
+    Ngene::Integer,
+    hierarchical::Bool=false,
+    key_col::String="Model_name",
+    ncoupling_col::String="ncoupling",
+    gamma_col::String="default_coupling",
+    skip_empty::Bool=true,
+)
+    specs = read_combined_file_specs_csv(csv_path; key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty)
+    create_combined_files_driver(specs; enhancer_file=enhancer_file, gene_file=gene_file, outfolder=outfolder, Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical)
+end
+
+"""
     test_sim(; r, transitions, G, R, S, insertstep, nhist, nalleles, onstates, bins, total, tol, ejectnumber)
 
 Run an uncoupled stochastic simulation with dwell-time configuration.

@@ -2813,12 +2813,36 @@ function correlation_functions(
     else
         throw(ArgumentError("coupled_stack must be :full or :legacy (got $(coupled_stack))"))
     end
-    # Default observed_units to [1, 2] for backward compatibility; noise_per_unit defaults to [4, 4]
+    # Default observed_units to [1, 2] for backward compatibility.
+    # Normalize noise_per_unit to match unit count so hidden/latent layouts don't throw bounds errors.
     if isnothing(observed_units)
         observed_units = [1, 2]
     end
     if isnothing(noise_per_unit)
-        noise_per_unit = [4, 4]
+        n_units = length(R)
+        # Default trace noise params only for observed units; hidden/unobserved units get none.
+        noise_per_unit = fill(0, n_units)
+        for i in observed_units
+            if 1 <= i <= n_units && R[i] > 0
+                noise_per_unit[i] = 4
+            end
+        end
+    else
+        n_units = length(R)
+        nv = Int.(collect(noise_per_unit))
+        if length(nv) < n_units
+            append!(nv, fill(0, n_units - length(nv)))
+        elseif length(nv) > n_units
+            nv = nv[1:n_units]
+        end
+        # Enforce hidden/unobserved units as having no emission/noise parameters.
+        observed_set = Set(observed_units)
+        for i in 1:n_units
+            if !(i in observed_set) || R[i] == 0
+                nv[i] = 0
+            end
+        end
+        noise_per_unit = nv
     end
     r, couplingStrength, noiseparams = prepare_rates_coupled(rin, coupling, transitions, R, S, insertstep, noise_per_unit)
     

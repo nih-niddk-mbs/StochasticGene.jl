@@ -1071,23 +1071,6 @@ function residenceprob_G_dataframe(r::Vector, G::Int)
     return df
 end
 
-function write_joint_residence_prob(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    traces = read_tracefiles(datapath, datacond, start, stop)
-    # r = readrates(file, get_row("median"))
-    p0 = make_p0_coupled(traces, interval, r, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
-    Gjoint, Rjoint = joint_residence_prob(p0, G, R, S, insertstep, coupling)
-    df = joint_residence_prob_dataframe(Gjoint, Rjoint)
-    CSV.write(outfile, df)
-end
-
-function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
-    _, model = make_trace_datamodel(traces, interval, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
-    rates, noiseparams, couplingStrength = prepare_rates(get_param(model), model)
-    Qtr = make_mat_TC(model.components, rates, couplingStrength)
-    p0 = normalized_nullspace(Qtr)
-    return p0
-end
-
 function joint_residence_prob(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple)
      Gjoint = zeros(G...)
      Rjoint = zeros(2,2)
@@ -1104,6 +1087,57 @@ function joint_residence_prob(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tupl
     end
     # return states
     return Gjoint ./ sum(Gjoint), Rjoint ./ sum(Rjoint)
+end
+
+"""
+    joint_residence_prob_onoff(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple; units=nothing)
+
+Compute the 2×2 joint residence probabilities for **ON/OFF** reporter states and return explicit
+entries `ON_ON`, `ON_OFF`, `OFF_ON`, `OFF_OFF` that sum to 1.
+
+`ON` is defined as `num_reporters_per_index(...) > 0` (using `insertstep`), i.e. the same ON/OFF
+definition used by `inverse_state(..., any)`.
+
+# Arguments
+- `p0`: Stationary distribution over coupled state space.
+- `G, R, S, insertstep, coupling`: Coupled model structure.
+- `units`: Optional 2-tuple of unit indices `(u1, u2)` to project. Defaults to first two units in
+  `coupling[1]`.
+
+# Returns
+NamedTuple with fields:
+- `ON_ON`, `ON_OFF`, `OFF_ON`, `OFF_OFF`
+- `matrix`: 2×2 matrix in row/column order `[OFF, ON] × [OFF, ON]`
+"""
+function joint_residence_prob_onoff(p0, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, coupling::Tuple; units=nothing)
+    unit_model = coupling[1]
+    u = if isnothing(units)
+        length(unit_model) >= 2 || throw(ArgumentError("Need at least two units in coupling[1]"))
+        (unit_model[1], unit_model[2])
+    else
+        (Int(units[1]), Int(units[2]))
+    end
+    1 <= u[1] <= length(G) || throw(ArgumentError("units[1] out of range"))
+    1 <= u[2] <= length(G) || throw(ArgumentError("units[2] out of range"))
+    u[1] != u[2] || throw(ArgumentError("units must be distinct"))
+
+    Rjoint = zeros(2, 2) # rows/cols = OFF(1), ON(2)
+    for i in eachindex(p0)
+        states = inverse_state(unit_state(i, G, R, S, unit_model), G, R, S, insertstep, any)
+        on1 = Int(states[u[1]][4]) + 1
+        on2 = Int(states[u[2]][4]) + 1
+        Rjoint[on1, on2] += p0[i]
+    end
+    s = sum(Rjoint)
+    s > 0 || throw(ArgumentError("Rjoint sum is zero; cannot normalize"))
+    Rjoint ./= s
+    return (
+        ON_ON=Rjoint[2, 2],
+        ON_OFF=Rjoint[2, 1],
+        OFF_ON=Rjoint[1, 2],
+        OFF_OFF=Rjoint[1, 1],
+        matrix=Rjoint,
+    )
 end
 
 """
