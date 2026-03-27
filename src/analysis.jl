@@ -2250,10 +2250,11 @@ function make_traces_dataframe_key(data::AbstractTraceData, rin, run_spec::Dict{
     probfn_raw  = run_spec[:probfn]
     if !isempty(coupling) && G isa Tuple
         fn = probfn_raw isa Tuple ? probfn_raw : ntuple(_ -> probfn_raw, length(G))
-        np = noisepriors isa Tuple ? length(noisepriors[1]) : length(noisepriors)
+        # Keep per-unit noise prior structure (tuple/vector) for coupled + hidden-unit layouts.
+        np = noisepriors
     else
         fn = probfn_raw isa Tuple ? first(probfn_raw) : probfn_raw
-        np = noisepriors isa Tuple ? length(noisepriors[1]) : length(noisepriors)
+        np = noisepriors isa Tuple ? first(noisepriors) : noisepriors
     end
     make_traces_dataframe(data, rin,
         run_spec[:transitions], G, run_spec[:R], run_spec[:S], run_spec[:insertstep],
@@ -2272,9 +2273,22 @@ function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, 
         method = Tsit5()
     end
     if !isempty(coupling) && G isa Tuple
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, grid, zeromedian)
+        n_units = length(G)
+        noisepriors = if noiseparams isa Number
+            [ones(Int, Int(noiseparams)) for _ in 1:n_units]
+        else
+            noiseparams
+        end
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, noisepriors, method, h, coupling, grid, zeromedian)
     else
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, coupling, grid, zeromedian)
+        noisepriors = if noiseparams isa Number
+            ones(Int, Int(noiseparams))
+        elseif noiseparams isa Tuple
+            first(noiseparams)
+        else
+            noiseparams
+        end
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, noisepriors, method, h, coupling, grid, zeromedian)
     end
     ts, d = predict_trace(get_param(model), data, model)
     states, observations = make_observation_dist(d, ts, G, R, S, coupling)
@@ -2358,7 +2372,12 @@ function write_traces_key(folder::String;
         dc       = isnothing(datacond)   ? info[:datacond]   : datacond
         col      = isnothing(datacol)    ? info[:datacol]    : datacol
         zm       = isnothing(zeromedian) ? info[:zeromedian] : zeromedian
-        data = load_data_trace(dp, "", "", dc, (dt, start, stop, 1.0, 0.0), :trace, col, zm)
+        datatype = String(get(info, :datatype, "trace"))
+        dttype = get(info, :dttype, String[])
+        trace_specs = get(info, :trace_specs, [])
+        dwell_specs = get(info, :dwell_specs, [])
+        temprna = Float64(get(info, :temprna, 1.0))
+        data = load_data(datatype, dttype, dp, "", "", dc, (dt, start, stop, 1.0, 0.0), temprna, col, zm, 1.0, trace_specs, dwell_specs)
         sp = splicetype == "" ? get(info, :splicetype, "") : splicetype
         df = make_traces_dataframe_key(data, r, info; state=state, splicetype=sp, grid=grid)
         CSV.write(outfile, df)
