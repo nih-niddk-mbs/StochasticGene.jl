@@ -80,7 +80,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 # Notes
 - If `propcv < 0`, proposal covariance is read from previous run if available.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
-- File and folder conventions may have changed; see README for details.
+- File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
 
 # Example
 If you are in the folder where data/HCT116_testdata is installed, you can fit the mock RNA histogram running 4 MCMC chains with:

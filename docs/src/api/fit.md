@@ -1,5 +1,8 @@
 # fit Function
 
+!!! note "Authoritative reference"
+    The full keyword list, coupling description, `key`-based loading, and return values are maintained in the **in-source docstring** for [`fit`](@ref). In the Julia REPL, use `?fit` after `using StochasticGene`. This page is a **short** summary; details may lag the code.
+
 Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
 
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).

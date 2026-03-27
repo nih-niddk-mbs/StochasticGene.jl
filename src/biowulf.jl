@@ -735,16 +735,27 @@ end
 """
     makeswarm_genes(genes::Vector{String}; <keyword arguments>)
 
-Write a swarm file and one shared fit script to run each gene in `genes`. Each swarm line runs the same
-script with the gene as argument: `julia -t nthreads -p nchains fitscript_<label>_<model>.jl gene`.
-The script calls `fit(...)` with `ARGS[1]` as the gene.
+Write a **swarm file** and **one shared fit script** so each gene runs as a separate job (genome-scale
+scRNA-style: one model specification, many genes). Each swarm line runs:
+
+`julia -t nthreads -p nchains fitscript_<label>_<model>.jl <gene>`
+
+The generated script passes the gene name as `ARGS[1]` into `fit(...)`.
 
 # Arguments
-- `genes`: vector of gene names
-- `batchsize=1000`: number of jobs per swarm file when `genes` is large
-- `filedir="."`: directory to write swarm and script files
-- Plus the same fit/model kwargs (datatype, dttype, datapath, cell, datacond,
-  transitions, G, R, S, insertstep, etc.) and swarm options (nchains, nthreads, swarmfile, juliafile, project, src).
+- `genes`: vector of gene names to include (list explicitly; there is no “all genes in folder” mode here).
+- `batchsize=1000`: split into multiple `.swarm` files when `length(genes) > batchsize`.
+- `filedir="."`: directory for `*.swarm` and the `fitscript_*.jl` file.
+- **`method`**: like other Biowulf helpers, this must be a **`String`** in the emitted script (e.g.
+  `\"Tsit5()\"`), not a raw `Tsit5()` value, so the script parses when submitted.
+- Plus the same keywords as [`fit`](@ref) for the model and data (`datatype`, `datapath`, `cell`,
+  `datacond`, `transitions`, `G`, `R`, `S`, `insertstep`, …) and swarm-only options (`nchains`,
+  `nthreads`, `swarmfile`, `juliafile`, `project`, `sysimage`, `src`).
+
+# Cluster use
+
+Submit the generated swarm with Biowulf `swarm` (or run the swarm file under Bash for sequential local
+execution). Allocate wall time and CPUs so `maxtime` and `nchains` are feasible.
 
 # Example
 ```julia

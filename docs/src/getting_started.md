@@ -2,14 +2,14 @@
 
 ## Folder Structure
 
-StochasticGene expects a specific directory structure for data and results:
+StochasticGene expects a specific directory structure for data and results. For **naming conventions**, **rate ordering**, and why **`results/`** is typically git-ignored, see [Package overview](package_overview.md).
 
 ```bash
 project_root/
 ├── data/
 │   ├── alleles/      # Contains allele count information
 │   └── halflives/    # Contains mRNA half-life information
-└── results/          # Output directory for analysis results
+└── results/          # Output directory for analysis results (add to .gitignore locally)
 ```
 
 ## Setting Up

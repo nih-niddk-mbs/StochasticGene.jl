@@ -6,7 +6,7 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
-**Version:** 1.7.3
+**Version:** 1.8.0
 
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
@@ -91,10 +91,11 @@ fits = fit(
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
 - `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
+- `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
 - `test.jl`: Test functions
 
-Batch workflows (swarms, combined starts, key-based runs) are documented in the manual: **Cluster and batch workflows** (`docs/src/cluster_batch_workflows.md`).
+Batch workflows (swarms, combined starts, key-based runs) are documented in the manual: **[Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html)**. Repository layout, `results/` conventions, and nomenclature are in **[Package overview](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/package_overview.html)**.
 
 # Dependencies
 
@@ -110,8 +111,7 @@ Batch workflows (swarms, combined starts, key-based runs) are documented in the 
 
 # Documentation
 
-For detailed usage, see the [documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/).
-Stable docs correspond to the current release (v1.7.3).
+Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.8.0).
 """
 module StochasticGene
 # __precompile__(true)

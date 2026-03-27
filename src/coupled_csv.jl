@@ -9,6 +9,40 @@
 #   6–7 gene→enhancer + sign
 # Token codes: two-digit "st", "Rsumk", "Ranyk", legacy "Rk" (see csv_row_to_connections_simple).
 
+"""
+    Coupled_models_to_test CSV schema
+
+This module implements parsing from **Coupled_models_to_test**-style spreadsheets into coupling connections
+and keyword dicts for [`build_coupled_fit_spec_from_csv_cells`](@ref), used by [`makeswarmfiles`](@ref)
+when `coupled_csv=true` and by [`makeswarmfiles_coupled`](@ref).
+
+# Column layout
+
+At least **7 columns** are required unless `coupled_csv_cols` remaps indices (default `(2, 3, 4, 5, 6, 7)`):
+
+| Section | Columns (default) | Content |
+|---------|-------------------|---------|
+| Key | 1 (`key_col`, default `Model_name`) | Run key; spaces → `-`. |
+| Enhancer→gene (1) | 2–3 | State token string + sign (`>0` / `<0`). |
+| Enhancer→gene (2) | 4–5 | Same. |
+| Gene→enhancer | 6–7 | State tokens + sign. |
+
+# Token strings in cells
+
+Comma-separated tokens are parsed per [`csv_row_to_connections_simple`](@ref):
+
+- Two-digit **`st`** — G-state source `s` and target transition index `t`.
+- **`Rsumk`**, **`Ranyk`** — sum or “any R step” coupling for elongation step `k`.
+- Legacy **`Rk`** — may be rewritten to `Rsumk` / `Ranyk` via [`replace_csv_cell_legacy_r`](@ref) when emitting variants.
+
+Sign cells use [`parse_coupling_sign_csv`](@ref) (`>0` → activate, else inhibit).
+
+# See also
+
+[`csv_row_to_connections_simple`](@ref), [`build_coupled_fit_spec_from_csv_cells`](@ref), [`makeswarmfiles`](@ref) docstring section *Coupled CSV*.
+"""
+const COUPLED_CSV_SCHEMA = true
+
 const _COUPLED_CSV_DEFAULT_ECOLS = (2, 3, 4, 5, 6, 7)
 
 """Map CSV sign string to `:activate` or `:inhibit` (`>0` / `<0`)."""

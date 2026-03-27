@@ -2,7 +2,7 @@
 
 A Julia package for simulating and fitting stochastic models of gene transcription to experimental data.
 
-**Current release: v1.7.3**
+**Current release: v1.8.0**
 
 ## Overview
 
@@ -53,6 +53,7 @@ fits, stats, measures, data, model, options = fit(nchains=4)
 
 - [Installation](installation.md): How to install StochasticGene.jl
 - [Getting Started](getting_started.md): Basic usage and examples
+- [Package overview](package_overview.md): Project layout, `results/` conventions, nomenclature (states vs steps), datatype summary, output files
 - [Cluster and batch workflows](cluster_batch_workflows.md): Biowulf swarms, `makeswarmfiles`, combined rate files (`create_combined_file*`), and key-based runs
 - [API Reference](api/index.md): Detailed documentation of all functions and types
 - [Concepts: Units and models](concepts/units_and_models.md): Units vs models and the unit–model map in coupled systems
