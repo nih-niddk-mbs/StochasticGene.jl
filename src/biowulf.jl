@@ -1,7 +1,8 @@
 # This file is part of StochasticGene.jl  
 
 # biowulf.jl
-# functions for use on the NIH Biowulf super computer
+# NIH Biowulf helpers: swarm files, fit scripts, run-spec presets (`makeswarm`, `makeswarm_models`,
+# `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, …).
 
 
 """
@@ -215,6 +216,206 @@ end
 function makeswarm(; key::String, kwargs...)
     isempty(key) && error("makeswarm(; key=...) requires a non-empty key")
     makeswarm([key]; kwargs...)
+end
+
+function _driver_write_specs_and_makeswarm(keys::Vector{String}, fit_base::Dict{Symbol,Any}, swarm_kw::Dict{Symbol,Any})
+    for key in keys
+        spec = copy(fit_base)
+        spec[:key] = key
+        write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
+    end
+    mk = merge(Dict{Symbol,Any}(
+        :nchains => get(swarm_kw, :nchains, 2),
+        :nthreads => get(swarm_kw, :nthreads, 1),
+        :swarmfile => get(swarm_kw, :swarmfile, "fit"),
+        :juliafile => get(swarm_kw, :juliafile, "fitscript"),
+        :filedir => get(swarm_kw, :filedir, "."),
+        :project => get(swarm_kw, :project, ""),
+        :sysimage => get(swarm_kw, :sysimage, ""),
+        :src => get(swarm_kw, :src, ""),
+        :resultfolder => get(fit_base, :resultfolder, ""),
+        :root => get(fit_base, :root, "."),
+    ), fit_base)
+    makeswarm(keys; pairs(mk)...)
+    return keys
+end
+
+"""
+    makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
+
+Developer driver for **single-unit** GRSM batches using [`makeswarm_models`](@ref): define model
+layouts, write `info_<key>.jld2/.toml`, and generate swarm + fit scripts. For **coupled key-first**
+workflows (CSV / explicit keys / H3 grid), use [`makeswarmfiles`](@ref) instead.
+
+Use `models` (vector of NamedTuples with `G,R,S,insertstep` and optional `key`) for explicit
+control, or leave `models=nothing` to generate from `Gvec/Rvec/Svec/insertvec`.
+All `kwargs...` are forwarded to [`makeswarm_models`](@ref) (e.g. data paths, fit options,
+`swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, etc.).
+"""
+function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, kwargs...)
+    if models === nothing
+        return makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=combine, transitions=transitions, kwargs...)
+    else
+        return makeswarm_models(models; transitions=transitions, kwargs...)
+    end
+end
+
+"""
+    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), kwargs...)
+    makeswarmfiles(csv_path, filedir; kwargs...)  # deprecated
+
+Unified entry for [`write_run_spec_preset`](@ref) + [`makeswarm`](@ref): one `info_<key>.jld2`
+(and marker TOML) per run key, plus swarm and `fitscript_<key>.jl` under `filedir`.
+
+Pick **exactly one** workflow below (mutually exclusive sources).
+
+# Coupled / key-first models (string keys + [`combined_rates_key`](@ref))
+
+Use when each run is identified by a **predefined key** (e.g. `H3-3-3`, combined-rate filenames).
+
+Provide keys in **one** of these ways:
+
+1. **`csv_file`**: path to a UTF-8 CSV with a **key column** (default `Model_name`; set `key_col`).
+   One row per model; other columns are ignored here (you may use them for bookkeeping or
+   [`create_combined_files`](@ref) workflows).
+2. **`base_keys`**: `Vector` of strings, e.g. `["H3-3-3", "H3-5-5"]`.
+3. **`h3_transition_range`**: e.g. `1:5` builds all `H3-t1-t2` base keys (same idea as
+   [`makeswarmfiles_h3_latent`](@ref)).
+
+Optional **`hierarchical_modes`**: tuple of `Bool` (default `(true, false)`) applies
+[`combined_rates_key`](@ref) for each mode (e.g. with/without `-h`). Use `(false,)` for non-hierarchical only.
+
+# Single-unit GRSM sweeps (keys from `G,R,S,insertstep`)
+
+Use when each run is a **different uncoupled** layout and keys come from [`default_model_key`](@ref)
+or per-row `key`:
+
+- **`models`**: `Vector` of named tuples with `G`, `R`, `S`, `insertstep`, optional `key`, plus
+  `transitions` (globally or per row as supported by [`makeswarm_models`](@ref)).
+- **Or** all four **`Gvec`, `Rvec`, `Svec`, `insertvec`**: grid with `combine=:product` or `:zip`.
+
+Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref). **Do not** combine with
+`csv_file`, `base_keys`, or `h3_transition_range`.
+
+# Common keywords
+
+- **`filedir`**: directory for `*.swarm` and `fitscript_<key>.jl`.
+- **`datapath`, `infolder`, `folder`**: merged into the run spec (`folder` is written as `resultfolder`).
+- **`maxtime`**: wall-time hint for scripts.
+- **`kwargs...`**: forwarded; swarm-only keys (`nthreads`, `nchains`, `project`, `juliafile`, …) go to
+  [`makeswarm`](@ref), the rest merge into each run spec (see [`_split_swarm_fit_kwargs`](@ref)).
+
+# Deprecated
+
+Two-argument form `makeswarmfiles(csv_path, filedir; ...)` — use
+`makeswarmfiles(; csv_file=csv_path, filedir=filedir, ...)`.
+"""
+function makeswarmfiles(;
+        filedir::AbstractString=".",
+        csv_file::AbstractString="",
+        datapath="data/5Prime_gene_enhancer/including_background/short",
+        infolder="coupled",
+        folder="coupled",
+        maxtime=30.0,
+        hierarchical_modes=(true, false),
+        key_col::String="Model_name",
+        skip_empty::Bool=true,
+        base_keys=nothing,
+        h3_transition_range=nothing,
+        models=nothing,
+        Gvec=nothing,
+        Rvec=nothing,
+        Svec=nothing,
+        insertvec=nothing,
+        combine::Symbol=:product,
+        transitions=([1, 2], [2, 1]),
+        kwargs...,
+    )
+    single_unit = models !== nothing ||
+        (Gvec !== nothing && Rvec !== nothing && Svec !== nothing && insertvec !== nothing)
+    if single_unit
+        !isempty(strip(csv_file)) &&
+            throw(ArgumentError("makeswarmfiles: csv_file cannot be used together with single-unit models= or Gvec/Rvec/Svec/insertvec"))
+        h3_transition_range !== nothing &&
+            throw(ArgumentError("makeswarmfiles: h3_transition_range cannot be used together with single-unit model sweep"))
+        base_keys !== nothing &&
+            throw(ArgumentError("makeswarmfiles: base_keys cannot be used together with single-unit model sweep"))
+        return makeswarmfiles_driver(; transitions=transitions, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
+            combine=combine, models=models, datapath=datapath, infolder=infolder, resultfolder=folder, maxtime=maxtime,
+            filedir=filedir, kwargs...)
+    end
+
+    path = strip(csv_file)
+    resolved = if !isempty(path)
+        h3_transition_range !== nothing &&
+            throw(ArgumentError("makeswarmfiles: cannot use csv_file together with h3_transition_range"))
+        !isnothing(base_keys) &&
+            @warn "makeswarmfiles: csv_file is set; ignoring base_keys" csv_file=path
+        df = DataFrame(CSV.File(path))
+        key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $path"))
+        out = String[]
+        for row in eachrow(df)
+            k = strip(string(row[Symbol(key_col)]))
+            (skip_empty && isempty(k)) && continue
+            push!(out, k)
+        end
+        isempty(out) &&
+            throw(ArgumentError("makeswarmfiles: CSV at '$path' produced no model keys (empty column or all rows skipped)."))
+        out
+    elseif h3_transition_range !== nothing
+        !isnothing(base_keys) &&
+            throw(ArgumentError("makeswarmfiles: use either h3_transition_range or base_keys, not both"))
+        [string("H3-", t1, "-", t2) for t1 in h3_transition_range for t2 in h3_transition_range]
+    elseif base_keys !== nothing
+        out = String[]
+        for k in base_keys
+            k2 = strip(string(k))
+            (skip_empty && isempty(k2)) && continue
+            push!(out, k2)
+        end
+        isempty(out) &&
+            throw(ArgumentError("makeswarmfiles: base_keys produced no non-empty keys (check skip_empty and entries)."))
+        out
+    else
+        throw(ArgumentError("makeswarmfiles: specify one source — csv_file, base_keys, h3_transition_range, or single-unit models / Gvec+Rvec+Svec+insertvec"))
+    end
+
+    keys = String[]
+    for h in hierarchical_modes
+        append!(keys, [combined_rates_key(k; hierarchical=h) for k in resolved])
+    end
+    swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
+    fit_base = merge(fit_default_spec(), fit_kw)
+    fit_base[:datapath] = datapath
+    fit_base[:infolder] = infolder
+    fit_base[:resultfolder] = folder
+    fit_base[:maxtime] = maxtime
+    swarm_kw[:filedir] = filedir
+    _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw)
+end
+
+function makeswarmfiles(csv_path::AbstractString, filedir::AbstractString; kwargs...)
+    Base.depwarn("makeswarmfiles(csv_path, filedir; kw...) is deprecated; use makeswarmfiles(; csv_file=csv_path, filedir=filedir, kw...)", :makeswarmfiles)
+    makeswarmfiles(; csv_file=csv_path, filedir=filedir, kwargs...)
+end
+
+"""
+    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled-h3", folder="coupled-h3", maxtime=30.0, hierarchical_modes=(true,false), kwargs...)
+
+Convenience wrapper: calls [`makeswarmfiles`](@ref) with `h3_transition_range=transition_range` and
+default `infolder` / `folder` for H3 latent coupled runs.
+"""
+function makeswarmfiles_h3_latent(filedir::AbstractString;
+        transition_range=1:5,
+        datapath="data/5Prime_gene_enhancer/including_background/short",
+        infolder="coupled-h3",
+        folder="coupled-h3",
+        maxtime=30.0,
+        hierarchical_modes=(true, false),
+        kwargs...,
+    )
+    makeswarmfiles(; filedir=filedir, h3_transition_range=transition_range, datapath=datapath,
+        infolder=infolder, folder=folder, maxtime=maxtime, hierarchical_modes=hierarchical_modes, kwargs...)
 end
 
 """

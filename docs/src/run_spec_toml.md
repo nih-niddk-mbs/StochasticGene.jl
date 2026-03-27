@@ -62,3 +62,4 @@ spec = read_run_spec_for_rates_file("results/myfolder/rates_myrun.txt")
 
 - [Model Fitting (fit)](@ref): full list of `fit` arguments.
 - [Key-based naming](@ref): `fit(; key = "id", ...)`.
+- [Cluster and batch workflows](cluster_batch_workflows.md): generating `info_<key>` presets with [`makeswarmfiles`](@ref) / [`write_run_spec_preset`](@ref) and combining single-unit rates for coupled starts.

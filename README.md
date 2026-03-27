@@ -17,6 +17,8 @@ The package can be installed using the Julia package manager. From the Julia REP
 pkg> add StochasticGene
 ```
 
+**Full manual (hosted on GitHub Pages):** [Documentation](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) — includes **[Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html)** for **`makeswarm`**, NIH Biowulf, and the recommended **coupled-model** path (fit individual units, merge fitted rates with `create_combined_file`, then run the coupled fit). Use `/dev/` instead of `/stable/` for the development docs.
+
 ## Workflows
 
 StochasticGene is typically used in two ways:
@@ -223,6 +225,9 @@ with `create_combined_file` (or `create_combined_file_mult` for more than two un
 combined file as a starting point for a coupled run that estimates coupling (and hidden units).
 Reciprocal coupling presets for sign modes live in `COUPLING_MODE_RECIPROCAL_DEFAULT` (see `make_coupling`
 and coupling documentation).
+
+**Full batch workflow reference (swarms, `makeswarmfiles`, CSV combined files, what belongs in docs vs README):**
+see the package docs — **[Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html)** (use `/dev/` instead of `/stable/` for the development docs).
 
 ### Correlation functions from fitted coupled models
 

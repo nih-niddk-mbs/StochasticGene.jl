@@ -2166,9 +2166,16 @@ Create DataFrame from trace data for coupled models (Tuple parameters).
 - Processes each unit in the coupling structure
 - Optionally includes state information for each unit
 - Handles missing values by padding with missing
+- **Gstate vs joint index:** the `Gstate` columns give the **promoter** index `g` (1…`G[k]`) for each
+  unit, not the full per-unit T-state. `JointState_*` is the **full** joint linear index over the
+  coupled T-space. The joint index can change while a unit’s `Gstate` stays fixed if only **reporter /
+  splice** (non-promoter) degrees of freedom change for that unit, or if other units’ slots change
+  while that unit’s marginal promoter state does not. For hidden units with `R[k] > 0`, `Rstate` and
+  `Reporters` columns (when present) show the rest of the decoded T-state.
 """
-function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling, observed_units=nothing)
+function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling, observed_units=nothing; joint_states=nothing)
     observed_units = isnothing(observed_units) ? [k for k in coupling[1] if R[k] > 0] : collect(Int, observed_units)
+    joint_states = isnothing(joint_states) ? ts : joint_states
     l = maximum(size.(traces, 1))
     cols = Matrix(undef, length(traces), 0)
     for (j, k) in enumerate(observed_units)
@@ -2183,6 +2190,39 @@ function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, ins
             s = ["Rstate$k" * "_$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             zs = ["Reporters$k" * "_$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
             cols = hcat(cols, [gs s zs])
+        end
+    end
+    if state
+        has_joint_indices = !isempty(joint_states) && !isempty(joint_states[1]) && (joint_states[1][1] isa Integer)
+        hidden_units = [k for k in coupling[1] if !(k in observed_units)]
+        for k in hidden_units
+            if has_joint_indices
+                dec_per_trace = [[inverse_state(idx, G, R, S, insertstep, coupling[1], any)[k] for idx in t] for t in joint_states]
+                g_hidden = [[d[1] for d in dec] for dec in dec_per_trace]
+                gs_hidden = ["Gstate$k" * "_$i" => [g_hidden[i]; fill(missing, l - length(g_hidden[i]))] for i in eachindex(g_hidden)]
+                cols = hcat(cols, gs_hidden)
+                if R[k] > 0
+                    zdigits_h = [[d[3] for d in dec_per_trace[i]] for i in eachindex(dec_per_trace)]
+                    r_h = [[d[4] for d in dec_per_trace[i]] for i in eachindex(dec_per_trace)]
+                    rs_h = ["Rstate$k" * "_$i" => [zdigits_h[i]; fill(missing, l - length(zdigits_h[i]))] for i in eachindex(zdigits_h)]
+                    rep_h = ["Reporters$k" * "_$i" => [r_h[i]; fill(missing, l - length(r_h[i]))] for i in eachindex(r_h)]
+                    cols = hcat(cols, [rs_h rep_h])
+                end
+            else
+                index = [[s[k] for s in t] for t in ts]
+                g, _, zdigits, r = inverse_state(index, G[k], R[k], S[k], insertstep[k])
+                gs_hidden = ["Gstate$k" * "_$i" => [g[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+                cols = hcat(cols, gs_hidden)
+                if R[k] > 0
+                    rs_h = ["Rstate$k" * "_$i" => [zdigits[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+                    rep_h = ["Reporters$k" * "_$i" => [r[i]; fill(missing, l - length(g[i]))] for i in eachindex(g)]
+                    cols = hcat(cols, [rs_h rep_h])
+                end
+            end
+        end
+        if has_joint_indices
+            joint_state = ["JointState_$i" => [joint_states[i]; fill(missing, l - length(joint_states[i]))] for i in eachindex(joint_states)]
+            cols = hcat(cols, joint_state)
         end
     end
     DataFrame(permutedims(cols, (2, 1))[:])
@@ -2306,10 +2346,10 @@ function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, 
         end
         model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, noisepriors, method, h, coupling, grid, zeromedian)
     end
-    ts, d = predict_trace(get_param(model), data, model)
-    states, observations = make_observation_dist(d, ts, G, R, S, coupling)
+    ts_joint, d = predict_trace(get_param(model), data, model)
+    states, observations = make_observation_dist(d, ts_joint, G, R, S, coupling)
     observed_units = !isempty(data.units) ? data.units : [k for k in coupling[1] if R[k] > 0]
-    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling, observed_units)
+    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling, observed_units; joint_states=ts_joint)
 end
 
 function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)

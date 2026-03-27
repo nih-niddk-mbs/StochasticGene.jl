@@ -6,6 +6,8 @@ A Julia package for simulating and fitting stochastic models of gene transcripti
 
 ## Overview
 
+If you install the package from the Julia registry (`Pkg.add("StochasticGene")`) or from GitHub, the full manual on **this site** includes **[Cluster and batch workflows](cluster_batch_workflows.md)** — how to use [`makeswarm`](@ref) on **NIH Biowulf**, and how to **merge single-unit fitted rates** into an **initial combined rate file** for **coupled** models.
+
 StochasticGene.jl is designed to analyze various types of experimental data including:
 - Distributions of mRNA counts per cell (e.g., single molecule FISH (smFISH) or single cell RNA sequencing (scRNA-seq) data)
 - Image intensity traces from live cell imaging
@@ -51,6 +53,7 @@ fits, stats, measures, data, model, options = fit(nchains=4)
 
 - [Installation](installation.md): How to install StochasticGene.jl
 - [Getting Started](getting_started.md): Basic usage and examples
+- [Cluster and batch workflows](cluster_batch_workflows.md): Biowulf swarms, `makeswarmfiles`, combined rate files (`create_combined_file*`), and key-based runs
 - [API Reference](api/index.md): Detailed documentation of all functions and types
 - [Concepts: Units and models](concepts/units_and_models.md): Units vs models and the unit–model map in coupled systems
 - [Examples](examples/index.md): More complex usage examples

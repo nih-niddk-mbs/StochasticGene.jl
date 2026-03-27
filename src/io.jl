@@ -4272,7 +4272,8 @@ For each MCMC row, columns are concatenated in order: enhancer block, gene block
 columns filled with `default_coupling` (or zeros). Use `Nenh`/`Ngene` as the **width of one set** per file
 (larger for hierarchical templates when each set includes hyperparameters).
 
-See also: [`create_combined_file_mult`](@ref) for more than two units.
+See also: [`create_combined_file_mult`](@ref) for more than two units; [`read_combined_file_specs_csv`](@ref) /
+[`create_combined_files_driver`](@ref) for key-based batch output from a CSV or explicit spec list.
 """
 function create_combined_file(enhancer_file::AbstractString, gene_file::AbstractString, output_file::AbstractString, Nenh::Integer, Ngene::Integer; ncoupling::Int=1, default_coupling=nothing)
     ed, eh = read_rates_table(enhancer_file)
@@ -4303,6 +4304,187 @@ function create_combined_file_mult(unit_rate_files::AbstractVector{<:AbstractStr
     out, hout = merge_coupled_stacked_units(unit_data, unit_headers, Nc; ncoupling=ncoupling, default_coupling=default_coupling)
     write_rates_table(output_file, out, hout)
     return output_file
+end
+
+# --- Key-based batch drivers (CSV model lists, H3 latent grids) ---
+
+function _parse_combined_file_spec_gamma(v, ncoupling::Int)
+    v === nothing && return nothing
+    if v isa AbstractVector
+        vals = Float64.(collect(v))
+        return length(vals) == ncoupling ? vals : nothing
+    end
+    if v isa Number
+        return fill(Float64(v), ncoupling)
+    end
+    s = strip(String(v))
+    isempty(s) && return nothing
+    s = replace(replace(s, "[" => ""), "]" => "")
+    parts = [strip(x) for x in split(s, ",") if !isempty(strip(x))]
+    vals = Float64[]
+    for p in parts
+        try
+            push!(vals, parse(Float64, p))
+        catch
+            return nothing
+        end
+    end
+    length(vals) == ncoupling ? vals : nothing
+end
+
+"""
+    read_combined_file_specs_csv(csv_path; key_col="Model_name", ncoupling_col="ncoupling", gamma_col="default_coupling", skip_empty=true)
+
+Read a simple CSV into combine-spec rows for [`create_combined_files_driver`](@ref).
+Returns `Vector{NamedTuple}` with fields:
+- `key::String`
+- `ncoupling::Int`
+- `default_coupling::Union{Nothing,Vector{Float64}}`
+
+If `ncoupling_col` is absent, defaults to `1`. If `gamma_col` is absent/unparseable, uses `nothing`
+(so [`create_combined_file`](@ref) fills coupling columns with zeros).
+"""
+function read_combined_file_specs_csv(csv_path::AbstractString; key_col::String="Model_name", ncoupling_col::String="ncoupling", gamma_col::String="default_coupling", skip_empty::Bool=true)
+    df = DataFrame(CSV.File(csv_path))
+    key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
+    rows = NamedTuple[]
+    for row in eachrow(df)
+        key = strip(string(row[Symbol(key_col)]))
+        (skip_empty && isempty(key)) && continue
+        ncoupling = ncoupling_col in names(df) ? Int(row[Symbol(ncoupling_col)]) : 1
+        gamma_raw = gamma_col in names(df) ? row[Symbol(gamma_col)] : nothing
+        default_coupling = _parse_combined_file_spec_gamma(gamma_raw, ncoupling)
+        push!(rows, (key=key, ncoupling=ncoupling, default_coupling=default_coupling))
+    end
+    return rows
+end
+
+"""
+    create_combined_files_driver(specs; enhancer_file, gene_file, outfolder, Nenh, Ngene, hierarchical=false)
+    create_combined_files_driver(csv_path::String; enhancer_file, gene_file, outfolder, Nenh, Ngene, hierarchical=false, key_col="Model_name", ncoupling_col="ncoupling", gamma_col="default_coupling", skip_empty=true)
+
+Developer driver for key-based combined starts. For each spec row, writes:
+`joinpath(outfolder, "rates_" * combined_rates_key(key; hierarchical=hierarchical) * ".txt")`
+using [`create_combined_file`](@ref).
+
+This keeps naming key-first (`rates_<key>.txt` with optional `-h`) and avoids legacy label/model filenames.
+"""
+function create_combined_files_driver(
+    specs::AbstractVector{<:NamedTuple};
+    enhancer_file::AbstractString,
+    gene_file::AbstractString,
+    outfolder::AbstractString,
+    Nenh::Integer,
+    Ngene::Integer,
+    hierarchical::Bool=false,
+)
+    isdir(outfolder) || mkpath(outfolder)
+    out = String[]
+    for s in specs
+        key = haskey(s, :key) ? String(s.key) : throw(ArgumentError("each spec needs key"))
+        nc = haskey(s, :ncoupling) ? Int(s.ncoupling) : 1
+        γ = haskey(s, :default_coupling) ? s.default_coupling : nothing
+        key_use = combined_rates_key(key; hierarchical=hierarchical)
+        outfile = joinpath(outfolder, "rates_" * key_use * ".txt")
+        create_combined_file(enhancer_file, gene_file, outfile, Int(Nenh), Int(Ngene); ncoupling=nc, default_coupling=γ)
+        push!(out, outfile)
+    end
+    return out
+end
+
+function create_combined_files_driver(
+    csv_path::AbstractString;
+    enhancer_file::AbstractString,
+    gene_file::AbstractString,
+    outfolder::AbstractString,
+    Nenh::Integer,
+    Ngene::Integer,
+    hierarchical::Bool=false,
+    key_col::String="Model_name",
+    ncoupling_col::String="ncoupling",
+    gamma_col::String="default_coupling",
+    skip_empty::Bool=true,
+)
+    specs = read_combined_file_specs_csv(csv_path; key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty)
+    create_combined_files_driver(specs; enhancer_file=enhancer_file, gene_file=gene_file, outfolder=outfolder, Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical)
+end
+
+"""
+    create_combined_files(csv_path::String, outfolder::String; enhancer_file, gene_file, hierarchical=false, Nenh=13, Ngene=13, key_col="Model_name")
+
+Developer wrapper with script-like call shape; reads keys from CSV and writes `rates_<key>.txt`
+combined starts using [`create_combined_files_driver`](@ref).
+"""
+function create_combined_files(csv_path::AbstractString, outfolder::AbstractString;
+        enhancer_file::AbstractString,
+        gene_file::AbstractString,
+        hierarchical::Bool=false,
+        Nenh::Integer=13,
+        Ngene::Integer=13,
+        key_col::String="Model_name",
+        ncoupling_col::String="ncoupling",
+        gamma_col::String="default_coupling",
+        skip_empty::Bool=true)
+    create_combined_files_driver(csv_path; enhancer_file=enhancer_file, gene_file=gene_file, outfolder=outfolder,
+        Nenh=Nenh, Ngene=Ngene, hierarchical=hierarchical, key_col=key_col, ncoupling_col=ncoupling_col, gamma_col=gamma_col, skip_empty=skip_empty)
+end
+
+"""
+    create_combined_files_h3_latent(outfolder::String; enhancer_file, gene_file, hierarchical=false, transition_range=1:5, Nenh=13, Ngene=13, Nlatent=8, n_noise=0, ncoupling=2, latent_prior=nothing, coupling_prior=nothing)
+
+Builds keys `H3-t1-t2` (optionally `-h` via `hierarchical`), stacks enhancer + gene blocks per set,
+appends a latent placeholder block and coupling columns, and writes one rates file per key.
+"""
+function create_combined_files_h3_latent(outfolder::AbstractString;
+        enhancer_file::AbstractString,
+        gene_file::AbstractString,
+        hierarchical::Bool=false,
+        transition_range=1:5,
+        Nenh::Integer=13,
+        Ngene::Integer=13,
+        Nlatent::Integer=8,
+        n_noise::Integer=0,
+        ncoupling::Integer=2,
+        latent_prior=nothing,
+        coupling_prior=nothing)
+    isdir(outfolder) || mkpath(outfolder)
+    ed, eh = read_rates_table(enhancer_file)
+    gd, gh = read_rates_table(gene_file)
+    nrows = size(ed, 1)
+    size(gd, 1) == nrows || throw(ArgumentError("enhancer and gene row counts must match"))
+    ne, ng = size(ed, 2), size(gd, 2)
+    ne % Int(Nenh) == 0 || throw(ArgumentError("enhancer width $ne not divisible by Nenh=$Nenh"))
+    ng % Int(Ngene) == 0 || throw(ArgumentError("gene width $ng not divisible by Ngene=$Ngene"))
+    nsets = div(ne, Int(Nenh))
+    nsets == div(ng, Int(Ngene)) || throw(ArgumentError("enhancer/gene set count mismatch"))
+
+    latent_len = latent_prior === nothing ? (Int(Nlatent) + Int(n_noise)) : length(latent_prior)
+    latent_vals = latent_prior === nothing ? fill(0.01, latent_len) : collect(Float64, latent_prior)
+    latent_hdr = ["Latent_$(i)" for i in 1:latent_len]
+    γ = coupling_prior !== nothing && length(coupling_prior) == Int(ncoupling) ? collect(Float64, coupling_prior) : fill(0.0, Int(ncoupling))
+
+    outfiles = String[]
+    for t1 in transition_range, t2 in transition_range
+        key = combined_rates_key("H3-$(t1)-$(t2)"; hierarchical=hierarchical)
+        outfile = joinpath(outfolder, "rates_" * key * ".txt")
+        out = zeros(Float64, nrows, 0)
+        hdr = String[]
+        for s in 1:nsets
+            ecols = ed[:, (s - 1) * Int(Nenh) + 1:s * Int(Nenh)]
+            gcols = gd[:, (s - 1) * Int(Ngene) + 1:s * Int(Ngene)]
+            out = hcat(out, ecols, gcols, repeat(reshape(latent_vals, 1, :), nrows, 1))
+            append!(hdr, eh[(s - 1) * Int(Nenh) + 1:s * Int(Nenh)])
+            append!(hdr, gh[(s - 1) * Int(Ngene) + 1:s * Int(Ngene)])
+            append!(hdr, latent_hdr)
+            for c in 1:Int(ncoupling)
+                out = hcat(out, fill(γ[c], nrows, 1))
+                push!(hdr, Int(ncoupling) == 1 ? "Coupling_$s" : "Coupling_$(c)_$s")
+            end
+        end
+        write_rates_table(outfile, out, hdr)
+        push!(outfiles, outfile)
+    end
+    outfiles
 end
 
 

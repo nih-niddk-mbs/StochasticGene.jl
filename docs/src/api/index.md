@@ -323,6 +323,12 @@ A structure for parameter transformations during fitting.
 - [`make_dataframes`](@ref): Create DataFrames from results
 - [`write_dataframes_only`](@ref): Write DataFrames to files
 
+### Cluster and combined-rate batch workflows
+
+Narrative guide (when to use which function, file layout, order of operations): [Cluster and batch workflows](../cluster_batch_workflows.md).
+
+Relevant APIs include [`makeswarm`](@ref), [`makeswarm_models`](@ref), [`makeswarmfiles`](@ref), [`makeswarmfiles_h3_latent`](@ref), [`write_run_spec_preset`](@ref), [`create_combined_file`](@ref), [`create_combined_file_mult`](@ref), [`combined_rates_key`](@ref), [`read_combined_file_specs_csv`](@ref), [`create_combined_files_driver`](@ref), [`create_combined_files`](@ref), [`create_combined_files_h3_latent`](@ref), [`read_rates_table`](@ref), [`write_rates_table`](@ref).
+
 ## Analysis Functions
 
 ### Model Diagnostics

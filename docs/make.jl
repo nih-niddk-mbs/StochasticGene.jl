@@ -19,6 +19,7 @@ makedocs(
         "Home" => "index.md",
         "Installation" => "installation.md",
         "Getting Started" => "getting_started.md",
+        "Cluster and batch workflows" => "cluster_batch_workflows.md",
         "Examples" => [
             "Overview" => "examples/index.md",
             "Basic Examples" => [

@@ -107,6 +107,8 @@ julia> ] update StochasticGene
 julia> ] add StochasticGene
 ```
 
+4. **Next:** for **swarm files**, **`makeswarm`**, merging single-unit rates for **coupled** fits, and the recommended **individual-units-then-merge** workflow, read **[Cluster and batch workflows](cluster_batch_workflows.md)** in this manual (also linked from the documentation home page).
+
 If you encounter Julia crashes after an update, remove your Julia depot and reinstall:
 
 ```bash

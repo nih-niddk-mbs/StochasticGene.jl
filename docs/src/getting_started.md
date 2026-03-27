@@ -209,6 +209,7 @@ The package can handle:
 
 ## Next Steps
 
+- **Cluster / Biowulf / batch fits:** read [Cluster and batch workflows](cluster_batch_workflows.md) for [`makeswarm`](@ref), [`makeswarmfiles`](@ref), and the **coupled-model workflow** (fit units separately, merge rates with [`create_combined_file`](@ref), then run the coupled fit).
 - Check the [Examples](@ref) section for more complex usage scenarios
 - Read the [API Reference](@ref) for detailed function documentation
 - Join the [GitHub discussions](https://github.com/nih-niddk-mbs/StochasticGene.jl/discussions) for community support

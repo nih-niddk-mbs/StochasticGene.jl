@@ -84,15 +84,17 @@ fits = fit(
 - `transition_rate_structures.jl`, `transition_rate_elements.jl`, `transition_rate_functions.jl`, `transition_rate_make.jl`: Transition rate matrices and master equations
 - `likelihoods.jl`: Likelihood functions for fitting
 - `metropolis_hastings.jl`: MCMC parameter estimation
-- `io.jl`: Input/output operations
+- `io.jl`: Input/output operations (including combined-rate file helpers: `create_combined_file`, `create_combined_files`, …)
 - `chemical_master.jl`: Chemical master equation solutions
 - `utilities.jl`: Common utility functions
 - `simulator_coupled.jl`: Stochastic simulation algorithms
 - `fit.jl`: Model fitting functions
 - `analysis.jl`: Post-fit analysis tools
-- `biowulf.jl`: NIH Biowulf cluster support
+- `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
 - `hmm.jl`: Hidden Markov model functions
 - `test.jl`: Test functions
+
+Batch workflows (swarms, combined starts, key-based runs) are documented in the manual: **Cluster and batch workflows** (`docs/src/cluster_batch_workflows.md`).
 
 # Dependencies
 
@@ -246,8 +248,8 @@ export
     test_fit_tracejoint,
     test_fit_tracejoint_hierarchical,
     makeswarmfiles_driver,
-    read_combined_file_specs_csv,
-    create_combined_files_driver,
+    makeswarmfiles,
+    makeswarmfiles_h3_latent,
     COUPLING_MODE_RECIPROCAL_DEFAULT,
     coupling_ranges,
     default_coupling_prior_mean,
@@ -289,6 +291,10 @@ export
     merge_coupled_two_unit_rates,
     merge_coupled_stacked_units,
     combined_rates_key,
+    read_combined_file_specs_csv,
+    create_combined_files_driver,
+    create_combined_files,
+    create_combined_files_h3_latent,
     write_run_spec_preset,
     default_model_key,
     zero_median

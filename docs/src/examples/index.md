@@ -19,6 +19,8 @@ This section contains detailed examples of using StochasticGene.jl for various a
 
 ## Advanced Examples
 
+Cluster / Biowulf batch generation and combined rate files are documented on the top-level page [Cluster and batch workflows](../cluster_batch_workflows.md) (`makeswarmfiles`, `create_combined_file`, etc.), not in this examples tree.
+
 ### Parallel Processing
 - [Parallel Processing](parallel_processing.md): Using parallel processing for large datasets
 
