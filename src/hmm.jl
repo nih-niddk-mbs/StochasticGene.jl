@@ -646,7 +646,14 @@ end
 function set_d(noiseparams::Vector{T1}, reporters_per_state::Vector{Vector{Int}}, probfn::Vector{T2}) where {T1<:AbstractVector, T2<:Function}
     d = Vector{Distribution}[]
     for i in eachindex(noiseparams)
-        push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
+        if isempty(noiseparams[i])
+            # Hidden/unobserved units can carry zero emission/noise parameters.
+            # Use near-deterministic emissions as a safe fallback so coupled-full
+            # prediction paths don't fail on empty parameter vectors.
+            push!(d, [Normal(Float64(r), 1e-9) for r in reporters_per_state[i]])
+        else
+            push!(d, probfn[i](noiseparams[i], reporters_per_state[i]))
+        end
     end
     return d
 end
@@ -2234,7 +2241,11 @@ end
 function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     a, p0 = make_ap(rates, couplingStrength, interval, components, method)
-    d = set_d(noiseparams, reporter)
+    observed_units = findall(rp -> rp.n > 0, reporter)
+    isempty(observed_units) && throw(ArgumentError("predict_trace: no observed units in coupled reporter"))
+    noiseparams_obs = [noiseparams[i] for i in observed_units]
+    reporter_obs = reporter[observed_units]
+    d = set_d(noiseparams_obs, reporter_obs)
     _predict_trace(a, p0, d, trace[1])
 end
 
@@ -2243,7 +2254,11 @@ function predict_trace(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, r
     coupling_rates = [couplingStrength[k] * rates[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
     a, p0 = make_ap(rates, coupling_rates, interval, components, method)
-    d = set_d(noiseparams, reporter)
+    observed_units = findall(rp -> rp.n > 0, reporter)
+    isempty(observed_units) && throw(ArgumentError("predict_trace: no observed units in coupled reporter"))
+    noiseparams_obs = [noiseparams[i] for i in observed_units]
+    reporter_obs = reporter[observed_units]
+    d = set_d(noiseparams_obs, reporter_obs)
     _predict_trace(a, p0, d, trace[1])
 end
 
@@ -2264,11 +2279,36 @@ end
 function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
     a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
-    d = set_d(noiseshared[1], reporter)
+    observed_units = findall(rp -> rp.n > 0, reporter)
+    isempty(observed_units) && throw(ArgumentError("predict_trace: no observed units in coupled reporter"))
+    reporter_obs = reporter[observed_units]
+    noiseshared_obs = [noiseshared[1][i] for i in observed_units]
+    noiseindividual_obs = [[ni[i] for i in observed_units] for ni in noiseindividual]
+    d = set_d(noiseshared_obs, reporter_obs)
     if method[2]
-        states, observation_dist = _predict_trace(noiseindividual, a, p0, reporter, trace[1])
+        states, observation_dist = _predict_trace(noiseindividual_obs, a, p0, reporter_obs, trace[1])
     else
-        states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual, interval, components, reporter, trace[1])
+        states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual_obs, interval, components, reporter_obs, trace[1])
+    end
+    states, observation_dist
+end
+
+# coupled full, hierarchical
+function predict_trace(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+    rshared, rindividual, noiseshared, noiseindividual, _, _, couplingshared, couplingindividual = r
+    coupling_rates_shared = [couplingshared[1][k] * rshared[1][components.targets[k][1]][components.targets[k][2]]
+                             for k in eachindex(components.targets)]
+    a, p0 = make_ap(rshared[1], coupling_rates_shared, interval, components, method[1])
+    observed_units = findall(rp -> rp.n > 0, reporter)
+    isempty(observed_units) && throw(ArgumentError("predict_trace: no observed units in coupled reporter"))
+    reporter_obs = reporter[observed_units]
+    noiseshared_obs = [noiseshared[1][i] for i in observed_units]
+    noiseindividual_obs = [[ni[i] for i in observed_units] for ni in noiseindividual]
+    d = set_d(noiseshared_obs, reporter_obs)
+    if method[2]
+        states, observation_dist = _predict_trace(noiseindividual_obs, a, p0, reporter_obs, trace[1])
+    else
+        states, observation_dist = _predict_trace(rindividual, couplingindividual, noiseindividual_obs, interval, components, reporter_obs, trace[1])
     end
     states, observation_dist
 end
@@ -2804,15 +2844,11 @@ function correlation_functions(
     observed_units=nothing,
     noise_per_unit=nothing,
 )
+    # CoupledFull is the only supported stack for coupled correlation functions.
+    coupled_stack === :full || throw(ArgumentError("Only coupled_stack=:full is supported (got $(coupled_stack))"))
     # `splicetype` is a splicing-model element parameter (e.g. "offeject").
     sp_norm = splicetype
-    components = if coupled_stack === :full
-        TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sp_norm)
-    elseif coupled_stack === :legacy
-        TCoupledComponents(coupling, transitions, G, R, S, insertstep, sp_norm)
-    else
-        throw(ArgumentError("coupled_stack must be :full or :legacy (got $(coupled_stack))"))
-    end
+    components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, sp_norm)
     # Default observed_units to [1, 2] for backward compatibility.
     # Normalize noise_per_unit to match unit count so hidden/latent layouts don't throw bounds errors.
     if isnothing(observed_units)

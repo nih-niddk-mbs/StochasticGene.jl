@@ -625,7 +625,13 @@ This function computes the number of reporters for a given state index `z`. It u
 # Returns
 - `Int`: The number of reporters for the given state index.
 """
-num_reporters_per_index(z, R, insertstep, base, f=sum) = f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+function num_reporters_per_index(z, R, insertstep, base, f=sum)
+    # Hidden/no-reporter unit: no reporter positions to aggregate.
+    if R == 0
+        return f(Bool[])
+    end
+    f(digits(z - 1, base=base, pad=R)[insertstep:end] .== base - 1)
+end
 
 """
     num_reporters_per_state(G::Int, R::Int, S::Int=0, insertstep=1, f=sum)

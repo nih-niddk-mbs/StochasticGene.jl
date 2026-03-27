@@ -1231,8 +1231,8 @@ Fit a simulated trace dataset using a hierarchical model and compare to the targ
 # Returns
 - Tuple of (median fitted parameters, target parameters).
 """
-function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.1, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, onstates=Int[], totaltime=1000.0, ntrials=100, fittedparam=[1, 2, 3, 4, 5, 6], propcv=0.01, noisepriors=[0.0, 0.1, 1.0, 0.1], hierarchical=(2, [7], tuple()), method=(Tsit5(), true), maxtime=60.0, nchains=1, zeromedian=true)
-    rh = 50.0 .+ 5.0 * randn(ntrials)
+function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.1, 0.1, 1.0, 5, 1, 50, 1], nsamples=10000000, onstates=Int[], totaltime=4000.0, ntrials=200, fittedparam=[1, 2, 3, 4, 5, 6], propcv=0.01, noisepriors=[0.0, 0.1, 1.0, 0.1], hierarchical=(2, [7], tuple()), method=(Tsit5(), true), maxtime=120.0, nchains=1, zeromedian=true)
+    rh = 5.0 .+ 1.0 * randn(ntrials)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials, hierarchical=(6, rh))
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces

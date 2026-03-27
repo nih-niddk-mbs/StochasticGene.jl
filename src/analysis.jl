@@ -2073,9 +2073,22 @@ function make_trace_datamodel(data::TraceData, rin, transitions, G, R, S, insert
         method = Tsit5()
     end
     if !isempty(coupling)
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, [ones(Int, noiseparams), ones(Int, noiseparams)], method, h, coupling, grid, zeromedian)
+        n_units = G isa Tuple ? length(G) : 2
+        noisepriors = if noiseparams isa Number
+            [ones(Int, Int(noiseparams)) for _ in 1:n_units]
+        else
+            noiseparams
+        end
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, noisepriors, method, h, coupling, grid, zeromedian)
     else
-        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, ones(Int, noiseparams), method, h, (), grid, zeromedian)
+        noisepriors = if noiseparams isa Number
+            ones(Int, Int(noiseparams))
+        elseif noiseparams isa Tuple
+            first(noiseparams)
+        else
+            noiseparams
+        end
+        model = load_model(data, rin, rin, [1, 2, 3], (), transitions, G, R, S, insertstep, splicetype, 1, 10.0, Int[], 1.0, 0.1, probfn, noisepriors, method, h, (), grid, zeromedian)
     end
     return data, model
 end
@@ -2127,7 +2140,7 @@ function make_traces_dataframe(ts, td, traces, G::Int, R::Int, S::Int, insertste
 end
 
 """
-    make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
+    make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling, observed_units=nothing)
 
 Create DataFrame from trace data for coupled models (Tuple parameters).
 
@@ -2141,6 +2154,8 @@ Create DataFrame from trace data for coupled models (Tuple parameters).
 - `insertstep::Tuple`: Insertion steps for each unit
 - `state::Bool`: Include state information
 - `coupling`: Coupling structure
+- `observed_units`: Optional observed unit indices (model-space unit ids). When omitted, uses
+  all units in `coupling[1]` with `R[k] > 0`.
 
 # Returns
 - `DataFrame`: DataFrame containing trace data, model predictions, and optional state information
@@ -2152,13 +2167,14 @@ Create DataFrame from trace data for coupled models (Tuple parameters).
 - Optionally includes state information for each unit
 - Handles missing values by padding with missing
 """
-function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling)
+function make_traces_dataframe(ts, tp, traces, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, state::Bool, coupling, observed_units=nothing)
+    observed_units = isnothing(observed_units) ? [k for k in coupling[1] if R[k] > 0] : collect(Int, observed_units)
     l = maximum(size.(traces, 1))
     cols = Matrix(undef, length(traces), 0)
-    for k in coupling[1]
-        data = ["data$k" * "_$i" => [traces[i][:, k]; fill(missing, l - length(traces[i][:, k]))] for i in eachindex(traces)]
-        pred = ["model_mean$k" * "_$i" => [[mean(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
-        predstd = ["std_mean$k" * "_$i" => [[std(t[k]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+    for (j, k) in enumerate(observed_units)
+        data = ["data$k" * "_$i" => [traces[i][:, j]; fill(missing, l - length(traces[i][:, j]))] for i in eachindex(traces)]
+        pred = ["model_mean$k" * "_$i" => [[mean(t[j]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
+        predstd = ["std_mean$k" * "_$i" => [[std(t[j]) for t in tp[i]]; fill(missing, l - length(tp[i]))] for i in eachindex(tp)]
         cols = hcat(cols, [data pred predstd])
         if state
             index = [[s[k] for s in t] for t in ts]
@@ -2292,7 +2308,8 @@ function make_traces_dataframe(data::AbstractTraceData, rin, transitions, G, R, 
     end
     ts, d = predict_trace(get_param(model), data, model)
     states, observations = make_observation_dist(d, ts, G, R, S, coupling)
-    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling)
+    observed_units = !isempty(data.units) ? data.units : [k for k in coupling[1] if R[k] > 0]
+    make_traces_dataframe(states, observations, data.trace[1], G, R, S, insertstep, state, coupling, observed_units)
 end
 
 function write_trace_dataframe(outfile, datapath, datacond, interval::Float64, r::Vector, transitions, G, R, S, insertstep, start=1, stop=-1, probfn=prob_Gaussian, noiseparams=4, splicetype=""; state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false, datacol=3)
@@ -2809,8 +2826,36 @@ end
 
 function make_p0_coupled(traces, interval, rin, transitions, G, R, S, insertstep, probfn=prob_Gaussian, noiseparams=4, splicetype="", state=true, hierarchical=false, coupling=tuple(), grid=nothing, zeromedian=false)
     _, model = make_trace_datamodel(traces, interval, rin, transitions, G, R, S, insertstep, probfn, noiseparams, splicetype, state, hierarchical, coupling, grid, zeromedian)
-    rates, noiseparams, couplingStrength = prepare_rates(get_param(model), model)
-    Qtr = make_mat_TC(model.components, rates, couplingStrength)
+    rp = prepare_rates(get_param(model), model)
+    rates = nothing
+    coupling_term = nothing
+    if hastrait(model, :hierarchical)
+        # Hierarchical coupled/full: use the first shared set (same convention as predict_trace).
+        if length(rp) >= 8
+            rshared = rp[1]
+            couplingshared = rp[7]
+            rates = rshared[1]
+            if model.components isa TCoupledFullComponents
+                coupling_term = [couplingshared[1][k] * rates[model.components.targets[k][1]][model.components.targets[k][2]]
+                                 for k in eachindex(model.components.targets)]
+            else
+                coupling_term = couplingshared[1]
+            end
+        else
+            throw(ArgumentError("Unsupported hierarchical rate tuple for coupled p0 construction"))
+        end
+    else
+        # Non-hierarchical coupled/full: (rates, noiseparams, couplingStrength)
+        rates = rp[1]
+        couplingStrength = rp[3]
+        if model.components isa TCoupledFullComponents
+            coupling_term = [couplingStrength[k] * rates[model.components.targets[k][1]][model.components.targets[k][2]]
+                             for k in eachindex(model.components.targets)]
+        else
+            coupling_term = couplingStrength
+        end
+    end
+    Qtr = make_mat_TC(model.components, rates, coupling_term)
     p0 = normalized_nullspace(Qtr)
     return p0
 end
@@ -3067,6 +3112,29 @@ split_conditions("ctrl", false)          # Returns: ["ctrl"]
 """
 split_conditions(cond::AbstractString, multicond::Bool) = multicond ? split(cond, "-") : [cond]
 
+function _onoff_probs_from_binary_traces(on_traces::Vector{<:AbstractMatrix}, n_observed::Int)
+    if n_observed < 2 || isempty(on_traces)
+        return (ON_ON=NaN, ON_OFF=NaN, OFF_ON=NaN, OFF_OFF=NaN)
+    end
+    c11 = 0
+    c10 = 0
+    c01 = 0
+    c00 = 0
+    total = 0
+    for M in on_traces
+        size(M, 2) >= 2 || continue
+        x = M[:, 1] .> 0.0
+        y = M[:, 2] .> 0.0
+        c11 += count(x .& y)
+        c10 += count(x .& .!y)
+        c01 += count((.!x) .& y)
+        c00 += count((.!x) .& .!y)
+        total += length(x)
+    end
+    total > 0 || return (ON_ON=NaN, ON_OFF=NaN, OFF_ON=NaN, OFF_OFF=NaN)
+    return (ON_ON=c11 / total, ON_OFF=c10 / total, OFF_ON=c01 / total, OFF_OFF=c00 / total)
+end
+
 
 ################################################################################
 # simulate_trials function
@@ -3137,12 +3205,22 @@ function simulate_trials(r::Vector, transitions::Tuple, G, R, S, insertstep, cou
     # Note: interval is now inferred from lags, so we don't pass it
     full_lags, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, m1ON, m2ON, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, m1Reporters, m2Reporters, v1Reporters, v2Reporters = correlation_functions(r, transitions, G, R, S, insertstep, probfn, coupling, positive_lags; offset=offset, splicetype=splicetype, observed_units=observed_units, noise_per_unit=noiseparams)
     # Pack into NamedTuple
+    # Theory ON/OFF joint probabilities from ON means and zero-lag ON cross-correlation.
+    # correlation_functions uses ON' = ON + offset; convert back to binary ON.
+    mid_idx = div(length(ccON), 2) + 1
+    m1_on_bin = m1ON - offset
+    m2_on_bin = m2ON - offset
+    p11_theory = ccON[mid_idx] - offset * (m1ON + m2ON) + offset^2
+    p10_theory = m1_on_bin - p11_theory
+    p01_theory = m2_on_bin - p11_theory
+    p00_theory = 1.0 - p11_theory - p10_theory - p01_theory
     theory = (
         ac1=ac1, ac2=ac2, cc=cc,
         m1=m1, m2=m2, v1=v1, v2=v2,
         ccON=ccON, m1ON=m1ON, m2ON=m2ON, ac1ON=ac1ON, ac2ON=ac2ON,
         ccReporters=ccReporters, m1Reporters=m1Reporters, m2Reporters=m2Reporters,
         ac1Reporters=ac1Reporters, ac2Reporters=ac2Reporters,
+        ON_ON=p11_theory, ON_OFF=p10_theory, OFF_ON=p01_theory, OFF_OFF=p00_theory,
         full_lags=full_lags
     )
     # Use ccON (ON/OFF cross-covariance) and ac1ON/ac2ON (ON/OFF autocovariances) for comparison
@@ -3245,6 +3323,7 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
     intensity_result = isempty(intensity_traces) ? nothing : compute_correlation_functions(intensity_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
     on_result = compute_correlation_functions(on_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
     reporter_result = compute_correlation_functions(reporter_traces, lags; correlation_algorithm=correlation_algorithm, bootstrap=true, n_bootstrap=n_bootstrap, frame_interval=interval)
+    onoff_empirical = _onoff_probs_from_binary_traces(on_traces, n_observed)
 
     # Extract results
     empirical = (
@@ -3300,7 +3379,11 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         ac2Reporters_lower=reporter_result.ac2_lower,
         ac2Reporters_median=reporter_result.ac2_median,
         ac2Reporters_upper=reporter_result.ac2_upper,
-        ac2Reporters_se=reporter_result.ac2_se
+        ac2Reporters_se=reporter_result.ac2_se,
+        ON_ON=onoff_empirical.ON_ON,
+        ON_OFF=onoff_empirical.ON_OFF,
+        OFF_ON=onoff_empirical.OFF_ON,
+        OFF_OFF=onoff_empirical.OFF_OFF
     )
 
     # Transform theory to match empirical based on CorrelationTrait
@@ -3593,6 +3676,8 @@ function simulate_trials(theory, r::Vector, transitions::Tuple, G, R, S, inserts
         mean1=empirical.mON1, mean2=empirical.mON2,
         m1=m1, m2=m2, v1=v1, v2=v2, v1_empirical=empirical.v1_empirical, v2_empirical=empirical.v2_empirical,
         m1ON=m1ON, m2ON=m2ON, mR1_empirical=empirical.mR1, mR2_empirical=empirical.mR2, m1Reporters=m1Reporters, m2Reporters=m2Reporters,
+        ON_ON_theory=theory.ON_ON, ON_OFF_theory=theory.ON_OFF, OFF_ON_theory=theory.OFF_ON, OFF_OFF_theory=theory.OFF_OFF,
+        ON_ON_empirical=empirical.ON_ON, ON_OFF_empirical=empirical.ON_OFF, OFF_ON_empirical=empirical.OFF_ON, OFF_OFF_empirical=empirical.OFF_OFF,
         # Diagnostic info for validation
         n_lags=n_lags_theory,  # Number of lags (should be same for all theory and empirical)
         trace_lengths=[size(t, 1) for t in intensity_traces],  # Length of each trace (for validation)
