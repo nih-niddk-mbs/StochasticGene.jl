@@ -266,6 +266,7 @@ export
     correlation_function_multitau,
     write_augmented,
     write_correlation_functions,
+    write_joint_residence_prob_onoff_key,
     write_correlation_functions_file,
     write_correlation_functions_empirical,
     correlation_functions_uncertainty_mc,

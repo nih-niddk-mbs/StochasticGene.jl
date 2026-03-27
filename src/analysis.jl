@@ -3843,6 +3843,74 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
     end
 end
 
+"""
+    write_joint_residence_prob_onoff_key(folder::String; outfile="joint_residence_onoff.csv", ratetype::String="median", units=nothing)
+
+Read all `info_*.jld2` files under `folder`, compute ON/OFF joint residence probabilities per key,
+and write a single summary CSV/DataFrame with columns:
+- `key`
+- `ON-ON`
+- `ON-OFF`
+- `OFF-ON`
+- `OFF-OFF`
+
+Each row is computed from the corresponding `rates_<key>.txt` (selected by `ratetype`) and run-spec
+metadata stored in `info_<key>.jld2`.
+"""
+function write_joint_residence_prob_onoff_key(folder::String; outfile::String="joint_residence_onoff.csv", ratetype::String="median", units=nothing)
+    df = DataFrame()
+    df[!, "key"] = String[]
+    df[!, "ON-ON"] = Float64[]
+    df[!, "ON-OFF"] = Float64[]
+    df[!, "OFF-ON"] = Float64[]
+    df[!, "OFF-OFF"] = Float64[]
+
+    for (root, _, files) in walkdir(folder)
+        for f in files
+            if occursin("info", f) && endswith(f, ".jld2")
+                info = read_run_spec(joinpath(root, f))
+                key = get_key(f)
+                ratefile = joinpath(root, "rates_" * key * ".txt")
+                isfile(ratefile) || begin
+                    @warn "write_joint_residence_prob_onoff_key: missing rates file for key=$key at $ratefile; skipping"
+                    continue
+                end
+                haskey(info, :datapath) && haskey(info, :datacond) && haskey(info, :traceinfo) || begin
+                    @warn "write_joint_residence_prob_onoff_key: run spec missing datapath/datacond/traceinfo for key=$key; skipping"
+                    continue
+                end
+
+                r = readrates(ratefile, get_row(ratetype))
+                interval = Float64(info[:traceinfo][1])
+                splicetype = String(get(info, :splicetype, ""))
+                noiseparams = get(info, :noisepriors, 4)
+                hierarchical = get(info, :hierarchical, tuple())
+                grid = get(info, :grid, nothing)
+                zeromedian = get(info, :zeromedian, false)
+                coupling = get(info, :coupling, tuple())
+
+                traces = read_tracefiles(info[:datapath], info[:datacond], 1, -1)
+                p0 = make_p0_coupled(
+                    traces, interval, r,
+                    info[:transitions], info[:G], info[:R], info[:S], info[:insertstep],
+                    info[:probfn], noiseparams, splicetype, true, !isempty(hierarchical), coupling, grid, zeromedian,
+                )
+                pr = joint_residence_prob_onoff(p0, info[:G], info[:R], info[:S], info[:insertstep], coupling; units=units)
+
+                push!(df[!, "key"], key)
+                push!(df[!, "ON-ON"], pr.ON_ON)
+                push!(df[!, "ON-OFF"], pr.ON_OFF)
+                push!(df[!, "OFF-ON"], pr.OFF_ON)
+                push!(df[!, "OFF-OFF"], pr.OFF_OFF)
+            end
+        end
+    end
+
+    outpath = isabspath(outfile) ? outfile : joinpath(folder, outfile)
+    CSV.write(outpath, df)
+    return df
+end
+
 
 """
     write_correlation_functions_empirical(trace_folder, unit1_filename, unit2_filename, output_file; intensity_labels=nothing, intensity_start=1, intensity_stop=-1, intensity_col=3, lags=collect(0:1:200), on_threshold=0, mON1_theory=nothing, mON2_theory=nothing, mR1_theory=nothing, mR2_theory=nothing, bootstrap=false, n_bootstrap=1000)
