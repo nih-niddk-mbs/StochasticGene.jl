@@ -1,0 +1,1 @@
+julia -t 1 -p	2	fitscript_3311.jl

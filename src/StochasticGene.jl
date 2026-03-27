@@ -150,6 +150,7 @@ export
     find_best_models,
     fit,
     fit_default_spec,
+    fit_coupled_default_spec,
     AbstractPriorContext,
     PriorContextCoupled,
     PriorContextTraceSingleUnit,
@@ -178,6 +179,11 @@ export
     make_mat,
     makeswarm,
     makeswarm_models,
+    csv_row_to_connections_simple,
+    build_coupled_fit_spec_from_csv_cells,
+    parse_coupling_sign_csv,
+    replace_csv_cell_legacy_r,
+    csv_row_has_legacy_r,
     makeswarm_coupled,
     makeswarm_genes,
     write_fitfile_coupled,
@@ -249,6 +255,7 @@ export
     test_fit_tracejoint_hierarchical,
     makeswarmfiles_driver,
     makeswarmfiles,
+    makeswarmfiles_coupled,
     makeswarmfiles_h3_latent,
     COUPLING_MODE_RECIPROCAL_DEFAULT,
     coupling_ranges,
@@ -296,6 +303,7 @@ export
     create_combined_files,
     create_combined_files_h3_latent,
     write_run_spec_preset,
+    write_fitscript_tracejoint_key,
     default_model_key,
     zero_median
 
@@ -337,11 +345,14 @@ include("fit.jl")
 # functions for post fit analysis and plots
 include("analysis.jl")
 
+# functions for hidden markov models (before coupled_csv: prob_Gaussian, etc.)
+include("hmm.jl")
+
+# Coupled_models_to_test.csv → coupling (used by biowulf batch helpers)
+include("coupled_csv.jl")
+
 # functions for use on NIH cluster Biowulf
 include("biowulf.jl")
-
-# functions for hidden markov models
-include("hmm.jl")
 
 # test functions
 include("test.jl")

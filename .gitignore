@@ -2,3 +2,6 @@ src/macros.jl
 
 # optional local scripts (not part of package)
 scripts/
+
+# local fit/analysis outputs (not part of package)
+results/

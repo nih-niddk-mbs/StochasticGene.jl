@@ -102,7 +102,9 @@ end
 Batch workflow for **many models, few genes**: merge `fit_default_spec` with shared kwargs (leave
 `priormean` empty to use `fit` defaults: for trace single-unit models, `make_structures` applies
 `prior_ratemean_trace` / structured `priorcv` automatically), write one `write_run_spec_preset` per
-model, then call `makeswarm` with the resulting keys.
+model, then write swarm + one `fitscript_<key>.jl` per key. Each script is a multi-line `fit(; …)` with
+the **full merged run spec** (same content as the companion `info_<key>.jld2`), not a minimal `fit(;
+key=…)` plus a few overrides.
 
 Each element of `models` should include `G`, `R`, `S`, `insertstep` and usually `transitions` (or pass
 `transitions=...` once for all rows). Optional `key` in a row overrides [`default_model_key`](@ref).
@@ -110,21 +112,27 @@ Each element of `models` should include `G`, `R`, `S`, `insertstep` and usually 
 The `combine=:product` form iterates `Base.product(Gvec, Rvec, Svec, insertvec)`; `combine=:zip` requires
 four vectors of equal length.
 
+Use **`transitionsvec`** (same length as **`Gvec`**) so each gene-state count **`Gvec[i]`** gets its own
+**`transitionsvec[i]`** (required when sweeping multiple **`G`** with different topologies). **`Gvec`**
+must have **unique** entries. Omit **`transitionsvec`** to use a single shared **`transitions=`** for
+every row (positional / kw to [`makeswarm_models`](@ref)).
+
 # Keyword split
 Keywords `nthreads`, `nchains`, `swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, `src` are
-passed to `makeswarm`; all others are merged into each run spec (and into `fit_default_spec()`).
+swarm-only; all others are merged into each run spec (and into `fit_default_spec()`).
 
 # Coupled follow-up
 For slow coupled fits, fit single units first, combine rates with [`create_combined_file`](@ref), then
 run coupled models using those starts (see README Workflow 2).
 """
-function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=nothing, kwargs...)
+function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=nothing, unique_model_keys::Bool=false, kwargs...)
     swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
     base = merge(fit_default_spec(), fit_kw)
     if transitions !== nothing && !haskey(base, :transitions)
         base[:transitions] = transitions
     end
     keys_out = String[]
+    specs_by_key = Dict{String, Dict{Symbol,Any}}()
     for m in models
         spec = merge(copy(base), Dict{Symbol,Any}(pairs(m)))
         if !haskey(spec, :transitions) || spec[:transitions] === nothing
@@ -135,11 +143,16 @@ function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=noth
         else
             default_model_key(spec[:G], spec[:R], spec[:S], spec[:insertstep])
         end
+        if unique_model_keys
+            suf = string(hash((key, time_ns(), objectid(models))), base=16)
+            key = sanitize_for_filename(string(key, "-", suf[1:min(8, length(suf))]))
+        end
         spec[:key] = key
         push!(keys_out, key)
         write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
+        specs_by_key[key] = spec
     end
-    mk = merge(Dict{Symbol,Any}(
+    swarm_out = merge(Dict{Symbol,Any}(
         :nchains => get(swarm_kw, :nchains, 2),
         :nthreads => get(swarm_kw, :nthreads, 1),
         :swarmfile => get(swarm_kw, :swarmfile, "fit"),
@@ -148,10 +161,8 @@ function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=noth
         :project => get(swarm_kw, :project, ""),
         :sysimage => get(swarm_kw, :sysimage, ""),
         :src => get(swarm_kw, :src, ""),
-        :resultfolder => get(base, :resultfolder, ""),
-        :root => get(base, :root, "."),
-    ), fit_kw)
-    makeswarm(keys_out; pairs(mk)...)
+    ), swarm_kw)
+    _makeswarm_with_run_specs(keys_out, swarm_out, specs_by_key)
 end
 
 function makeswarm_models(
@@ -160,18 +171,38 @@ function makeswarm_models(
     Svec::AbstractVector{<:Integer},
     insertvec::AbstractVector{<:Integer};
     combine::Symbol=:product,
+    unique_model_keys::Bool=false,
+    transitionsvec=nothing,
     kwargs...,
 )
+    g_tr = nothing
+    if transitionsvec !== nothing
+        length(transitionsvec) == length(Gvec) ||
+            throw(ArgumentError("transitionsvec length ($(length(transitionsvec))) must match Gvec length ($(length(Gvec)))"))
+        length(unique(Gvec)) == length(Gvec) ||
+            throw(ArgumentError("transitionsvec requires unique entries in Gvec (duplicate G would be ambiguous)"))
+        g_tr = Dict{Int,Any}(Gvec[i] => transitionsvec[i] for i in eachindex(Gvec))
+    end
     if combine == :product
-        models = [(G=gs[1], R=gs[2], S=gs[3], insertstep=gs[4]) for gs in Base.product(Gvec, Rvec, Svec, insertvec)]
+        # Array comprehensions over ProductIterator allocate an ndims(A) array matching the
+        # product axes; vec(...) yields a Vector{NamedTuple} for makeswarm_models(models; ...).
+        if g_tr === nothing
+            models = vec([(G=gs[1], R=gs[2], S=gs[3], insertstep=gs[4]) for gs in Base.product(Gvec, Rvec, Svec, insertvec)])
+        else
+            models = vec([(G=gs[1], R=gs[2], S=gs[3], insertstep=gs[4], transitions=g_tr[gs[1]]) for gs in Base.product(Gvec, Rvec, Svec, insertvec)])
+        end
     elseif combine == :zip
         n = length(Gvec)
         length(Rvec) == length(Svec) == length(insertvec) == n || throw(ArgumentError("combine=:zip requires equal-length Gvec, Rvec, Svec, insertvec"))
-        models = [(G=Gvec[i], R=Rvec[i], S=Svec[i], insertstep=insertvec[i]) for i in 1:n]
+        if g_tr === nothing
+            models = [(G=Gvec[i], R=Rvec[i], S=Svec[i], insertstep=insertvec[i]) for i in 1:n]
+        else
+            models = [(G=Gvec[i], R=Rvec[i], S=Svec[i], insertstep=insertvec[i], transitions=transitionsvec[i]) for i in 1:n]
+        end
     else
         throw(ArgumentError("combine must be :product or :zip"))
     end
-    makeswarm_models(models; kwargs...)
+    makeswarm_models(models; unique_model_keys=unique_model_keys, kwargs...)
 end
 
 """
@@ -218,30 +249,189 @@ function makeswarm(; key::String, kwargs...)
     makeswarm([key]; kwargs...)
 end
 
-function _driver_write_specs_and_makeswarm(keys::Vector{String}, fit_base::Dict{Symbol,Any}, swarm_kw::Dict{Symbol,Any})
-    for key in keys
-        spec = copy(fit_base)
-        spec[:key] = key
-        write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
-    end
-    mk = merge(Dict{Symbol,Any}(
-        :nchains => get(swarm_kw, :nchains, 2),
-        :nthreads => get(swarm_kw, :nthreads, 1),
-        :swarmfile => get(swarm_kw, :swarmfile, "fit"),
-        :juliafile => get(swarm_kw, :juliafile, "fitscript"),
-        :filedir => get(swarm_kw, :filedir, "."),
-        :project => get(swarm_kw, :project, ""),
-        :sysimage => get(swarm_kw, :sysimage, ""),
-        :src => get(swarm_kw, :src, ""),
-        :resultfolder => get(fit_base, :resultfolder, ""),
-        :root => get(fit_base, :root, "."),
-    ), fit_base)
-    makeswarm(keys; pairs(mk)...)
-    return keys
+"""Like [`folder_path`](@ref) but never prints to stdout (used when probing many candidate paths)."""
+function _folder_path_quiet(folder::AbstractString, root::AbstractString, folderatetype::AbstractString="")
+    isempty(strip(folder)) && return string(folder)
+    f = string(folder)
+    ispath(f) && return f
+    f = joinpath(root, folder)
+    ispath(f) && return f
+    joinpath(root, folderatetype, folder)
 end
 
 """
-    makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
+    _find_existing_info_toml(key, infolder, resultfolder, root) -> String or nothing
+
+Same resolution as `fit(; key=...)`: `joinpath(folder_path(folder, root, \"results\"), \"info_<key>.toml\")`
+for `resultfolder` and `infolder` (first hit wins).
+"""
+function _find_existing_info_toml(key::AbstractString, infolder, resultfolder, root)
+    stem = "info_" * string(key) * ".toml"
+    seen = Set{String}()
+    function try_path(p)
+        p = abspath(p)
+        p in seen && return nothing
+        push!(seen, p)
+        isfile(p) ? p : nothing
+    end
+    for base in (resultfolder, infolder)
+        isempty(strip(string(base))) && continue
+        rr = _folder_path_quiet(base, root, "results")
+        (x = try_path(joinpath(rr, stem))) !== nothing && return x
+    end
+    nothing
+end
+
+function _driver_write_specs_and_makeswarm(keys::Vector{String}, fit_base::Dict{Symbol,Any}, swarm_kw::Dict{Symbol,Any};
+        merge_existing_info::Bool=false,
+    )
+    n_missing = 0
+    specs_by_key = Dict{String, Dict{Symbol,Any}}()
+    for key in keys
+        spec = copy(fit_base)
+        if merge_existing_info
+            p = _find_existing_info_toml(key, get(spec, :infolder, ""), get(spec, :resultfolder, ""), get(spec, :root, "."))
+            if p !== nothing
+                loaded = read_run_spec(p)
+                spec = merge(spec, loaded)
+                for k in (:datapath, :infolder, :resultfolder, :maxtime, :root)
+                    haskey(fit_base, k) && (spec[k] = fit_base[k])
+                end
+            else
+                n_missing += 1
+            end
+        end
+        spec[:key] = key
+        write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
+        specs_by_key[key] = spec
+    end
+    if merge_existing_info && n_missing > 0
+        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(keys)) keys under infolder/resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs." n_missing=n_missing nkeys=length(keys)
+    end
+    _makeswarm_with_run_specs(keys, swarm_kw, specs_by_key)
+    return keys
+end
+
+function _makeswarmfiles_coupled_models_csv(
+    csv_path::AbstractString;
+    filedir::AbstractString,
+    key_col::String,
+    skip_empty::Bool,
+    hierarchical_modes,
+    coupled_csv_cols::NTuple{6,Int},
+    coupled_emit_legacy_r_variants::Bool,
+    coupled_tie_rsum::Bool,
+    G::Tuple,
+    R::Tuple,
+    S::Tuple,
+    insertstep::Tuple,
+    transitions::Tuple,
+    merged::Dict{Symbol,Any},
+    swarm_kw::Dict{Symbol,Any},
+)
+    df = DataFrame(CSV.File(csv_path))
+    ncol(df) < maximum(coupled_csv_cols) &&
+        throw(ArgumentError("coupled_models_csv: need at least $(maximum(coupled_csv_cols)) columns (got $(ncol(df)))"))
+    key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
+    cix = coupled_csv_cols
+    keys_ordered = String[]
+    specs_by_key = Dict{String, Dict{Symbol,Any}}()
+    for hierarchical in hierarchical_modes
+        for row in eachrow(df)
+            kn = strip(string(row[Symbol(key_col)]))
+            (skip_empty && isempty(kn)) && continue
+            kn == "Model_name" && continue
+            key_base = replace(kn, " " => "-")
+            e1 = row[cix[1]]
+            e1s = row[cix[2]]
+            e2 = row[cix[3]]
+            e2s = row[cix[4]]
+            ge = row[cix[5]]
+            ges = row[cix[6]]
+            has_lr = coupled_emit_legacy_r_variants && csv_row_has_legacy_r(e1, e2, ge)
+            variant_kinds = has_lr ? ((:rsum, "-Rsum"), (:rany, "-Rany")) : ((:none, ""),)
+            for (vkind, vsuffix) in variant_kinds
+                e1u = vkind === :none ? e1 : replace_csv_cell_legacy_r(e1, vkind)
+                e2u = vkind === :none ? e2 : replace_csv_cell_legacy_r(e2, vkind)
+                geu = vkind === :none ? ge : replace_csv_cell_legacy_r(ge, vkind)
+                key = key_base * (hierarchical ? "-h" : "") * vsuffix
+                ti = get(merged, :traceinfo, (5.0 / 3.0, 1.0, -1.0))
+                interval = Float64(ti[1])
+                tracetime = length(ti) >= 3 ? Float64(ti[3]) : -1.0
+                dc = get(merged, :datacond, ["enhancer", "gene"])
+                dc_vec = dc isa AbstractVector ? String[string(x) for x in dc] : String[string(dc)]
+                pfn0 = get(merged, :probfn, nothing)
+                pfn = if pfn0 === nothing || pfn0 isa Function
+                    (prob_Gaussian, prob_Gaussian)
+                elseif pfn0 isa Tuple && length(pfn0) >= 2
+                    pfn0
+                else
+                    (prob_Gaussian, prob_Gaussian)
+                end
+                np = get(merged, :noisepriors, nothing)
+                if np === nothing || np == [] || (np isa AbstractVector && isempty(np))
+                    np = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2])
+                end
+                el = get(merged, :elongationtime, (20.0, 5.0))
+                elongationtime2 = if el isa Tuple && length(el) >= 2
+                    (Float64(el[1]), Float64(el[2]))
+                elseif el isa Real
+                    (Float64(el), Float64(el))
+                else
+                    (20.0, 5.0)
+                end
+                spec0 = build_coupled_fit_spec_from_csv_cells(
+                    e1u, e1s, e2u, e2s, geu, ges, key;
+                    G=G,
+                    R=R,
+                    S=S,
+                    insertstep=insertstep,
+                    transitions=transitions,
+                    datapath=string(merged[:datapath]),
+                    infolder=string(merged[:infolder]),
+                    resultfolder=string(merged[:resultfolder]),
+                    root=string(get(merged, :root, ".")),
+                    gene=string(get(merged, :gene, "MYC")),
+                    cell=string(get(merged, :cell, "HBEC")),
+                    datacond=dc_vec,
+                    noisepriors=np,
+                    elongationtime=elongationtime2,
+                    hierarchical=hierarchical,
+                    interval=interval,
+                    tracetime=tracetime,
+                    zeromedian=get(merged, :zeromedian, Bool[true, true]),
+                    probfn=pfn,
+                    trace_specs=get(merged, :trace_specs, []),
+                    tie_rsum=coupled_tie_rsum,
+                    maxtime=Float64(get(merged, :maxtime, 3600.0)),
+                    nchains=Int(get(merged, :nchains, 16)),
+                    samplesteps=Int(get(merged, :samplesteps, 100_000)),
+                    warmupsteps=Int(get(merged, :warmupsteps, 0)),
+                    propcv=Float64(get(merged, :propcv, 0.05)),
+                    ratetype=string(get(merged, :ratetype, "median")),
+                    datacol=Int(get(merged, :datacol, 3)),
+                    writesamples=Bool(get(merged, :writesamples, false)),
+                    prerun=Float64(get(merged, :prerun, 0.0)),
+                    splicetype=string(get(merged, :splicetype, "")),
+                    decayrate=Float64(get(merged, :decayrate, 1.0)),
+                    TransitionType=string(get(merged, :TransitionType, "nstate")),
+                )
+                spec0 === nothing && continue
+                spec = merge(merged, spec0)
+                spec[:key] = key
+                write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
+                specs_by_key[key] = spec
+                push!(keys_ordered, key)
+            end
+        end
+    end
+    isempty(keys_ordered) && throw(ArgumentError("coupled_models_csv: no runnable rows (empty coupling for all rows?)"))
+    _makeswarm_with_run_specs(keys_ordered, swarm_kw, specs_by_key)
+    return keys_ordered
+end
+
+"""
+    makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine=:product, models=nothing, kwargs...)
 
 Developer driver for **single-unit** GRSM batches using [`makeswarm_models`](@ref): define model
 layouts, write `info_<key>.jld2/.toml`, and generate swarm + fit scripts. For **coupled key-first**
@@ -252,20 +442,24 @@ control, or leave `models=nothing` to generate from `Gvec/Rvec/Svec/insertvec`.
 All `kwargs...` are forwarded to [`makeswarm_models`](@ref) (e.g. data paths, fit options,
 `swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, etc.).
 """
-function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, kwargs...)
+function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=nothing, Gvec=[3], Rvec=[3, 4, 5], Svec=[0], insertvec=[1], combine::Symbol=:product, models=nothing, unique_model_keys::Bool=false, kwargs...)
     if models === nothing
-        return makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=combine, transitions=transitions, kwargs...)
+        return makeswarm_models(Gvec, Rvec, Svec, insertvec; combine=combine, transitions=transitions, transitionsvec=transitionsvec, unique_model_keys=unique_model_keys, kwargs...)
     else
-        return makeswarm_models(models; transitions=transitions, kwargs...)
+        transitionsvec !== nothing &&
+            throw(ArgumentError("makeswarmfiles_driver: transitionsvec only applies to Gvec/Rvec/Svec/insertvec grids, not models="))
+        return makeswarm_models(models; transitions=transitions, unique_model_keys=unique_model_keys, kwargs...)
     end
 end
 
 """
-    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), kwargs...)
-    makeswarmfiles(csv_path, filedir; kwargs...)  # deprecated
+    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, coupled=nothing, merge_existing_info=true, warn_coupled_csv_shape=true, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), transitionsvec=nothing, kwargs...)
 
-Unified entry for [`write_run_spec_preset`](@ref) + [`makeswarm`](@ref): one `info_<key>.jld2`
-(and marker TOML) per run key, plus swarm and `fitscript_<key>.jl` under `filedir`.
+Unified entry for [`write_run_spec_preset`](@ref) plus swarm and `fitscript_<key>.jl` under `filedir`
+(one `info_<key>.jld2` and marker TOML per key). Single-unit `Gvec`…`insertvec` / `models` batches use
+[`write_fitscript_tracejoint_key`](@ref) so each script contains the **full** default-merged `fit(;
+…)`; string-key / coupled-CSV paths do the same. Direct [`makeswarm`](@ref) with a vector of keys
+still writes a compact one-line `fit(; key=…)` when used alone (no presets).
 
 Pick **exactly one** workflow below (mutually exclusive sources).
 
@@ -276,11 +470,27 @@ Use when each run is identified by a **predefined key** (e.g. `H3-3-3`, combined
 Provide keys in **one** of these ways:
 
 1. **`csv_file`**: path to a UTF-8 CSV with a **key column** (default `Model_name`; set `key_col`).
-   One row per model; other columns are ignored here (you may use them for bookkeeping or
-   [`create_combined_files`](@ref) workflows).
+   **Only that column is used for batch keys.** This is **not** the same as the
+   `makeswarmfiles(csv_path, filedir)` / `makeswarmfiles_from_csv` workflow in **`makescriptcoupled.jl`**:
+   there, each row’s **coupling** is built from **seven columns** (model name + six coupling cells:
+   enhancer→gene ×2 + signs, gene→enhancer + sign). That logic lives in the script (calls
+   `StochasticGene.makeswarm_coupled` / `_csv_row_to_connections_*` per row and writes **full** fit scripts).
+   Here, coupling and priors for each key must come from **`kwargs...`**, from merged
+   **`info_<key>.jld2`** when **`merge_existing_info=true`**, or from your own precomputed specs—not from
+   extra CSV columns.
 2. **`base_keys`**: `Vector` of strings, e.g. `["H3-3-3", "H3-5-5"]`.
 3. **`h3_transition_range`**: e.g. `1:5` builds all `H3-t1-t2` base keys (same idea as
    [`makeswarmfiles_h3_latent`](@ref)).
+
+Set **`coupled`** for this workflow (defaults to **`true`** when omitted):
+
+- **`coupled=true`** or **`coupled=nothing`**: run specs start from [`fit_coupled_default_spec`](@ref) (trace-joint / coupled batch baseline) merged with `kwargs...`.
+- **`coupled=false`**: run specs start from [`fit_default_spec`](@ref) (single-unit GRSM baseline). Use when keys refer to **uncoupled** models (e.g. CSV of `default_model_key` strings) but you still want string-key batching.
+
+If **`merge_existing_info=true`** (default), each key also merges an existing
+`info_<key>.toml` / JLD2 found under `infolder` or `folder` (same resolution as `fit(; key=...)`),
+so layouts, priors, and trace settings from a prior fit are preserved; explicit
+`datapath`, `infolder`, `folder` (`resultfolder`), `maxtime`, and `root` from this call still win.
 
 Optional **`hierarchical_modes`**: tuple of `Bool` (default `(true, false)`) applies
 [`combined_rates_key`](@ref) for each mode (e.g. with/without `-h`). Use `(false,)` for non-hierarchical only.
@@ -293,26 +503,47 @@ or per-row `key`:
 - **`models`**: `Vector` of named tuples with `G`, `R`, `S`, `insertstep`, optional `key`, plus
   `transitions` (globally or per row as supported by [`makeswarm_models`](@ref)).
 - **Or** all four **`Gvec`, `Rvec`, `Svec`, `insertvec`**: grid with `combine=:product` or `:zip`.
+  With **`transitionsvec`** (same length as **`Gvec`**; **`Gvec`** must have unique entries), use
+  **`transitionsvec[i]`** for **`Gvec[i]`**; otherwise one shared **`transitions`** applies to every row.
+  Not used with **`models=`** (put **`transitions`** in each named tuple instead).
 
-Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref). **Do not** combine with
-`csv_file`, `base_keys`, or `h3_transition_range`.
+Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), which always uses
+[`fit_default_spec`](@ref) as the batch baseline (**single-unit**). **Do not** combine with
+`csv_file`, `base_keys`, or `h3_transition_range`. Do not pass **`coupled=true`** here.
 
 # Common keywords
 
 - **`filedir`**: directory for `*.swarm` and `fitscript_<key>.jl`.
 - **`datapath`, `infolder`, `folder`**: merged into the run spec (`folder` is written as `resultfolder`).
+  Defaults **`infolder="coupled"`** and **`folder="coupled"`**; if that path is missing, [`folder_path`](@ref) logs a warning naming the folder (e.g. `coupled`)—not a Julia “variable not found” error.
 - **`maxtime`**: wall-time hint for scripts.
+- **`coupled`**: only for the **key-first** branch (`csv_file` / `base_keys` / `h3_transition_range`); see above.
+- **`merge_existing_info`**: if `true`, merge each key’s existing `info_<key>` run spec when found (see above).
+- **`warn_coupled_csv_shape`**: if `true` (default), and the CSV has many columns (≥7), emit a **one-time**
+  hint that this API does not parse `Coupled_models_to_test.csv`-style coupling columns; set to `false` to
+  silence when your file is wide for other reasons.
 - **`kwargs...`**: forwarded; swarm-only keys (`nthreads`, `nchains`, `project`, `juliafile`, …) go to
   [`makeswarm`](@ref), the rest merge into each run spec (see [`_split_swarm_fit_kwargs`](@ref)).
 
-# Deprecated
+# Removed API
 
-Two-argument form `makeswarmfiles(csv_path, filedir; ...)` — use
-`makeswarmfiles(; csv_file=csv_path, filedir=filedir, ...)`.
+Positional `makeswarmfiles(csv_path, filedir; ...)` is **not** supported — use **only** the keyword form below.
+
+# Coupled CSV (per-row coupling, `Coupled_models_to_test` layout)
+
+Prefer **[`makeswarmfiles_coupled`](@ref)**`(; csv=path, filedir=..., ...)` or **`makeswarmfiles(; csv_file=path, coupled_csv=true, ...)`**.
+Legacy **`coupled_models_csv=path`** is still accepted (same as **`coupled_csv=true`** with that path). See `coupled_csv.jl` for columns: **`key_col`** plus six coupling columns (**`coupled_csv_cols`**, default `(2,…,7)`). Shared tuple kwargs **`coupled_G`**, **`coupled_R`**, **`coupled_S`**, **`coupled_insertstep`**, **`coupled_transitions`** set the two-unit skeleton. Mutually exclusive with keys-only **`csv_file`** without **`coupled_csv`**, **`base_keys`**, and **`h3_transition_range`**.
+
+# Uncoupled grids and unique keys (`makeswarm_models`)
+
+For **`models=`** or **`Gvec`…`insertvec`**, pass **`unique_model_keys=true`** on [`makeswarm_models`](@ref) / [`makeswarmfiles_driver`](@ref) to append a random suffix so keys stay unique when layouts repeat. For **`Gvec`** grids only, **`transitionsvec`** (same length as **`Gvec`**, **`Gvec`** unique) sets per-**`G`** transitions; otherwise use one shared **`transitions`**.
 """
 function makeswarmfiles(;
         filedir::AbstractString=".",
         csv_file::AbstractString="",
+        csv_path::Union{Nothing,AbstractString}=nothing,
+        coupled_csv::Bool=false,
+        coupled_models_csv::Union{Nothing,AbstractString}=nothing,
         datapath="data/5Prime_gene_enhancer/including_background/short",
         infolder="coupled",
         folder="coupled",
@@ -329,29 +560,97 @@ function makeswarmfiles(;
         insertvec=nothing,
         combine::Symbol=:product,
         transitions=([1, 2], [2, 1]),
+        transitionsvec=nothing,
+        coupled::Union{Nothing,Bool}=nothing,
+        merge_existing_info::Bool=true,
+        warn_coupled_csv_shape::Bool=true,
+        coupled_csv_cols::NTuple{6,Int}=(2, 3, 4, 5, 6, 7),
+        coupled_emit_legacy_r_variants::Bool=true,
+        coupled_tie_rsum::Bool=true,
+        coupled_G::Tuple=(3, 3),
+        coupled_R::Tuple=(3, 3),
+        coupled_S::Tuple=(0, 0),
+        coupled_insertstep::Tuple=(1, 1),
+        coupled_transitions::Tuple=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
         kwargs...,
     )
+    path_csv = strip(csv_file)
+    if csv_path !== nothing
+        !isempty(path_csv) &&
+            throw(ArgumentError("makeswarmfiles: pass only one of csv_file or csv_path"))
+        path_csv = strip(string(csv_path))
+    end
+    cms = coupled_models_csv === nothing ? "" : strip(string(coupled_models_csv))
+    if !isempty(cms)
+        if !isempty(path_csv) && path_csv != cms
+            throw(ArgumentError("makeswarmfiles: csv_file/csv_path and coupled_models_csv disagree; use one path"))
+        end
+        path_csv = isempty(path_csv) ? cms : path_csv
+    end
+    use_coupled_rows = coupled_csv || !isempty(cms)
+
+    if use_coupled_rows
+        models !== nothing && throw(ArgumentError("makeswarmfiles: coupled CSV cannot be used with models="))
+        (Gvec !== nothing || Rvec !== nothing || Svec !== nothing || insertvec !== nothing) &&
+            throw(ArgumentError("makeswarmfiles: coupled CSV cannot be used with Gvec/Rvec/Svec/insertvec"))
+        base_keys !== nothing &&
+            throw(ArgumentError("makeswarmfiles: coupled CSV cannot be used with base_keys"))
+        h3_transition_range !== nothing &&
+            throw(ArgumentError("makeswarmfiles: coupled CSV cannot be used with h3_transition_range"))
+        isempty(path_csv) &&
+            throw(ArgumentError("makeswarmfiles: coupled CSV requires csv_file, csv_path, or coupled_models_csv"))
+        swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
+        merged = merge(fit_coupled_default_spec(), fit_kw)
+        merged[:datapath] = datapath
+        merged[:infolder] = infolder
+        merged[:resultfolder] = folder
+        merged[:maxtime] = maxtime
+        swarm_kw[:filedir] = filedir
+        return _makeswarmfiles_coupled_models_csv(
+            path_csv;
+            filedir=filedir,
+            key_col=key_col,
+            skip_empty=skip_empty,
+            hierarchical_modes=hierarchical_modes,
+            coupled_csv_cols=coupled_csv_cols,
+            coupled_emit_legacy_r_variants=coupled_emit_legacy_r_variants,
+            coupled_tie_rsum=coupled_tie_rsum,
+            G=coupled_G,
+            R=coupled_R,
+            S=coupled_S,
+            insertstep=coupled_insertstep,
+            transitions=coupled_transitions,
+            merged=merged,
+            swarm_kw=swarm_kw,
+        )
+    end
+
     single_unit = models !== nothing ||
         (Gvec !== nothing && Rvec !== nothing && Svec !== nothing && insertvec !== nothing)
     if single_unit
-        !isempty(strip(csv_file)) &&
-            throw(ArgumentError("makeswarmfiles: csv_file cannot be used together with single-unit models= or Gvec/Rvec/Svec/insertvec"))
+        coupled === true &&
+            throw(ArgumentError("makeswarmfiles: coupled=true is invalid for single-unit workflows (models= or Gvec/Rvec/Svec/insertvec); omit coupled or use coupled=false, or use csv_file/base_keys/h3 for coupled key lists"))
+        !isempty(path_csv) &&
+            throw(ArgumentError("makeswarmfiles: csv_file/csv_path cannot be used together with single-unit models= or Gvec/Rvec/Svec/insertvec"))
         h3_transition_range !== nothing &&
             throw(ArgumentError("makeswarmfiles: h3_transition_range cannot be used together with single-unit model sweep"))
         base_keys !== nothing &&
             throw(ArgumentError("makeswarmfiles: base_keys cannot be used together with single-unit model sweep"))
-        return makeswarmfiles_driver(; transitions=transitions, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
+        return makeswarmfiles_driver(; transitions=transitions, transitionsvec=transitionsvec, Gvec=Gvec, Rvec=Rvec, Svec=Svec, insertvec=insertvec,
             combine=combine, models=models, datapath=datapath, infolder=infolder, resultfolder=folder, maxtime=maxtime,
             filedir=filedir, kwargs...)
     end
 
-    path = strip(csv_file)
+    path = path_csv
     resolved = if !isempty(path)
         h3_transition_range !== nothing &&
             throw(ArgumentError("makeswarmfiles: cannot use csv_file together with h3_transition_range"))
         !isnothing(base_keys) &&
             @warn "makeswarmfiles: csv_file is set; ignoring base_keys" csv_file=path
         df = DataFrame(CSV.File(path))
+        if warn_coupled_csv_shape && ncol(df) >= 7
+            @warn """Wide CSV ($(ncol(df)) columns): keys-only mode uses `key_col` ($(repr(key_col))) only. For per-row coupling, use `makeswarmfiles_coupled` or `makeswarmfiles(; coupled_csv=true, csv_file=..., ...)` (or legacy `coupled_models_csv`). Or `merge_existing_info=true` with existing `info_<key>.jld2`. Silence: `warn_coupled_csv_shape=false`.""" path = path
+        end
         key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $path"))
         out = String[]
         for row in eachrow(df)
@@ -377,7 +676,7 @@ function makeswarmfiles(;
             throw(ArgumentError("makeswarmfiles: base_keys produced no non-empty keys (check skip_empty and entries)."))
         out
     else
-        throw(ArgumentError("makeswarmfiles: specify one source — csv_file, base_keys, h3_transition_range, or single-unit models / Gvec+Rvec+Svec+insertvec"))
+        throw(ArgumentError("makeswarmfiles: specify one source — csv_file / csv_path, base_keys, h3_transition_range, or single-unit models / Gvec+Rvec+Svec+insertvec"))
     end
 
     keys = String[]
@@ -385,22 +684,37 @@ function makeswarmfiles(;
         append!(keys, [combined_rates_key(k; hierarchical=h) for k in resolved])
     end
     swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
-    fit_base = merge(fit_default_spec(), fit_kw)
+    is_coupled = coupled === nothing ? true : coupled
+    fit_base = merge((is_coupled ? fit_coupled_default_spec : fit_default_spec)(), fit_kw)
     fit_base[:datapath] = datapath
     fit_base[:infolder] = infolder
     fit_base[:resultfolder] = folder
     fit_base[:maxtime] = maxtime
     swarm_kw[:filedir] = filedir
-    _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw)
+    _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw; merge_existing_info=merge_existing_info)
 end
 
 function makeswarmfiles(csv_path::AbstractString, filedir::AbstractString; kwargs...)
-    Base.depwarn("makeswarmfiles(csv_path, filedir; kw...) is deprecated; use makeswarmfiles(; csv_file=csv_path, filedir=filedir, kw...)", :makeswarmfiles)
-    makeswarmfiles(; csv_file=csv_path, filedir=filedir, kwargs...)
+    throw(ArgumentError(
+        "positional `makeswarmfiles(csv_path, filedir; kw...)` was removed. Use e.g. " *
+        "`makeswarmfiles(; csv_file=" * repr(csv_path) * ", filedir=" * repr(filedir) * ", kw...)` (keys-only CSV), or " *
+        "`makeswarmfiles_coupled(; csv=" * repr(csv_path) * ", filedir=" * repr(filedir) * ", kw...)` / " *
+        "`makeswarmfiles(; csv_file=" * repr(csv_path) * ", coupled_csv=true, filedir=" * repr(filedir) * ", kw...)` for Coupled_models_to_test.",
+    ))
 end
 
 """
-    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled-h3", folder="coupled-h3", maxtime=30.0, hierarchical_modes=(true,false), kwargs...)
+    makeswarmfiles_coupled(; csv, filedir, kwargs...)
+
+Convenience entry for **Coupled_models_to_test**-style CSVs: calls [`makeswarmfiles`](@ref) with
+**`coupled_csv=true`** and **`csv_file=csv`**, merging [`fit_coupled_default_spec`](@ref) with **`kwargs`**.
+"""
+function makeswarmfiles_coupled(; csv::AbstractString, filedir::AbstractString, kwargs...)
+    makeswarmfiles(; csv_file=csv, coupled_csv=true, filedir=filedir, kwargs...)
+end
+
+"""
+    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled-h3", folder="coupled-h3", maxtime=30.0, hierarchical_modes=(true,false), merge_existing_info=true, kwargs...)
 
 Convenience wrapper: calls [`makeswarmfiles`](@ref) with `h3_transition_range=transition_range` and
 default `infolder` / `folder` for H3 latent coupled runs.
@@ -538,6 +852,107 @@ function _format_fit_override(k::Symbol, v)::Union{String,Nothing}
     v isa Real && return "$k=$v"
     v isa Bool && return "$k=$v"
     return nothing
+end
+
+"""
+    write_fitscript_tracejoint_key(scriptpath, key, spec; src="")
+
+Write a standalone fit script: `@everywhere using StochasticGene` then a multi-line
+`fit(; key=..., kw=..., ...)` with one keyword per line (same style as `makescriptcoupled.jl`’s
+`_write_fitscript_key`). Used for coupled/key-list batches and for **single-unit** [`makeswarm_models`](@ref)
+so each `fitscript_<key>.jl` lists the full merged run spec, not only `key` plus a few overrides.
+
+Values use `repr` (valid Julia literals) except:
+
+- `method::AbstractString` is written verbatim (code snippet, e.g. `\"Tsit5()\"` or `\"(Tsit5(), true)\"`);
+- `method` as a `Tsit5()` instance (or `(Tsit5(), bool)` for hierarchical) is shortened to `Tsit5()` / `(Tsit5(), true)`;
+- `probfn` equal to `(prob_Gaussian, prob_Gaussian)` is written as module-qualified
+  `(StochasticGene.prob_Gaussian, StochasticGene.prob_Gaussian)`.
+
+`spec` should match the dict passed to [`write_run_spec_preset`](@ref). `root` is absolutized before
+serialization. Keywords with value `nothing` are omitted.
+
+This is used by [`_makeswarm_with_run_specs`](@ref) (coupled CSV and key-list [`makeswarmfiles`](@ref) paths).
+"""
+function write_fitscript_tracejoint_key(scriptpath::AbstractString, key::String, spec::Dict{Symbol,Any}; src::AbstractString="")
+    sp = copy(spec)
+    if haskey(sp, :root)
+        try
+            sp[:root] = abspath(expanduser(string(sp[:root])))
+        catch
+        end
+    end
+    f = open(scriptpath, "w")
+    write_prolog(f, src)
+    write(f, "@time fit(; key=$(repr(key))")
+    ks = sort!(collect(setdiff(keys(sp), (:key,))), by = x -> String(x))
+    for sym in ks
+        line = _fit_kw_value_for_fitscript_line(sym, sp[sym])
+        line === nothing && continue
+        write(f, ",\n    $(sym)=$(line)")
+    end
+    write(f, ")\n")
+    close(f)
+end
+
+function _method_value_string_for_fitscript(v)::String
+    v isa AbstractString && return String(v)
+    if v isa Tuple && length(v) == 2 && v[2] isa Bool
+        try
+            if nameof(typeof(v[1])) === :Tsit5
+                return v[2] ? "(Tsit5(), true)" : "(Tsit5(), false)"
+            end
+        catch
+        end
+    end
+    try
+        if nameof(typeof(v)) === :Tsit5
+            return "Tsit5()"
+        end
+    catch
+    end
+    return repr(v)
+end
+
+function _probfn_value_string_for_fitscript(v)::String
+    if v isa Tuple && length(v) == 2
+        g1, g2 = v[1], v[2]
+        if g1 isa Function && g2 isa Function && g1 === prob_Gaussian && g2 === prob_Gaussian
+            return "(StochasticGene.prob_Gaussian, StochasticGene.prob_Gaussian)"
+        end
+    end
+    return repr(v)
+end
+
+function _fit_kw_value_for_fitscript_line(k::Symbol, v)::Union{String,Nothing}
+    v === nothing && return nothing
+    if k === :method
+        return _method_value_string_for_fitscript(v)
+    end
+    if k === :probfn
+        return _probfn_value_string_for_fitscript(v)
+    end
+    return repr(v)
+end
+
+function _makeswarm_with_run_specs(keys::Vector{String}, swarm_kw::Dict{Symbol,Any}, specs_by_key::Dict{String, Dict{Symbol,Any}})
+    filedir = get(swarm_kw, :filedir, ".")
+    !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
+    isempty(keys) && return
+    nchains = Int(get(swarm_kw, :nchains, 2))
+    nthreads = Int(get(swarm_kw, :nthreads, 1))
+    swarmfile = get(swarm_kw, :swarmfile, "fit")
+    juliafile = get(swarm_kw, :juliafile, "fitscript")
+    project = get(swarm_kw, :project, "")
+    sysimage = get(swarm_kw, :sysimage, "")
+    src = get(swarm_kw, :src, "")
+    sfile = endswith(swarmfile, ".swarm") ? swarmfile : swarmfile * ".swarm"
+    write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
+    for k in keys
+        haskey(specs_by_key, k) || throw(ArgumentError("missing run spec dict for key $(repr(k))"))
+        scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
+        write_fitscript_tracejoint_key(scriptpath, k, specs_by_key[k]; src=src)
+    end
 end
 
 """
@@ -933,7 +1348,7 @@ function folder_path(folder::String, root::String, folderatetype::String=""; mak
         if ~ispath(f)
             f = joinpath(root, folderatetype, folder)
             if ~ispath(f) && ~make
-                println("$folder not found")
+                @warn "folder_path: no existing directory matched" folder=folder root=root folderatetype=folderatetype tried=f
             elseif ~ispath(f) && make
                 mkpath(f)
             end

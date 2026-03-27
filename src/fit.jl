@@ -192,6 +192,26 @@ function fit_default_spec()
     return d
 end
 
+"""
+    fit_coupled_default_spec() -> Dict{Symbol,Any}
+
+Like [`fit_default_spec`](@ref), but baseline keywords for **coupled** / trace-joint batch jobs
+(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype=\"tracejoint\"`, more chains,
+fewer MCMC steps than the single-gene RNA default, etc. Per-model structure (`G`, `R`, `coupling`,
+priors, …) should come from merging an existing `info_<key>.jld2` (see [`makeswarmfiles`](@ref)) or
+explicit `kwargs`.
+"""
+function fit_coupled_default_spec()
+    d = fit_default_spec()
+    d[:datatype] = "tracejoint"
+    d[:nchains] = 16
+    d[:samplesteps] = 100_000
+    d[:annealsteps] = 0
+    d[:warmupsteps] = 0
+    d[:writesamples] = false
+    return d
+end
+
 function fit(; key=nothing, kwargs...)
     defaults = Dict{Symbol, Any}(pairs(_FIT_DEFAULTS))
     if defaults[:probfn] === nothing

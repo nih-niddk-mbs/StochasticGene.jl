@@ -1,0 +1,297 @@
+# This file is part of StochasticGene.jl
+#
+# coupled_csv.jl — Coupled_models_to_test.csv → coupling connections and fit-spec pieces.
+#
+# Column layout (minimum 7 columns; key column name defaults to Model_name):
+#   1 Model_name — run key (spaces → -)
+#   2–3 enhancer→gene block 1 + sign
+#   4–5 enhancer→gene block 2 + sign
+#   6–7 gene→enhancer + sign
+# Token codes: two-digit "st", "Rsumk", "Ranyk", legacy "Rk" (see csv_row_to_connections_simple).
+
+const _COUPLED_CSV_DEFAULT_ECOLS = (2, 3, 4, 5, 6, 7)
+
+"""Map CSV sign string to `:activate` or `:inhibit` (`>0` / `<0`)."""
+function parse_coupling_sign_csv(s)::Symbol
+    strip(lowercase(string(s))) == ">0" ? :activate : :inhibit
+end
+
+"""Default γ placeholder per mode (matches legacy `makescriptcoupled.jl`)."""
+function default_coupling_gamma_csv(mode::Symbol)
+    mode === :activate && return 0.1
+    mode === :inhibit && return -0.1
+    return 0.0
+end
+
+function _legacy_r_token(tok::AbstractString)
+    s = strip(string(tok))
+    isempty(s) && return false
+    startswith(s, "Rsum") && return false
+    startswith(s, "Rany") && return false
+    startswith(s, "R") || return false
+    tail = s[2:end]
+    !isempty(tail) && all(isdigit, tail)
+end
+
+"""
+Replace legacy `Rk` tokens in a CSV cell with `Rsumk` or `Ranyk` (comma-separated tokens preserved).
+"""
+function replace_csv_cell_legacy_r(cell, kind::Symbol)
+    s = strip(string(cell))
+    (isempty(s) || s == "missing") && return cell
+    parts = split(s, ',')
+    out = map(parts) do p
+        t = strip(p)
+        if _legacy_r_token(t)
+            k = t[2:end]
+            (kind === :rsum) ? "Rsum$k" : "Rany$k"
+        else
+            t
+        end
+    end
+    return join(out, ",")
+end
+
+function csv_row_has_legacy_r(e1, e2, ge)
+    for cell in (e1, e2, ge)
+        s = strip(string(cell))
+        (isempty(s) || s == "missing") && continue
+        for p in split(s, ',')
+            _legacy_r_token(strip(p)) && return true
+        end
+    end
+    return false
+end
+
+"""
+    csv_row_to_connections_simple(e1_states, e1_sign, e2_states, e2_sign, ge_states, ge_sign, G, R; tie_rsum=true)
+
+Parse six CSV cells into connection tuples `(β, s, α, t)`, default γs, tie groups (shared coupling indices),
+and per-connection modes. See module docstring [Coupled model CSV format](@ref).
+"""
+function csv_row_to_connections_simple(e1_states, e1_sign, e2_states, e2_sign, ge_states, ge_sign, G::Tuple, R::Tuple; tie_rsum::Bool=true)
+    connections = NTuple{4,Int}[]
+    gammas = Float64[]
+    tie_groups = Vector{Vector{Int}}()
+    modes = Symbol[]
+
+    function _parse_code(code, β, α)
+        s = strip(string(code))
+        isempty(s) && return NTuple{4,Int}[]
+        Gβ = G[β]
+        Rβ = R[β]
+        if startswith(s, "Rany")
+            tail = s[5:end]
+            (isempty(tail) || !all(isdigit, tail)) && return NTuple{4,Int}[]
+            t = parse(Int, tail)
+            return [(β, Gβ + Rβ + 1, α, t)]
+        elseif startswith(s, "Rsum")
+            tail = s[5:end]
+            (isempty(tail) || !all(isdigit, tail)) && return NTuple{4,Int}[]
+            t = parse(Int, tail)
+            return [(β, i, α, t) for i in Gβ+1:Gβ+Rβ]
+        elseif startswith(s, "R")
+            tail = s[2:end]
+            (isempty(tail) || !all(isdigit, tail)) && return NTuple{4,Int}[]
+            t = parse(Int, tail)
+            return [(β, i, α, t) for i in Gβ+1:Gβ+Rβ]
+        else
+            length(s) == 2 || return NTuple{4,Int}[]
+            isdigit(s[1]) && isdigit(s[2]) || return NTuple{4,Int}[]
+            src = parse(Int, s[1])
+            t = parse(Int, s[2])
+            return [(β, src, α, t)]
+        end
+    end
+
+    function _append_direction!(states, sign, β, α)
+        s = strip(string(states))
+        isempty(s) && return
+        conns_dir = _parse_code(s, β, α)
+        isempty(conns_dir) && return
+        mode = parse_coupling_sign_csv(sign)
+        γ = default_coupling_gamma_csv(mode)
+        len_before = length(connections)
+        append!(connections, conns_dir)
+        append!(gammas, fill(γ, length(conns_dir)))
+        append!(modes, fill(mode, length(conns_dir)))
+        if startswith(s, "R") && !startswith(s, "Rany") && !startswith(s, "Rsum")
+            push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
+        elseif tie_rsum && startswith(s, "Rsum") && length(conns_dir) > 1
+            push!(tie_groups, collect(len_before + 1:len_before + length(conns_dir)))
+        end
+    end
+
+    _append_direction!(e1_states, e1_sign, 1, 2)
+    _append_direction!(e2_states, e2_sign, 1, 2)
+    _append_direction!(ge_states, ge_sign, 2, 1)
+
+    return connections, gammas, tie_groups, modes
+end
+
+function _coupling_prior_mean_from_gammas(default_γ::Vector{Float64}, ncoupling::Int)
+    isempty(default_γ) && return fill(0.0, ncoupling)
+    length(default_γ) == ncoupling && return default_γ
+    length(default_γ) > ncoupling && return default_γ[1:ncoupling]
+    return vcat(default_γ, fill(default_γ[end], ncoupling - length(default_γ)))
+end
+
+"""
+    build_coupled_fit_spec_from_csv_cells(e1, e1s, e2, e2s, ge, ges, key::AbstractString;
+        G, R, S, insertstep, transitions, datapath, infolder, resultfolder, root,
+        noisepriors, elongationtime, datacond, cell, hierarchical, interval, tracetime,
+        zeromedian, probfn, method, trace_specs, initprior, tie_rsum, ...)
+
+Build a `Dict{Symbol,Any}` suitable for [`write_run_spec_preset`](@ref) / `fit(; key=..., ...)`
+from six CSV cells and shared tracejoint defaults.
+"""
+function build_coupled_fit_spec_from_csv_cells(
+    e1, e1s, e2, e2s, ge, ges, key::AbstractString;
+    G::Tuple,
+    R::Tuple,
+    S::Tuple,
+    insertstep::Tuple,
+    transitions::Tuple,
+    datapath::AbstractString,
+    infolder::AbstractString,
+    resultfolder::AbstractString,
+    root::AbstractString,
+    gene::AbstractString="MYC",
+    cell::AbstractString="HBEC",
+    datacond::Union{AbstractVector{<:AbstractString},AbstractVector{String}}=["enhancer", "gene"],
+    noisepriors=([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2]),
+    elongationtime::Tuple=(20.0, 5.0),
+    initprior::Float64=0.1,
+    hierarchical::Bool=true,
+    interval::Float64=5.0 / 3.0,
+    tracetime::Float64=-1.0,
+    zeromedian=Bool[true, true],
+    probfn=(prob_Gaussian, prob_Gaussian),
+    trace_specs=[],
+    tie_rsum::Bool=true,
+    maxtime::Float64=3600.0,
+    nchains::Int=16,
+    samplesteps::Int=100_000,
+    warmupsteps::Int=0,
+    propcv::Float64=0.05,
+    ratetype::AbstractString="median",
+    datacol::Int=3,
+    writesamples::Bool=false,
+    prerun::Float64=0.0,
+    splicetype::AbstractString="",
+    decayrate::Float64=1.0,
+    TransitionType::AbstractString="nstate",
+)
+    if noisepriors === nothing || noisepriors == [] || (noisepriors isa AbstractVector && isempty(noisepriors))
+        noisepriors = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2])
+    end
+    if probfn === nothing || probfn isa Function
+        probfn = (prob_Gaussian, prob_Gaussian)
+    elseif !(probfn isa Tuple) || length(probfn) < 2
+        probfn = (prob_Gaussian, prob_Gaussian)
+    end
+    conns, default_γ, tie_groups, modes = csv_row_to_connections_simple(e1, e1s, e2, e2s, ge, ges, G, R; tie_rsum=tie_rsum)
+    isempty(conns) && return nothing
+    ncoupling = length(conns)
+    coupling = ((1, 2), conns, modes)
+    coupling_prior_mean = _coupling_prior_mean_from_gammas(default_γ, ncoupling)
+
+    # Base rate + noise priors (two units), then coupling block (matches makescriptcoupled template)
+    priormean = Float64[fill(0.001, 2); fill(0.01, length(transitions[1]) - 2); initprior; fill(R[1] / elongationtime[1], R[1]); fill(0.05, max(0, S[1] - insertstep[1] + 1)); 0.03165055618995184; noisepriors[1]]
+    priorcv = Float64[fill(1.0, length(transitions[1])); 1.0; fill(0.1, R[1]); fill(0.1, max(0, S[1] - insertstep[1] + 1)); 1.0; [0.1, 0.1, 0.1, 0.1]]
+    for i in 2:length(R)
+        priormean = vcat(priormean, Float64[fill(0.01, length(transitions[i])); initprior; fill(R[i] / elongationtime[i], R[i]); fill(0.05, max(0, S[i] - insertstep[i] + 1)); 1.0; noisepriors[i]])
+        priorcv = vcat(priorcv, Float64[fill(1.0, length(transitions[i])); 1.0; fill(0.1, R[i]); fill(0.1, max(0, S[i] - insertstep[i] + 1)); 1.0; [0.1, 0.1, 0.01, 0.1]])
+    end
+    priormean = vcat(priormean, coupling_prior_mean)
+    priorcv = vcat(priorcv, fill(10.0, ncoupling))
+
+    hypercv_base = Float64[fill(1.0, length(transitions[1])); 1.0; fill(0.1, R[1] - 1); 1.0; fill(1.0, max(0, S[1] - insertstep[1] + 1)); 1.0; fill(0.25, 4)]
+    for i in 2:length(R)
+        hypercv_base = vcat(hypercv_base, Float64[fill(1.0, length(transitions[i])); 1.0; fill(0.1, R[i] - 1); 1.0; fill(1.0, max(0, S[i] - insertstep[i] + 1)); 1.0; fill(0.25, 4)])
+    end
+    h = if hierarchical
+        priormean = vcat(priormean, vcat(hypercv_base, fill(1.0, ncoupling)))
+        priorcv = vcat(priorcv, fill(2.0, length(priorcv)))
+        (2, Int[], tuple())
+    else
+        tuple()
+    end
+
+    nr1 = num_rates(transitions[1], R[1], S[1], insertstep[1])
+    n1 = nr1 + length(noisepriors[1])
+    totalrates = 0
+    for i in eachindex(R)
+        totalrates += num_rates(transitions[i], R[i], S[i], insertstep[i]) + length(noisepriors[i])
+    end
+
+    target_inds = sort(unique([(α == 1 ? t : n1 + t) for (β, s, α, t) in conns]))
+    tie_vectors = Vector{Vector{Int}}()
+    tied_locals = Set{Int}()
+    for g in tie_groups
+        length(g) <= 1 && continue
+        first_local = g[1]
+        rest_locals = g[2:end]
+        global_first = totalrates + first_local
+        global_rest = [totalrates + i for i in rest_locals]
+        push!(tie_vectors, vcat([global_first], global_rest))
+        union!(tied_locals, rest_locals)
+    end
+    fixedeffects = Tuple(tie_vectors)
+    all_locals = collect(1:ncoupling)
+    fitted_coupling_locals = [i for i in all_locals if !(i in tied_locals)]
+    coupling_fp = [totalrates + i for i in fitted_coupling_locals]
+    fittedparam = Int[vcat(target_inds, coupling_fp)...]
+
+    method = hierarchical ? (Tsit5(), true) : Tsit5()
+    n_u = n_observed_trace_units(coupling)
+    trace_specs_eff = if isempty(trace_specs)
+        default_trace_specs_for_coupled((interval, 1.0, tracetime), zeromedian, n_u)
+    else
+        trace_specs
+    end
+
+    return Dict{Symbol,Any}(
+        :key => string(key),
+        :gene => gene,
+        :cell => cell,
+        :datacond => datacond,
+        :datatype => "tracejoint",
+        :TransitionType => TransitionType,
+        :datapath => datapath,
+        :infolder => infolder,
+        :resultfolder => resultfolder,
+        :root => root,
+        :transitions => transitions,
+        :G => G,
+        :R => R,
+        :S => S,
+        :insertstep => insertstep,
+        :coupling => coupling,
+        :priormean => priormean,
+        :priorcv => priorcv,
+        :fittedparam => fittedparam,
+        :fixedeffects => fixedeffects,
+        :noisepriors => noisepriors,
+        :hierarchical => h,
+        :elongationtime => elongationtime,
+        :traceinfo => (interval, 1.0, tracetime),
+        :zeromedian => zeromedian,
+        :probfn => probfn,
+        :method => method,
+        :maxtime => maxtime,
+        :nchains => nchains,
+        :samplesteps => samplesteps,
+        :warmupsteps => warmupsteps,
+        :propcv => propcv,
+        :ratetype => ratetype,
+        :datacol => datacol,
+        :writesamples => writesamples,
+        :prerun => prerun,
+        :splicetype => splicetype,
+        :decayrate => decayrate,
+        :trace_specs => trace_specs_eff,
+        :inlabel => "",
+        :label => "",
+    )
+end
