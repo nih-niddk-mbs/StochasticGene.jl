@@ -203,7 +203,7 @@ function build_coupled_fit_spec_from_csv_cells(
     probfn=(prob_Gaussian, prob_Gaussian),
     trace_specs=[],
     tie_rsum::Bool=true,
-    maxtime::Float64=3600.0,
+    maxtime=60.0,
     nchains::Int=16,
     samplesteps::Int=100_000,
     warmupsteps::Int=0,

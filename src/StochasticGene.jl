@@ -116,7 +116,9 @@ Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable
 module StochasticGene
 # __precompile__(true)
 
+using AdvancedHMC
 using CSV
+using ChainRulesCore
 using DataFrames
 using Dates
 using DelimitedFiles
@@ -127,6 +129,7 @@ using FFTW
 using JLD2
 using JSON
 using LinearAlgebra
+using LogDensityProblems
 using LSODA
 using MultivariateStats
 using Optim
@@ -136,6 +139,8 @@ using SparseArrays
 using Statistics
 using StatsBase
 using TOML
+using Zygote
+using Random
 # using CUDA
 
 export
@@ -151,6 +156,11 @@ export
     fit,
     fit_default_spec,
     fit_coupled_default_spec,
+    maxtime_seconds,
+    INFERENCE_ADVI,
+    INFERENCE_CHOICES,
+    INFERENCE_MH,
+    INFERENCE_NUTS,
     AbstractPriorContext,
     PriorContextCoupled,
     PriorContextTraceSingleUnit,
@@ -163,6 +173,8 @@ export
     folder_setup,
     get_param,
     get_rates,
+    get_rates_ad,
+    fixed_rates_ad,
     GMmodel,
     GRSMmodel,
     AbstractGRSMmodel,
@@ -192,6 +204,14 @@ export
     mean,
     mean_elongationtime,
     metropolis_hastings,
+    GenePosteriorLogDensity,
+    NUTSOptions,
+    ADVIOptions,
+    run_nuts,
+    run_nuts_fit,
+    run_NUTS,
+    run_advi,
+    logposterior,
     norm,
     normalize_histogram,
     num_all_parameters,
@@ -201,6 +221,7 @@ export
     predictedarray,
     predictedfn,
     prepare_rates,
+    prepare_rates_ad,
     plot_empirical_vs_theory,
     prob_Gaussian,
     prob_Gaussian_grid,
@@ -248,11 +269,15 @@ export
     test_fit_rnadwelltime,
     test_fit_rnaonoff,
     test_fit_simrna,
+    test_compare_mh_nuts_posterior,
+    test_fit_simrna_mh_nuts,
     test_simulate_trials,
     test_fit_trace,
     test_fit_trace_hierarchical,
     test_fit_tracejoint,
     test_fit_tracejoint_hierarchical,
+    test_normalized_nullspace_augmented_pullback_fd,
+    test_trace_specs_utilities,
     makeswarmfiles_driver,
     makeswarmfiles,
     makeswarmfiles_coupled,
@@ -325,6 +350,9 @@ include("likelihoods.jl")
 
 # Metropolis Hastings MCMC for computing posterior distributions of model parameters
 include("metropolis_hastings.jl")
+
+# NUTS / ADVI (gradient-based inference on transformed parameters)
+include("gradient_inference.jl")
 
 # Input output functions
 include("io.jl")

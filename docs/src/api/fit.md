@@ -37,12 +37,14 @@ fits = fit(; kwargs...)
 
 ### Fitting Parameters
 
-- `nchains::Int = 2`: Number of MCMC chains
-- `maxtime::Float64 = 60`: Maximum wall time (minutes)
-- `samplesteps::Int = 1000000`: Number of MCMC sampling steps
-- `warmupsteps::Int = 0`: Number of warmup steps
+- `nchains::Int = 2`: Number of parallel chains for **Metropolis–Hastings** (`inference=:mh`). For **NUTS** (`inference=:nuts`), must be `1` (single chain).
+- `inference = :mh`: Posterior algorithm — [`INFERENCE_MH`](@ref) (MH, default), [`INFERENCE_NUTS`](@ref) (NUTS via AdvancedHMC; use `samplesteps` / `warmupsteps` as `n_samples` / `n_adapts`), or [`INFERENCE_ADVI`](@ref) (not wired through `fit`; call [`run_advi`](@ref)).
+- `steady_state_solver = :augmented`: Passed to the likelihood when using NUTS.
+- `ad_likelihood = nothing`: Passed to NUTS (`nothing` selects AD likelihood for RNA count data when appropriate).
+- `maxtime = 60`: Maximum **total** wall time for the **MH** phase, including **warmup and sampling** together. A **numeric** value is **seconds**; you may also pass a **string** with suffix `m` (minutes) or `h` (hours), e.g. `"90m"`, `"2h"`. Set `samplesteps` large and use `maxtime` as the primary stop (e.g. cluster time limits). See [`maxtime_seconds`](@ref). (NUTS stopping is controlled by `samplesteps` / `warmupsteps`; `maxtime` is not applied to NUTS in the current `fit` wiring.)
+- `samplesteps::Int = 1000000`: MH: max sampling steps (may stop earlier at `maxtime`). NUTS: `n_samples`.
+- `warmupsteps::Int = 0`: MH: discarded warmup (shared `maxtime` with sampling). NUTS: `n_adapts`.
 - `propcv::Float64 = 0.01`: Proposal distribution coefficient of variation
-- `annealsteps::Int = 0`: Number of annealing steps
 - `temp::Float64 = 1.0`: MCMC temperature
 
 ### Prior Parameters

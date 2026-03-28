@@ -17,7 +17,7 @@ export load_data, load_model, write_histograms, write_traces, write_dataframes
 export mean, norm, normalize_histogram, mean_elongationtime, on_states, source_states
 
 # Utility Functions
-export make_array, make_mat, prepare_rates, prob_Gaussian, prob_GaussianMixture, prob_Gaussian_grid
+export make_array, make_mat, prepare_rates, prepare_rates_ad, prob_Gaussian, prob_GaussianMixture, prob_Gaussian_grid
 
 # Correlation Algorithms
 export CorrelationAlgorithm, StandardCorrelation, WindowedCorrelation, MultiTauCorrelation, IDLCorrelation, DEFAULT_CORRELATION_ALGORITHM

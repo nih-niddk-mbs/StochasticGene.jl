@@ -452,32 +452,32 @@ Qtr is the transpose of the Markov process transition rate matrix Q
 #     kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
 # end
 
-function make_ap(rates::Vector, interval, components::TComponents, method=Tsit5())
+function make_ap(rates::Vector, interval, components::TComponents, method=Tsit5(); steady_state_solver::Symbol=:default)
     Qtr = make_mat_T(components, rates) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), steady_state_vector(Qtr; solver=steady_state_solver)
 end
 
-function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Tsit5())
+function make_ap(rates, couplingStrength, interval, components::TCoupledComponents, method=Tsit5(); steady_state_solver::Symbol=:default)
     Qtr = make_mat_TC(components, rates, couplingStrength)
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), steady_state_vector(Qtr; solver=steady_state_solver)
 end
 
-function make_ap(rates, coupling_rates, interval, components::TCoupledFullComponents, method=Tsit5())
+function make_ap(rates, coupling_rates, interval, components::TCoupledFullComponents, method=Tsit5(); steady_state_solver::Symbol=:default)
     Qtr = make_mat_TC(components, rates, coupling_rates)
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), steady_state_vector(Qtr; solver=steady_state_solver)
 end
 
-function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=Tsit5())
+function make_ap(r::Tuple{<:Vector}, interval, components::TComponents, method=Tsit5(); steady_state_solver::Symbol=:default)
     r, couplingStrength = r
     Qtr = make_mat_TC(components, r, couplingStrength)
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), steady_state_vector(Qtr; solver=steady_state_solver)
 end
 
-function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5())
+function make_ap(rates, couplingStrength, interval, components::TForcedComponents, method=Tsit5(); steady_state_solver::Symbol=:default)
     r = set_rates_forced(rates,couplingStrength,components)
     Q = [make_mat_T(components, r[i]) for i in 1:2]
     a = [kolmogorov_forward(Qtr', interval, method) for Qtr in Q]
-    p0 = [normalized_nullspace(Qtr) for Qtr in Q]
+    p0 = [steady_state_vector(Qtr; solver=steady_state_solver) for Qtr in Q]
     return a, p0
 end
 
@@ -497,9 +497,9 @@ Arguments:
 - `N`: number of HMM states
 
 """
-function make_ap(r, interval, elementsT::Vector, N, method=Tsit5())
+function make_ap(r, interval, elementsT::Vector, N, method=Tsit5(); steady_state_solver::Symbol=:default)
     Qtr = make_mat(elementsT, r, N) ##  transpose of the Markov process transition rate matrix Q
-    kolmogorov_forward(Qtr', interval, method), normalized_nullspace(Qtr)
+    kolmogorov_forward(Qtr', interval, method), steady_state_vector(Qtr; solver=steady_state_solver)
 end
 """
     make_logap(r, transitions, interval, G)
@@ -1843,18 +1843,18 @@ end
 
 """
 # no traits
-function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2}
+function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5(); steady_state_solver::Symbol=:default) where {T1,T2}
     rates, noiseparams = r
-    a, p0 = make_ap(rates, interval, components, method)
+    a, p0 = make_ap(rates, interval, components, method; steady_state_solver=steady_state_solver)
     ll, logpredictions = _ll_hmm(a, p0, set_d(noiseparams, reporter), trace[1])
     lb = ll_off(trace, noiseparams, reporter, components, a, p0)
     ll + lb, logpredictions
 end
 
 # coupled (observed_units: when set, only these units have trace columns; full model still has all units)
-function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing) where {T1,T2,T3}
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing, steady_state_solver::Symbol=:default) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
-    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver)
     if observed_units !== nothing
         noiseparams_obs = [noiseparams[i] for i in observed_units]
         reporter_obs = reporter[observed_units]
@@ -1868,11 +1868,11 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
 end
 
 # full coupled matrix
-function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing) where {T1,T2,T3}
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing, steady_state_solver::Symbol=:default) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     coupling_rates = [couplingStrength[k] * rates[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
-    a, p0 = make_ap(rates, coupling_rates, interval, components, method)
+    a, p0 = make_ap(rates, coupling_rates, interval, components, method; steady_state_solver=steady_state_solver)
     if observed_units !== nothing
         noiseparams_obs = [noiseparams[i] for i in observed_units]
         reporter_obs = reporter[observed_units]
@@ -1886,9 +1886,9 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter
 end
 
 # forced
-function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
+function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::HMMReporter, interval, trace, method=Tsit5(); steady_state_solver::Symbol=:default) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
-    a, p0 = make_ap(rates, couplingStrength, interval, components, method)
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver)
     d = (1, set_d(noiseparams, reporter))
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1])
     lb = ll_off(trace, noiseparams, reporter, components, a[1], p0[1])
@@ -1896,9 +1896,9 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TForcedComponents, reporter::HMM
 end
 
 # hierarchical
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6}, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper = r
-    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    a, p0 = make_ap(rshared[1], interval, components, method[1]; steady_state_solver=steady_state_solver)
     if method[2]
         ll, logpredictions = _ll_hmm(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1919,9 +1919,9 @@ function _filter_observed(reporter::Vector{HMMReporter}, noiseindividual, observ
 end
 
 # coupled, hierarchical
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing, steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
-    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1]; steady_state_solver=steady_state_solver)
     if method[2]
         reporter_eff, noise_eff = _filter_observed(reporter, noiseindividual, observed_units)
         ll, logpredictions = _ll_hmm(noise_eff, a, p0, reporter_eff, trace[1])
@@ -1934,11 +1934,11 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledComponent
 end
 
 # full coupled matrix, hierarchical
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); observed_units=nothing, steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
     coupling_rates = [couplingshared[1][k] * rshared[1][components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
-    a, p0 = make_ap(rshared[1], coupling_rates, interval, components, method[1])
+    a, p0 = make_ap(rshared[1], coupling_rates, interval, components, method[1]; steady_state_solver=steady_state_solver)
     if method[2]
         reporter_eff, noise_eff = _filter_observed(reporter, noiseindividual, observed_units)
         ll, logpredictions = _ll_hmm(noise_eff, a, p0, reporter_eff, trace[1])
@@ -1951,9 +1951,9 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TCoupledFullCompo
 end
 
 # forced, hierarchical
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TForcedComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, components::TForcedComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method::Tuple=(Tsit5(), true); steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual = r
-    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1]; steady_state_solver=steady_state_solver)
     if method[2]
         ll, logpredictions = _ll_hmm_forced(noiseindividual, a, p0, reporter, trace[1])
     else
@@ -1970,27 +1970,27 @@ end
     
 """
 # grid
-function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5()) where {T1,T2,T3}
+function ll_hmm(r::Tuple{T1,T2,T3}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5(); steady_state_solver::Symbol=:default) where {T1,T2,T3}
     r, noiseparams, pgrid = r
-    a, p0 = make_ap(r, interval, components, method)
+    a, p0 = make_ap(r, interval, components, method; steady_state_solver=steady_state_solver)
     a_grid = make_a_grid(pgrid[1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
     _ll_hmm_grid(a, a_grid, p0, d, trace[1])
 end
 
 # coupled, grid
-function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5()) where {T1,T2,T3,T4}
+function ll_hmm(r::Tuple{T1,T2,T3,T4}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); steady_state_solver::Symbol=:default) where {T1,T2,T3,T4}
     r, noiseparams, couplingStrength, pgrid = r
-    a, p0 = make_ap(r, couplingStrength, interval, components, method)
+    a, p0 = make_ap(r, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver)
     a_grid = make_a_grid(pgrid[1][1], Ngrid)
     d = set_d(noiseparams, reporter, Ngrid)
     _ll_hmm_grid(a, a_grid, p0, d, trace[1])
 end
 
 # hierarchical, grid
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComponents, reporter::HMMReporter, interval::Float64, trace::Tuple, method=(Tsit5(), true); steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6,T7,T8}
     rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, pgridshared, pgridindividual = r
-    a, p0 = make_ap(rshared[1], interval, components, method[1])
+    a, p0 = make_ap(rshared[1], interval, components, method[1]; steady_state_solver=steady_state_solver)
     a_grid = make_a_grid(pgridshared[1][1], Ngrid)
     d = set_d(noiseshared[1], reporter)
     if method[2]
@@ -2002,9 +2002,9 @@ function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8}, Ngrid::Int, components::TComp
 end
 
 # coupled, hierarchical, grid
-function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true)) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
+function ll_hmm(r::Tuple{T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}, Ngrid::Int, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval::Float64, trace::Tuple, method=(Tsit5(), true); steady_state_solver::Symbol=:default) where {T1,T2,T3,T4,T5,T6,T7,T8,T9,T10}
     rshared, rindividual, _, noiseindividual, _, _, couplingshared, couplingindividual, pgridshared, pgridindividual = r
-    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1])
+    a, p0 = make_ap(rshared[1], couplingshared[1], interval, components, method[1]; steady_state_solver=steady_state_solver)
     a_grid = make_a_grid(pgridshared[1][1], Ngrid)
     d = set_d(noiseshared[1], reporter)
     if method[2]

@@ -8,26 +8,52 @@
 
 # Functions to compute steady state mRNA histograms
 """
-    steady_state(M, nT, nalleles, nhist)
-    steady_state(M, nT, nalleles)
+    steady_state_vector(M::AbstractMatrix; solver::Symbol=:default)
 
-Return steady-state mRNA histogram for G and GR models by computing the null space of the
-truncated full transition matrix.
+Return a normalized steady-state vector `p` with `M * p ≈ 0` and entries summing to 1.
+
+- `solver=:default` or `:fast` — [`normalized_nullspace`](@ref) (sparse QR, SVD fallback).
+- `solver=:augmented` or `:autodiff` — [`normalized_nullspace_augmented`](@ref) (linear solve + AD rules).
+
+Non-sparse `M` is converted with `sparse(M)`.
+"""
+function steady_state_vector(M::SparseMatrixCSC; solver::Symbol=:default)
+    if solver === :default || solver === :fast
+        return normalized_nullspace(M)
+    elseif solver === :augmented || solver === :autodiff
+        return normalized_nullspace_augmented(M)
+    else
+        throw(
+            ArgumentError(
+                "steady_state_vector: unknown solver $(repr(solver)); use :default, :fast, :augmented, or :autodiff",
+            ),
+        )
+    end
+end
+
+steady_state_vector(M::AbstractMatrix; kwargs...) = steady_state_vector(SparseMatrixCSC(M); kwargs...)
+
+"""
+    steady_state(M, nT, nalleles, nhist; steady_state_solver=:default)
+    steady_state(M, nT, nalleles; steady_state_solver=:default)
+
+Return steady-state mRNA histogram for G and GR models via [`steady_state_vector`](@ref) and marginalization.
 
 # Arguments
 - `M`: Truncated full transition rate matrix including transcription state transitions (GR) and mRNA birth and death
 - `nT`: Dimension of state transitions
 - `nalleles`: Number of alleles (for convolution)
 - `nhist`: Length of histogram to return (four-argument form only)
+- `steady_state_solver`: passed to [`steady_state_vector`](@ref) (`:default` or `:augmented` / `:autodiff` for gradients)
 
 # Returns
 - `steady_state(M, nT, nalleles, nhist)`: Vector of length `nhist`
 - `steady_state(M, nT, nalleles)`: Full marginal histogram convolved over alleles
 """
-steady_state(M, nT, nalleles, nhist) = steady_state(M, nT, nalleles)[1:nhist]
+steady_state(M, nT, nalleles, nhist; kwargs...) = steady_state(M, nT, nalleles; kwargs...)[1:nhist]
 
-function steady_state(M, nT, nalleles)
-    P = normalized_nullspace(M)
+function steady_state(M, nT, nalleles; steady_state_solver::Symbol=:default)
+    P = steady_state_vector(M; solver=steady_state_solver)
     mhist = marginalize(P, nT)
     allele_convolve(mhist, nalleles)
 end
@@ -68,8 +94,8 @@ ontimePDF(tin::Vector, TA::AbstractMatrix, offstates, SAinit::Vector, method=Tsi
 
 offtimePDF(tin::Vector, TI::AbstractMatrix, onstates, SIinit::Vector, method=Tsit5()) = dwelltimePDF(tin, TI, onstates, SIinit, method)
 
-function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix, nT::Int, elementsT::Vector, onstates::Vector)
-    pss = normalized_nullspace(T)
+function offonPDF(t::Vector, r::Vector, T::AbstractMatrix, TA::AbstractMatrix, TI::AbstractMatrix, nT::Int, elementsT::Vector, onstates::Vector; steady_state_solver::Symbol=:default)
+    pss = steady_state_vector(T; solver=steady_state_solver)
     nonzeros = nonzero_rows(TI)
     offtimePDF(t, TI[nonzeros, nonzeros], nonzero_states(onstates, nonzeros), init_SI(r, onstates, elementsT, pss, nonzeros)), ontimePDF(t, TA, off_states(nT, onstates), init_SA(r, onstates, elementsT, pss))
 end
@@ -203,16 +229,11 @@ marginalize(P::Matrix)
 
 Marginalize over G states
 """
-function marginalize(p::Vector, nT, nhist)
-    mhist = zeros(nhist)
-    for m in 1:nhist
-        i = (m - 1) * nT
-        mhist[m] = sum(p[i+1:i+nT])
-    end
-    return mhist
+function marginalize(p::AbstractVector, nT, nhist)
+    return [sum(@view p[(m-1)*nT+1:m*nT]) for m in 1:nhist]
 end
 
-function marginalize(p::Vector, nT)
+function marginalize(p::AbstractVector, nT)
     nhist = div(length(p), nT)
     marginalize(p, nT, nhist)
 end
@@ -370,6 +391,150 @@ function normalized_nullspace(M::SparseMatrixCSC)
     normalized_nullspace_svd(M)
 end
 
+"""
+    normalized_nullspace_augmented(M::SparseMatrixCSC)
+
+Compute a steady-state vector `p` with `M * p ≈ 0` and `sum(p) == 1` by solving the
+`n×n` linear system formed from the first `n-1` rows of `M` and the constraint
+`sum(p) = 1`. This avoids sparse QR pivoting and SVD, so it is suitable for
+forward-mode AD (e.g. `ForwardDiff` through the linear solve; can be fragile for sparse `\\`).
+Reverse mode: `ChainRulesCore.rrule` is defined for this function, so Zygote-style AD
+will use the hand-coded pullback. You can also call [`pullback_normalized_nullspace_augmented`](@ref) directly.
+
+The last row of `M` is not used; for a CTMC generator with row sums zero, that row
+is linearly dependent on the others.
+
+Output is clipped and renormalized like [`normalized_nullspace`](@ref): negative
+entries from roundoff are projected with `max(·,0)` and the vector is rescaled to
+sum to 1. If the augmented system is singular or non-finite, falls back to
+[`normalized_nullspace_svd`](@ref) (then [`pullback_normalized_nullspace_augmented`](@ref) errors).
+
+# See also
+- [`normalized_nullspace`](@ref) — fast QR default for plain `Float64` use.
+"""
+function normalized_nullspace_augmented(M::SparseMatrixCSC{T}) where T
+    n = size(M, 1)
+    n == 0 && return T[]
+    n == 1 && return ones(T, 1)
+    r = _augmented_nullspace_try(M, n)
+    return r === nothing ? normalized_nullspace_svd(M) : r.out
+end
+
+"""
+    _augmented_nullspace_try(M, n) -> Union{Nothing, NamedTuple}
+
+On success, returns `(; out, A, p, s)` where `out` is the normalized steady state,
+`A` and `p` satisfy `A * p = b` with `b = [0…0, 1]`, and `s = sum(max.(p,0))`.
+Returns `nothing` if the augmented system fails (singular / non-finite).
+"""
+function _augmented_nullspace_try(M::SparseMatrixCSC{T}, n::Int) where T
+    A = vcat(M[1:n-1, :], sparse(ones(T, 1, n)))
+    # Dense RHS required: sparse `b` makes `A \\ b` error on some Julia versions
+    b = vcat(zeros(T, n - 1), one(T))
+    p = try
+        A \ b
+    catch
+        return nothing
+    end
+    any(!isfinite, p) && return nothing
+    v = max.(p, zero(T))
+    s = sum(v)
+    (!(isfinite(s)) || s == 0) && return nothing
+    out = v ./ s
+    return (; out, A, p, s)
+end
+
+"""Returns `(output, augmented_path_ok)`; if `!augmented_path_ok`, output is from SVD."""
+function _normalized_nullspace_augmented_core(M::SparseMatrixCSC, n::Int)
+    r = _augmented_nullspace_try(M, n)
+    r === nothing ? (normalized_nullspace_svd(M), false) : (r.out, true)
+end
+
+"""
+    pullback_normalized_nullspace_augmented(M::SparseMatrixCSC, ȳ::AbstractVector)
+    pullback_normalized_nullspace_augmented(M, ȳ, r)
+
+Hand-coded reverse-mode map for the augmented steady-state: returns primal
+`p = normalized_nullspace_augmented(M)` when the augmented linear system succeeds,
+and sparse `M̄` with the same structure as `M`, representing the gradient of
+`dot(ȳ, p)` with respect to the entries of `M` (only rows `1:n-1` receive nonzero
+sensitivities; the last row of `M` is unused in the augmented formulation).
+
+If the augmented solve would fall back to SVD, throws `ArgumentError` (call
+[`normalized_nullspace`](@ref) for a primal-only robust path).
+
+The three-argument form reuses the named tuple `r` from [`_augmented_nullspace_try`](@ref)
+so a `ChainRulesCore.rrule` can avoid repeating the forward solve.
+
+Use this from `ChainRulesCore.rrule`, Zygote `@adjoint`, or a custom optimizer.
+"""
+function pullback_normalized_nullspace_augmented(M::SparseMatrixCSC{T}, ȳ::AbstractVector) where T
+    n = size(M, 1)
+    n == 0 && return T[], spzeros(T, 0, 0)
+    n == 1 && return ones(T, 1), spzeros(T, 1, 1)
+    r = _augmented_nullspace_try(M, n)
+    if r === nothing
+        throw(
+            ArgumentError(
+                "normalized_nullspace_augmented fell back to SVD; pullback is undefined. " *
+                "Use a well-conditioned augmented system or call normalized_nullspace for primal only.",
+            ),
+        )
+    end
+    return pullback_normalized_nullspace_augmented(M, ȳ, r)
+end
+
+function pullback_normalized_nullspace_augmented(
+    M::SparseMatrixCSC{T},
+    ȳ::AbstractVector,
+    r::NamedTuple,
+) where T
+    n = size(M, 1)
+    (; out, A, p, s) = r
+    output = out
+    ȳ = ȳ
+    v̄ = (ȳ .- dot(ȳ, output)) ./ s
+    p̄ = v̄ .* (p .> 0)
+    λ = A' \ p̄
+    Ā = -λ * p'
+    G = zeros(T, n, n)
+    G[1:n-1, :] .= Ā[1:n-1, :]
+    Ii, Jj, _ = findnz(M)
+    M̄_vals = map((i, j) -> G[i, j], Ii, Jj)
+    M̄ = sparse(Ii, Jj, M̄_vals, n, n)
+    return output, M̄
+end
+
+function ChainRulesCore.rrule(::typeof(normalized_nullspace_augmented), M::SparseMatrixCSC{T}) where T
+    n = size(M, 1)
+    if n == 0
+        return T[], _ -> (ChainRulesCore.NoTangent(), ChainRulesCore.ZeroTangent())
+    end
+    if n == 1
+        return ones(T, 1), _ -> (ChainRulesCore.NoTangent(), ChainRulesCore.ZeroTangent())
+    end
+    r = _augmented_nullspace_try(M, n)
+    if r === nothing
+        out = normalized_nullspace_svd(M)
+        function normalized_nullspace_augmented_pullback_svd(ȳ)
+            ChainRulesCore.unthunk(ȳ)
+            throw(
+                ArgumentError(
+                    "normalized_nullspace_augmented fell back to SVD; reverse-mode AD is undefined for this input.",
+                ),
+            )
+        end
+        return out, normalized_nullspace_augmented_pullback_svd
+    end
+    p = r.out
+    function normalized_nullspace_augmented_pullback_rr(ȳ)
+        ȳ = ChainRulesCore.unthunk(ȳ)
+        _, M̄ = pullback_normalized_nullspace_augmented(M, ȳ, r)
+        return ChainRulesCore.NoTangent(), M̄
+    end
+    return p, normalized_nullspace_augmented_pullback_rr
+end
+
 function normalized_nullspace_ad(M::SparseMatrixCSC)
     m = size(M, 1)
     F = qr(M)
@@ -393,19 +558,20 @@ end
 
     Convolve to compute distribution for contributions from multiple alleles
 """
+function _allele_convolve_step(prev::AbstractVector, mhist::AbstractVector)
+    nhist = length(mhist)
+    return [
+        sum(prev[m-m2+1] * mhist[m2+1] for m2 in 0:min(nhist - 1, m)) for m in 0:nhist-1
+    ]
+end
+
 function allele_convolve(mhist, nalleles)
     nhist = length(mhist)
-    mhists = Array{Array{Float64,1}}(undef, nalleles)
-    mhists[1] = float.(mhist)
-    for i = 2:nalleles
-        mhists[i] = zeros(nhist)
-        for m = 0:nhist-1
-            for m2 = 0:min(nhist - 1, m)
-                mhists[i][m+1] += mhists[i-1][m-m2+1] * mhist[m2+1]
-            end
-        end
+    a = float.(collect(mhist))
+    for _ in 2:nalleles
+        a = _allele_convolve_step(a, mhist)
     end
-    return mhists[nalleles]
+    return a
 end
 """
     allele_deconvolve(mhist,nalleles)

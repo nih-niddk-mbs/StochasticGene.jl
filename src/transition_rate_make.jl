@@ -508,10 +508,13 @@ This function returns an nT x nT sparse matrix T, with elements set according to
 # Returns
 - `SparseMatrixCSC`: The created sparse matrix T.
 """
-function make_mat(elements::Vector, rates::Vector, nT::Int)
-    T = spzeros(nT, nT)
-    make_mat!(T, elements, rates)
-    return T
+function make_mat(elements::Vector, rates::AbstractVector, nT::Int)
+    isempty(elements) && return spzeros(nT, nT)
+    # Sparsity pattern (row/col indices) is structural; Zygote cannot differentiate Int[] fills.
+    I = ChainRulesCore.@ignore_derivatives [Int(e.a) for e in elements]
+    J = ChainRulesCore.@ignore_derivatives [Int(e.b) for e in elements]
+    V = [e.pm * rates[e.index] for e in elements]
+    return sparse(I, J, V, nT, nT)
 end
 
 """
@@ -628,11 +631,15 @@ function make_mat_M(T::SparseMatrixCSC, B::SparseMatrixCSC, U::SparseMatrixCSC, 
     nT = size(T, 1)
     total = size(U, 1)
     M = kron(U, sparse(I, nT, nT)) + kron(sparse(I, total, total), T - B) + kron(Uminus, B) + kron(Uplus, sparse(I, nT, nT))
-    M[end-size(B, 1)+1:end, end-size(B, 1)+1:end] .+= B  # boundary condition to ensure probability is conserved
-    return M
+    nM = size(M, 1)
+    nb = size(B, 1)
+    offset = nM - nb
+    Bi, Bj, Bv = findnz(B)
+    Δ = sparse(offset .+ Bi, offset .+ Bj, Bv, nM, nM)
+    return M + Δ  # boundary condition to ensure probability is conserved
 end
 
-function make_mat_M(components::MComponents, rates::Vector)
+function make_mat_M(components::MComponents, rates::AbstractVector)
     T = make_mat(components.elementsT, rates, components.nT)
     B = make_mat(components.elementsB, rates, components.nT)
     make_mat_M(T, B, components.U, components.Uminus, components.Uplus)

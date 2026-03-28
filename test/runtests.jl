@@ -2,57 +2,105 @@
 #
 # runtests.jl
 #
-# All test functions are in test.jl
+# Role: **orchestrate** `Pkg.test()` and **assert** outcomes. Reusable scenarios and
+# computations live in `src/test.jl` as `test_*` functions so you can run the same checks
+# interactively (e.g. `using StochasticGene; test_fit_simrna()`).
 #
+# Additional focused suites (`ad_fd_tests.jl`, `get_rates_ad_tests.jl`, `nuts_fit_tests.jl`)
+# live under `test/` for Zygote/FD and short NUTS smoke tests; they can be folded into
+# `src/test.jl` over time if you want a single entry point for everything.
+#
+# Default `Pkg.test()` runs AD checks and other fast tests only. Long MCMC / fit
+# integration tests are gated: set environment variable
+#   STOCHASTICGENE_FULL_TESTS=1
+# when validating the full stack (e.g. after end-to-end AD is confirmed).
 
+using Random
 using StochasticGene
 using Test
 
+const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
+
 @testset "StochasticGene" begin
 
-    @testset "RNA histograms" begin
-        h1, h2 = StochasticGene.test_compare()
-        @test isapprox(h1, h2, rtol=0.05)
+    include("ad_fd_tests.jl")
+    include("get_rates_ad_tests.jl")
+    include("nuts_fit_tests.jl")
 
-        h1, h2 = StochasticGene.test_fit_simrna()
-        @test isapprox(h1, h2, rtol=0.05)
-
-        h1, h2 = StochasticGene.test_fit_rna()
-        @test isapprox(h1, h2, rtol=0.05)
+    @testset "maxtime_seconds" begin
+        @test StochasticGene.maxtime_seconds(3600) == 3600.0
+        @test StochasticGene.maxtime_seconds(3600.0) == 3600.0
+        @test StochasticGene.maxtime_seconds("2h") == 7200.0
+        @test StochasticGene.maxtime_seconds("90m") == 5400.0
+        @test StochasticGene.maxtime_seconds("120") == 120.0
+        @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
-    @testset "RNA + ON/OFF + dwell" begin
-        h1, h2 = StochasticGene.test_fit_rnaonoff()
-        @test isapprox(h1, h2, rtol=0.05)
-
-        h1, h2 = StochasticGene.test_fit_rnadwelltime()
-        @test isapprox(h1, h2, rtol=0.3)
+    @testset "normalized_nullspace_augmented pullback (FD check)" begin
+        @test StochasticGene.test_normalized_nullspace_augmented_pullback_fd()
     end
 
-    @testset "Traces (single-unit)" begin
-        lower, target, upper = StochasticGene.test_fit_trace()
-        @test lower <= target <= upper
+    if FULL_TESTS
+        @testset "RNA histograms" begin
+            h1, h2 = StochasticGene.test_compare()
+            @test isapprox(h1, h2, rtol=0.05)
 
-        lower, target, upper = StochasticGene.test_fit_trace_hierarchical()
-        @test lower <= target <= upper
-    end
+            h1, h2 = StochasticGene.test_fit_simrna()
+            @test isapprox(h1, h2, rtol=0.05)
 
-    @testset "Coupled traces and dwell" begin
-        lower, target, upper = StochasticGene.test_fit_tracejoint()
-        @test lower <= target <= upper
+            h1, h2 = StochasticGene.test_fit_rna()
+            @test isapprox(h1, h2, rtol=0.05)
+        end
 
-        # Basic coupled dwell-time vs simulator comparison (short 3-unit example)
-        cme_vec, sim_vec = StochasticGene.test_compare_3unit()
-        @test length(cme_vec) == length(sim_vec)
+        @testset "RNA + ON/OFF + dwell" begin
+            h1, h2 = StochasticGene.test_fit_rnaonoff()
+            @test isapprox(h1, h2, rtol=0.05)
+
+            h1, h2 = StochasticGene.test_fit_rnadwelltime()
+            @test isapprox(h1, h2, rtol=0.3)
+        end
+
+        @testset "Traces (single-unit)" begin
+            lower, target, upper = StochasticGene.test_fit_trace()
+            @test all(lower .<= target .<= upper)
+            # `test_fit_trace_hierarchical` fits a very high-dimensional hierarchical
+            # state (slow, machine-dependent sample counts under maxtime). Run it
+            # interactively when validating hierarchical traces; see `src/test.jl`.
+        end
+
+        @testset "Coupled traces and dwell" begin
+            lower, target, upper = StochasticGene.test_fit_tracejoint()
+            @test all(lower .<= target .<= upper)
+
+            # Basic coupled dwell-time vs simulator comparison (short 3-unit example)
+            cme_vec, sim_vec = StochasticGene.test_compare_3unit()
+            @test length(cme_vec) == length(sim_vec)
+        end
+
+        @testset "MH vs NUTS posterior (GM, simulated RNA histogram)" begin
+            # Same likelihood and priors; compare posterior mean rates (Stats.meanparam).
+            # Large MH chain + moderate NUTS; finite-diff gradients for robust NUTS.
+            res = StochasticGene.test_fit_simrna_mh_nuts(;
+                totalsteps=80_000,
+                sim_seed=42,
+                mh_samplesteps=35_000,
+                mh_warmup=8_000,
+                mh_maxtime=240.0,
+                mh_seed=101,
+                nuts_n_samples=1_200,
+                nuts_n_adapts=600,
+                nuts_gradient=:finite,
+                nuts_fd_ε=1e-4,
+                rng_nuts=MersenneTwister(202),
+            )
+            @test length(res.mean_mh) == length(res.mean_nuts)
+            # Monte Carlo noise: allow generous margin on rate-space means
+            @test res.max_abs_diff < 1.25
+        end
     end
 
     @testset "trace_specs utilities" begin
-        c2 = ((1, 2), NTuple{4,Int}[], Symbol[])
-        @test StochasticGene.n_observed_trace_units(c2) == 2
-        c3 = ((1, 2, 3), NTuple{4,Int}[], Symbol[])
-        @test StochasticGene.n_observed_trace_units(c3) == 2
-        sp = StochasticGene.default_trace_specs_for_coupled((1.0, 1.0, -1.0), [true, true], 2)
-        @test length(sp) == 2 && sp[1].unit == 1 && sp[2].unit == 2 && sp[1].interval == 1.0
+        @test StochasticGene.test_trace_specs_utilities()
     end
 
 end

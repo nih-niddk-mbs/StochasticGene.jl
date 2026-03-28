@@ -4,25 +4,21 @@
 
 
 """
-struct MHOptions <: Options
+    MHOptions <: Options
 
 Options for Metropolis-Hastings MCMC.
 
 # Fields
-- `samplesteps::Int64`: Number of MCMC samples to collect.
-- `warmupsteps::Int64`: Number of warmup (burn-in) steps.
-- `annealsteps::Int64`: Number of annealing steps.
-- `maxtime::Float64`: Maximum allowed runtime (seconds).
-- `temp::Float64`: Final temperature for annealing.
-- `tempanneal::Float64`: Initial temperature for annealing.
+- `samplesteps::Int64`: Number of MCMC samples to collect (stored in [`Fit`](@ref)).
+- `warmupsteps::Int64`: Warmup steps — **discarded** for inference; used to relax initial transients and (when applicable) adapt the proposal before sampling.
+- `maxtime::Float64`: Maximum **total** wall time (**seconds**) for warmup **and** sampling combined. Warmup and sampling share one budget (see [`metropolis_hastings`](@ref)). [`fit`](@ref) accepts seconds as a number or strings like `"90m"` / `"2h"` via [`maxtime_seconds`](@ref).
+- `temp::Float64`: MCMC temperature for MH moves (`mhstep`).
 """
 struct MHOptions <: Options
     samplesteps::Int64
     warmupsteps::Int64
-    annealsteps::Int64
     maxtime::Float64
     temp::Float64
-    tempanneal::Float64
 end
 
 """
@@ -119,7 +115,7 @@ Run a single Metropolis-Hastings MCMC chain and compute statistics (R-hat, ESS, 
 # Arguments
 - `data`: Experimental data structure (e.g. `RNADwellTimeData`, `TraceData`).
 - `model`: Model with `logprior` and compatible with `loglikelihood(param, data, model)`.
-- `options`: `MHOptions` (samplesteps, warmupsteps, annealsteps, maxtime, temp, tempanneal).
+- `options`: `MHOptions` (samplesteps, warmupsteps, maxtime, temp).
 
 # Returns
 - `fits`: `Fit` struct (samples, ll, parml, llml, accept, total, etc.).
@@ -305,72 +301,29 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 function metropolis_hastings(data, model, options)
     param, d = initial_proposal(model)
     ll, logpredictions = loglikelihood(param, data, model)
-    maxtime = options.maxtime
-    totalsteps = options.warmupsteps + options.samplesteps + options.annealsteps
+    options.warmupsteps + options.samplesteps > 0 || throw(ArgumentError("MHOptions: warmupsteps + samplesteps must be positive"))
+    # Single wall-clock budget for warmup + sampling (seconds). Do **not** apportion by step counts:
+    # users often set huge `samplesteps` and rely on `maxtime` (e.g. Biowulf); proportional splits
+    # would give warmup almost no time when samplesteps ≫ warmupsteps.
+    maxtime_sec = Float64(options.maxtime)
+    t_start = time()
     parml = param
     llml = ll
     proposalcv = model.proposal
-    if options.annealsteps > 0
-        println("Annealing")
-        param, parml, ll, llml, logpredictions, temp = anneal(logpredictions, param, parml, ll, llml, d, model.proposal, data, model, options.annealsteps, options.temp, options.tempanneal, time(), maxtime * options.annealsteps / totalsteps)
-    end
     if options.warmupsteps > 0
         println("Warmup")
-        param, parml, ll, llml, d, proposalcv, logpredictions = warmup(logpredictions, param, param, ll, ll, d, model.proposal, data, model, options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps)
+        param, parml, ll, llml, d, proposalcv, logpredictions = warmup(logpredictions, param, param, ll, ll, d, model.proposal, data, model, options.warmupsteps, options.temp, t_start, maxtime_sec)
     end
     println("Sampling")
-    fits = sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, options.samplesteps, options.temp, time(), maxtime * options.samplesteps / totalsteps)
+    fits = sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, options.samplesteps, options.temp, t_start, maxtime_sec)
     waic = compute_waic(fits.lppd, fits.pwaic, data)
     return fits, waic
 end
 
 """
-    anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, tempanneal, t1, maxtime)
+    warmup(..., samplesteps, temp, t_start, maxtime_sec)
 
-Run an annealing phase for the Metropolis-Hastings MCMC algorithm, gradually lowering the temperature.
-
-# Arguments
-- `logpredictions`: Initial log-likelihood predictions
-- `param`: Initial parameter vector
-- `parml`: Initial maximum likelihood parameter vector
-- `ll`: Initial negative log-likelihood
-- `llml`: Initial maximum likelihood value
-- `d`: Initial proposal distribution
-- `proposalcv`: Initial proposal covariance or scale
-- `data`: Experimental data structure
-- `model`: Model structure
-- `samplesteps`: Number of annealing steps
-- `temp`: Final temperature
-- `tempanneal`: Initial temperature
-- `t1`: Start time
-- `maxtime`: Maximum allowed time for annealing
-
-# Returns
-- Tuple of updated (param, parml, ll, llml, logpredictions, temp)
-"""
-function anneal(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, tempanneal, t1, maxtime)
-    parout = Array{Float64,2}(undef, length(param), samplesteps)
-    prior = logprior(param, model)
-    step = 0
-    annealrate = 3 / samplesteps
-    anneal = 1 - annealrate  # annealing rate with time constant of samplesteps/3
-    proposalcv = model.proposal
-    while step < samplesteps && time() - t1 < maxtime
-        step += 1
-        _, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, tempanneal)
-        if ll > llml
-            llml, parml = ll, param
-        end
-        parout[:, step] = param
-        tempanneal = anneal * tempanneal + annealrate * temp
-    end
-    return param, parml, ll, llml, logpredictions, temp
-end
-
-"""
-warmup(logpredictions,param,rml,ll,llml,d,sigma,data,model,samplesteps,temp,t1,maxtime)
-
-Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal distributions.
+Run the **warmup** phase: draws are **not** retained in [`Fit`](@ref). Serves (1) reducing dependence on the initial parameter vector and (2) optional **proposal adaptation** (empirical covariance) before [`sample`](@ref).
 
 # Arguments
 - `logpredictions`: Initial log-likelihood predictions.
@@ -384,8 +337,8 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 - `model`: Model structure.
 - `samplesteps`: Number of warmup steps to run.
 - `temp`: Temperature for MCMC.
-- `t1`: Start time.
-- `maxtime`: Maximum allowed time for warmup.
+- `t_start`: Wall-clock start (`time()`), shared with [`sample`](@ref).
+- `maxtime_sec`: Maximum **total** elapsed seconds allowed from `t_start` (warmup + sampling combined).
 
 # Returns
 - `param`: Final parameter vector after warmup.
@@ -398,12 +351,12 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 
 This function can be used to adapt the proposal distribution (e.g., empirical covariance) before the main MCMC sampling phase.
 """
-function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
+function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t_start, maxtime_sec)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
     accepttotal = 0
-    while step < samplesteps && time() - t1 < maxtime
+    while step < samplesteps && time() - t_start < maxtime_sec
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
         if ll > llml
@@ -441,7 +394,7 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
 end
 
 """
-    sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, SLAB=10000)
+    sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t_start, maxtime_sec, SLAB=10000)
 
 Run the main MCMC sampling phase, collecting samples and statistics.
 
@@ -457,14 +410,14 @@ Run the main MCMC sampling phase, collecting samples and statistics.
 - `model`: Model structure
 - `samplesteps`: Number of MCMC samples to collect
 - `temp`: Temperature for MCMC
-- `t1`: Start time
-- `maxtime`: Maximum allowed time for sampling
+- `t_start`: Wall-clock start (same as warmup; shared total budget).
+- `maxtime_sec`: Maximum total elapsed seconds from `t_start` (not a separate sampling-only cap).
 - `SLAB`: Slab size for dynamic array allocation (default: 10000)
 
 # Returns
 - `Fit`: Structure containing MCMC samples and statistics
 """
-function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime, SLAB=10000)
+function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t_start, maxtime_sec, SLAB=10000)
     llout = Array{Float64,1}(undef, SLAB)
     parout = Array{Float64,2}(undef, length(param), SLAB)
     pwaic = (0, log.(max.(logpredictions, eps(Float64))), zeros(length(logpredictions)))
@@ -473,7 +426,7 @@ function sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
     prior = logprior(param, model)
     step = 0
     diag_done = false
-    while step < samplesteps && time() - t1 < maxtime
+    while step < samplesteps && time() - t_start < maxtime_sec
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
 

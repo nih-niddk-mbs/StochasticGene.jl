@@ -153,6 +153,13 @@ function prepare_rates(r, hierarchy::HierarchicalTrait)
     return collect(eachcol(rshared)), collect(eachcol(rindividual))
 end
 
+"""
+    prepare_rates_ad(r, hierarchy::HierarchicalTrait)
+
+Non-mutating counterpart to [`prepare_rates(r, hierarchy)`](@ref) for hierarchical
+traits: returns shared and individual rate columns without mutating `r`. Use with AD
+when splitting hierarchical rate vectors.
+"""
 function prepare_rates_ad(r, hierarchy::HierarchicalTrait)
     nallparams = hierarchy.nrates
     rshared = reshape(r[1:hierarchy.individualstart-1], nallparams, hierarchy.nhypersets)
@@ -514,6 +521,11 @@ function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{
 end
 
 # Model loglikelihoods
+#
+# For gradients (e.g. Zygote), pass `steady_state_solver=:augmented` into `loglikelihood`,
+# `predictedfn`, `predictedarray`, `ll_hmm_trace`, etc. That uses [`steady_state_vector`](@ref)
+# with the augmented linear solve ([`normalized_nullspace_augmented`](@ref)). The default
+# `steady_state_solver=:default` keeps the fast QR-based [`normalized_nullspace`](@ref).
 
 """
     loglikelihood(param, data, model)
@@ -542,15 +554,15 @@ This function calculates the log-likelihood for different types of data and mode
 # Convention
 - All loglikelihood functions in this codebase return the log-likelihood (higher is better), not the negative log-likelihood.
 """
-function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
-    predictions = predictedfn(param, data, model)
+function loglikelihood(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
+    predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver)
     hist = datahistogram(data)
     logpredictions = log.(max.(predictions, eps()))
     return sum(hist .* logpredictions), hist .* logpredictions  # Convention: return log-likelihoods
 end
 
-function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel)
-    predictions = predictedfn(param, data, model)
+function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
+    predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver)
     logpredictions = Array{Float64,1}(undef, length(data.countsRNA))
     for k in eachindex(data.countsRNA)
         # Use per-cell yieldfactor (BUG FIX: was hardcoded to 1.0)
@@ -560,9 +572,9 @@ function loglikelihood(param, data::RNACountData, model::AbstractGeneTransitionM
     return sum(logpredictions), logpredictions  # Convention: return log-likelihoods
 end
 
-# AD-friendly version (no in-place mutation)
-function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransitionModel)
-    predictions = predictedfn(param, data, model)
+# AD-friendly version (no in-place mutation); defaults to augmented steady-state for AD
+function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
+    predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver, rates_fn=get_rates_ad)
     logpredictions = [
         log(max(technical_loss_at_k(data.countsRNA[k], predictions, data.yieldfactor[k], data.nRNA), eps()))
         for k in eachindex(data.countsRNA)
@@ -572,17 +584,17 @@ end
 
 
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel)
-    ll_hmm_trace(param, data, model)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
+    ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver)
 end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel)
-    llg, llgp = ll_hmm_trace(param, data, model)
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
+    llg, llgp = ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver)
     r = get_rates(param, model)
     
     # Get nRNA_true from data structure (extract from yield tuple)
     nRNA_true = get_nRNA_true(data.yield, data.nRNA)
-    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true)
+    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     
     # Apply loss matrix if yield < 1.0 (observation noise for RNA histogram)
     yield_val = get_yield_value(data.yield)
@@ -603,18 +615,18 @@ get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = mod
 get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
 # (Add more as needed)
 
-function ll_hmm_trace(param, data, model::AbstractGRSMmodel)
+function ll_hmm_trace(param, data, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
     r = prepare_rates(param, model)
     components = get_components(model, data)
     observed_units = isempty(data.units) ? nothing : data.units
     if !isnothing(model.trait) && haskey(model.trait, :grid)
-        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method)
+        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method; steady_state_solver=steady_state_solver)
     else
         # Only pass observed_units for CoupledFull stack; legacy Coupled and single-unit don't support it
         if components isa TCoupledFullComponents
-            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units)
+            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units, steady_state_solver=steady_state_solver)
         else
-            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method)
+            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; steady_state_solver=steady_state_solver)
         end
     end
 end
@@ -622,14 +634,14 @@ end
 
 # Predicted histogram functions
 
-function predictedRNA(r, mcomponents, nalleles, nRNA)
+function predictedRNA(r, mcomponents, nalleles, nRNA; steady_state_solver::Symbol=:default)
     M = make_mat_M(mcomponents, r)
-    steady_state(M, mcomponents.nT, nalleles, nRNA)
+    steady_state(M, mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver)
 end
 
 
 """
-    predictedfn(param, data::RNAData, model::AbstractGeneTransitionModel)
+    predictedfn(param, data::RNAData, model::AbstractGeneTransitionModel; steady_state_solver, rates_fn=get_rates)
 
 Calculates the likelihood for a single RNA histogram.
 
@@ -637,12 +649,19 @@ Calculates the likelihood for a single RNA histogram.
 - `param`: The model parameters.
 - `data::RNAData`: The RNA data.
 - `model::AbstractGeneTransitionModel`: The model.
+- `rates_fn`: Maps `(param, model)` to the full rate vector; use [`get_rates_ad`](@ref) for AD.
 
 # Returns
 - `Vector{Float64}`: The steady-state probabilities for the RNA histogram.
 """
-function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransitionModel)
-    r = get_rates(param, model)
+function predictedfn(
+    param,
+    data::AbstractRNAData,
+    model::AbstractGeneTransitionModel;
+    steady_state_solver::Symbol=:default,
+    rates_fn::Function=get_rates,
+)
+    r = rates_fn(param, model)
     M = make_mat_M(model.components, r)
     
     # Get nRNA_true from data structure (already computed in load_data)
@@ -653,7 +672,7 @@ function predictedfn(param, data::AbstractRNAData, model::AbstractGeneTransition
     else
         nRNA_true = get_nRNA_true(data.yield, data.nRNA)
     end
-    p_true = steady_state(M, model.components.nT, model.nalleles, nRNA_true)
+    p_true = steady_state(M, model.components.nT, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
     
     # Apply loss matrix if yield < 1.0 (observation noise)
     # Note: RNACountData has per-cell yields (Vector), handled separately in loglikelihood()
@@ -681,7 +700,7 @@ end
 
 
 """
-    predictedfn(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
+    predictedfn(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver, rates_fn=get_rates)
 
 Calculates the likelihood for multiple histograms.
 
@@ -689,12 +708,19 @@ Calculates the likelihood for multiple histograms.
 - `param`: The model parameters.
 - `data::AbstractHistogramData`: The histogram data.
 - `model::AbstractGeneTransitionModel`: The model.
+- `rates_fn`: Maps `(param, model)` to the full rate vector; use [`get_rates_ad`](@ref) for AD.
 
 # Returns
 - `Array{Float64,2}`: An array of likelihoods for the histograms.
 """
-function predictedfn(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel)
-    h = predictedarray(get_rates(param, model), data, model)
+function predictedfn(
+    param,
+    data::AbstractHistogramData,
+    model::AbstractGeneTransitionModel;
+    steady_state_solver::Symbol=:default,
+    rates_fn::Function=get_rates,
+)
+    h = predictedarray(rates_fn(param, model), data, model; steady_state_solver=steady_state_solver)
     make_array(h)
 end
 
@@ -712,21 +738,22 @@ Calculates the likelihood for multiple histograms and returns an array of PDFs.
 # Returns
 - `Array{Array{Float64,1},1}`: An array of PDFs for the histograms.
 """
-function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+function predictedarray(r, data::RNAData{T1,T2}, model::AbstractGMmodel; steady_state_solver::Symbol=:default) where {T1<:Array,T2<:Array}
     h = Array{Array{Float64,1},1}(undef, length(data.nRNA))
     for i in eachindex(data.nRNA)
         M = make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G])
-        h[i] = steady_state(M, model.G, model.nalleles, data.nRNA[i])
+        h[i] = steady_state(M, model.G, model.nalleles, data.nRNA[i]; steady_state_solver=steady_state_solver)
     end
     trim_hist(h, data.nRNA)
 end
 
-# AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, data::RNAData{T1,T2}, model::AbstractGMmodel) where {T1<:Array,T2<:Array}
+# AD-friendly version (no in-place mutation); defaults to augmented steady-state for AD
+function predictedarray_ad(r, data::RNAData{T1,T2}, model::AbstractGMmodel; steady_state_solver::Symbol=:augmented) where {T1<:Array,T2<:Array}
     h = [
         steady_state(
             make_mat_M(model.components[i], r[(i-1)*2*model.G+1:i*2*model.G]),
-            model.G, model.nalleles, data.nRNA[i]
+            model.G, model.nalleles, data.nRNA[i];
+            steady_state_solver=steady_state_solver,
         )
         for i in eachindex(data.nRNA)
     ]
@@ -747,7 +774,7 @@ Calculates the likelihood for RNA On/Off data.
 # Returns
 - `Array{Float64,1}`: The likelihoods for the RNA On/Off data.
 """
-function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionModel)
+function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
     #     if model.splicetype == "offdecay"
     #         # r[end-1] *= survival_fraction(nu, eta, model.R)
     #     end
@@ -757,8 +784,8 @@ function predictedarray(r, data::RNAOnOffData, model::AbstractGeneTransitionMode
     TA = make_mat_TA(components.tcomponents, r)
     TI = make_mat_TI(components.tcomponents, r)
     M = make_mat_M(components.mcomponents, r)
-    histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA)
-    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates)
+    histF = steady_state(M, components.mcomponents.nT, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
+    modelOFF, modelON = offonPDF(data.bins, r, T, TA, TI, components.tcomponents.nT, components.tcomponents.elementsT, onstates; steady_state_solver=steady_state_solver)
     return [modelOFF, modelON, histF]
 end
 
@@ -780,48 +807,26 @@ This function calculates the likelihood array for RNA dwell time data using the 
 - `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods for the dwell times.
 
 """
-function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel)
-    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA)
+function predictedarray(r, data::RNADwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
+    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes, model.nalleles, data.nRNA; steady_state_solver=steady_state_solver)
 end
 
-function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel)
-    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes)
+function predictedarray(r, data::DwellTimeData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:default)
+    predictedarray(r, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
 end
 
-function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+function predictedarray(r, data::DwellTimeData, model::AbstractGRSMmodel{T}; steady_state_solver::Symbol=:default) where {T<:NamedTuple{(:coupling,)}}
     r, coupling_strength = prepare_rates_coupled(r, model.nrates, model.trait.coupling.couplingindices)
-    predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes)
+    predictedarray(r, coupling_strength, model.components, data.bins, model.reporter, data.DTtypes; steady_state_solver=steady_state_solver)
 end
-"""
-    predictedarray(r, G, components, bins, onstates, dttype, nalleles, nRNA)
 
-Calculates the likelihood array
-
-# Arguments
-- `r`: The rates.
-- `G`: The number of gene states.
-- `components`: The model components.
-- `bins`: The bins for the data.
-- `onstates`: The on states for the data.
-- `dttype`: The data types (e.g., "OFF", "ON", "OFFG", "ONG").
-- `nalleles`: The number of alleles.
-- `nRNA`: The RNA data.
-
-# Description
-This function calculates the likelihood array for various types of data, including "OFF", "ON", "OFFG", and "ONG". It constructs the transition matrices and calculates the probability density functions for each data type. The function returns a vector of histograms representing the likelihoods.
-
-# Returns
-- `Vector{Vector{Float64}}`: A vector of histograms representing the likelihoods.
-"""
-
-
-function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:default)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
-    pss = normalized_nullspace(T)
+    pss = steady_state_vector(T; solver=steady_state_solver)
     elementsG = tcomponents.elementsG
     TG = make_mat(elementsG, r, G)
-    pssG = normalized_nullspace(TG)
+    pssG = steady_state_vector(TG; solver=steady_state_solver)
     hists = Vector[]
     for (i, Dtype) in enumerate(dttype)
         if Dtype == "OFF"
@@ -844,13 +849,13 @@ function predictedarray(r, G::Int, tcomponents, bins, onstates, dttype)
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype)
+function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype; steady_state_solver::Symbol=:augmented)
     elementsT = tcomponents.elementsT
     T = make_mat(elementsT, r, tcomponents.nT)
-    pss = normalized_nullspace(T)
+    pss = steady_state_vector(T; solver=steady_state_solver)
     elementsG = tcomponents.elementsG
     TG = make_mat(elementsG, r, G)
-    pssG = normalized_nullspace(TG)
+    pssG = steady_state_vector(TG; solver=steady_state_solver)
     [
         Dtype == "OFF" ? begin
             TD = make_mat(tcomponents.elementsTD[i], r, tcomponents.nT)
@@ -874,23 +879,23 @@ function predictedarray_ad(r, G::Int, tcomponents, bins, onstates, dttype)
     ]
 end
 
-function steady_state_dist(r, components, dt)
+function steady_state_dist(r, components, dt; steady_state_solver::Symbol=:default)
     pss = nothing
     pssG = nothing
     for b in union(dt)
         if b
-            pssG = normalized_nullspace(make_mat_G(components, r))
+            pssG = steady_state_vector(make_mat_G(components, r); solver=steady_state_solver)
         else
-            pss = normalized_nullspace(make_mat_T(components, r))
+            pss = steady_state_vector(make_mat_T(components, r); solver=steady_state_solver)
         end
     end
     return (pss=pss, pssG=pssG, dt=dt)
 end
 
-function predictedarray(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
-    p = steady_state_dist(r, components, dt)
+    p = steady_state_dist(r, components, dt; steady_state_solver=steady_state_solver)
     hists = Vector[]
     for i in eachindex(sojourn)
         if dt[i]
@@ -905,10 +910,10 @@ function predictedarray(r, components::TDComponents, bins, reporter, dttype)
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype)
+function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
     sojourn, nonzeros = reporter
     dt = occursin.("G", dttype)
-    p = steady_state_dist(r, components, dt)
+    p = steady_state_dist(r, components, dt; steady_state_solver=steady_state_solver)
     [
         dt[i] ?
             dwelltimePDF(bins[i], make_mat(components.elementsTD[i], r, components.TDdims[i]), sojourn[i], init_S(r, sojourn[i], components.elementsG, p.pssG)) :
@@ -917,12 +922,12 @@ function predictedarray_ad(r, components::TDComponents, bins, reporter, dttype)
     ]
 end
 
-function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA)
+function predictedarray(r, components::MTComponents, bins, reporter, dttype, nalleles, nRNA; steady_state_solver::Symbol=:default)
     M = make_mat_M(components.mcomponents, r)
-    [steady_state(M, components.mcomponents.nT, nalleles, nRNA); predictedarray(r, components.tcomponents, bins, reporter, dttype)...]
+    [steady_state(M, components.mcomponents.nT, nalleles, nRNA; steady_state_solver=steady_state_solver); predictedarray(r, components.tcomponents, bins, reporter, dttype; steady_state_solver=steady_state_solver)...]
 end
 
-function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt)
+function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model, dt; steady_state_solver::Symbol=:default)
     pssG = nothing
     pss = nothing
     TC = nothing
@@ -930,10 +935,10 @@ function steady_state_dist(unit::Int, T, Gm, Gs, Gt, IT, IG, IR, coupling_streng
     for b in union(dt)
         if b
             GC = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
-            pssG = normalized_nullspace(GC)
+            pssG = steady_state_vector(GC; solver=steady_state_solver)
         else
             TC = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-            pss = normalized_nullspace(TC)
+            pss = steady_state_vector(TC; solver=steady_state_solver)
         end
     end
     return (pss=pss, pssG=pssG, TC=TC, GC=GC)
@@ -943,14 +948,14 @@ function compute_dwelltime!(cache::CoupledDTCache, unit, T, Gm, Gs, Gt, IT, IG, 
     if dt
         if !haskey(cache.TC, dt)
             cache.TC[dt] = make_mat_TC(coupling_strength, Gm, Gs, Gt, IG, sources, model)
-            cache.pss[dt] = normalized_nullspace(cache.TC[dt])
+            cache.pss[dt] = steady_state_vector(cache.TC[dt]; solver=cache.steady_state_solver)
         end
         TCD = make_mat_TCD(cache.TC[dt], sojourn)
         return dwelltimePDF(bins, TCD, sojourn, init_S(sojourn, cache.TC[dt], cache.pss[dt]))
     else
         if !haskey(cache.TC, dt)
             cache.TC[dt] = make_mat_TC(unit, T[unit], Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model)
-            cache.pss[dt] = normalized_nullspace(cache.TC[dt])
+            cache.pss[dt] = steady_state_vector(cache.TC[dt]; solver=cache.steady_state_solver)
         end
         TCD = make_mat_TCD(cache.TC[dt], sojourn)
         return dwelltimePDF(bins, TCD[nonzeros, nonzeros], nonzero_states(sojourn, nonzeros), init_S(sojourn, cache.TC[dt], cache.pss[dt], nonzeros))
@@ -964,11 +969,11 @@ function empty_cache!(cache)
     end
 end
 
-function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:default)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
-    cache = CoupledDTCache(Dict(), Dict())
+    cache = CoupledDTCache(Dict(), Dict(), steady_state_solver)
     T, TD, Gm, Gt, Gs, IG, IR, IT = make_matvec_C(components, r)
     hists = Vector{Vector}[]
     for α in eachindex(components.modelcomponents)
@@ -987,12 +992,12 @@ end
 # Full stack dwell-time prediction.
 # r::Vector{Vector{Float64}} (per-unit rates), coupling_strength::Vector{Float64} (γ values).
 # Sojourn sets come from reporter (same pattern as TDComponents); components store filtered elements.
-function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype)
+function predictedarray(r, coupling_strength, components::TDCoupledFullComponents, bins, reporter, dttype; steady_state_solver::Symbol=:default)
     sojourn_full, _ = reporter
     coupling_rates = [coupling_strength[k] * r[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
     T = make_mat_TC(components, r, coupling_rates)
-    pss = normalized_nullspace(T)
+    pss = steady_state_vector(T; solver=steady_state_solver)
     hists = Vector{Vector}[]
     for α in eachindex(sojourn_full)
         h = Vector[]
@@ -1012,7 +1017,7 @@ function predictedarray(r, coupling_strength, components::TDCoupledFullComponent
 end
 
 # AD-friendly version (no in-place mutation)
-function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype)
+function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{Vector{TDCoupledUnitComponents}}, bins, reporter, dttype; steady_state_solver::Symbol=:augmented)
     sojourn, nonzeros = reporter
     sources = components.sources
     model = components.model
@@ -1020,7 +1025,7 @@ function predictedarray_ad(r, coupling_strength, components::TCoupledComponents{
     [
         [
             compute_dwelltime!(
-                CoupledDTCache(Dict(), Dict()), α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model,
+                CoupledDTCache(Dict(), Dict(), steady_state_solver), α, T, Gm, Gs, Gt, IT, IG, IR, coupling_strength, sources, model,
                 sojourn[α][i], occursin("G", dttype[α][i]), nonzeros[α][i], bins[α][i]
             )
             for i in eachindex(sojourn[α])
@@ -1212,10 +1217,108 @@ function get_param(model::AbstractGRSMmodel)
     transform_rates(model.rates[model.fittedparam], model)
 end
 
+"""Write inverse-transformed fitted parameters into rate vector `r` (mutates `r`)."""
+function get_rates!(r, param, model, inverse)
+    if inverse
+        r[model.fittedparam] = inverse_transform_params(param, model)
+    else
+        r[model.fittedparam] = param
+    end
+end
+
+"""True if `rates` is stored as one vector per unit (e.g. `Vector{Vector{Float64}}`)."""
+_rates_is_per_unit_vectors(rates) =
+    rates isa AbstractVector && !isempty(rates) && eltype(rates) <: AbstractVector{<:Real}
+
+"""Merge `fittedparam` slots from `u` into base rates `r0` without mutating (AD-friendly)."""
+function _merge_param_into_rates(r0::AbstractVector, u::AbstractVector, fittedparam)
+    return [
+        begin
+            i = findfirst(==(k), fittedparam)
+            i === nothing ? r0[k] : u[i]
+        end for k in eachindex(r0)
+    ]
+end
+
+"""
+    fixed_rates_ad(r, fixedeffects)
+
+Same result as [`fixed_rates`](@ref), but implemented without in-place broadcast
+mutation so reverse-mode AD (e.g. Zygote) can differentiate through it.
+"""
+function fixed_rates_ad(r::AbstractVector, fixedeffects)
+    isempty(fixedeffects) && return collect(r)
+    out = collect(r)
+    for effect in fixedeffects
+        ref = out[effect[1]]
+        slaves = effect[2:end]
+        out = [i ∈ slaves ? ref : out[i] for i in eachindex(out)]
+    end
+    return out
+end
+
+"""
+    get_rates_ad(param, model::AbstractGeneTransitionModel, inverse=true)
+
+AD-friendly counterpart to [`get_rates`](@ref): builds the full rate vector from
+transformed `param` without mutating buffers (`get_rates!` or shared model storage).
+Use this inside `predictedfn` / `loglikelihood_ad` when computing gradients.
+
+For `param::Vector{Vector}` with per-unit `model.rates`, see the specialized
+[`get_rates_ad(param::Vector{Vector}, model)`](@ref) method.
+
+When `model.rates` is a vector of per-unit rate vectors, this method merges `param`
+into **each** unit (same rule as [`get_rates`](@ref) with `param::Vector{Vector}`) and
+applies [`fixed_rates_ad`](@ref) to the **last** unit only, matching legacy [`fixed_rates`](@ref)
+on that layout.
+"""
+function get_rates_ad(param, model::AbstractGeneTransitionModel, inverse::Bool=true)
+    r0 = copy_r(model)
+    if _rates_is_per_unit_vectors(r0)
+        rv = [copy(ri) for ri in r0]
+        u = inverse ? inverse_transform_params(param, model) : param
+        for i in eachindex(rv)
+            rv[i] = collect(_merge_param_into_rates(rv[i], u, model.fittedparam))
+        end
+        return fixed_rates_ad(rv[end], model.fixedeffects)
+    end
+    u = inverse ? inverse_transform_params(param, model) : param
+    r = _merge_param_into_rates(r0, u, model.fittedparam)
+    fixed_rates_ad(r, model.fixedeffects)
+end
+
+"""
+    get_rates_ad(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse=true)
+
+Same role as [`get_rates`](@ref) for the `param::Vector{Vector}` layout when
+`model.rates` stores one rate vector per unit (`Vector{<:AbstractVector{<:Real}}`).
+Uses deep copies of each unit vector so AD and callers never mutate `model.rates`
+(unlike [`get_rates`](@ref), which uses `copy` and can alias inner vectors).
+
+If `model.rates` is a flat `Vector{<:Real}`, use a single vector `param` instead;
+this method throws `ArgumentError` in that case.
+"""
+function get_rates_ad(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse::Bool=true)
+    rates = model.rates
+    if !(rates isa AbstractVector) || !(eltype(rates) <: AbstractVector)
+        throw(ArgumentError(
+            "get_rates_ad(param::Vector{Vector}, model): model.rates must be a Vector of per-unit rate vectors. " *
+            "For a flat rate vector, use get_rates_ad(param::AbstractVector, model).",
+        ))
+    end
+    rv = [copy(ri) for ri in rates]
+    u = inverse ? inverse_transform_params(param, model) : param
+    for i in eachindex(rv)
+        rv[i] = collect(_merge_param_into_rates(rv[i], u, model.fittedparam))
+    end
+    return fixed_rates_ad(rv[end], model.fixedeffects)
+end
+
 """
     get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
 
-Map (transformed) parameters back to rate space and return the full rate vector.
+Map (transformed) parameters back to rate space and return the full rate vector (mutating
+implementation via [`get_rates!`](@ref); use [`get_rates_ad`](@ref) for AD).
 
 # Arguments
 - `param`: Vector of parameters in transformed space (e.g. from `get_param(model)` or MCMC samples).
@@ -1225,15 +1328,6 @@ Map (transformed) parameters back to rate space and return the full rate vector.
 # Returns
 - Full rate vector (or vector of vectors for coupled/hierarchical) with fitted indices set from `param` and fixed effects applied.
 """
-
-function get_rates!(r, param, model, inverse)
-    if inverse
-        r[model.fittedparam] = inverse_transform_params(param, model)
-    else
-        r[model.fittedparam] = param
-    end
-end
-
 function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
     r = copy_r(model)
     get_rates!(r, param, model, inverse)

@@ -66,11 +66,16 @@ distributions across dwell-time computations within a single likelihood evaluati
 # Fields
 - `TC::Dict`: cached coupled transition matrices keyed by unit index.
 - `pss::Dict`: cached steady-state distributions keyed by unit index.
+- `steady_state_solver::Symbol`: `:default` or `:augmented` / `:autodiff` (must match [`steady_state_vector`](@ref) choice).
 """
 mutable struct CoupledDTCache
     TC::Dict
     pss::Dict
+    steady_state_solver::Symbol
 end
+
+CoupledDTCache() = CoupledDTCache(Dict(), Dict(), :default)
+CoupledDTCache(TC, pss) = CoupledDTCache(TC, pss, :default)
 
 """
     AbstractComponents
