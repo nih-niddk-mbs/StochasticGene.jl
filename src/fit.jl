@@ -1616,8 +1616,9 @@ Create reporter components for coupled trace analysis.
 - Handles different probability functions per unit
 - Creates `TCoupledFullComponents` for multi-unit trace analysis (default coupled stack)
 - Used for coupled fluorescence trace data modeling
+- **`coupled_stack`**: `:full` (default) uses `TCoupledFullComponents`; `:legacy` uses `TCoupledComponents` (RG / Kronecker assembly).
 """
-function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling)
+function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tuple, insertstep::Tuple, splicetype, onstates, probfn, noisepriors, coupling; coupled_stack::Symbol=:full)
     reporter = HMMReporter[]
     nunits = length(G)
     if probfn isa Union{Tuple,Vector}
@@ -1635,7 +1636,13 @@ function make_reporter_components(transitions::Tuple, G::Tuple, R::Tuple, S::Tup
         weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
         push!(reporter, HMMReporter(nnoise, n_per_state[i], probfn[i], weightind, off_states(n_per_state[i]), collect(n+1:n+nnoise)))
     end
-    components = TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    components = if coupled_stack === :full
+        TCoupledFullComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    elseif coupled_stack === :legacy
+        TCoupledComponents(coupling, transitions, G, R, S, insertstep, splicetype)
+    else
+        throw(ArgumentError("make_reporter_components (coupled trace): coupled_stack must be :full or :legacy (got $(coupled_stack))"))
+    end
     return reporter, components
 end
 
@@ -1847,8 +1854,8 @@ Create reporter components for trace data analysis.
 - Handles HMM-based analysis of time series data
 - Used for live-cell imaging data analysis
 """
-function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-    make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
+function make_reporter_components(data::AbstractTraceData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling; coupled_stack=coupled_stack)
 end
 
 """
@@ -1877,8 +1884,8 @@ Create reporter components for combined trace and histogram data analysis.
 - Combines fluorescence traces with RNA histograms
 - Used for comprehensive transcription analysis with multiple data types
 """
-function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1)
-    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling)
+function make_reporter_components(data::AbstractTraceHistogramData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    reporter, tcomponents = make_reporter_components(transitions, G, R, S, insertstep, splicetype, onstates, probfn, noisepriors, coupling; coupled_stack=coupled_stack)
     # Use nRNA_true if available (from yield tuple), otherwise use observed nRNA
     nRNA_size = get_nRNA_true(data.yield, data.nRNA)
     mcomponents = MComponents(transitions, G, R, nRNA_size, decayrate, splicetype, ejectnumber)
@@ -2235,6 +2242,9 @@ end
 Construct and return the appropriate model struct for the given data and options.
 When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full-length dttype for all units) so that coupled TD matrices are built correctly when some units are hidden.
 
+For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects the transition-matrix assembly:
+`:full` (default, `TCoupledFullComponents`) or `:legacy` (`TCoupledComponents`). Dwell-time and RNA paths ignore this keyword.
+
 # Arguments
 - `data`: Data structure
 - `r`: Initial rate parameters
@@ -2267,7 +2277,7 @@ When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_specs=[])
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full)
     dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
     # For coupled dwell models, extract full onstates from dwell_specs here.
     if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple
@@ -2279,7 +2289,7 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     reporter, components = if data isa DwellTimeData
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs)
     else
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
     end
 
     nrates = num_rates(transitions, R, S, insertstep)

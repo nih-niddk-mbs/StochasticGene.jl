@@ -253,6 +253,7 @@ export
     test_fit_trace_hierarchical,
     test_fit_tracejoint,
     test_fit_tracejoint_hierarchical,
+    test_benchmark_trace_joint_fit_stacks,
     makeswarmfiles_driver,
     makeswarmfiles,
     makeswarmfiles_coupled,

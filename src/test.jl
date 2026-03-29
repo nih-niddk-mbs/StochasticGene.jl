@@ -624,8 +624,8 @@ function test_trace_full(;
     rm = StochasticGene.prior_ratemean(transitions, R, S, insertstep, 1.0, noisepriors, [5.0, 5.0], coupling)
     fittedparam = StochasticGene.set_fittedparam(Int[], data.label, transitions, R, S, insertstep, noisepriors, coupling, nothing)
 
-    model_rg   = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "",     1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
-    model_full = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing)
+    model_rg   = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "",     1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing; coupled_stack=:legacy)
+    model_full = load_model(data, rtarget, rm, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 10.0, Int[], 1.0, 0.01, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing; coupled_stack=:full)
 
     ll_rg   = loglikelihood(get_param(model_rg),   data, model_rg)[1]
     ll_full = loglikelihood(get_param(model_full), data, model_full)[1]
@@ -634,6 +634,92 @@ function test_trace_full(;
     println("Trace ll: RG=$ll_rg, Full=$ll_full, |diff|=$diff, match=$match")
     return (ll_rg=ll_rg, ll_full=ll_full, diff=diff, match=match,
             components_rg=model_rg.components, components_full=model_full.components)
+end
+
+"""
+    test_benchmark_trace_joint_fit_stacks(; nsamples, totaltime, ntrials, n_repeat, maxtime, ...)
+
+Developer diagnostic: run [`run_mh`](@ref) on the **same** simulated coupled joint traces with
+[`load_model`](@ref)`(...; coupled_stack=:legacy)` (`TCoupledComponents`, RG / Kronecker stack) vs
+`:full` (`TCoupledFullComponents`). Prints mean wall time and allocations per stack (each stack runs
+`n_repeat` independent fits). Not called from `runtests.jl`.
+
+**Defaults** use **two units with `G=(3,3)`, `R=(3,3)`**, `S=(0,0)`, `insertstep=(1,1)`, and the usual
+3-state promoter transitions **`([1,2],[2,1],[2,3],[3,2])`** per unit (must match `G`). Override
+`G`, `R`, `transitions`, and **`rtarget`** (length `sum(num_rates per unit) + noise + ncoupling`) for
+other layouts.
+
+Use small `nsamples` / `maxtime` for a quick local check; increase for more stable timings.
+[`test_trace_full`](@ref) checks likelihood parity; this helper compares **fit-loop** cost only.
+
+# Returns
+NamedTuple: `time_legacy`, `time_full`, `alloc_legacy`, `alloc_full`, `ratio_time_full_over_legacy`,
+`fits_legacy`, `fits_full` (last MCMC result per stack).
+"""
+function test_benchmark_trace_joint_fit_stacks(;
+    coupling=((1, 2), [(1, 2, 2, 1)], [:free]),
+    G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    rtarget=Float64[
+        0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2,
+        0.0, 0.1, 0.5, 0.15,
+        0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2,
+        0.0, 0.1, 0.9, 0.2,
+        -0.4,
+    ],
+    nsamples=1500,
+    warmupsteps=0,
+    annealsteps=0,
+    totaltime=800.0,
+    ntrials=4,
+    fittedparam=Int[19],
+    interval=1.0,
+    noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]),
+    propcv=0.2,
+    maxtime=120.0,
+    method=Tsit5(),
+    n_repeat=2,
+    verbose=true,
+    trace_specs=nothing,
+)
+    trace_specs_eff = trace_specs === nothing ? StochasticGene.default_trace_specs_for_coupled((interval, 1.0, -1.0), [false, false], 2) : trace_specs
+    units = [spec.unit for spec in trace_specs_eff]
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; noiseparams=[4, 4])
+    data = StochasticGene.TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units)), 1), units)
+    priormean = StochasticGene.set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors,
+        StochasticGene.mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
+    rinit = rtarget
+    options = StochasticGene.MHOptions(nsamples, warmupsteps, annealsteps, maxtime, 1.0, 1.0)
+    nr = StochasticGene.num_rates(transitions, R, S, insertstep)
+
+    function bench_stack(stack::Symbol)
+        time_acc = 0.0
+        alloc_acc = 0
+        fits_last = nothing
+        for _ in 1:n_repeat
+            model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep,
+                "", 1, 10.0, Int[], rtarget[nr], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing;
+                coupled_stack=stack)
+            time_acc += @elapsed begin
+                fits_last, _, _ = run_mh(data, model, options)
+            end
+            alloc_acc += @allocated run_mh(data, model, options)
+        end
+        return (time_acc / n_repeat, alloc_acc ÷ n_repeat, fits_last)
+    end
+
+    time_legacy, alloc_legacy, fits_legacy = bench_stack(:legacy)
+    time_full, alloc_full, fits_full = bench_stack(:full)
+    ratio = time_full / max(time_legacy, eps(Float64))
+    if verbose
+        println("test_benchmark_trace_joint_fit_stacks (nsamples=$nsamples, n_repeat=$n_repeat, ntrials=$ntrials):")
+        println("  legacy (TCoupledComponents):  time=$(round(time_legacy; digits=4)) s, alloc=$alloc_legacy bytes")
+        println("  full   (TCoupledFullComponents): time=$(round(time_full; digits=4)) s, alloc=$alloc_full bytes")
+        println("  time_full / time_legacy = $(round(ratio; digits=3))")
+    end
+    return (time_legacy=time_legacy, time_full=time_full, alloc_legacy=alloc_legacy, alloc_full=alloc_full,
+            ratio_time_full_over_legacy=ratio, fits_legacy=fits_legacy, fits_full=fits_full)
 end
 
 """
