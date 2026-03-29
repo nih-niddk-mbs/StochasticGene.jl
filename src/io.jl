@@ -3469,6 +3469,26 @@ function read_tracefiles_unbalanced(path::String, label::Vector{String}, start::
 end
 
 """
+    _trace_frame_stop_from_traceinfo(traceinfo)
+
+Map `traceinfo[3]` (end time, same units as `traceinfo[1]`) to a stop **frame** index for
+[`read_tracefiles`](@ref). Returns `-1` to read through the end of each file (`traceinfo[3] < 0`).
+Legacy **open-ended** markers (`t_end` ≈ `1e30` from older `trace_specs`) cannot be rounded to
+`Int64` and are treated like `-1`.
+"""
+function _trace_frame_stop_from_traceinfo(traceinfo::Tuple)
+    dt = Float64(traceinfo[1])
+    t3 = Float64(traceinfo[3])
+    t3 < 0 && return -1
+    t3 >= 1e20 && return -1
+    isinf(t3) && return -1
+    isnan(t3) && return -1
+    r = t3 / dt
+    r >= float(typemax(Int64)) && return -1
+    return max(round(Int, r), 1)
+end
+
+"""
     read_tracefiles(path, label, traceinfo::Tuple, col=3)
 
 #Arguments: same as read_tracefiles with
@@ -3478,7 +3498,7 @@ read in a set of trace files from a folder
 """
 function read_tracefiles(path, label, traceinfo::Tuple, col=3)
     start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
-    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    stop = _trace_frame_stop_from_traceinfo(traceinfo)
     read_tracefiles(path, label, start, stop, col)
 end
 """
@@ -3499,7 +3519,7 @@ Reads trace files from a specified directory that match a given label and extrac
 
 function read_tracefiles_grid(path, label, traceinfo)
     start = max(round(Int, traceinfo[2] / traceinfo[1]), 1)
-    stop = traceinfo[3] < 0 ? -1 : max(round(Int, traceinfo[3] / traceinfo[1]), 1)
+    stop = _trace_frame_stop_from_traceinfo(traceinfo)
     read_tracefiles_grid(path, label, start, stop)
 end
 

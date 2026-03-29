@@ -81,8 +81,11 @@ would pass to `fit`, including `resultfolder` and `root`.
 # Notes
 - [`read_run_spec`](@ref) loads the **JLD2** companion; keep complex types (e.g. `method`, `probfn`) in
   the dict so restarts match an interactive `fit` call.
+- Before writing, [`normalize_trace_specs_legacy_t_end!`](@ref) rewrites legacy huge `t_end` (old `1e30`
+  sentinel) to `-1.0` so merged specs from older `info_<key>.jld2` files do not keep invalid values.
 """
-function write_run_spec_preset(resultfolder::AbstractString, key::AbstractString, run_spec; root::AbstractString=".")
+function write_run_spec_preset(resultfolder::AbstractString, key::AbstractString, run_spec::Dict{Symbol,Any}; root::AbstractString=".")
+    normalize_trace_specs_legacy_t_end!(run_spec)
     rr = folder_path(resultfolder, root, "results")
     mkpath(rr)
     path_toml = joinpath(rr, "info_" * string(key) * ".toml")

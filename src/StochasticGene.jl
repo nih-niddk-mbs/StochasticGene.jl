@@ -151,6 +151,7 @@ export
     fit,
     fit_default_spec,
     fit_coupled_default_spec,
+    normalize_trace_specs_legacy_t_end!,
     AbstractPriorContext,
     PriorContextCoupled,
     PriorContextTraceSingleUnit,

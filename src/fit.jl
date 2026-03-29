@@ -1214,10 +1214,41 @@ function _read_tracefiles_for_fit(datapath::String, datacond, traceinfo_eff, col
     return tracer
 end
 
+"""Map legacy huge `t_end` (e.g. old `1e30` sentinel) to `-1.0` so `traceinfo[3]` matches [`read_tracefiles`](@ref)."""
+function _sanitize_trace_end_time(t::Float64)
+    t < 0 && return t
+    (t >= 1e20 || isinf(t)) && return -1.0
+    isnan(t) && return -1.0
+    return t
+end
+
+function _normalize_trace_spec_row_t_end(s)
+    hasproperty(s, :t_end) || return s
+    te = Float64(getproperty(s, :t_end))
+    (te >= 1e20 || isinf(te) || isnan(te)) && return merge(s, (; t_end=-1.0))
+    return s
+end
+
+"""
+    normalize_trace_specs_legacy_t_end!(spec::Dict)
+
+Rewrite `spec[:trace_specs]` rows whose `t_end` is the legacy open-ended sentinel (`≈ 1e30`) to
+`t_end = -1.0`, matching current [`default_trace_specs_for_coupled`](@ref). Call before saving
+`info_<key>.jld2` so merged old runs do not keep huge `t_end` values that break [`read_tracefiles`](@ref).
+
+Idempotent if `trace_specs` already use `-1.0`.
+"""
+function normalize_trace_specs_legacy_t_end!(spec::Dict{Symbol,Any})
+    ts = get(spec, :trace_specs, nothing)
+    (ts === nothing || !isa(ts, AbstractVector) || isempty(ts)) && return spec
+    spec[:trace_specs] = [_normalize_trace_spec_row_t_end(s) for s in ts]
+    return spec
+end
+
 """Effective `traceinfo[3]` for [`read_tracefiles`](@ref): `spec.t_end` if present, else `traceinfo[3]`. Joint loads use one window; warn if specs disagree."""
 function _t_end_from_trace_specs(traceinfo, trace_specs)
     fallback = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
-    ts = Float64[get(s, :t_end, fallback) for s in trace_specs]
+    ts = Float64[_sanitize_trace_end_time(Float64(get(s, :t_end, fallback))) for s in trace_specs]
     u = unique(ts)
     if length(u) > 1
         @warn "trace_specs disagree on t_end; joint trace load uses a single end time — using $(ts[1])" t_end_values=ts
