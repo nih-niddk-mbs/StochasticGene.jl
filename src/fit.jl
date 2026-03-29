@@ -58,7 +58,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `temp=1.0`: MCMC temperature
 - `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
-- `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via `default_trace_specs_for_coupled` so `data.units` lists observed units (required for correct HMM emission masking with hidden units / Rany).
+- `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via [`default_trace_specs_for_coupled`](@ref) from `traceinfo` and `zeromedian` so `data.units` lists observed units. **If you pass non-empty `trace_specs`,** `interval`, `zeromedian`, and **`t_end`** (→ effective `traceinfo[3]` for [`read_tracefiles`](@ref), same semantics as `traceinfo[3]`) control loading; keep `traceinfo[1]` in sync with `interval` or expect a warning.
 - `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, dttype). When non-empty, used for dwell-time data with multiple units or observation mapping. Legacy dwell data uses single-unit defaults when empty.
 - `traceinfo=(1.0, 1., -1, 1., 0.5)`: 5 tuple = (frame interval of intensity traces in minutes, starting frame time in minutes, ending frame time (use -1 for last index), fraction of observed active traces, background mean)
     for simultaneous joint traces, the fraction of active traces is a vector of the active fractions for each trace, e.g. (1.0, 1., -1, [.5, .7], [0.5,0.5]) 
@@ -68,7 +68,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
 - `warmupsteps=0`: number of MCMC warmup steps to find proposal distribution covariance
 - `writesamples=false`: write out MH samples if true, default is false
-- `zeromedian=false`: if true, subtract the median of each trace from each trace, then scale by the maximum of the medians
+- `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
 
 # Returns
@@ -169,7 +169,7 @@ const _FIT_DEFAULTS = (
     optimize=false,
     writesamples=false,
     method=Tsit5(),
-    zeromedian=false,
+    zeromedian=true,
     datacol=3,
     ejectnumber=1,
     yieldfactor=1.0,
@@ -327,11 +327,11 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
     propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
@@ -339,10 +339,10 @@ function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cel
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1)
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
@@ -855,7 +855,7 @@ Create and configure data, model, and options structures for fitting.
 - `tempanneal`: Annealing temperature (default: 100.0)
 - `temprna`: RNA temperature (default: 1.0)
 - `method`: Numerical method (default: Tsit5())
-- `zeromedian`: Whether to zero median (default: false)
+- `zeromedian`: Whether to zero median (default: true)
 - `datacol`: Data column (default: 3)
 - `ejectnumber`: Ejection number (default: 1)
 - `trace_specs`: Per-unit observation windows for `tracejoint` (default: empty). For **coupled** `tracejoint`, if left empty and `dwell_specs` is empty, defaults are built from `traceinfo` and `zeromedian` (see `default_trace_specs_for_coupled`) so observed units are set on `TraceData`.
@@ -871,7 +871,7 @@ Create and configure data, model, and options structures for fitting.
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
 """
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -882,6 +882,11 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     nalleles = reset_nalleles(nalleles, coupling)
     infolder = folder_path(infolder, root, "results")
     datapath = folder_path(datapath, root, "data")
+    # Coupled tracejoint: empty trace_specs leaves TraceData.units unset in load_data_trace; fill from
+    # traceinfo + zeromedian so HMM masking matches observed units (see default_trace_specs_for_coupled).
+    if normalize_datatype(datatype) == :tracejoint && isempty(dwell_specs) && isempty(trace_specs) && !isempty(coupling)
+        trace_specs = default_trace_specs_for_coupled(traceinfo, zeromedian, n_observed_trace_units(coupling))
+    end
     data = load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol, zeromedian, yieldfactor, trace_specs, dwell_specs)
     decayrate = set_decayrate(decayrate, gene, cell, root)
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype; priorcv=priorcv)
@@ -916,13 +921,16 @@ end
 
 Construct `trace_specs` for coupled `tracejoint` when the caller omits them: one NamedTuple per
 observed unit (`unit`, `interval`, `start`, `t_end`, `zeromedian`), using `traceinfo[1]` as the
-sampling interval and `traceinfo[3]` as the trace end time (or a large upper bound if `< 0`).
+sampling interval and `traceinfo[3]` copied into `t_end` when it is nonnegative; when `traceinfo[3] < 0`, sets
+`t_end = -1.0` (same “use full trace / no fixed end” convention as `traceinfo[3] == -1`).
+[`load_data_trace`](@ref) passes `spec.t_end` into the effective `traceinfo[3]` used by
+[`read_tracefiles`](@ref) (same units as `traceinfo[3]`; `< 0` means read to end of file).
 """
 function default_trace_specs_for_coupled(traceinfo, zeromedian, n_units::Int)
     n_units >= 1 || throw(ArgumentError("n_units must be >= 1"))
     interval = Float64(traceinfo[1])
     tracetime = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
-    t_end = tracetime < 0 ? 1.0e30 : tracetime
+    t_end = tracetime < 0 ? -1.0 : tracetime
     zm_vec = zeromedian isa AbstractVector ? zeromedian : fill(zeromedian, n_units)
     length(zm_vec) >= n_units || throw(ArgumentError("zeromedian vector length must be >= n_units ($n_units)"))
     return [NamedTuple{(:unit, :interval, :start, :t_end, :zeromedian)}((u, interval, 0.0, t_end, zm_vec[u])) for u in 1:n_units]
@@ -939,7 +947,7 @@ function default_trace_specs_for_coupled(traceinfo, zeromedian, observed_units::
     n >= 1 || throw(ArgumentError("observed_units must be non-empty"))
     interval = Float64(traceinfo[1])
     tracetime = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
-    t_end = tracetime < 0 ? 1.0e30 : tracetime
+    t_end = tracetime < 0 ? -1.0 : tracetime
     zm_vec = zeromedian isa AbstractVector ? zeromedian : fill(zeromedian, n)
     length(zm_vec) >= n || throw(ArgumentError("zeromedian vector length must be >= length(observed_units) ($n)"))
     return [NamedTuple{(:unit, :interval, :start, :t_end, :zeromedian)}((observed_units[i], interval, 0.0, t_end, zm_vec[i])) for i in 1:n]
@@ -1163,7 +1171,7 @@ end
 # end
 
 """
-    load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false)
+    load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=true)
 
 Load and process trace data from files.
 
@@ -1175,7 +1183,7 @@ Load and process trace data from files.
 - `traceinfo`: Trace information tuple
 - `datatype::Symbol`: Type of trace data (:trace, :tracejoint, :tracerna)
 - `col`: Column to read from trace files (default: 3)
-- `zeromedian`: Whether to zero-center traces (default: false)
+- `zeromedian`: Whether to zero-center traces (default: true)
 
 # Returns
 - Trace data structure (TraceData or TraceRNAData)
@@ -1206,14 +1214,48 @@ function _read_tracefiles_for_fit(datapath::String, datacond, traceinfo_eff, col
     return tracer
 end
 
-function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0, trace_specs=[])
-    # When trace_specs is provided, override interval, zeromedian, and units from specs.
+"""Effective `traceinfo[3]` for [`read_tracefiles`](@ref): `spec.t_end` if present, else `traceinfo[3]`. Joint loads use one window; warn if specs disagree."""
+function _t_end_from_trace_specs(traceinfo, trace_specs)
+    fallback = length(traceinfo) >= 3 ? Float64(traceinfo[3]) : -1.0
+    ts = Float64[get(s, :t_end, fallback) for s in trace_specs]
+    u = unique(ts)
+    if length(u) > 1
+        @warn "trace_specs disagree on t_end; joint trace load uses a single end time — using $(ts[1])" t_end_values=ts
+    end
+    return ts[1]
+end
+
+"""Build the `traceinfo` tuple passed to `read_tracefiles`: interval from specs, `t_end` → third slot (like `traceinfo[3]`), tail from `traceinfo`."""
+function _traceinfo_eff_from_trace_specs(traceinfo, trace_specs, interval_eff::Float64)
+    t3_eff = _t_end_from_trace_specs(traceinfo, trace_specs)
+    if length(traceinfo) >= 4
+        return (interval_eff, Float64(traceinfo[2]), t3_eff, traceinfo[4:end]...)
+    elseif length(traceinfo) == 3
+        return (interval_eff, Float64(traceinfo[2]), t3_eff)
+    elseif length(traceinfo) == 2
+        return (interval_eff, Float64(traceinfo[2]), t3_eff)
+    elseif length(traceinfo) == 1
+        st = Float64(get(trace_specs[1], :start, 0.0))
+        return (interval_eff, st, t3_eff)
+    else
+        throw(ArgumentError("traceinfo must be non-empty when trace_specs is provided"))
+    end
+end
+
+function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[])
+    # When trace_specs is provided, override interval, zeromedian, units, and trace end time (t_end → traceinfo[3] for read_tracefiles).
     # When empty, use legacy traceinfo / zeromedian parameters unchanged.
     if !isempty(trace_specs)
-        interval_eff = trace_specs[1].interval
+        interval_eff = Float64(trace_specs[1].interval)
+        if length(traceinfo) >= 1
+            t1 = Float64(traceinfo[1])
+            if abs(interval_eff - t1) > max(1e-9, 1e-6 * max(abs(t1), abs(interval_eff), 1.0))
+                @warn "trace_specs[1].interval ($interval_eff) differs from traceinfo[1] ($t1); load_data uses trace_specs for interval and zeromedian. Align traceinfo[1] or fix trace_specs." traceinfo1=t1 trace_specs_interval=interval_eff
+            end
+        end
         zm_eff = [spec.zeromedian for spec in trace_specs]
         length(zm_eff) == 1 && (zm_eff = zm_eff[1])  # scalar for single-unit
-        traceinfo_eff = (interval_eff, traceinfo[2:end]...)
+        traceinfo_eff = _traceinfo_eff_from_trace_specs(traceinfo, trace_specs, interval_eff)
         units_out = [spec.unit for spec in trace_specs]
     else
         traceinfo_eff = traceinfo
@@ -1313,7 +1355,7 @@ const TRACE_DATATYPES = Set([
 ])
 
 """
-    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
+    load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true)
 
 Load RNA or trace data based on the provided `datatype` string or symbol.
 
@@ -1330,7 +1372,7 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 - `traceinfo`: Tuple of trace metadata
 - `temprna`: Integer divisor for histogram normalization
 - `datacol`: Column of trace data to extract (default = 3)
-- `zeromedian`: If true, zero-center each trace before fitting (default = false)
+- `zeromedian`: If true, zero-center each trace before fitting (default = true)
 
 # Returns
 - A concrete data structure subtype (e.g., `RNAData`, `TraceRNAData`, `DwellTimeData`)
@@ -1338,7 +1380,7 @@ dwell time distributions, ON/OFF state durations, and fluorescence traces.
 # Throws
 - `ArgumentError` if `datatype` is unsupported
 """
-function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     dt = normalize_datatype(datatype)
     # Units for non-trace data types come from dwell_specs; for trace types they come from trace_specs.
     units = get_units(dwell_specs, trace_specs)
@@ -2026,7 +2068,7 @@ end
 
 
 """
-    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
+    make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=true)
 
 Construct hierarchical model traits and priors.
 
@@ -2045,7 +2087,7 @@ Construct hierarchical model traits and priors.
 - `grid`: Grid parameter (default: nothing)
 - `factor`: Prior scaling factor (default: 10)
 - `ratetransforms`: Rate transformations (default: nothing)
-- `zeromedian`: Whether to zero median (default: false)
+- `zeromedian`: Whether to zero median (default: true)
 
 # Returns
 - `Tuple`: (hierarchical trait, fittedparam, fixedeffects, priord, ratetransforms)
@@ -2056,7 +2098,7 @@ Construct hierarchical model traits and priors.
 - Sets up appropriate prior distributions
 - Handles parameter indexing for hierarchical structure
 """
-function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=false)
+function make_hierarchical(data, rmean, fittedparam, fixedeffects, transitions, R, S, insertstep, priorcv, noisepriors, hierarchical::Tuple, reporter, coupling=tuple(), couplingindices=nothing, grid=nothing, factor=10, ratetransforms=nothing, zeromedian=true)
     fittedindividual = hierarchical[2]
     fittedshared = setdiff(fittedparam, fittedindividual)
     nhypersets = hierarchical[1]
@@ -2237,7 +2279,7 @@ end
 
 
 """
-    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
+    load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_dttype_full=nothing)
 
 Construct and return the appropriate model struct for the given data and options.
 When `dwell_dttype_full` is provided and data is DwellTimeData, it is used (full-length dttype for all units) so that coupled TD matrices are built correctly when some units are hidden.
@@ -2264,7 +2306,7 @@ For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects
 - `hierarchical`: Hierarchical structure
 - `coupling`: Coupling structure
 - `grid`: Grid parameter
-- `zeromedian`: Whether to zero-center traces (default: false)
+- `zeromedian`: Whether to zero-center traces (default: true)
 - `ejectnumber`: Number of mRNAs per burst (default: 1)
 - `factor`: Prior scaling factor (default: 10)
 
@@ -2277,7 +2319,7 @@ For **coupled trace** / `AbstractTraceData`, keyword **`coupled_stack`** selects
 - Sets up traits and prior distributions
 - Returns concrete model type based on model complexity
 """
-function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=false, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full)
+function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian=true, ejectnumber=1, factor=10, dwell_specs=[]; coupled_stack::Symbol=:full)
     dwell_specs = (dwell_specs === nothing) ? [] : dwell_specs
     # For coupled dwell models, extract full onstates from dwell_specs here.
     if !isempty(dwell_specs) && !isempty(coupling) && G isa Tuple

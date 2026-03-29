@@ -152,8 +152,8 @@ function makeswarm_models(models::AbstractVector{<:NamedTuple}; transitions=noth
         write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
         specs_by_key[key] = spec
     end
+    # Omit default `nchains` so `_makeswarm_with_run_specs` can match `-p` to each spec (see `_nchains_for_swarm_line`).
     swarm_out = merge(Dict{Symbol,Any}(
-        :nchains => get(swarm_kw, :nchains, 2),
         :nthreads => get(swarm_kw, :nthreads, 1),
         :swarmfile => get(swarm_kw, :swarmfile, "fit"),
         :juliafile => get(swarm_kw, :juliafile, "fitscript"),
@@ -589,6 +589,8 @@ Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), whi
   silence when your file is wide for other reasons.
 - **`kwargs...`**: forwarded; swarm-only keys (`nthreads`, `nchains`, `project`, `juliafile`, …) go to
   [`makeswarm`](@ref), the rest merge into each run spec (see [`_split_swarm_fit_kwargs`](@ref)).
+  If you omit **`nchains`** in **`kwargs`**, the swarm file’s **`-p`** is set from each run spec’s **`nchains`**
+  (e.g. **16** from [`fit_coupled_default_spec`](@ref)), matching the generated **`fit(; …)`** scripts.
 
 # Removed API
 
@@ -853,7 +855,7 @@ makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", 
 """
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=false, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="")
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="")
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
@@ -969,19 +971,14 @@ Values use `repr` (valid Julia literals) except:
 - `probfn` equal to `(prob_Gaussian, prob_Gaussian)` is written as module-qualified
   `(StochasticGene.prob_Gaussian, StochasticGene.prob_Gaussian)`.
 
-`spec` should match the dict passed to [`write_run_spec_preset`](@ref). `root` is absolutized before
-serialization. Keywords with value `nothing` are omitted.
+`spec` should match the dict passed to [`write_run_spec_preset`](@ref). **`root`** is written exactly as
+in `spec` (e.g. `"."`); no `abspath` / `expanduser` — path resolution is the user’s responsibility.
+Keywords with value `nothing` are omitted.
 
 This is used by [`_makeswarm_with_run_specs`](@ref) (coupled CSV and key-list [`makeswarmfiles`](@ref) paths).
 """
 function write_fitscript_tracejoint_key(scriptpath::AbstractString, key::String, spec::Dict{Symbol,Any}; src::AbstractString="")
     sp = copy(spec)
-    if haskey(sp, :root)
-        try
-            sp[:root] = abspath(expanduser(string(sp[:root])))
-        catch
-        end
-    end
     f = open(scriptpath, "w")
     write_prolog(f, src)
     write(f, "@time fit(; key=$(repr(key))")
@@ -1035,11 +1032,31 @@ function _fit_kw_value_for_fitscript_line(k::Symbol, v)::Union{String,Nothing}
     return repr(v)
 end
 
+"""
+`nchains` for the Julia `-p` flag: explicit `swarm_kw[:nchains]` wins; otherwise use the first
+`nchains` found in `specs_by_key` (same order as `keys`) so the swarm matches
+[`fit_coupled_default_spec`](@ref) / merged run specs (e.g. 16) without requiring a duplicate
+`nchains=` in swarm-only kwargs.
+"""
+function _nchains_for_swarm_line(swarm_kw::Dict{Symbol,Any}, keys::Vector{String}, specs_by_key::Dict{String, Dict{Symbol,Any}})
+    if haskey(swarm_kw, :nchains)
+        return Int(swarm_kw[:nchains])
+    end
+    for k in keys
+        sp = get(specs_by_key, k, nothing)
+        sp === nothing && continue
+        if haskey(sp, :nchains) && sp[:nchains] !== nothing
+            return Int(sp[:nchains])
+        end
+    end
+    return 2
+end
+
 function _makeswarm_with_run_specs(keys::Vector{String}, swarm_kw::Dict{Symbol,Any}, specs_by_key::Dict{String, Dict{Symbol,Any}})
     filedir = get(swarm_kw, :filedir, ".")
     !isempty(filedir) && !isdir(filedir) && mkpath(filedir)
     isempty(keys) && return
-    nchains = Int(get(swarm_kw, :nchains, 2))
+    nchains = _nchains_for_swarm_line(swarm_kw, keys, specs_by_key)
     nthreads = Int(get(swarm_kw, :nthreads, 1))
     swarmfile = get(swarm_kw, :swarmfile, "fit")
     juliafile = get(swarm_kw, :juliafile, "fitscript")
@@ -1143,7 +1160,7 @@ function makeswarm_coupled(; gene::String, inlabel::String, label::String,
     splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(),
     ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0,
     annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false,
-    optimize=false, writesamples=false, method="Tsit5()", zeromedian=false,
+    optimize=false, writesamples=false, method="Tsit5()", zeromedian=true,
     datacol=3, ejectnumber=1, yieldfactor::Float64=1.0,
     trace_specs=[], dwell_specs=[], kwargs...)
     if !isempty(filedir) && !isdir(filedir)
