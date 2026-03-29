@@ -257,6 +257,7 @@ export
     makeswarmfiles,
     makeswarmfiles_coupled,
     makeswarmfiles_h3_latent,
+    parse_h3_transition_key,
     COUPLING_MODE_RECIPROCAL_DEFAULT,
     coupling_ranges,
     default_coupling_prior_mean,

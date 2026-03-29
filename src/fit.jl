@@ -196,19 +196,31 @@ end
     fit_coupled_default_spec() -> Dict{Symbol,Any}
 
 Like [`fit_default_spec`](@ref), but baseline keywords for **coupled** / trace-joint batch jobs
-(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype=\"tracejoint\"`, more chains,
-fewer MCMC steps than the single-gene RNA default, etc. Per-model structure (`G`, `R`, `coupling`,
-priors, …) should come from merging an existing `info_<key>.jld2` (see [`makeswarmfiles`](@ref)) or
-explicit `kwargs`.
+(`makeswarmfiles` with CSV keys, `base_keys`, or H3 grids): `datatype=\"tracejoint\"`,
+`datacond=[\"gene\", \"enhancer\"]` (joint trace filename tags), more chains,
+fewer MCMC steps than the single-gene RNA default, etc. Shared **two-unit** structure matches the
+`coupled_G` / `coupled_R` / … defaults on [`makeswarmfiles`](@ref) (not the single-unit RNA `G=2`, `R=0`
+from [`fit_default_spec`](@ref)). Override with `kwargs` or an existing `info_<key>` merge when needed
+(e.g. H3 latent layouts).
 """
 function fit_coupled_default_spec()
     d = fit_default_spec()
     d[:datatype] = "tracejoint"
+    d[:datacond] = ["gene", "enhancer"]
     d[:nchains] = 16
     d[:samplesteps] = 100_000
     d[:annealsteps] = 0
     d[:warmupsteps] = 0
     d[:writesamples] = false
+    d[:G] = (3, 3)
+    d[:R] = (3, 3)
+    d[:S] = (0, 0)
+    d[:insertstep] = (1, 1)
+    d[:transitions] = (([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2]))
+    d[:coupling] = ((1, 2), [(1, 3, 2, 4)], [:inhibit])
+    d[:probfn] = (prob_Gaussian, prob_Gaussian)
+    d[:noisepriors] = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2])
+    d[:elongationtime] = (20.0, 5.0)
     return d
 end
 
@@ -1175,6 +1187,25 @@ Load and process trace data from files.
 - Supports single and joint trace data types
 - Throws error if no traces are found
 """
+function _normalize_datacond_for_tracefiles(datacond)
+    # A single condition stored as `["MOCK"]` would dispatch to the joint `Vector` reader, which only
+    # uses `readdir` (non-recursive). The scalar `"MOCK"` reader uses `walkdir` and finds per-gene
+    # subfolders; normalize so one condition behaves like the scalar case.
+    if datacond isa AbstractVector && length(datacond) == 1
+        return string(datacond[1])
+    end
+    return datacond
+end
+
+function _read_tracefiles_for_fit(datapath::String, datacond, traceinfo_eff, col, gene::String)
+    dc = _normalize_datacond_for_tracefiles(datacond)
+    tracer = read_tracefiles(datapath, dc, traceinfo_eff, col)
+    if isempty(tracer) && !isempty(strip(gene)) && isdir(joinpath(datapath, gene))
+        tracer = read_tracefiles(joinpath(datapath, gene), dc, traceinfo_eff, col)
+    end
+    return tracer
+end
+
 function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::Symbol, col=3, zeromedian=false, yieldfactor::Float64=1.0, trace_specs=[])
     # When trace_specs is provided, override interval, zeromedian, and units from specs.
     # When empty, use legacy traceinfo / zeromedian parameters unchanged.
@@ -1190,11 +1221,22 @@ function load_data_trace(datapath, label, gene, datacond, traceinfo, datatype::S
         units_out = Int[]
     end
     if typeof(datapath) <: String
-        tracer = read_tracefiles(datapath, datacond, traceinfo_eff, col)
+        tracer = _read_tracefiles_for_fit(datapath, datacond, traceinfo_eff, col, gene)
     else
-        tracer = read_tracefiles(datapath[1], datacond, traceinfo_eff, col)
+        tracer = _read_tracefiles_for_fit(datapath[1], datacond, traceinfo_eff, col, gene)
     end
-    (length(tracer) == 0) && throw("No traces")
+    if isempty(tracer)
+        base = typeof(datapath) <: String ? datapath : datapath[1]
+        sub = joinpath(base, gene)
+        msg = "No trace files loaded after searching datapath=$(repr(base))"
+        isdir(sub) && (msg *= " and gene subfolder $(repr(sub))")
+        msg *= "; datacond=$(repr(datacond)); gene=$(repr(gene)). "
+        msg *= "Filenames must contain each `datacond` substring (see `read_tracefiles` in `io.jl`). " *
+            "For several joint labels, files must sit in the top level of the trace directory and pair by sorted order; " *
+            "for a single label, directories are searched recursively. " *
+            "If traces live only under a gene-named folder, set `datapath` to that folder or pass `gene` so `joinpath(datapath, gene)` is tried."
+        throw(ArgumentError(msg))
+    end
     trace, tracescale = zero_median(tracer, zm_eff)
     println("number of traces: ", length(trace))
     println("datapath: ", datapath)

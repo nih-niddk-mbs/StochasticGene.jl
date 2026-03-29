@@ -192,7 +192,7 @@ function build_coupled_fit_spec_from_csv_cells(
     root::AbstractString,
     gene::AbstractString="MYC",
     cell::AbstractString="HBEC",
-    datacond::Union{AbstractVector{<:AbstractString},AbstractVector{String}}=["enhancer", "gene"],
+    datacond::Union{AbstractVector{<:AbstractString},AbstractVector{String}}=["gene", "enhancer"],
     noisepriors=([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2]),
     elongationtime::Tuple=(20.0, 5.0),
     initprior::Float64=0.1,

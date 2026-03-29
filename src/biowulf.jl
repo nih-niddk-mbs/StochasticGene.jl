@@ -282,12 +282,56 @@ function _find_existing_info_toml(key::AbstractString, infolder, resultfolder, r
     nothing
 end
 
-function _driver_write_specs_and_makeswarm(keys::Vector{String}, fit_base::Dict{Symbol,Any}, swarm_kw::Dict{Symbol,Any};
+"""Parse `H3-t1-t2` or `H3-t1-t2-h` batch keys into `(t1, t2)` for hidden-latent coupling; else `nothing`."""
+function parse_h3_transition_key(key::AbstractString)
+    s = String(strip(key))
+    m = match(r"^H3-(\d+)-(\d+)(?:-h)?$", s)
+    m === nothing && return nothing
+    return (parse(Int, m[1]), parse(Int, m[2]))
+end
+
+"""Shared three-unit transitions for H3 latent (units 1–2 observed GRSM, unit 3 hidden G-only all-pairs)."""
+const _H3_LATENT_TRANSITIONS = (
+    ([1, 2], [2, 1], [2, 3], [3, 2]),
+    ([1, 2], [2, 1], [2, 3], [3, 2]),
+    ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1]),
+)
+
+function _apply_h3_latent_key_overlay!(spec::Dict{Symbol,Any}, t1::Int, t2::Int; coupling_ranges::Tuple=(:activate, :activate))
+    spec[:G] = (3, 3, 3)
+    spec[:R] = (3, 3, 0)
+    spec[:S] = (0, 0, 0)
+    spec[:insertstep] = (1, 1, 0)
+    spec[:transitions] = _H3_LATENT_TRANSITIONS
+    spec[:coupling] = make_coupling_hidden_latent(t1, t2; coupling_ranges=coupling_ranges)
+    spec[:noisepriors] = ([0.0, 0.1, 0.5, 0.15], [0.0, 0.1, 0.9, 0.2], Float64[])
+    spec[:probfn] = (prob_Gaussian, prob_Gaussian)
+    el = get(spec, :elongationtime, (20.0, 5.0))
+    if el isa Real
+        spec[:elongationtime] = (Float64(el), Float64(el))
+    elseif el isa Tuple && length(el) >= 2
+        spec[:elongationtime] = (Float64(el[1]), Float64(el[2]))
+    else
+        spec[:elongationtime] = (20.0, 5.0)
+    end
+    spec[:traceinfo] = (5.0 / 3.0, 1.0, -1.0)
+    spec[:zeromedian] = Bool[true, true]
+    spec[:decayrate] = 1.0
+    spec[:splicetype] = "full"
+    spec[:prerun] = get(spec, :prerun, 0.0)
+    return spec
+end
+
+function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::Dict{Symbol,Any}, swarm_kw::Dict{Symbol,Any};
         merge_existing_info::Bool=false,
+        fit_kw::Dict{Symbol,Any}=Dict{Symbol,Any}(),
+        warn_missing_info::Bool=true,
+        apply_h3_latent_overlay::Bool=false,
+        h3_coupling_ranges::Tuple=(:activate, :activate),
     )
     n_missing = 0
     specs_by_key = Dict{String, Dict{Symbol,Any}}()
-    for key in keys
+    for key in run_keys
         spec = copy(fit_base)
         if merge_existing_info
             p = _find_existing_info_toml(key, get(spec, :infolder, ""), get(spec, :resultfolder, ""), get(spec, :root, "."))
@@ -297,19 +341,33 @@ function _driver_write_specs_and_makeswarm(keys::Vector{String}, fit_base::Dict{
                 for k in (:datapath, :infolder, :resultfolder, :maxtime, :root)
                     haskey(fit_base, k) && (spec[k] = fit_base[k])
                 end
+                # Explicit `makeswarmfiles(...; kw...)` fit keys win over loaded info (merge loaded first for priors).
+                # Use `Base.keys` — a parameter named `keys` would shadow `keys(...)`.
+                for k in Base.keys(fit_kw)
+                    haskey(fit_base, k) && (spec[k] = fit_base[k])
+                end
             else
                 n_missing += 1
+            end
+        end
+        if apply_h3_latent_overlay
+            h3p = parse_h3_transition_key(key)
+            if h3p !== nothing
+                _apply_h3_latent_key_overlay!(spec, h3p[1], h3p[2]; coupling_ranges=h3_coupling_ranges)
+                for k in Base.keys(fit_kw)
+                    haskey(fit_base, k) && (spec[k] = fit_base[k])
+                end
             end
         end
         spec[:key] = key
         write_run_spec_preset(spec[:resultfolder], key, spec; root=spec[:root])
         specs_by_key[key] = spec
     end
-    if merge_existing_info && n_missing > 0
-        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(keys)) keys under infolder/resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs." n_missing=n_missing nkeys=length(keys)
+    if merge_existing_info && n_missing > 0 && warn_missing_info
+        @warn "makeswarmfiles: no info_<key>.toml (with JLD2) found for $n_missing of $(length(run_keys)) keys under infolder/resultfolder; run specs use merged defaults only — add prior `info_<key>` files next to those fits or pass full model kwargs. Silence when expected: `warn_missing_info=false`." n_missing=n_missing nkeys=length(run_keys)
     end
-    _makeswarm_with_run_specs(keys, swarm_kw, specs_by_key)
-    return keys
+    _makeswarm_with_run_specs(run_keys, swarm_kw, specs_by_key)
+    return run_keys
 end
 
 function _makeswarmfiles_coupled_models_csv(
@@ -358,7 +416,7 @@ function _makeswarmfiles_coupled_models_csv(
                 ti = get(merged, :traceinfo, (5.0 / 3.0, 1.0, -1.0))
                 interval = Float64(ti[1])
                 tracetime = length(ti) >= 3 ? Float64(ti[3]) : -1.0
-                dc = get(merged, :datacond, ["enhancer", "gene"])
+                dc = get(merged, :datacond, ["gene", "enhancer"])
                 dc_vec = dc isa AbstractVector ? String[string(x) for x in dc] : String[string(dc)]
                 pfn0 = get(merged, :probfn, nothing)
                 pfn = if pfn0 === nothing || pfn0 isa Function
@@ -453,7 +511,7 @@ function makeswarmfiles_driver(; transitions=([1, 2], [2, 1]), transitionsvec=no
 end
 
 """
-    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, coupled=nothing, merge_existing_info=true, warn_coupled_csv_shape=true, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), transitionsvec=nothing, kwargs...)
+    makeswarmfiles(; filedir=".", csv_file="", datapath, infolder, folder, maxtime=30.0, hierarchical_modes=(true,false), key_col="Model_name", skip_empty=true, base_keys=nothing, h3_transition_range=nothing, coupled=nothing, merge_existing_info=true, warn_missing_info=true, h3_latent=false, h3_coupling_ranges=(:activate, :activate), warn_coupled_csv_shape=true, models=nothing, Gvec=nothing, Rvec=nothing, Svec=nothing, insertvec=nothing, combine=:product, transitions=([1,2],[2,1]), transitionsvec=nothing, kwargs...)
 
 Unified entry for [`write_run_spec_preset`](@ref) plus swarm and `fitscript_<key>.jl` under `filedir`
 (one `info_<key>.jld2` and marker TOML per key). Single-unit `Gvec`…`insertvec` / `models` batches use
@@ -469,7 +527,7 @@ Use when each run is identified by a **predefined key** (e.g. `H3-3-3`, combined
 
 Provide keys in **one** of these ways:
 
-1. **`csv_file`**: path to a UTF-8 CSV with a **key column** (default `Model_name`; set `key_col`).
+1. **`csv_file`** (alias **`csv`**): path to a UTF-8 CSV with a **key column** (default `Model_name`; set `key_col`).
    **Only that column is used for batch keys.** This is **not** the same as the
    `makeswarmfiles(csv_path, filedir)` / `makeswarmfiles_from_csv` workflow in **`makescriptcoupled.jl`**:
    there, each row’s **coupling** is built from **seven columns** (model name + six coupling cells:
@@ -480,7 +538,10 @@ Provide keys in **one** of these ways:
    extra CSV columns.
 2. **`base_keys`**: `Vector` of strings, e.g. `["H3-3-3", "H3-5-5"]`.
 3. **`h3_transition_range`**: e.g. `1:5` builds all `H3-t1-t2` base keys (same idea as
-   [`makeswarmfiles_h3_latent`](@ref)).
+   [`makeswarmfiles_h3_latent`](@ref)). This automatically enables the **H3 hidden-latent**
+   three-unit skeleton (`G=(3,3,3)`, `make_coupling_hidden_latent(t1,t2)`, …) on each key; it is **not**
+   the two-unit `fit_coupled_default_spec` layout. For CSV / `base_keys` only, pass **`h3_latent=true`**
+   (and optionally **`h3_coupling_ranges=(:activate, :activate)`**) so the same overlay applies.
 
 Set **`coupled`** for this workflow (defaults to **`true`** when omitted):
 
@@ -490,7 +551,8 @@ Set **`coupled`** for this workflow (defaults to **`true`** when omitted):
 If **`merge_existing_info=true`** (default), each key also merges an existing
 `info_<key>.toml` / JLD2 found under `infolder` or `folder` (same resolution as `fit(; key=...)`),
 so layouts, priors, and trace settings from a prior fit are preserved; explicit
-`datapath`, `infolder`, `folder` (`resultfolder`), `maxtime`, and `root` from this call still win.
+`infolder`, `folder` (`resultfolder`), `maxtime`, and `root` from this call still win, as do
+any fit keywords you pass (including **`datapath`** when you set it here).
 
 Optional **`hierarchical_modes`**: tuple of `Bool` (default `(true, false)`) applies
 [`combined_rates_key`](@ref) for each mode (e.g. with/without `-h`). Use `(false,)` for non-hierarchical only.
@@ -515,10 +577,13 @@ Delegates to [`makeswarmfiles_driver`](@ref) → [`makeswarm_models`](@ref), whi
 
 - **`filedir`**: directory for `*.swarm` and `fitscript_<key>.jl`.
 - **`datapath`, `infolder`, `folder`**: merged into the run spec (`folder` is written as `resultfolder`).
-  Defaults **`infolder="coupled"`** and **`folder="coupled"`**; if that path is missing, [`folder_path`](@ref) logs a warning naming the folder (e.g. `coupled`)—not a Julia “variable not found” error.
+  There is **no** repository default for **`datapath`**—set it to your machine’s data root. Defaults
+  **`infolder="coupled"`** and **`folder="coupled"`**; if that path is missing, [`folder_path`](@ref) logs a warning naming the folder (e.g. `coupled`)—not a Julia “variable not found” error.
 - **`maxtime`**: wall-time hint for scripts.
 - **`coupled`**: only for the **key-first** branch (`csv_file` / `base_keys` / `h3_transition_range`); see above.
 - **`merge_existing_info`**: if `true`, merge each key’s existing `info_<key>` run spec when found (see above).
+  When some keys have no prior file, a **`@warn`** is emitted unless **`warn_missing_info=false`** (e.g. you supply full model kwargs for every key).
+- **`h3_latent`**, **`h3_coupling_ranges`**: for CSV / `base_keys` whose entries look like `H3-t1-t2`, set **`h3_latent=true`** to apply the same three-unit hidden-latent skeleton as **`h3_transition_range`** (see above). **`h3_coupling_ranges`** defaults to **`(:activate, :activate)`** (passed to [`make_coupling_hidden_latent`](@ref)).
 - **`warn_coupled_csv_shape`**: if `true` (default), and the CSV has many columns (≥7), emit a **one-time**
   hint that this API does not parse `Coupled_models_to_test.csv`-style coupling columns; set to `false` to
   silence when your file is wide for other reasons.
@@ -531,20 +596,30 @@ Positional `makeswarmfiles(csv_path, filedir; ...)` is **not** supported — use
 
 # Coupled CSV (per-row coupling, `Coupled_models_to_test` layout)
 
-Prefer **[`makeswarmfiles_coupled`](@ref)**`(; csv=path, filedir=..., ...)` or **`makeswarmfiles(; csv_file=path, coupled_csv=true, ...)`**.
-Legacy **`coupled_models_csv=path`** is still accepted (same as **`coupled_csv=true`** with that path). See `coupled_csv.jl` for columns: **`key_col`** plus six coupling columns (**`coupled_csv_cols`**, default `(2,…,7)`). Shared tuple kwargs **`coupled_G`**, **`coupled_R`**, **`coupled_S`**, **`coupled_insertstep`**, **`coupled_transitions`** set the two-unit skeleton. Mutually exclusive with keys-only **`csv_file`** without **`coupled_csv`**, **`base_keys`**, and **`h3_transition_range`**.
+Prefer **[`makeswarmfiles_coupled`](@ref)**`(; csv=path, filedir=..., ...)` or **`makeswarmfiles(; csv_file=path, coupled_csv=true, ...)`** — **`csv`** and **`csv_file`** are the same argument (path to the CSV).
+Legacy **`coupled_models_csv=path`** is still accepted (same as **`coupled_csv=true`** with that path). See `coupled_csv.jl` for columns: **`key_col`** plus six coupling columns (**`coupled_csv_cols`**, default `(2,…,7)`). Shared tuple kwargs **`coupled_G`**, **`coupled_R`**, **`coupled_S`**, **`coupled_insertstep`**, **`coupled_transitions`** set the two-unit skeleton. Mutually exclusive with keys-only **`csv`/`csv_file`** without **`coupled_csv`**, **`base_keys`**, and **`h3_transition_range`**.
 
 # Uncoupled grids and unique keys (`makeswarm_models`)
 
 For **`models=`** or **`Gvec`…`insertvec`**, pass **`unique_model_keys=true`** on [`makeswarm_models`](@ref) / [`makeswarmfiles_driver`](@ref) to append a random suffix so keys stay unique when layouts repeat. For **`Gvec`** grids only, **`transitionsvec`** (same length as **`Gvec`**, **`Gvec`** unique) sets per-**`G`** transitions; otherwise use one shared **`transitions`**.
 """
+function _resolve_csv_kw(csv_file::AbstractString, csv::Union{Nothing,AbstractString})
+    f = strip(csv_file)
+    c = csv === nothing ? "" : strip(string(csv))
+    if !isempty(f) && !isempty(c) && f != c
+        throw(ArgumentError("csv and csv_file disagree; pass one path (csv_file=$(repr(f)), csv=$(repr(c)))"))
+    end
+    return !isempty(f) ? f : c
+end
+
 function makeswarmfiles(;
         filedir::AbstractString=".",
         csv_file::AbstractString="",
+        csv::Union{Nothing,AbstractString}=nothing,
         csv_path::Union{Nothing,AbstractString}=nothing,
         coupled_csv::Bool=false,
         coupled_models_csv::Union{Nothing,AbstractString}=nothing,
-        datapath="data/5Prime_gene_enhancer/including_background/short",
+        datapath::AbstractString="",
         infolder="coupled",
         folder="coupled",
         maxtime=30.0,
@@ -563,6 +638,9 @@ function makeswarmfiles(;
         transitionsvec=nothing,
         coupled::Union{Nothing,Bool}=nothing,
         merge_existing_info::Bool=true,
+        warn_missing_info::Bool=true,
+        h3_latent::Bool=false,
+        h3_coupling_ranges::Tuple=(:activate, :activate),
         warn_coupled_csv_shape::Bool=true,
         coupled_csv_cols::NTuple{6,Int}=(2, 3, 4, 5, 6, 7),
         coupled_emit_legacy_r_variants::Bool=true,
@@ -574,16 +652,16 @@ function makeswarmfiles(;
         coupled_transitions::Tuple=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
         kwargs...,
     )
-    path_csv = strip(csv_file)
+    path_csv = _resolve_csv_kw(csv_file, csv)
     if csv_path !== nothing
         !isempty(path_csv) &&
-            throw(ArgumentError("makeswarmfiles: pass only one of csv_file or csv_path"))
+            throw(ArgumentError("makeswarmfiles: pass only one of csv_file/csv or csv_path"))
         path_csv = strip(string(csv_path))
     end
     cms = coupled_models_csv === nothing ? "" : strip(string(coupled_models_csv))
     if !isempty(cms)
         if !isempty(path_csv) && path_csv != cms
-            throw(ArgumentError("makeswarmfiles: csv_file/csv_path and coupled_models_csv disagree; use one path"))
+            throw(ArgumentError("makeswarmfiles: csv/csv_file/csv_path and coupled_models_csv disagree; use one path"))
         end
         path_csv = isempty(path_csv) ? cms : path_csv
     end
@@ -598,7 +676,7 @@ function makeswarmfiles(;
         h3_transition_range !== nothing &&
             throw(ArgumentError("makeswarmfiles: coupled CSV cannot be used with h3_transition_range"))
         isempty(path_csv) &&
-            throw(ArgumentError("makeswarmfiles: coupled CSV requires csv_file, csv_path, or coupled_models_csv"))
+            throw(ArgumentError("makeswarmfiles: coupled CSV requires csv/csv_file, csv_path, or coupled_models_csv"))
         swarm_kw, fit_kw = _split_swarm_fit_kwargs(Dict{Symbol,Any}(kwargs))
         merged = merge(fit_coupled_default_spec(), fit_kw)
         merged[:datapath] = datapath
@@ -676,7 +754,7 @@ function makeswarmfiles(;
             throw(ArgumentError("makeswarmfiles: base_keys produced no non-empty keys (check skip_empty and entries)."))
         out
     else
-        throw(ArgumentError("makeswarmfiles: specify one source — csv_file / csv_path, base_keys, h3_transition_range, or single-unit models / Gvec+Rvec+Svec+insertvec"))
+        throw(ArgumentError("makeswarmfiles: specify one source — csv/csv_file / csv_path, base_keys, h3_transition_range, or single-unit models / Gvec+Rvec+Svec+insertvec"))
     end
 
     keys = String[]
@@ -691,7 +769,9 @@ function makeswarmfiles(;
     fit_base[:resultfolder] = folder
     fit_base[:maxtime] = maxtime
     swarm_kw[:filedir] = filedir
-    _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw; merge_existing_info=merge_existing_info)
+    apply_h3 = h3_latent || (h3_transition_range !== nothing)
+    _driver_write_specs_and_makeswarm(keys, fit_base, swarm_kw; merge_existing_info=merge_existing_info, fit_kw=fit_kw, warn_missing_info=warn_missing_info,
+        apply_h3_latent_overlay=apply_h3, h3_coupling_ranges=h3_coupling_ranges)
 end
 
 function makeswarmfiles(csv_path::AbstractString, filedir::AbstractString; kwargs...)
@@ -699,32 +779,41 @@ function makeswarmfiles(csv_path::AbstractString, filedir::AbstractString; kwarg
         "positional `makeswarmfiles(csv_path, filedir; kw...)` was removed. Use e.g. " *
         "`makeswarmfiles(; csv_file=" * repr(csv_path) * ", filedir=" * repr(filedir) * ", kw...)` (keys-only CSV), or " *
         "`makeswarmfiles_coupled(; csv=" * repr(csv_path) * ", filedir=" * repr(filedir) * ", kw...)` / " *
-        "`makeswarmfiles(; csv_file=" * repr(csv_path) * ", coupled_csv=true, filedir=" * repr(filedir) * ", kw...)` for Coupled_models_to_test.",
+        "`makeswarmfiles(; csv=" * repr(csv_path) * ", coupled_csv=true, filedir=" * repr(filedir) * ", kw...)` for Coupled_models_to_test (`csv` and `csv_file` are aliases).",
     ))
 end
 
 """
-    makeswarmfiles_coupled(; csv, filedir, kwargs...)
+    makeswarmfiles_coupled(; csv | csv_file, filedir, kwargs...)
 
 Convenience entry for **Coupled_models_to_test**-style CSVs: calls [`makeswarmfiles`](@ref) with
-**`coupled_csv=true`** and **`csv_file=csv`**, merging [`fit_coupled_default_spec`](@ref) with **`kwargs`**.
+**`coupled_csv=true`**, merging [`fit_coupled_default_spec`](@ref) with **`kwargs`**.
+
+Pass the CSV path as **`csv`** or **`csv_file`** (aliases; at least one required, same semantics as [`makeswarmfiles`](@ref)).
 """
-function makeswarmfiles_coupled(; csv::AbstractString, filedir::AbstractString, kwargs...)
-    makeswarmfiles(; csv_file=csv, coupled_csv=true, filedir=filedir, kwargs...)
+function makeswarmfiles_coupled(; csv=nothing, csv_file::AbstractString="", filedir::AbstractString, kwargs...)
+    p = _resolve_csv_kw(csv_file, csv)
+    isempty(p) && throw(ArgumentError("makeswarmfiles_coupled: pass csv=... or csv_file=... (path to Coupled_models_to_test-style CSV)"))
+    makeswarmfiles(; csv_file=p, coupled_csv=true, filedir=filedir, kwargs...)
 end
 
 """
-    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled-h3", folder="coupled-h3", maxtime=30.0, hierarchical_modes=(true,false), merge_existing_info=true, kwargs...)
+    makeswarmfiles_h3_latent(filedir::String; transition_range=1:5, datapath, infolder="coupled", folder="coupled", maxtime=43000.0, hierarchical_modes=(true,false), merge_existing_info=true, warn_missing_info=true, kwargs...)
 
-Convenience wrapper: calls [`makeswarmfiles`](@ref) with `h3_transition_range=transition_range` and
-default `infolder` / `folder` for H3 latent coupled runs.
+Convenience wrapper: calls [`makeswarmfiles`](@ref) with `h3_transition_range=transition_range`.
+**`datapath`** is required (no default)—set your machine’s trace data root. Other defaults
+match [`fit_coupled_default_spec`](@ref)-style coupled trace jobs: **`maxtime`** in **seconds**
+(~`43000` ≈ 12 h wall for the MCMC engine, same units as [`fit`](@ref) → `MHOptions`),
+and **`infolder` / `folder`** aligned with [`makeswarmfiles`](@ref) (`"coupled"`). Override
+**`infolder` / `folder`** if you use a separate results directory (e.g. `"coupled-h3"`).
+Forwarded kwargs include **`warn_missing_info`** (see [`makeswarmfiles`](@ref)).
 """
 function makeswarmfiles_h3_latent(filedir::AbstractString;
         transition_range=1:5,
-        datapath="data/5Prime_gene_enhancer/including_background/short",
-        infolder="coupled-h3",
-        folder="coupled-h3",
-        maxtime=30.0,
+        datapath::AbstractString,
+        infolder="coupled",
+        folder="coupled",
+        maxtime=43000.0,
         hierarchical_modes=(true, false),
         kwargs...,
     )
