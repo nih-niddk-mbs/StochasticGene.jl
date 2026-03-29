@@ -27,6 +27,8 @@ Unset or optional arguments are stored as the string `"nothing"`; when the file 
 
 Coupling is stored as `coupling_unit_model` and `coupling_connections` in `[run]` (format `(unit_model, connections)` with each connection `(β, s, α, t)`).
 
+Full run state for **`fit(; key=...)`** is read from the companion **JLD2** file (same stem as the marker TOML). When batch helpers call [`write_run_spec_preset`](@ref), legacy **`trace_specs[].t_end`** values from old merged specs (historical huge “open end” markers) are normalized to **`-1.0`** via [`normalize_trace_specs_legacy_t_end!`](@ref) before writing—see [Cluster and batch workflows](cluster_batch_workflows.md).
+
 ## Starting a fit from a TOML file
 
 Pass `key = "identifier"` to load the run specification from `info_<key>.toml` in the results folder. The results folder is `folder_path(resultfolder, root, "results")`; set `resultfolder` and `root` in the call if needed. All run options are read from the TOML's `[run]` section; any keyword arguments you pass to `fit` override those values.
