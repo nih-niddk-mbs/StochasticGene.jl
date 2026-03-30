@@ -77,6 +77,14 @@ Adjust **`-g`**, **`-t`**, **time**, and **module** to match your allocation and
 - [`makeswarmfiles`](@ref) — **unified** entry: coupled key lists (CSV, explicit `base_keys`, or H3 grids) **or** single-unit sweeps; writes presets and runs `makeswarm`. See its docstring for the mutually exclusive modes.
 - [`makeswarmfiles_h3_latent`](@ref) — convenience for H3 latent key grids.
 
+### Swarm `julia -p`, `nchains`, merged `info_<key>`, and `root`
+
+- **Parallel workers:** The swarm command should use **`-p N`** (or equivalent) consistent with how many chains run in parallel. For [`makeswarmfiles`](@ref) / [`makeswarm_models`](@ref), if you do **not** pass an explicit swarm-only **`nchains=`** in kwargs, the generated **`-p`** is taken from each run spec’s **`nchains`** (e.g. coupled defaults often use 16), so it stays aligned with **`fit(; …, nchains=…)`**. See the [`makeswarmfiles`](@ref) docstring.
+
+- **Merged presets:** With **`merge_existing_info=true`** (default), older **`info_<key>.jld2`** files are merged into new specs. Legacy **`trace_specs`** sometimes used a huge **`t_end`** (historical “open end” sentinel). When saving, [`write_run_spec_preset`](@ref) runs [`normalize_trace_specs_legacy_t_end!`](@ref) so those values are rewritten to **`t_end = -1.0`**, matching current [`default_trace_specs_for_coupled`](@ref) and avoiding invalid frame indices in [`read_tracefiles`](@ref).
+
+- **`root` in generated fit scripts:** Scripts list **`root`** exactly as in the run spec (no forced `abspath`). Use **`root="."`** if the job’s **working directory** is the project root (set **`cd`** in the swarm or submit from the right folder). Paths resolved in an **interactive** Biowulf session can differ from **batch** jobs; **`"."`** avoids baking in an interactive-only absolute path.
+
 ---
 
 ## Key-based naming

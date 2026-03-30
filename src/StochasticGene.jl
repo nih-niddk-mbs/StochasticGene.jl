@@ -6,7 +6,7 @@
 
 A Julia package for stochastic modeling of gene transcription and Bayesian inference.
 
-**Version:** 1.8.0
+**Version:** 1.8.3
 
 # Overview
 StochasticGene.jl is a comprehensive Julia package for simulating and fitting stochastic models of gene transcription. It provides tools for:
@@ -111,7 +111,7 @@ Batch workflows (swarms, combined starts, key-based runs) are documented in the 
 
 # Documentation
 
-Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.8.0).
+Hosted manual: [stable](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/) · [dev](https://nih-niddk-mbs.github.io/StochasticGene.jl/dev/). Stable docs track the released version (v1.8.3).
 """
 module StochasticGene
 # __precompile__(true)
@@ -161,6 +161,7 @@ export
     INFERENCE_CHOICES,
     INFERENCE_MH,
     INFERENCE_NUTS,
+    normalize_trace_specs_legacy_t_end!,
     AbstractPriorContext,
     PriorContextCoupled,
     PriorContextTraceSingleUnit,
@@ -278,10 +279,12 @@ export
     test_fit_tracejoint_hierarchical,
     test_normalized_nullspace_augmented_pullback_fd,
     test_trace_specs_utilities,
+    test_benchmark_trace_joint_fit_stacks,
     makeswarmfiles_driver,
     makeswarmfiles,
     makeswarmfiles_coupled,
     makeswarmfiles_h3_latent,
+    parse_h3_transition_key,
     COUPLING_MODE_RECIPROCAL_DEFAULT,
     coupling_ranges,
     default_coupling_prior_mean,

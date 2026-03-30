@@ -5,7 +5,7 @@ Load experimental data from files into StochasticGene.jl data structures.
 ## Syntax
 
 ```julia
-load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=false)
+load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna, datacol=3, zeromedian=true)
 ```
 
 ## Arguments
@@ -24,7 +24,7 @@ load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo, temprna,
 ### Optional Arguments
 
 - `datacol::Int = 3`: Column index for trace data
-- `zeromedian::Bool = false`: Whether to zero-center traces
+- `zeromedian::Bool = true`: Whether to zero-center traces
 
 ## Supported Data Types
 

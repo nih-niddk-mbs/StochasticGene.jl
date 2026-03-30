@@ -65,7 +65,7 @@ fits = fit(; kwargs...)
 - `datacol::Int = 3`: Data column index
 - `probfn::Function = prob_Gaussian`: Observation probability function
 - `noiseparams::Int = 4`: Number of noise parameters
-- `zeromedian::Bool = false`: Subtract median from traces
+- `zeromedian::Bool = true`: Subtract median from traces
 
 ### Output Parameters
 
