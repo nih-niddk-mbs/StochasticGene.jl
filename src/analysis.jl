@@ -3970,9 +3970,11 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
 end
 
 function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median")
+    n = 0
     for (root, _, files) in walkdir(folder)
         for f in files
             if occursin("info", f) && endswith(f, ".jld2")
+                n += 1
                 info = read_run_spec(joinpath(root, f))
                 key = get_key(f)
                 ratefile = joinpath(root, "rates_" * key * ".txt")
@@ -3985,10 +3987,12 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
             end
         end
     end
+    n == 0 && @warn "write_correlation_functions_key: no info_*.jld2 files found under $(abspath(folder))"
+    return n
 end
 
 """
-    write_joint_residence_prob_onoff_key(folder::String; outfile="joint_residence_onoff.csv", ratetype::String="median", units=nothing)
+    write_joint_residence_prob_onoff_key(folder::String; outfile="joint_residence_onoff.csv", ratetype::String="median", units=nothing, interval=nothing)
 
 Read all `info_*.jld2` files under `folder`, compute ON/OFF joint residence probabilities per key,
 and write a single summary CSV/DataFrame with columns:
@@ -4000,8 +4004,19 @@ and write a single summary CSV/DataFrame with columns:
 
 Each row is computed from the corresponding `rates_<key>.txt` (selected by `ratetype`) and run-spec
 metadata stored in `info_<key>.jld2`.
+
+# Keywords
+- `interval`: frame interval in **minutes** passed through to [`read_tracefiles`](@ref) / [`make_p0_coupled`](@ref).
+  Default `nothing` uses `traceinfo[1]` from each run spec. Set explicitly (e.g. `5/3`) if the saved `traceinfo`
+  does not match the data acquisition interval.
 """
-function write_joint_residence_prob_onoff_key(folder::String; outfile::String="joint_residence_onoff.csv", ratetype::String="median", units=nothing)
+function write_joint_residence_prob_onoff_key(
+    folder::String;
+    outfile::String="joint_residence_onoff.csv",
+    ratetype::String="median",
+    units=nothing,
+    interval::Union{Nothing,Real}=nothing,
+)
     df = DataFrame()
     df[!, "key"] = String[]
     df[!, "ON-ON"] = Float64[]
@@ -4025,7 +4040,7 @@ function write_joint_residence_prob_onoff_key(folder::String; outfile::String="j
                 end
 
                 r = readrates(ratefile, get_row(ratetype))
-                interval = Float64(info[:traceinfo][1])
+                interval_eff = interval === nothing ? Float64(info[:traceinfo][1]) : Float64(interval)
                 splicetype = String(get(info, :splicetype, ""))
                 noiseparams = get(info, :noisepriors, 4)
                 hierarchical = get(info, :hierarchical, tuple())
@@ -4035,7 +4050,7 @@ function write_joint_residence_prob_onoff_key(folder::String; outfile::String="j
 
                 traces = read_tracefiles(info[:datapath], info[:datacond], 1, -1)
                 p0 = make_p0_coupled(
-                    traces, interval, r,
+                    traces, interval_eff, r,
                     info[:transitions], info[:G], info[:R], info[:S], info[:insertstep],
                     info[:probfn], noiseparams, splicetype, true, !isempty(hierarchical), coupling, grid, zeromedian,
                 )

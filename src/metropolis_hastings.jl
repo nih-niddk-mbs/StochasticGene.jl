@@ -114,7 +114,7 @@ Run a single Metropolis-Hastings MCMC chain and compute statistics (R-hat, ESS, 
 
 # Arguments
 - `data`: Experimental data structure (e.g. `RNADwellTimeData`, `TraceData`).
-- `model`: Model with `logprior` and compatible with `loglikelihood(param, data, model)`.
+- `model`: Model with `logprior` and compatible with `loglikelihood(param, data, model)` (MH track: [`HMM_STACK_MH`](@ref) for trace HMMs).
 - `options`: `MHOptions` (samplesteps, warmupsteps, maxtime, temp).
 
 # Returns
@@ -300,6 +300,7 @@ Run the Metropolis-Hastings MCMC algorithm for a given model and data.
 """
 function metropolis_hastings(data, model, options)
     param, d = initial_proposal(model)
+    # MH / sampling track: `loglikelihood` → `ll_hmm_trace` with `HMM_STACK_MH` (fast in-place HMM).
     ll, logpredictions = loglikelihood(param, data, model)
     options.warmupsteps + options.samplesteps > 0 || throw(ArgumentError("MHOptions: warmupsteps + samplesteps must be positive"))
     # Single wall-clock budget for warmup + sampling (seconds). Do **not** apportion by step counts:
@@ -1273,7 +1274,8 @@ function find_ml(fits::Array)
     for i in eachindex(fits)
         llml[i] = fits[i].llml
     end
-    return fits[argmin(llml)].parml, llml[argmin(llml)]
+    j = argmax(llml)
+    return fits[j].parml, llml[j]
 end
 
 """

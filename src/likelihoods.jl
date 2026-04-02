@@ -197,8 +197,9 @@ function prepare_rates_noiseparams(rates::Vector{T}, nrates::Int, reporter::HMMR
 end
 
 function prepare_rates_noiseparams(rates::Vector, nrates::Vector{Int}, reporter::Vector{HMMReporter})
-    r = Vector{Vector{Float64}}(undef, length(nrates))
-    noiseparams = Vector{Vector{Float64}}(undef, length(nrates))
+    ET = eltype(rates)
+    r = Vector{Vector{ET}}(undef, length(nrates))
+    noiseparams = Vector{Vector{ET}}(undef, length(nrates))
     k = 1
     for i in eachindex(r)
         n = nrates[i]
@@ -233,7 +234,7 @@ end
     
 """
 
-function prepare_coupling(rates::Vector{Float64}, couplingindices)
+function prepare_coupling(rates::AbstractVector, couplingindices)
     rates[couplingindices]
 end
 
@@ -278,7 +279,8 @@ function prepare_rates_coupled(r, nrates, reporter, couplingindices)
 end
 
 function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindices)
-    r = Vector{Vector{Float64}}(undef, length(nrates))
+    ET = eltype(rates)
+    r = Vector{Vector{ET}}(undef, length(nrates))
     k = 1
     for i in eachindex(r)
         n = nrates[i]
@@ -312,7 +314,7 @@ function prepare_rates_coupled_full(rates::Vector, nrates::Vector{Int},
                                     couplingindices, targets)
     # Per-unit base rates (same layout as prepare_rates_coupled)
     model_rates, couplingStrengths = prepare_rates_coupled(rates, nrates, couplingindices)
-    coupling_rates = similar(couplingStrengths, Float64)
+    coupling_rates = similar(couplingStrengths)
     @inbounds for k in eachindex(couplingStrengths)
         coupling_rates[k] = couplingStrengths[k] * model_rates[targets[k][1]][targets[k][2]]
     end
@@ -522,10 +524,51 @@ end
 
 # Model loglikelihoods
 #
+# ## Automatic differentiation feasibility (summary)
+#
+# These notes refer to gradients of the **log-likelihood** (and log-posterior) with respect to parameters.
+# **Finite differences** (`NUTSOptions(gradient=:finite)`, or benchmarks using central differences) evaluate
+# the likelihood at **Float64** parameters only — they avoid pushing `Dual` or Zygote through the whole graph
+# and are the most robust option when other modes fail.
+#
+# ### Histogram / count likelihoods (no trace HMM forward–backward)
+#
+# These use [`predictedfn`](@ref) → [`predictedarray`](@ref) / [`make_array`](@ref), built from promoter / reporter
+# transition matrices, [`steady_state_vector`](@ref) or [`dwelltimePDF`](@ref) / [`offtimePDF`](@ref) /
+# [`ontimePDF`](@ref) / [`offonPDF`](@ref) — **not** [`ll_hmm_trace`](@ref) and **not** [`kolmogorov_forward_ad`](@ref).
+#
+# | Data (all via [`loglikelihood_ad`](@ref) when `AbstractHistogramData` / count) | Zygote | ForwardDiff | Finite diff |
+# |:--|:--|:--|:--|
+# | [`RNAData`](@ref), [`RNACountData`](@ref) | Usually OK with `steady_state_solver=:augmented` | Usually OK if dimension moderate | Always OK |
+# | [`RNAOnOffData`](@ref) (RNA + ON/OFF **time** histograms): [`predictedarray`](@ref) → [`offonPDF`](@ref) etc. | Usually OK (same steady-state / matrix stack as other histograms) | Usually OK | Always OK |
+# | [`RNADwellTimeData`](@ref) (RNA + **dwell-time** histograms per type): [`MTComponents`](@ref) / [`TDComponents`](@ref), [`dwelltimePDF`](@ref) | Usually OK uncoupled; **coupled** units → large `make_mat_TC` / joint steady state — watch memory | Usually OK uncoupled; coupled cost scales with generator size (different failure mode than trace matrix-exp) | Always OK |
+# | [`DwellTimeData`](@ref) (dwell-time **only**): same PDF machinery; if [`hastrait`](@ref)`(model, :coupling)` uses [`predictedarray`](@ref) with [`TCoupledComponents`](@ref) / [`TDCoupledFullComponents`](@ref) — joint generators, not the trace HMM | Coupled multi-unit dwell can be **heavy** for Zygote (large graphs) | Not blocked by the trace [`kolmogorov_forward_ad`](@ref) / `Dual` issue; may still be slow for huge state | Always OK |
+#
+# Specialized non-mutating helpers ([`predictedarray_ad`](@ref)) exist for some shapes (e.g. [`TDComponents`](@ref),
+# [`RNAData`](@ref)); generic [`predictedfn`](@ref) for [`AbstractHistogramData`](@ref) calls [`predictedarray`](@ref)
+# — use `steady_state_solver=:augmented` for AD through the nullspace.
+#
+# ### Trace likelihoods ([`AbstractTraceData`](@ref), [`TraceRNAData`](@ref))
+#
+# | Data / method | Zygote | ForwardDiff | Finite diff |
+# |:--|:--|:--|:--|
+# | [`AbstractTraceData`](@ref) (**uncoupled**) via [`ll_hmm_trace`](@ref) | Often OK on **short** traces; long traces → compiler / tape issues — [`hmm_checkpoint_steps`](@ref) or `gradient=:finite` | Often OK if HMM state dimension modest | Always OK |
+# | [`AbstractTraceData`](@ref) + **coupling** | Very high memory; not for routine use | OK (Kolmogorov [`kolmogorov_forward_ad`](@ref) uses `Dual`-generic matrix exp); large state → slow | Always OK |
+# | [`TraceRNAData`](@ref) | Same as trace for HMM + histogram part as for [`RNAData`](@ref) | Same as trace HMM part | Always OK |
+#
+# [`check_ad_gradient_feasibility`](@ref) does **not** block ForwardDiff on coupled traces (Kolmogorov path uses a
+# `Dual`-generic matrix exponential). Coupled **dwell / ON–OFF histogram** models use separate code paths;
+# use `gradient=:finite` if any AD mode misbehaves.
+#
+# Low-level calls (e.g. `ForwardDiff.gradient` on [`loglikelihood_ad`](@ref) alone) are not guarded — use this table
+# and [`benchmark_trace_finitediff_gradient`](@ref) for coupled **trace** benchmarks.
+#
 # For gradients (e.g. Zygote), pass `steady_state_solver=:augmented` into `loglikelihood`,
 # `predictedfn`, `predictedarray`, `ll_hmm_trace`, etc. That uses [`steady_state_vector`](@ref)
 # with the augmented linear solve ([`normalized_nullspace_augmented`](@ref)). The default
 # `steady_state_solver=:default` keeps the fast QR-based [`normalized_nullspace`](@ref).
+# Trace HMMs use two parallel tracks: `HMM_STACK_MH` (default for `loglikelihood` / MCMC) vs `HMM_STACK_AD`
+# (`loglikelihood_ad` / NUTS / ADVI). Pass `hmm_stack=HMM_STACK_MH` or `HMM_STACK_AD` to `ll_hmm_trace` if needed.
 
 """
     loglikelihood(param, data, model)
@@ -582,14 +625,47 @@ function loglikelihood_ad(param, data::RNACountData, model::AbstractGeneTransiti
     return sum(logpredictions), logpredictions
 end
 
+"""
+    loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver=:augmented)
 
-
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
-    ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver)
+Same as [`loglikelihood`](@ref) for histogram data but uses [`get_rates_ad`](@ref) in [`predictedfn`](@ref) (Zygote-friendly).
+[`RNACountData`](@ref) and trace types use more specific methods.
+"""
+function loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGeneTransitionModel; steady_state_solver::Symbol=:augmented)
+    predictions = predictedfn(param, data, model; steady_state_solver=steady_state_solver, rates_fn=get_rates_ad)
+    hist = datahistogram(data)
+    logpredictions = log.(max.(predictions, eps()))
+    return sum(hist .* logpredictions), hist .* logpredictions
 end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
-    llg, llgp = ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH)
+    ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
+end
+
+"""
+    loglikelihood_ad(param, data::AbstractTraceData, model::AbstractGRSMmodel; ...)
+
+Same as [`loglikelihood`](@ref) but uses the **AD track** ([`HMM_STACK_AD`](@ref)): `forward_ad`, [`kolmogorov_forward_ad`](@ref), …
+Use for NUTS/ADVI/Zygote; use [`loglikelihood`](@ref) (MH track, [`HMM_STACK_MH`](@ref)) for Metropolis–Hastings.
+"""
+function loglikelihood_ad(
+    param,
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:augmented,
+    hmm_stack::Symbol=HMM_STACK_AD,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    ll_hmm_trace(
+        param, data, model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )
+end
+
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH)
+    llg, llgp = ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
     r = get_rates(param, model)
     
     # Get nRNA_true from data structure (extract from yield tuple)
@@ -610,23 +686,70 @@ function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; stea
     return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)  # Convention: all log-likelihoods
 end
 
+function loglikelihood_ad(
+    param,
+    data::TraceRNAData,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:augmented,
+    hmm_stack::Symbol=HMM_STACK_AD,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    llg, llgp = ll_hmm_trace(
+        param, data, model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=hmm_stack,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )
+    r = get_rates(param, model)
+    nRNA_true = get_nRNA_true(data.yield, data.nRNA)
+    p_true = predictedRNA(r[1:num_rates(model)], model.components.mcomponents, model.nalleles, nRNA_true; steady_state_solver=steady_state_solver)
+    yield_val = get_yield_value(data.yield)
+    if yield_val < 1.0
+        L = make_loss_matrix(data.nRNA, nRNA_true, yield_val)
+        predictions = L * p_true
+    else
+        predictions = p_true
+    end
+    logpredictions = log.(max.(predictions, eps()))
+    hist = datahistogram(data)
+    return sum(hist .* logpredictions) + llg, vcat(hist .* logpredictions, llgp)
+end
+
 # Helper to get the right component
 get_components(model::AbstractGRSMmodel, data::AbstractTraceHistogramData) = model.components.tcomponents
 get_components(model::AbstractGRSMmodel, data::AbstractTraceData) = model.components
 # (Add more as needed)
 
-function ll_hmm_trace(param, data, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default)
-    r = prepare_rates(param, model)
-    components = get_components(model, data)
-    observed_units = isempty(data.units) ? nothing : data.units
-    if !isnothing(model.trait) && haskey(model.trait, :grid)
-        ll_hmm(r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method; steady_state_solver=steady_state_solver)
-    else
-        # Only pass observed_units for CoupledFull stack; legacy Coupled and single-unit don't support it
-        if components isa TCoupledFullComponents
-            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; observed_units=observed_units, steady_state_solver=steady_state_solver)
+function ll_hmm_trace(
+    param,
+    data,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:default,
+    hmm_stack::Symbol=HMM_STACK_MH,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+)
+    with_hmm_zygote_checkpoint(hmm_checkpoint_steps) do
+        r = prepare_rates(param, model)
+        components = get_components(model, data)
+        observed_units = isempty(data.units) ? nothing : data.units
+        if !isnothing(model.trait) && haskey(model.trait, :grid)
+            ll_hmm(
+                r, model.trait.grid.ngrid, components, model.reporter, data.interval, data.trace, model.method;
+                steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
+            )
         else
-            ll_hmm(r, components, model.reporter, data.interval, data.trace, model.method; steady_state_solver=steady_state_solver)
+            # Only pass observed_units for CoupledFull stack; legacy Coupled and single-unit don't support it
+            if components isa TCoupledFullComponents
+                ll_hmm(
+                    r, components, model.reporter, data.interval, data.trace, model.method;
+                    observed_units=observed_units, steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
+                )
+            else
+                ll_hmm(
+                    r, components, model.reporter, data.interval, data.trace, model.method;
+                    steady_state_solver=steady_state_solver, hmm_stack=hmm_stack,
+                )
+            end
         end
     end
 end
@@ -1101,12 +1224,12 @@ end
 # end
 
 
-function apply_transform(p::AbstractVector, f)
-    Vector{Float64}(map((f, x) -> f(x), f, p))
+function apply_transform(p::AbstractVector, fs)
+    map((tf, x) -> tf(x), fs, p)
 end
 
-function apply_transform(p::AbstractMatrix, f)
-    hcat([Vector{Float64}(map((f, x) -> f(x), f, p[:, i])) for i in 1:size(p, 2)]...)
+function apply_transform(p::AbstractMatrix, fs)
+    hcat([map((tf, x) -> tf(x), fs, @view(p[:, i])) for i in 1:size(p, 2)]...)
 end
 
 """
@@ -1317,8 +1440,12 @@ end
 """
     get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
 
-Map (transformed) parameters back to rate space and return the full rate vector (mutating
-implementation via [`get_rates!`](@ref); use [`get_rates_ad`](@ref) for AD).
+Map (transformed) parameters back to rate space and return the full rate vector.
+
+For a flat `param` vector, this delegates to [`get_rates_ad`](@ref) (same numerics as the
+legacy `get_rates!` + [`fixed_rates`](@ref) path, but type-generic so `ForwardDiff.Dual`
+and other reals propagate). For `param::Vector{Vector}`, the implementation still uses
+[`get_rates!`](@ref) on copied buffers.
 
 # Arguments
 - `param`: Vector of parameters in transformed space (e.g. from `get_param(model)` or MCMC samples).
@@ -1329,9 +1456,7 @@ implementation via [`get_rates!`](@ref); use [`get_rates_ad`](@ref) for AD).
 - Full rate vector (or vector of vectors for coupled/hierarchical) with fitted indices set from `param` and fixed effects applied.
 """
 function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
-    r = copy_r(model)
-    get_rates!(r, param, model, inverse)
-    fixed_rates(r, model.fixedeffects)
+    get_rates_ad(param, model, inverse)
 end
 
 function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse=true)

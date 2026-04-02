@@ -2825,6 +2825,1398 @@ function profile_trace_prediction(info_jld2::String, rates_file::String; ratetyp
     return nothing
 end
 
+# --- Inference benchmark (MH / NUTS / ADVI wall-clock comparison) ---
+# Interactive: `using StochasticGene; benchmark_inference_setup_parallel_workers(8)` then
+# `scen = benchmark_inference_simrna_small()` and `benchmark_inference_run_mh(scen; maxtime=600.0)`.
+# Or start Julia with extra workers: `julia --project=. -p 8`.
+
+"""
+    benchmark_inference_simrna_small(; kwargs...) -> NamedTuple
+
+Build a small **GM + RNA histogram** [`RNAData`](@ref) and [`GMmodel`](@ref) for comparing
+[`run_mh`](@ref), [`run_nuts_fit`](@ref), and [`run_advi`](@ref) on the same synthetic problem.
+
+# Returns
+`(; data, model, meta)` — pass `scenario` to [`benchmark_inference_run_mh`](@ref), etc.
+
+# Keyword arguments
+- `rtarget`, `transitions`, `G`, `nRNA`, `nalleles`, `fittedparam`, `fixedeffects`, `rinit`, `totalsteps`: simulation / model layout (defaults match [`test_fit_simrna`](@ref)-style smoke tests).
+- `seed`: passed to `Random.seed!` when not `nothing` (default `42`).
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_simrna_small(seed=1)
+benchmark_inference_run_mh(scen; nchains=1, maxtime=30.0)  # laptop smoke
+```
+"""
+function benchmark_inference_simrna_small(;
+    rtarget=[0.33, 0.19, 2.5, 1.0],
+    transitions=([1, 2], [2, 1]),
+    G::Int=2,
+    nRNA::Int=100,
+    nalleles::Int=2,
+    fittedparam=[1, 2, 3],
+    fixedeffects=tuple(),
+    rinit=[0.1, 0.1, 0.1, 1.0],
+    totalsteps::Int=100_000,
+    seed::Union{Nothing,Int}=42,
+)
+    seed !== nothing && Random.seed!(seed)
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
+    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0, [1])
+    model = load_model(
+        data, rinit,
+        prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0),
+        fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02,
+        prob_Gaussian, [], 1, tuple(), tuple(), nothing,
+    )
+    meta = (; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, seed)
+    return (; data, model, meta)
+end
+
+"""
+    benchmark_inference_trace_gr2r2(; kwargs...) -> NamedTuple
+
+Simulated **trace** data and a **GRSM** model with **G = 2**, **R = 2**, **S = 0**, **insertstep = 1**
+(same layout as [`test_fit_trace`](@ref)). Use with [`benchmark_inference_run_mh`](@ref),
+[`benchmark_inference_run_nuts_parallel`](@ref), [`benchmark_inference_run_advi`](@ref).
+
+For NUTS on traces, pass **`steady_state_solver=:augmented`** to [`benchmark_inference_run_nuts_parallel`](@ref)
+(the RNA-histogram default `:default` is for steady-state RNA likelihoods).
+
+# Returns
+`(; data, model, meta)` with `TraceData` and a loaded `GRSMmodel`.
+
+# Keyword arguments
+- `traceinfo`, `transitions`, `rtarget`, `totaltime`, `ntrials`, `fittedparam`, `propcv`, `noisepriors`, `zeromedian`, `initprior`: same roles as [`test_fit_trace`](@ref). Default **`propcv=0.01`** matches [`fit`](@ref); increase only if MH acceptance is too high.
+- `seed`: passed to `Random.seed!` when not `nothing` (default `42`).
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_gr2r2(seed=1, totaltime=500.0, ntrials=4)
+benchmark_inference_run_mh(scen; nchains=1, maxtime=60.0)
+benchmark_inference_run_nuts_parallel(scen; nchains=2, n_samples=200, steady_state_solver=:augmented)
+```
+"""
+function benchmark_inference_trace_gr2r2(;
+    traceinfo=(1.0, 1.0, -1, 1.0, 0.5),
+    G::Int=2,
+    R::Int=2,
+    S::Int=0,
+    insertstep::Int=1,
+    transitions=([1, 2], [2, 1]),
+    rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5],
+    totaltime::Float64=4000.0,
+    ntrials::Int=10,
+    fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1],
+    propcv::Float64=0.01,
+    noisepriors=[0.0, 0.1, 1.0, 0.1],
+    zeromedian::Bool=true,
+    initprior::Float64=0.1,
+    seed::Union{Nothing,Int}=42,
+)
+    seed !== nothing && Random.seed!(seed)
+    tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
+    trace, tracescale = zero_median(tracer, zeromedian)
+    nframes = round(Int, mean(size.(trace, 1)))
+    if length(traceinfo) > 3 && traceinfo[4] != 1.0
+        weight = set_trace_weight(traceinfo)
+        background = set_trace_background(traceinfo)
+    else
+        weight = 0.0
+        background = 0.0
+    end
+    data = TraceData{String,String,Tuple}("trace", "gene", traceinfo[1], (trace, background, weight, nframes, tracescale), Int[])
+    elongationtime = mean_elongationtime(rtarget, transitions, R)
+    priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors]
+    priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
+    rinit = isempty(tuple()) ? set_rinit(rtarget, priormean) : set_rinit(rtarget, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
+    meta = (; traceinfo, G, R, S, insertstep, transitions, rtarget, totaltime, ntrials, fittedparam, propcv, zeromedian, seed)
+    return (; data, model, meta)
+end
+
+"""
+    benchmark_inference_trace_coupled_3x3(; kwargs...) -> NamedTuple
+
+Simulated **coupled joint-trace** data and a **GRSM** model with **two units**, each
+**`(G,R,S,insertstep) = (3,3,0,1)`**, 3-state promoter transitions per unit, and reciprocal coupling
+`(1,2)` with one hidden connection — the same geometry as [`test_benchmark_trace_joint_fit_stacks`](@ref)
+defaults. Use with [`benchmark_inference_run_mh`](@ref), [`benchmark_inference_run_nuts_parallel`](@ref),
+[`benchmark_trace_finitediff_gradient`](@ref), [`benchmark_trace_zygote_subset_gradient`](@ref), etc. Do **not** use
+[`benchmark_trace_zygote_gradient`](@ref) (full-parameter Zygote) on this scenario unless you pass **`allow_coupled_zygote=true`**
+— it can OOM. Use [`hmm_checkpoint_steps`](@ref) and subset-gradient benchmarks for coupled traces.
+
+# Returns
+`(; data, model, meta)` with `TraceData` (`"tracejoint"`) and [`load_model`](@ref) `GRSMmodel`.
+Default **`coupled_stack=:full`** (`TCoupledFullComponents`); pass **`coupled_stack=:legacy`** to match the
+RG / Kronecker stack used in [`test_benchmark_trace_joint_fit_stacks`](@ref) timing comparisons.
+
+# Keyword arguments
+- `seed`: `Random.seed!` when not `nothing` (default `42`).
+- `coupling`, `G`, `R`, `S`, `insertstep`, `transitions`, `rtarget`: coupled layout (defaults match
+  [`test_benchmark_trace_joint_fit_stacks`](@ref); `rtarget` length is `num_rates(...) + ncoupling`).
+- `totaltime`, `ntrials`, `interval`, `trace_specs`, `noisepriors`: simulation and [`TraceData`](@ref) construction
+  (default `trace_specs` is [`default_trace_specs_for_coupled`](@ref)).
+- `fittedparam`, `propcv`, `method`, `zeromedian`, `coupled_stack`: passed to [`load_model`](@ref).
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_coupled_3x3(seed=1, totaltime=500.0, ntrials=2)
+benchmark_inference_run_mh(scen; nchains=1, maxtime=60.0)
+```
+"""
+function benchmark_inference_trace_coupled_3x3(;
+    seed::Union{Nothing,Int}=42,
+    coupling=((1, 2), [(1, 2, 2, 1)], [:free]),
+    G=(3, 3), R=(3, 3), S=(0, 0), insertstep=(1, 1),
+    transitions=(([1, 2], [2, 1], [2, 3], [3, 2]), ([1, 2], [2, 1], [2, 3], [3, 2])),
+    rtarget::Vector{Float64}=Float64[
+        0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2,
+        0.0, 0.1, 0.5, 0.15,
+        0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2,
+        0.0, 0.1, 0.9, 0.2,
+        -0.4,
+    ],
+    totaltime::Float64=800.0,
+    ntrials::Int=4,
+    interval::Float64=1.0,
+    noisepriors=([0., .1, 1., .1], [0., .1, 1., .1]),
+    trace_specs=nothing,
+    fittedparam=Int[19],
+    propcv::Float64=0.2,
+    method=Tsit5(),
+    coupled_stack::Symbol=:full,
+    zeromedian::Bool=true,
+)
+    seed !== nothing && Random.seed!(seed)
+    trace_specs_eff = trace_specs === nothing ? StochasticGene.default_trace_specs_for_coupled((interval, 1.0, -1.0), [false, false], 2) : trace_specs
+    units = [spec.unit for spec in trace_specs_eff]
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; noiseparams=[4, 4])
+    data = TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units)), 1), units)
+    priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors,
+                              mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
+    rinit = rtarget
+    nr = num_rates(transitions, R, S, insertstep)
+    model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep,
+                       "", 1, 10.0, Int[], rtarget[nr], propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing,
+                       zeromedian; coupled_stack=coupled_stack)
+    meta = (; coupling, G, R, S, insertstep, transitions, rtarget, totaltime, ntrials, interval,
+            fittedparam, propcv, coupled_stack, zeromedian, seed)
+    return (; data, model, meta)
+end
+
+"""
+    benchmark_scenario_coupled_3x3_10traces_220frames(; kwargs...) -> NamedTuple
+
+Convenience wrapper around [`benchmark_inference_trace_coupled_3x3`](@ref) with **`ntrials=10`**,
+**`totaltime=220`**, **`interval=1.0`**, targeting on the order of **220 frames per trace** (exact length follows the simulator).
+
+Additional `kwargs` are forwarded (e.g. `seed`, `coupled_stack`, `fittedparam`, `rtarget`).
+"""
+function benchmark_scenario_coupled_3x3_10traces_220frames(; kwargs...)
+    benchmark_inference_trace_coupled_3x3(; ntrials=10, totaltime=220.0, interval=1.0, kwargs...)
+end
+
+"""
+    benchmark_inference_trace_coupled_3x3_g3r0(; kwargs...) -> NamedTuple
+
+Simulated **three-unit coupled joint-trace** scenario: **two** observed **(G,R,S,insertstep) = (3,3,0,1)**
+reporter units plus a **hidden** **(G,R,S) = (3,0,0)** telegraph (**R = 0** on that unit). Same layout as
+[`test_fit_tracejoint_3unit`](@ref) but with **G = (3,3,3)** and **R = (3,3,0)** instead of the smaller 2+1 reporter geometry.
+
+The third unit uses **`insertstep = 1`** (matching [`test_fit_tracejoint_3unit`](@ref)); **`insertstep = 0`** with **`R = 0`**
+mis-sizes the auto-generated prior vector relative to [`num_rates`](@ref).
+
+- **Coupling** (default): `unit_model = (1,2,3)`, connections `(3,1,1,2)` and `(3,3,2,2)`, **`[:inhibit,:inhibit]`**
+  (hidden unit 3 affects units 1 and 2).
+- **Traces**: only units **1** and **2** (`data.units`; unit 3 is latent). Uses [`default_trace_specs_for_coupled`](@ref)
+  with [`n_observed_trace_units`](@ref)`(coupling) == 2` when `trace_specs === nothing`.
+- **Parameters**: default **`fixedeffects`** ties all unit-3 rates to one master and both coupling strengths to one
+  (same pattern as [`test_fit_tracejoint_3unit`](@ref)); override with **`fixedeffects`** / **`fittedparam`** /
+  **`rtarget`** for other experiments.
+
+As with [`benchmark_inference_trace_coupled_3x3`](@ref), [`benchmark_trace_zygote_gradient`](@ref) is **opt-in only**
+(`allow_coupled_zygote=true`); use **finite differences** for AD benchmarks on coupled traces ([`benchmark_trace_finitediff_gradient`](@ref)).
+
+# Returns
+`(; data, model, meta)` with `TraceData` (`"tracejoint"`) and [`load_model`](@ref) `GRSMmodel`.
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_coupled_3x3_g3r0(seed=1, totaltime=500.0, ntrials=2)
+benchmark_inference_run_mh(scen; nchains=1, maxtime=120.0)
+```
+"""
+function benchmark_inference_trace_coupled_3x3_g3r0(;
+    seed::Union{Nothing,Int}=42,
+    coupling=((1, 2, 3), [(3, 1, 1, 2), (3, 3, 2, 2)], [:inhibit, :inhibit]),
+    G=(3, 3, 3),
+    R=(3, 3, 0),
+    S=(0, 0, 0),
+    insertstep=(1, 1, 1),
+    transitions=(
+        ([1, 2], [2, 1], [2, 3], [3, 2]),
+        ([1, 2], [2, 1], [2, 3], [3, 2]),
+        ([1, 2], [2, 1], [2, 3], [3, 2], [1, 3], [3, 1]),
+    ),
+    rtarget::Union{Nothing,Vector{Float64}}=nothing,
+    units=[1, 2],
+    totaltime::Float64=800.0,
+    ntrials::Int=4,
+    interval::Float64=1.0,
+    noisepriors=([0., .1, 1., .1], [0., .1, 1., .1], Float64[]),
+    trace_specs=nothing,
+    fixedeffects=nothing,
+    fittedparam=nothing,
+    propcv::Float64=0.2,
+    method=Tsit5(),
+    coupled_stack::Symbol=:full,
+    zeromedian::Bool=true,
+)
+    seed !== nothing && Random.seed!(seed)
+    nrates_per_unit = num_rates(transitions, R, S, insertstep)
+    ncpl = ncoupling(coupling)
+    n_noise = sum(length.(noisepriors))
+    n_total = sum(nrates_per_unit) + n_noise + ncpl
+    unit3_rate_start = sum(nrates_per_unit[1:2]) + sum(length.(noisepriors[1:2])) + 1
+    unit3_rate_end = unit3_rate_start + nrates_per_unit[3] - 1
+    coupling_start = sum(nrates_per_unit) + n_noise + 1
+    if rtarget === nothing
+        u1r = Float64[0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2]
+        u1n = Float64[0.0, 0.1, 0.5, 0.15]
+        u2r = Float64[0.03, 0.1, 0.5, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2]
+        u2n = Float64[0.0, 0.1, 0.9, 0.2]
+        u3r = Float64[0.12, 0.08, 0.15, 0.1, 0.1, 0.1, 0.1, 0.2]
+        rtarget = vcat(u1r, u1n, u2r, u2n, u3r, fill(-0.2, ncpl))
+    else
+        length(rtarget) == n_total || throw(ArgumentError("rtarget must have length $n_total (sum(num_rates)+noise+coupling)"))
+    end
+    if fixedeffects === nothing
+        fixedeffects = (collect(unit3_rate_start:unit3_rate_end), collect(coupling_start:coupling_start + ncpl - 1))
+    end
+    if fittedparam === nothing
+        fittedparam = Int[unit3_rate_start, coupling_start]
+    end
+    trace_specs_eff = if trace_specs === nothing
+        zm = zeromedian isa Bool ? fill(zeromedian, length(units)) : zeromedian
+        StochasticGene.default_trace_specs_for_coupled((interval, 1.0, -1.0), zm, units)
+    else
+        trace_specs
+    end
+    units_eff = [spec.unit for spec in trace_specs_eff]
+    length(units_eff) == length(units) || throw(ArgumentError("trace_specs units must match observed unit count"))
+    trace = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, coupling,
+                                  interval, totaltime, ntrials; observed_units=units_eff, noiseparams=[4, 4, 0])
+    data = TraceData("tracejoint", "test", interval, (trace, [], fill(0.0, length(units_eff)), 1), units_eff)
+    priormean = set_priormean([], transitions, R, S, insertstep, 1.0, noisepriors,
+                              mean_elongationtime(rtarget, transitions, R), tuple(), coupling, nothing)
+    rinit = rtarget
+    block_ends = cumsum([nrates_per_unit[i] + length(noisepriors[i]) for i in eachindex(R)])
+    block_starts = vcat(1, block_ends[1:end-1] .+ 1)
+    decayrate = tuple((rtarget[block_starts[i] + nrates_per_unit[i] - 1] for i in eachindex(R))...)
+    model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep,
+                       "", 1, 10.0, Int[], decayrate, propcv, prob_Gaussian, noisepriors, method, tuple(), coupling, nothing,
+                       zeromedian; coupled_stack=coupled_stack)
+    meta = (; coupling, G, R, S, insertstep, transitions, rtarget, totaltime, ntrials, interval, units=units_eff,
+            fittedparam, fixedeffects, propcv, coupled_stack, zeromedian, seed)
+    return (; data, model, meta)
+end
+
+"""
+    benchmark_inference_ensure_workers(n::Int)
+
+Require at least `n` Julia **worker** processes for parallel chains (`run_mh(..., nchains)` and
+[`benchmark_inference_run_nuts_parallel`](@ref)). Does not add workers.
+
+Throws `ArgumentError` if `nworkers() < n`. Start Julia with e.g. `julia -p 8`, or run
+[`benchmark_inference_setup_parallel_workers`](@ref) once per session.
+"""
+function benchmark_inference_ensure_workers(n::Int)
+    n < 1 && throw(ArgumentError("n must be >= 1"))
+    nworkers() >= n && return nothing
+    throw(ArgumentError(
+        "Need at least $n worker processes (nworkers()=$(nworkers())). " *
+        "Start with e.g. `julia -p $n` or run `using Distributed; addprocs($n)` then " *
+        "`@everywhere using StochasticGene`, or call `benchmark_inference_setup_parallel_workers($n)`.",
+    ))
+end
+
+"""
+    benchmark_inference_setup_parallel_workers(n::Int) -> Int
+
+Add workers until `nworkers() >= n` and load `StochasticGene` on all workers (`@everywhere using`).
+Returns `nworkers()` after setup. Safe for interactive benchmarking on a laptop; optional for CI.
+"""
+function benchmark_inference_setup_parallel_workers(n::Int)
+    n < 1 && throw(ArgumentError("n must be >= 1"))
+    if nworkers() < n
+        addprocs(n - nworkers())
+    end
+    # `@everywhere` cannot run inside `include`/`test.jl`; load on each worker explicitly.
+    for w in workers()
+        remotecall_eval(Main, w, :(using StochasticGene))
+    end
+    return nworkers()
+end
+
+function _benchmark_ess_summary(measures::Measures, elapsed_sec::Float64)
+    ess = measures.ess
+    min_ess = minimum(ess)
+    mean_ess = mean(ess)
+    max_rhat = maximum(measures.rhat)
+    return (;
+        min_ess=min_ess,
+        mean_ess=mean_ess,
+        max_rhat=max_rhat,
+        ess_per_sec_min=min_ess / elapsed_sec,
+        ess_per_sec_mean=mean_ess / elapsed_sec,
+    )
+end
+
+"""
+    benchmark_inference_run_mh(data, model; kwargs...)
+    benchmark_inference_run_mh(scenario; kwargs...)
+
+Parallel Metropolis–Hastings with [`run_mh`](@ref). Requires [`benchmark_inference_ensure_workers`](@ref)(`nchains`) unless `nchains==1`.
+
+# Keywords
+- `nchains`, `samplesteps`, `warmupsteps`, `maxtime`: passed to [`MHOptions`](@ref) (`maxtime` in seconds, total wall budget per chain for warmup+sampling).
+- `mh_seed`: optional `Random.seed!` before running.
+
+Proposal scaling is **not** set here — it lives on `model` as **`propcv`** (see [`load_model`](@ref)). If you see “Low acceptance” / huge `max|Δparam|` / `prior=-Inf` from [`metropolis_hastings`](@ref), **rebuild** the scenario with a smaller `propcv` (e.g. [`benchmark_inference_trace_gr2r2`](@ref)(`propcv=0.005`) for trace GRSM). [`fit`](@ref) defaults to `propcv=0.01`.
+
+# Returns
+`NamedTuple` with `elapsed_sec`, `fits`, `stats`, `measures`, and ESS summary fields (`min_ess`, `ess_per_sec_min`, …).
+"""
+function benchmark_inference_run_mh(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel;
+    nchains::Int=8,
+    samplesteps::Int=10_000_000,
+    warmupsteps::Int=5_000,
+    maxtime::Float64=600.0,
+    mh_seed::Union{Nothing,Int}=nothing,
+)
+    nchains > 1 && benchmark_inference_ensure_workers(nchains)
+    mh_seed !== nothing && Random.seed!(mh_seed)
+    opts = MHOptions(samplesteps, warmupsteps, maxtime_seconds(maxtime), 1.0)
+    elapsed_sec = @elapsed begin
+        fits, stats, measures = run_mh(data, model, opts, nchains)
+    end
+    ess = _benchmark_ess_summary(measures, elapsed_sec)
+    return (; elapsed_sec, fits, stats, measures, ess...)
+end
+
+function benchmark_inference_run_mh(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model (e.g. from benchmark_inference_simrna_small)"))
+    benchmark_inference_run_mh(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+    benchmark_inference_run_nuts_parallel(data, model; kwargs...)
+    benchmark_inference_run_nuts_parallel(scenario; kwargs...)
+
+For **`nchains > 1`**, runs independent [`run_nuts_fit`](@ref) chains in parallel (`Distributed.@spawn`), then
+[`merge_fit`](@ref) and pooled diagnostics. For **`nchains == 1`**, runs **in the main process** (no `@spawn`) so **ForwardDiff**, progress bars, and verbose output behave reliably (workers can break or wrap errors).
+
+Use **`steady_state_solver=:default`** to align log-likelihood with MH for RNA histogram benchmarks (see [`test_compare_mh_nuts_posterior`](@ref)).
+
+**Default `steady_state_solver` is `:auto`:** [`AbstractTraceData`](@ref) uses **`:augmented`** (AD-friendly steady state for [`loglikelihood_ad`](@ref)); other data use **`:default`**.
+
+**Default `nuts_gradient` is `:auto`:** [`AbstractTraceData`](@ref) uses **`:finite`** (central differences; Zygote through the full trace HMM often overflows the compiler stack). RNA / count data use **`:Zygote`**. Pass **`nuts_gradient=:ForwardDiff`** to use forward-mode AD ([`NUTSOptions`](@ref); often good when only **few** parameters are fit). Pass `nuts_gradient=:Zygote` to try reverse-mode AD on traces.
+
+**Traces and NUTS:** For live traces—including **coupled** `tracejoint` models—**`gradient=:finite`** is the **supported** NUTS choice: each log-density evaluation uses central differences on [`loglikelihood_ad`](@ref), so cost scales with the number of fitted parameters, not with “embarrassment.” Reverse-mode Zygote on the full coupled HMM (see [`benchmark_trace_zygote_gradient`](@ref)) is a separate, experimental micro-benchmark and can allocate huge memory or hit compiler `_pullback_generator` limits; it is **not** required for NUTS, and NUTS does **not** default to it for traces.
+
+# Keywords
+- `nchains`, `n_samples`, `n_adapts`, `nuts_δ`, `nuts_gradient`, `nuts_fd_ε`, `steady_state_solver` (`:auto` / `:default` / `:augmented`), `nuts_seed`, `ad_likelihood`: NUTS / likelihood options.
+- `verbose`, `progress`: passed to [`NUTSOptions`](@ref) → [`AdvancedHMC.sample`](@ref). With **`nchains > 1`**, `progress` is forced to **`false`** on workers ([`Distributed.@spawn`](@ref) cannot reliably run AdvancedHMC’s progress machinery across processes). Use **`report_chains`** for parallel feedback, or run a **single chain** (`nchains=1`) if you want `progress=true`.
+- `report_chains` (default `true`): log on the **main** process after each `fetch` (chain index order; use when runs are long).
+
+# Returns
+`NamedTuple` including `elapsed_sec`, merged `fits`, `stats`, `measures`, `chain_fits`, `nuts_results`.
+"""
+function benchmark_inference_run_nuts_parallel(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel;
+    nchains::Int=8,
+    n_samples::Int=150,
+    n_adapts::Int=80,
+    nuts_δ::Float64=0.8,
+    nuts_gradient::Symbol=:auto,
+    nuts_fd_ε::Float64=1e-4,
+    steady_state_solver::Symbol=:auto,
+    nuts_seed::Int=2025,
+    ad_likelihood::Union{Nothing,Bool}=nothing,
+    verbose::Bool=false,
+    progress::Bool=false,
+    report_chains::Bool=true,
+)
+    ss = if steady_state_solver === :auto
+        data isa AbstractTraceData ? :augmented : :default
+    else
+        steady_state_solver
+    end
+    ng = if nuts_gradient === :auto
+        data isa AbstractTraceData ? :finite : :Zygote
+    else
+        nuts_gradient
+    end
+    ng in (:Zygote, :finite, :ForwardDiff) ||
+        throw(ArgumentError("nuts_gradient must be :auto, :Zygote, :finite, or :ForwardDiff, got $(repr(nuts_gradient))"))
+    nchains > 1 && benchmark_inference_ensure_workers(nchains)
+    progress_eff = progress
+    if nchains > 1 && progress
+        @warn "benchmark_inference_run_nuts_parallel: progress=true is not supported with nchains > 1 (Distributed); using progress=false on workers. Use report_chains=true or nchains=1."
+        progress_eff = false
+    end
+    opts = NUTSOptions(;
+        n_samples=n_samples,
+        n_adapts=n_adapts,
+        δ=nuts_δ,
+        gradient=ng,
+        fd_ε=nuts_fd_ε,
+        verbose=verbose,
+        progress=progress_eff,
+    )
+    rngs = [MersenneTwister(nuts_seed + k) for k in 1:nchains]
+    report_chains && @info "benchmark_inference_run_nuts_parallel: spawning $(nchains) NUTS chains (n_samples=$(n_samples), n_adapts=$(n_adapts), steady_state_solver=$(ss), gradient=$(ng), nuts_fd_ε=$(nuts_fd_ε) (used if gradient is :finite))..."
+    elapsed_sec = @elapsed begin
+        results = if nchains == 1
+            # Local run: avoids Distributed @spawn (ForwardDiff / progress / errors deserialize badly on workers).
+            r = run_nuts_fit(data, model, opts; rng=rngs[1], steady_state_solver=ss, ad_likelihood=ad_likelihood)
+            report_chains && @info "benchmark_inference_run_nuts_parallel: chain 1/1 finished"
+            Any[r]
+        else
+            futures = map(1:nchains) do k
+                @spawn run_nuts_fit(data, model, opts; rng=rngs[k], steady_state_solver=ss, ad_likelihood=ad_likelihood)
+            end
+            res = Vector{Any}(undef, nchains)
+            for k in 1:nchains
+                v = fetch(futures[k])
+                v isa Distributed.RemoteException && throw(v)
+                res[k] = v
+                report_chains && @info "benchmark_inference_run_nuts_parallel: chain $(k)/$(nchains) finished"
+            end
+            res
+        end
+        fits_vec = [r[1] for r in results]
+        merged = merge_fit(fits_vec)
+        stats = compute_stats(merged.param, model)
+        rhat = vec(compute_rhat(fits_vec))
+        ess_pooled, geweke, mcse = compute_measures(fits_vec)
+        waic = compute_waic(merged.lppd, merged.pwaic, data)
+        measures = Measures(waic, rhat, ess_pooled, geweke, mcse)
+    end
+    ess_nt = _benchmark_ess_summary(measures, elapsed_sec)
+    return (; elapsed_sec, fits=merged, stats, measures, chain_fits=fits_vec, nuts_results=results, ess_nt...)
+end
+
+function benchmark_inference_run_nuts_parallel(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_inference_run_nuts_parallel(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+Longest per-trial frame count (for Zygote preflight).
+
+Supports:
+- `AbstractVector` of per-trial arrays (each trial `AbstractMatrix` or `AbstractVector`);
+- `Tuple` with first component that `Vector` of per-trial arrays (**coupled `tracejoint`**: `(trials, background, weights, nframes)`);
+- `Tuple` whose first component is a single `AbstractMatrix` (one stacked trial).
+"""
+_benchmark_trace_longest_timesteps(data::AbstractTraceData) = longest_trace_timesteps(data)
+
+function _benchmark_zygote_nested_messages(err)::String
+    parts = String[]
+    e = err
+    for _ in 1:6
+        push!(parts, sprint(showerror, e))
+        e isa TaskFailedException || break
+        te = e.task.exception
+        te === nothing && break
+        e = te
+    end
+    return join(parts, "\n")
+end
+
+"""True if `err` looks like Zygote / compiler failure on a huge differentiated graph (not necessarily `StackOverflowError`)."""
+function _benchmark_zygote_compiler_failure(err)::Bool
+    err isa StackOverflowError && return true
+    msg = _benchmark_zygote_nested_messages(err)
+    lmsg = lowercase(msg)
+    occursin("stack overflow", lmsg) && return true
+    occursin("_pullback_generator", msg) && return true
+    occursin("internal error", lmsg) && return true
+    occursin("type inference", lmsg) && occursin("stack overflow", lmsg) && return true
+    occursin("ntuple{", lmsg) && occursin("datatype", lmsg) && occursin("stack overflow", lmsg) && return true
+    return false
+end
+
+"""
+    benchmark_trace_zygote_gradient(data, model; kwargs...)
+    benchmark_trace_zygote_gradient(scenario; kwargs...)
+
+Time **Zygote** reverse-mode gradients of [`loglikelihood_ad`](@ref) at `get_param(model)` for trace
+[`AbstractTraceData`](@ref), comparing **no** HMM checkpointing (`hmm_checkpoint_steps=nothing`) vs a
+given chunk size. Uses the keyword `hmm_checkpoint_steps` on [`loglikelihood_ad`](@ref) (no global
+[`set_hmm_zygote_checkpoint_steps!`](@ref)).
+
+!!! warning "Long traces and Zygote"
+    Reverse-mode AD through the **full** unrolled trace HMM often triggers **compiler stack overflow**
+    (`InternalError` / `_pullback_generator` / huge `NTuple{…}`) when frame counts are in the thousands
+    (Julia may print `Internal error` lines to stderr even when the run eventually finishes).
+    By default this function **refuses** to run when the inferred longest trial exceeds `max_timesteps` (see below).
+    [`benchmark_inference_trace_gr2r2`](@ref) defaults to **`totaltime=4000`** — that is usually **too long** for this
+    benchmark; pass e.g. `totaltime=500.0, ntrials=2`, or use [`benchmark_trace_forwarddiff_gradient`](@ref) /
+    [`benchmark_trace_finitediff_gradient`](@ref), or `skip_no_checkpoint=true`.
+
+!!! danger "Coupled `tracejoint` models"
+    If [`hastrait`](@ref)`(model, :coupling)` (e.g. [`benchmark_inference_trace_coupled_3x3`](@ref)), this helper **refuses**
+    to run unless **`allow_coupled_zygote=true`**. Reverse-mode AD on the coupled full HMM can allocate **hundreds of GB**
+    and is unsuitable for routine benchmarks. For **NUTS** on traces, [`benchmark_inference_run_nuts_parallel`](@ref) defaults
+    to **`gradient=:finite`** (via `nuts_gradient=:auto`); that path does **not** use this Zygote helper.
+
+Intended for **developer** micro-benchmarks (wall time, memory trade-offs on modest traces), not CI.
+For timing gradients of a **small subset** of parameters (e.g. three), use
+[`benchmark_trace_forwarddiff_gradient`](@ref) and [`benchmark_trace_finitediff_gradient`](@ref) (both support coupled
+traces; large coupled state spaces can make ForwardDiff slow).
+
+# Keywords
+- `steady_state_solver` (default `:augmented`): passed to [`loglikelihood_ad`](@ref).
+- `checkpoint_chunks` (default `32`): positive `Int` for the timed “with checkpoint” run; set to `nothing`
+  to only report `time_no_checkpoint`.
+- `nruns` (default `3`): each timing is the **minimum** of this many `@elapsed` trials (after one warmup each).
+- `warmup` (default `true`): compile with one extra gradient per mode before timing.
+- `max_timesteps` (default `2048`): if not `nothing`, require longest per-trial trace length (from `data.trace`)
+  ≤ this, or throw `ArgumentError`. Pass `max_timesteps=nothing` to skip the check (may still hit compiler limits).
+- `skip_no_checkpoint` (default `false`): if `true`, do **not** time the uncheckpointed gradient (the usual source
+  of compiler `_pullback_generator` / `NTuple{…}` overflows on long traces); only time `hmm_checkpoint_steps=checkpoint_chunks`.
+  Requires `checkpoint_chunks > 0`.
+- `catch_zygote_failure` (default `true`): on Zygote/compiler stack overflow, return `success=false` and an
+  `error` string instead of rethrowing. Set to `false` to debug with a full stack trace.
+- `allow_coupled_zygote` (default `false`): if `hastrait(model, :coupling)`, throw unless `true` (see warning above).
+
+# Returns
+`NamedTuple` with `success::Bool`, `time_no_checkpoint`, `time_with_checkpoint` (or `nothing`), `ratio`,
+`θlen`, `longest_timesteps` (or `nothing`), `steady_state_solver`, `checkpoint_chunks`. On failure,
+`time_*` and `ratio` are `nothing` and `error` contains a short message.
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_gr2r2(totaltime=500.0, ntrials=2, seed=1)
+benchmark_trace_zygote_gradient(scen; checkpoint_chunks=32, nruns=2)
+```
+"""
+function benchmark_trace_zygote_gradient(
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol=:augmented,
+    checkpoint_chunks::Union{Nothing,Integer}=32,
+    nruns::Int=3,
+    warmup::Bool=true,
+    max_timesteps::Union{Nothing,Int}=2048,
+    skip_no_checkpoint::Bool=false,
+    catch_zygote_failure::Bool=true,
+    allow_coupled_zygote::Bool=false,
+)
+    nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    max_timesteps !== nothing && max_timesteps < 0 &&
+        throw(ArgumentError("max_timesteps must be non-negative or nothing"))
+    skip_no_checkpoint && (checkpoint_chunks === nothing || checkpoint_chunks <= 0) &&
+        throw(ArgumentError("skip_no_checkpoint=true requires checkpoint_chunks > 0"))
+    if hastrait(model, :coupling) && !allow_coupled_zygote
+        throw(ArgumentError(
+            "benchmark_trace_zygote_gradient: coupled joint-trace model (hastrait(model, :coupling)); " *
+            "Zygote reverse-mode on this graph can allocate hundreds of GB and is disabled by default. " *
+            "Use benchmark_trace_forwarddiff_gradient / benchmark_trace_finitediff_gradient for subset gradients; " *
+            "or pass allow_coupled_zygote=true only if you accept the memory and time cost.",
+        ))
+    end
+    θ = Vector{Float64}(get_param(model))
+    L = _benchmark_trace_longest_timesteps(data)
+    if max_timesteps !== nothing && L !== nothing && L > max_timesteps
+        throw(ArgumentError(
+            "benchmark_trace_zygote_gradient: longest per-trial trace has $L frames (> max_timesteps=$max_timesteps). " *
+            "Zygote reverse-mode on long trace HMMs usually overflows the compiler; use a shorter scenario " *
+            "(e.g. smaller totaltime/ntrials), pass max_timesteps=nothing to skip this check at your own risk, " *
+            "use skip_no_checkpoint=true with checkpoint_chunks>0 to time only the checkpointed path, " *
+            "or use benchmark_trace_forwarddiff_gradient / benchmark_trace_finitediff_gradient.",
+        ))
+    end
+
+    function mintime(hmm_checkpoint_steps)
+        f = η -> loglikelihood_ad(
+            η, data, model;
+            steady_state_solver=steady_state_solver,
+            hmm_stack=HMM_STACK_AD,
+            hmm_checkpoint_steps=hmm_checkpoint_steps,
+        )[1]
+        warmup && Zygote.gradient(f, θ)
+        t = Inf
+        for _ in 1:nruns
+            ti = @elapsed Zygote.gradient(f, θ)
+            t = min(t, ti)
+        end
+        t
+    end
+
+    if skip_no_checkpoint
+        local t1s
+        try
+            t1s = mintime(Int(checkpoint_chunks))
+        catch err
+            if catch_zygote_failure && _benchmark_zygote_compiler_failure(err)
+                return (;
+                    success=false,
+                    time_no_checkpoint=nothing,
+                    time_with_checkpoint=nothing,
+                    ratio=nothing,
+                    θlen=length(θ),
+                    longest_timesteps=L,
+                    steady_state_solver,
+                    checkpoint_chunks=Int(checkpoint_chunks),
+                    error=_benchmark_zygote_nested_messages(err),
+                )
+            end
+            rethrow()
+        end
+        return (;
+            success=true,
+            time_no_checkpoint=nothing,
+            time_with_checkpoint=t1s,
+            ratio=nothing,
+            θlen=length(θ),
+            longest_timesteps=L,
+            steady_state_solver,
+            checkpoint_chunks=Int(checkpoint_chunks),
+        )
+    end
+
+    local t0
+    try
+        t0 = mintime(nothing)
+    catch err
+        if catch_zygote_failure && _benchmark_zygote_compiler_failure(err)
+            return (;
+                success=false,
+                time_no_checkpoint=nothing,
+                time_with_checkpoint=nothing,
+                ratio=nothing,
+                θlen=length(θ),
+                longest_timesteps=L,
+                steady_state_solver,
+                checkpoint_chunks,
+                error=_benchmark_zygote_nested_messages(err),
+            )
+        end
+        rethrow()
+    end
+
+    if checkpoint_chunks === nothing || checkpoint_chunks <= 0
+        return (;
+            success=true,
+            time_no_checkpoint=t0,
+            time_with_checkpoint=nothing,
+            ratio=nothing,
+            θlen=length(θ),
+            longest_timesteps=L,
+            steady_state_solver,
+            checkpoint_chunks,
+        )
+    end
+
+    local t1
+    try
+        t1 = mintime(Int(checkpoint_chunks))
+    catch err
+        if catch_zygote_failure && _benchmark_zygote_compiler_failure(err)
+            return (;
+                success=false,
+                time_no_checkpoint=t0,
+                time_with_checkpoint=nothing,
+                ratio=nothing,
+                θlen=length(θ),
+                longest_timesteps=L,
+                steady_state_solver,
+                checkpoint_chunks=Int(checkpoint_chunks),
+                error=_benchmark_zygote_nested_messages(err),
+            )
+        end
+        rethrow()
+    end
+    return (;
+        success=true,
+        time_no_checkpoint=t0,
+        time_with_checkpoint=t1,
+        ratio=t1 / t0,
+        θlen=length(θ),
+        longest_timesteps=L,
+        steady_state_solver,
+        checkpoint_chunks=Int(checkpoint_chunks),
+    )
+end
+
+function benchmark_trace_zygote_gradient(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_trace_zygote_gradient(scenario.data, scenario.model; kwargs...)
+end
+
+function _benchmark_trace_resolve_param_indices(θlen::Int, param_indices::Union{Nothing,AbstractVector{<:Integer}})
+    if param_indices === nothing
+        k = min(3, θlen)
+        k < 1 && throw(ArgumentError("parameter vector is empty"))
+        return collect(1:k)
+    end
+    idx = collect(Int, param_indices)
+    isempty(idx) && throw(ArgumentError("param_indices must be non-empty"))
+    all(i -> 1 <= i <= θlen, idx) || throw(ArgumentError("param_indices must lie in 1:$θlen"))
+    return idx
+end
+
+"""One central-difference gradient vector for `θ` at `idx` (same convention as [`benchmark_trace_finitediff_gradient`](@ref))."""
+function _benchmark_trace_central_grad_vector(
+    θ::Vector{Float64},
+    idx::Vector{Int},
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    fd_ε::Float64,
+    steady_state_solver::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer},
+)
+    k = length(idx)
+    g = Vector{Float64}(undef, k)
+    for j in 1:k
+        i = idx[j]
+        θp = copy(θ)
+        θm = copy(θ)
+        θp[i] += fd_ε
+        θm[i] -= fd_ε
+        lp = loglikelihood_ad(
+            θp, data, model;
+            steady_state_solver=steady_state_solver,
+            hmm_stack=HMM_STACK_AD,
+            hmm_checkpoint_steps=hmm_checkpoint_steps,
+        )[1]
+        lm = loglikelihood_ad(
+            θm, data, model;
+            steady_state_solver=steady_state_solver,
+            hmm_stack=HMM_STACK_AD,
+            hmm_checkpoint_steps=hmm_checkpoint_steps,
+        )[1]
+        g[j] = (lp - lm) / (2fd_ε)
+    end
+    return g
+end
+
+function _benchmark_trace_ll_subparams(
+    u::AbstractVector,
+    θ::Vector{Float64},
+    idx::Vector{Int},
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    steady_state_solver::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer},
+)
+    T = promote_type(Float64, eltype(u))
+    θc = T.(θ)
+    for j in eachindex(idx)
+        θc[idx[j]] = u[j]
+    end
+    return loglikelihood_ad(
+        θc, data, model;
+        steady_state_solver=steady_state_solver,
+        hmm_stack=HMM_STACK_AD,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )[1]
+end
+
+function _benchmark_trace_fwd_vs_fd_agreement(
+    θ::Vector{Float64},
+    idx::Vector{Int},
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    fd_ε::Float64,
+    steady_state_solver::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer},
+)
+    u0 = θ[idx]
+    function ll_u(u)
+        _benchmark_trace_ll_subparams(u, θ, idx, data, model; steady_state_solver=steady_state_solver, hmm_checkpoint_steps=hmm_checkpoint_steps)
+    end
+    g_fwd = ForwardDiff.gradient(ll_u, u0)
+    g_fd = _benchmark_trace_central_grad_vector(
+        θ, idx, data, model, fd_ε, steady_state_solver, hmm_checkpoint_steps,
+    )
+    mad = maximum(abs, g_fwd .- g_fd)
+    denom = max(maximum(abs, g_fwd), maximum(abs, g_fd), 1e-12)
+    return (; gradient_max_abs_diff=mad, gradient_max_rel_diff=mad / denom)
+end
+
+function _benchmark_trace_zygote_vs_fd_agreement(
+    θ::Vector{Float64},
+    idx::Vector{Int},
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel,
+    fd_ε::Float64,
+    steady_state_solver::Symbol,
+    hmm_checkpoint_steps::Union{Nothing,Integer},
+)
+    u0 = θ[idx]
+    function ll_u(u)
+        _benchmark_trace_ll_subparams(u, θ, idx, data, model; steady_state_solver=steady_state_solver, hmm_checkpoint_steps=hmm_checkpoint_steps)
+    end
+    gz = Zygote.gradient(ll_u, u0)
+    g_z = gz === nothing ? nothing : first(gz)
+    g_z === nothing && error("Zygote.gradient returned nothing for subset log-likelihood")
+    g_fd = _benchmark_trace_central_grad_vector(
+        θ, idx, data, model, fd_ε, steady_state_solver, hmm_checkpoint_steps,
+    )
+    mad = maximum(abs, g_z .- g_fd)
+    denom = max(maximum(abs, g_z), maximum(abs, g_fd), 1e-12)
+    return (; gradient_max_abs_diff=mad, gradient_max_rel_diff=mad / denom)
+end
+
+"""
+    benchmark_trace_forwarddiff_gradient(data, model; kwargs...)
+    benchmark_trace_forwarddiff_gradient(scenario; kwargs...)
+
+Wall-clock time for a **full forward-mode gradient** of [`loglikelihood_ad`](@ref) with respect to a
+**subset** of transformed parameters (default: the first **three** entries of `get_param(model)`), holding
+the rest fixed. This mirrors the use case for NUTS with [`NUTSOptions`](@ref) `gradient=:ForwardDiff` when
+only a few coordinates matter or dimension is small.
+
+Uses [`ForwardDiff.gradient`](https://juliadiff.org/ForwardDiff.jl/stable/user/advanced/#ForwardDiff.gradient)
+on `u ↦ loglikelihood_ad(θ with u embedded at param_indices, …)`.
+
+# Keywords
+- `param_indices`: indices into `θ` (1-based); default `nothing` → `1:min(3, length(θ))`.
+- `steady_state_solver` (default `:augmented`), `hmm_checkpoint_steps` (default `nothing`): passed to [`loglikelihood_ad`](@ref).
+- `nruns`, `warmup`: same meaning as [`benchmark_trace_zygote_gradient`](@ref).
+
+# Returns
+`NamedTuple` with `method` (`:forwarddiff`), `time_sec`, **`gradient`** (`Vector{Float64}`, last timed evaluation),
+`param_indices`, `nparams`, `θlen`, `steady_state_solver`, `hmm_checkpoint_steps`.
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_gr2r2(totaltime=400.0, ntrials=4, seed=1)
+benchmark_trace_forwarddiff_gradient(scen; param_indices=[1, 2, 4], nruns=2)
+```
+"""
+function benchmark_trace_forwarddiff_gradient(
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    nruns::Int=3,
+    warmup::Bool=true,
+)
+    nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    θ = Vector{Float64}(get_param(model))
+    θlen = length(θ)
+    idx = _benchmark_trace_resolve_param_indices(θlen, param_indices)
+    u0 = θ[idx]
+    function ll_u(u)
+        _benchmark_trace_ll_subparams(u, θ, idx, data, model; steady_state_solver=steady_state_solver, hmm_checkpoint_steps=hmm_checkpoint_steps)
+    end
+    warmup && ForwardDiff.gradient(ll_u, u0)
+    t = Inf
+    local g_out
+    for _ in 1:nruns
+        ti = @elapsed g_out = ForwardDiff.gradient(ll_u, u0)
+        t = min(t, ti)
+    end
+    return (;
+        method=:forwarddiff,
+        time_sec=t,
+        gradient=collect(Float64, g_out),
+        param_indices=idx,
+        nparams=length(idx),
+        θlen,
+        steady_state_solver,
+        hmm_checkpoint_steps,
+    )
+end
+
+function benchmark_trace_forwarddiff_gradient(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_trace_forwarddiff_gradient(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+    benchmark_trace_finitediff_gradient(data, model; kwargs...)
+    benchmark_trace_finitediff_gradient(scenario; kwargs...)
+
+Wall-clock time for a **central finite-difference gradient** of [`loglikelihood_ad`](@ref) with respect to a
+subset of parameters (default: first **three**), matching NUTS `gradient=:finite` (central difference per
+coordinate). Each gradient uses **``2k``** likelihood evaluations for `k` parameters.
+
+# Keywords
+- `param_indices`: default `nothing` → `1:min(3, length(θ))`.
+- `fd_ε` (default `1e-4`): same order of magnitude as [`NUTSOptions`](@ref) `fd_ε`.
+- `steady_state_solver`, `hmm_checkpoint_steps`: passed to [`loglikelihood_ad`](@ref).
+- `nruns`, `warmup`: same as [`benchmark_trace_forwarddiff_gradient`](@ref).
+
+# Returns
+`NamedTuple` with `method` (`:finitediff`), `time_sec`, **`gradient`** (`Vector{Float64}`, last timed evaluation),
+`param_indices`, `nparams`, `n_ll_evals_per_grad` (= `2 * nparams`), `fd_ε`, `θlen`, etc.
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_gr2r2(totaltime=400.0, ntrials=4, seed=1)
+benchmark_trace_finitediff_gradient(scen; param_indices=collect(1:3), fd_ε=1e-4, nruns=2)
+```
+"""
+function benchmark_trace_finitediff_gradient(
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    fd_ε::Float64=1e-4,
+    nruns::Int=3,
+    warmup::Bool=true,
+)
+    nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    fd_ε > 0 || throw(ArgumentError("fd_ε must be positive"))
+    θ = Vector{Float64}(get_param(model))
+    θlen = length(θ)
+    idx = _benchmark_trace_resolve_param_indices(θlen, param_indices)
+    k = length(idx)
+    function fd_grad!(g::Vector{Float64}, θ0::Vector{Float64})
+        @assert length(g) == k
+        g .= _benchmark_trace_central_grad_vector(
+            θ0, idx, data, model, fd_ε, steady_state_solver, hmm_checkpoint_steps,
+        )
+        return g
+    end
+    g = Vector{Float64}(undef, k)
+    warmup && fd_grad!(g, θ)
+    t = Inf
+    for _ in 1:nruns
+        ti = @elapsed fd_grad!(g, θ)
+        t = min(t, ti)
+    end
+    return (;
+        method=:finitediff,
+        time_sec=t,
+        gradient=copy(g),
+        param_indices=idx,
+        nparams=k,
+        n_ll_evals_per_grad=2k,
+        fd_ε,
+        θlen,
+        steady_state_solver,
+        hmm_checkpoint_steps,
+    )
+end
+
+function benchmark_trace_finitediff_gradient(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_trace_finitediff_gradient(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+    benchmark_trace_zygote_subset_gradient(data, model; kwargs...)
+    benchmark_trace_zygote_subset_gradient(scenario; kwargs...)
+
+Wall-clock time for **Zygote** reverse-mode gradient of [`loglikelihood_ad`](@ref) on the same **subset** of
+transformed parameters as [`benchmark_trace_forwarddiff_gradient`](@ref) / [`benchmark_trace_finitediff_gradient`](@ref)
+(`u ↦` likelihood with `u` embedded at `param_indices`).
+
+Uses [`Zygote.gradient`](https://fluxml.ai/Zygote.jl/stable/) on that scalar map. Coupled joint traces can be **slow**
+or memory-heavy; use [`hmm_checkpoint_steps`](@ref) and per-trace checkpointing in the HMM stack.
+
+# Keywords
+Same as [`benchmark_trace_forwarddiff_gradient`](@ref) (`param_indices`, `steady_state_solver`, `hmm_checkpoint_steps`, `nruns`, `warmup`).
+
+# Returns
+`NamedTuple` with `method` (`:zygote`), `time_sec`, **`gradient`**, `param_indices`, `nparams`, `θlen`, `steady_state_solver`, `hmm_checkpoint_steps`.
+"""
+function benchmark_trace_zygote_subset_gradient(
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    nruns::Int=3,
+    warmup::Bool=true,
+)
+    nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    θ = Vector{Float64}(get_param(model))
+    θlen = length(θ)
+    idx = _benchmark_trace_resolve_param_indices(θlen, param_indices)
+    u0 = θ[idx]
+    function ll_u(u)
+        _benchmark_trace_ll_subparams(u, θ, idx, data, model; steady_state_solver=steady_state_solver, hmm_checkpoint_steps=hmm_checkpoint_steps)
+    end
+    warmup && Zygote.gradient(ll_u, u0)
+    t = Inf
+    local gz
+    for _ in 1:nruns
+        ti = @elapsed gz = Zygote.gradient(ll_u, u0)
+        t = min(t, ti)
+    end
+    g1 = gz === nothing ? nothing : first(gz)
+    g1 === nothing && throw(ErrorException("Zygote.gradient returned nothing for trace subset likelihood"))
+    return (;
+        method=:zygote,
+        time_sec=t,
+        gradient=collect(Float64, g1),
+        param_indices=idx,
+        nparams=length(idx),
+        θlen,
+        steady_state_solver,
+        hmm_checkpoint_steps,
+    )
+end
+
+function benchmark_trace_zygote_subset_gradient(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_trace_zygote_subset_gradient(scenario.data, scenario.model; kwargs...)
+end
+
+function _benchmark_trace_pairwise_grad_diff(a::AbstractVector{Float64}, b::AbstractVector{Float64})
+    d = a .- b
+    mad = maximum(abs, d)
+    denom = max(maximum(abs, a), maximum(abs, b), 1e-12)
+    return (; max_abs_diff=mad, max_rel_diff=mad / denom)
+end
+
+"""
+    compare_trace_subset_gradient_benchmarks(r_forwarddiff, r_finitediff, r_zygote)
+
+Compare outputs from [`benchmark_trace_forwarddiff_gradient`](@ref), [`benchmark_trace_finitediff_gradient`](@ref),
+and [`benchmark_trace_zygote_subset_gradient`](@ref) run with the **same** `data`, `model`, and keyword options.
+
+# Arguments
+- `r_forwarddiff`, `r_finitediff`, `r_zygote`: `NamedTuple`s from the three benchmark functions (must share `param_indices`, `nparams`, `θlen`).
+
+# Returns
+`NamedTuple` with `compare` (`:trace_subset_gradient_three_way`), wall-clock times, `fastest_method` (`:forwarddiff`, `:finitediff`, or `:zygote`),
+pairwise `max_abs_diff` / `max_rel_diff` between the three gradient vectors, and shared metadata (`param_indices`, `fd_ε`, etc.).
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_scenario_coupled_3x3_10traces_220frames(seed=1)
+rf = benchmark_trace_forwarddiff_gradient(scen; param_indices=[1], nruns=2, hmm_checkpoint_steps=32)
+rfd = benchmark_trace_finitediff_gradient(scen; param_indices=[1], nruns=2, hmm_checkpoint_steps=32, fd_ε=1e-4)
+rz = benchmark_trace_zygote_subset_gradient(scen; param_indices=[1], nruns=2, hmm_checkpoint_steps=32)
+compare_trace_subset_gradient_benchmarks(rf, rfd, rz)
+```
+"""
+function compare_trace_subset_gradient_benchmarks(
+    r_forwarddiff::NamedTuple,
+    r_finitediff::NamedTuple,
+    r_zygote::NamedTuple,
+)
+    for k in (:param_indices, :nparams, :θlen)
+        a = getfield(r_forwarddiff, k)
+        getfield(r_finitediff, k) == a && getfield(r_zygote, k) == a ||
+            throw(ArgumentError("compare_trace_subset_gradient_benchmarks: mismatch in $(k) across results"))
+    end
+    gf = r_forwarddiff.gradient
+    gfd = r_finitediff.gradient
+    gz = r_zygote.gradient
+    length(gf) == length(gfd) == length(gz) || throw(ArgumentError("compare_trace_subset_gradient_benchmarks: gradient length mismatch"))
+    d_ffd = _benchmark_trace_pairwise_grad_diff(gf, gfd)
+    d_fz = _benchmark_trace_pairwise_grad_diff(gf, gz)
+    d_fdz = _benchmark_trace_pairwise_grad_diff(gfd, gz)
+    ts = [r_forwarddiff.time_sec, r_finitediff.time_sec, r_zygote.time_sec]
+    fastest_method = [:forwarddiff, :finitediff, :zygote][argmin(ts)]
+    return (;
+        compare=:trace_subset_gradient_three_way,
+        time_forwarddiff_sec=r_forwarddiff.time_sec,
+        time_finitediff_sec=r_finitediff.time_sec,
+        time_zygote_sec=r_zygote.time_sec,
+        fastest_method,
+        forwarddiff_vs_finitediff_max_abs_diff=d_ffd.max_abs_diff,
+        forwarddiff_vs_finitediff_max_rel_diff=d_ffd.max_rel_diff,
+        forwarddiff_vs_zygote_max_abs_diff=d_fz.max_abs_diff,
+        forwarddiff_vs_zygote_max_rel_diff=d_fz.max_rel_diff,
+        finitediff_vs_zygote_max_abs_diff=d_fdz.max_abs_diff,
+        finitediff_vs_zygote_max_rel_diff=d_fdz.max_rel_diff,
+        param_indices=r_forwarddiff.param_indices,
+        nparams=r_forwarddiff.nparams,
+        θlen=r_forwarddiff.θlen,
+        fd_ε=get(r_finitediff, :fd_ε, nothing),
+        steady_state_solver=r_forwarddiff.steady_state_solver,
+        hmm_checkpoint_steps=r_forwarddiff.hmm_checkpoint_steps,
+    )
+end
+
+"""
+    benchmark_trace_compare_forwarddiff_vs_finitediff(data, model; kwargs...)
+    benchmark_trace_compare_forwarddiff_vs_finitediff(scenario; kwargs...)
+
+Compare wall-clock time for a **subset gradient** of [`loglikelihood_ad`](@ref) using **forward-mode**
+([`benchmark_trace_forwarddiff_gradient`](@ref)) vs **central finite differences**
+([`benchmark_trace_finitediff_gradient`](@ref)), with identical `param_indices`, `steady_state_solver`,
+`hmm_checkpoint_steps`, `nruns`, and `warmup`. Use this to choose between NUTS `gradient=:ForwardDiff` and
+`gradient=:finite` for the same trace scenario and number of parameters.
+
+Coupled joint traces are supported; large coupled state spaces may make ForwardDiff gradients slow.
+
+# Keywords
+- `param_indices`, `steady_state_solver`, `hmm_checkpoint_steps`, `nruns`, `warmup`: shared by both benchmarks.
+- `fd_ε`: passed only to the finite-difference run (default `1e-4`).
+- `check_gradients` (default `true`): after timing, compare an independent AD gradient to central FD on the same
+  `u ↦ loglikelihood_ad(θ with u at param_indices, …)`:
+  - **ForwardDiff vs FD** (`_benchmark_trace_fwd_vs_fd_agreement`) when `check_gradients=true`.
+  - Optionally set **`check_zygote_vs_fd=true`** on **coupled** models to **also** compare **Zygote** vs FD (expensive,
+    can OOM on long traces — same caveats as [`benchmark_trace_zygote_gradient`](@ref)); default `false`.
+- `check_zygote_vs_fd` (default `false`): coupled models only; run Zygote vs central FD in addition to ForwardDiff vs FD.
+
+# Returns
+`NamedTuple` with:
+- `compare` (`:forwarddiff_vs_finitediff`): tag for [`benchmark_inference_print_summary`](@ref)
+- `time_forwarddiff_sec`: seconds for one ForwardDiff gradient
+- `time_finitediff_sec`: seconds for one central finite-difference gradient
+- `faster`: `:forwarddiff` or `:finite`
+- `ratio_forwarddiff_over_finitediff`: `time_forwarddiff_sec / time_finitediff_sec`; **< 1** means ForwardDiff is faster, **> 1** means finite differences are faster
+- `gradient_check_reference`: `:forwarddiff_vs_fd`, `:zygote_vs_fd` (extra coupled check), `:none` (checks off), `:failed`, or `:unavailable`
+- `gradient_max_abs_diff`, `gradient_max_rel_diff`: agreement for the reference pair above (`nothing` when no check ran).
+  If components are very small, rely on `gradient_max_abs_diff`; FD truncation error scales with `fd_ε`.
+- `forwarddiff_unavailable_reason`: `nothing` or a short string when ForwardDiff was skipped
+- `param_indices`, `nparams`, `n_ll_evals_per_grad`, `fd_ε`, `θlen`, `steady_state_solver`, `hmm_checkpoint_steps`
+
+# Example
+```julia
+using StochasticGene
+scen = benchmark_inference_trace_gr2r2(totaltime=200.0, ntrials=2, seed=1)
+benchmark_trace_compare_forwarddiff_vs_finitediff(scen; param_indices=[1, 2], nruns=3, fd_ε=1e-4)
+```
+
+Wrapping the **first** call in `@time` in a fresh session often shows most time in **compilation**; the returned
+`time_*_sec` fields are still minima over `nruns` after internal warmup (`warmup=true` by default). Repeat the
+call (or run after precompilation) if you need `@time` without the one-time compile cost.
+"""
+function benchmark_trace_compare_forwarddiff_vs_finitediff(
+    data::AbstractTraceData,
+    model::AbstractGRSMmodel;
+    param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    fd_ε::Float64=1e-4,
+    nruns::Int=3,
+    warmup::Bool=true,
+    check_gradients::Bool=true,
+    check_zygote_vs_fd::Bool=false,
+)
+    fd = benchmark_trace_finitediff_gradient(
+        data, model;
+        param_indices=param_indices,
+        steady_state_solver=steady_state_solver,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+        fd_ε=fd_ε,
+        nruns=nruns,
+        warmup=warmup,
+    )
+    fw = benchmark_trace_forwarddiff_gradient(
+        data, model;
+        param_indices=param_indices,
+        steady_state_solver=steady_state_solver,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+        nruns=nruns,
+        warmup=warmup,
+    )
+    tf = fw.time_sec
+    tfd = fd.time_sec
+    agr = if check_gradients
+        θ = Vector{Float64}(get_param(model))
+        _benchmark_trace_fwd_vs_fd_agreement(
+            θ, fd.param_indices, data, model, fd_ε, steady_state_solver, hmm_checkpoint_steps,
+        )
+    else
+        (; gradient_max_abs_diff=nothing, gradient_max_rel_diff=nothing)
+    end
+    if check_gradients && hastrait(model, :coupling) && check_zygote_vs_fd
+        θz = Vector{Float64}(get_param(model))
+        try
+            zagr = _benchmark_trace_zygote_vs_fd_agreement(
+                θz, fd.param_indices, data, model, fd_ε, steady_state_solver, hmm_checkpoint_steps,
+            )
+            @info "benchmark_trace_compare (coupled): optional Zygote vs FD" gradient_max_abs_diff=zagr.gradient_max_abs_diff gradient_max_rel_diff=zagr.gradient_max_rel_diff
+        catch e
+            @warn "Zygote vs FD (optional coupled check) failed; set check_zygote_vs_fd=false to skip" exception=(e, catch_backtrace())
+        end
+    end
+    return (;
+        compare=:forwarddiff_vs_finitediff,
+        time_forwarddiff_sec=tf,
+        time_finitediff_sec=tfd,
+        faster=tf < tfd ? :forwarddiff : :finite,
+        ratio_forwarddiff_over_finitediff=tf / tfd,
+        gradient_check_reference=check_gradients ? :forwarddiff_vs_fd : :none,
+        gradient_max_abs_diff=agr.gradient_max_abs_diff,
+        gradient_max_rel_diff=agr.gradient_max_rel_diff,
+        forwarddiff_unavailable_reason=nothing,
+        param_indices=fd.param_indices,
+        nparams=fd.nparams,
+        n_ll_evals_per_grad=fd.n_ll_evals_per_grad,
+        fd_ε=fd.fd_ε,
+        θlen=fd.θlen,
+        steady_state_solver=fd.steady_state_solver,
+        hmm_checkpoint_steps=fd.hmm_checkpoint_steps,
+    )
+end
+
+function benchmark_trace_compare_forwarddiff_vs_finitediff(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_trace_compare_forwarddiff_vs_finitediff(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+    benchmark_inference_run_advi(data, model; kwargs...)
+    benchmark_inference_run_advi(scenario; kwargs...)
+
+Mean-field [`run_advi`](@ref) with optional Optim `time_limit` (seconds) for wall-clock alignment with MH `maxtime`.
+ESS is not defined for ADVI; the returned tuple includes `neg_elbo_min` from `Optim.minimum`.
+
+# Keywords
+- `rng`, `steady_state_solver`, `ad_likelihood`, `zygote_trace`: passed to [`run_advi`](@ref).
+- `advi_options`: [`ADVIOptions`](@ref) (default: `maxiter` large, `time_limit=600`, `gradient=:Zygote`, `init_s_raw=-4`). For **trace** [`AbstractTraceData`](@ref), [`run_advi`](@ref) switches to **`gradient=:finite`** unless `zygote_trace=true` (Zygote through long HMM traces overflows the compiler stack).
+"""
+function benchmark_inference_run_advi(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel;
+    rng::Random.AbstractRNG=Random.default_rng(),
+    steady_state_solver::Symbol=:augmented,
+    ad_likelihood::Union{Nothing,Bool}=nothing,
+    zygote_trace::Bool=false,
+    advi_options::ADVIOptions=ADVIOptions(; maxiter=50_000, n_mc=8, σ_floor=1e-4, verbose=false, gradient=:Zygote, time_limit=600.0),
+)
+    elapsed_sec = @elapsed out = run_advi(
+        data, model, rng, advi_options;
+        steady_state_solver=steady_state_solver,
+        ad_likelihood=ad_likelihood,
+        zygote_trace=zygote_trace,
+    )
+    neg_elbo_min = Optim.minimum(out.optimization)
+    return (; elapsed_sec, μ=out.μ, σ=out.σ, optimization=out.optimization, neg_elbo_min, initial_θ=out.initial_θ)
+end
+
+function benchmark_inference_run_advi(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    benchmark_inference_run_advi(scenario.data, scenario.model; kwargs...)
+end
+
+"""
+    benchmark_inference_print_summary(result::NamedTuple)
+
+Print a short summary for benchmark `NamedTuple` returns:
+
+- [`benchmark_inference_run_mh`](@ref) / [`benchmark_inference_run_nuts_parallel`](@ref): `elapsed_sec` and, when present, ESS / R-hat lines.
+- [`benchmark_inference_run_advi`](@ref): `elapsed_sec` and `neg_elbo_min` when present.
+- [`benchmark_trace_zygote_gradient`](@ref): `success`, `time_no_checkpoint`, `time_with_checkpoint`, `ratio`, `θlen`, `longest_timesteps`, and `error` on failure.
+- [`benchmark_trace_forwarddiff_gradient`](@ref) / [`benchmark_trace_finitediff_gradient`](@ref): `time_sec`, `param_indices`, `nparams`, `θlen`, and finite-diff extras when present.
+- [`benchmark_trace_compare_forwarddiff_vs_finitediff`](@ref): `time_forwarddiff_sec`, `time_finitediff_sec`, `faster`, `ratio_forwarddiff_over_finitediff`.
+- [`compare_trace_subset_gradient_benchmarks`](@ref): `time_*_sec`, `fastest_method`, pairwise gradient diffs.
+"""
+function benchmark_inference_print_summary(result::NamedTuple)
+    if get(result, :compare, nothing) === :trace_subset_gradient_three_way
+        println("compare_trace_subset_gradient_benchmarks:")
+        println("  time_forwarddiff_sec: ", result.time_forwarddiff_sec)
+        println("  time_finitediff_sec: ", result.time_finitediff_sec)
+        println("  time_zygote_sec: ", result.time_zygote_sec)
+        println("  fastest_method: ", result.fastest_method)
+        println("  forwarddiff_vs_finitediff max_abs / max_rel: ", result.forwarddiff_vs_finitediff_max_abs_diff, " / ", result.forwarddiff_vs_finitediff_max_rel_diff)
+        println("  forwarddiff_vs_zygote max_abs / max_rel: ", result.forwarddiff_vs_zygote_max_abs_diff, " / ", result.forwarddiff_vs_zygote_max_rel_diff)
+        println("  finitediff_vs_zygote max_abs / max_rel: ", result.finitediff_vs_zygote_max_abs_diff, " / ", result.finitediff_vs_zygote_max_rel_diff)
+        haskey(result, :fd_ε) && result.fd_ε !== nothing && println("  fd_ε: ", result.fd_ε)
+        haskey(result, :param_indices) && println("  param_indices: ", result.param_indices)
+        haskey(result, :nparams) && println("  nparams: ", result.nparams)
+        haskey(result, :θlen) && println("  θlen: ", result.θlen)
+        haskey(result, :hmm_checkpoint_steps) && println("  hmm_checkpoint_steps: ", result.hmm_checkpoint_steps)
+    elseif get(result, :compare, nothing) === :forwarddiff_vs_finitediff
+        println("benchmark_trace_compare_forwarddiff_vs_finitediff:")
+        println("  time_finitediff_sec: ", result.time_finitediff_sec)
+        haskey(result, :gradient_check_reference) && println("  gradient_check_reference: ", result.gradient_check_reference)
+        if result.time_forwarddiff_sec === nothing
+            println("  time_forwarddiff_sec: (skipped) ", get(result, :forwarddiff_unavailable_reason, ""))
+            println("  faster: finite-difference only")
+        else
+            println("  time_forwarddiff_sec: ", result.time_forwarddiff_sec)
+            ρ = result.ratio_forwarddiff_over_finitediff
+            println("  ratio (ForwardDiff time / finite-diff time): ", ρ)
+            println("  faster: ", result.faster, "  (ratio < 1 ⇒ ForwardDiff quicker; ratio > 1 ⇒ finite-diff quicker)")
+        end
+        if haskey(result, :gradient_max_rel_diff) && result.gradient_max_rel_diff !== nothing
+            ref = get(result, :gradient_check_reference, :forwarddiff_vs_fd)
+            label = ref === :zygote_vs_fd ? "Zygote vs central FD" : "ForwardDiff vs central FD"
+            println("  gradient_max_abs_diff ($label): ", result.gradient_max_abs_diff)
+            println("  gradient_max_rel_diff: ", result.gradient_max_rel_diff)
+        elseif get(result, :gradient_check_reference, nothing) === :unavailable
+            println("  gradient agreement: skipped (coupled trace; pass check_zygote_vs_fd=true for Zygote vs FD)")
+        elseif get(result, :gradient_check_reference, nothing) === :failed
+            println("  gradient agreement: Zygote vs FD check failed (see @warn above)")
+        end
+        println("  param_indices: ", result.param_indices)
+        println("  nparams: ", result.nparams)
+        println("  n_ll_evals_per_grad: ", result.n_ll_evals_per_grad)
+        println("  fd_ε: ", result.fd_ε)
+        haskey(result, :θlen) && println("  θlen: ", result.θlen)
+        haskey(result, :hmm_checkpoint_steps) && println("  hmm_checkpoint_steps: ", result.hmm_checkpoint_steps)
+    elseif haskey(result, :elapsed_sec)
+        println("elapsed_sec: ", result.elapsed_sec)
+    elseif haskey(result, :time_no_checkpoint)
+        println("benchmark_trace_zygote_gradient:")
+        haskey(result, :success) && println("  success: ", result.success)
+        haskey(result, :time_no_checkpoint) && println("  time_no_checkpoint: ", result.time_no_checkpoint)
+        haskey(result, :time_with_checkpoint) && println("  time_with_checkpoint: ", result.time_with_checkpoint)
+        haskey(result, :ratio) && println("  ratio (with / no checkpoint): ", result.ratio)
+        haskey(result, :θlen) && println("  θlen: ", result.θlen)
+        if haskey(result, :longest_timesteps)
+            print("  longest_timesteps: ", result.longest_timesteps)
+            if result.longest_timesteps === nothing
+                print("  (not inferred — re-run `benchmark_trace_zygote_gradient` after updating StochasticGene, or trace layout has no `nframes`/trial length hint)")
+            end
+            println()
+        end
+        haskey(result, :checkpoint_chunks) && println("  checkpoint_chunks: ", result.checkpoint_chunks)
+        haskey(result, :error) && println("  error: ", result.error)
+    elseif haskey(result, :time_sec) && haskey(result, :param_indices)
+        println("trace likelihood subset gradient (ForwardDiff or finite-diff):")
+        println("  time_sec: ", result.time_sec)
+        println("  param_indices: ", result.param_indices)
+        println("  nparams: ", result.nparams)
+        haskey(result, :θlen) && println("  θlen: ", result.θlen)
+        haskey(result, :n_ll_evals_per_grad) && println("  n_ll_evals_per_grad: ", result.n_ll_evals_per_grad)
+        haskey(result, :fd_ε) && println("  fd_ε: ", result.fd_ε)
+        haskey(result, :hmm_checkpoint_steps) && println("  hmm_checkpoint_steps: ", result.hmm_checkpoint_steps)
+    else
+        println("(no standard benchmark fields; keys: ", join(string.(keys(result)), ", "), ")")
+    end
+    if haskey(result, :min_ess)
+        println("min_ess: ", result.min_ess, "  mean_ess: ", result.mean_ess)
+        println("max_rhat: ", result.max_rhat)
+        println("ESS/s (min): ", result.ess_per_sec_min, "  ESS/s (mean): ", result.ess_per_sec_mean)
+    end
+    if haskey(result, :neg_elbo_min)
+        println("ADVI Optim minimum (neg ELBO objective): ", result.neg_elbo_min)
+    end
+    return nothing
+end
+
 # --- Notes on the `set_d` function family ---
 # Your `set_d` functions often return newly created arrays of Distributions.
 # e.g., `probfn(noiseparams, reporters_per_state, N)`

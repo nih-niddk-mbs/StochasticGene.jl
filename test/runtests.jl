@@ -103,4 +103,19 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.test_trace_specs_utilities()
     end
 
+    @testset "inference benchmark (smoke)" begin
+        scen = StochasticGene.benchmark_inference_simrna_small(seed=7)
+        @test hasproperty(scen, :data) && hasproperty(scen, :model)
+        @test length(StochasticGene.get_param(scen.model)) > 0
+        tr = StochasticGene.benchmark_inference_trace_gr2r2(seed=11, totaltime=120.0, ntrials=2)
+        @test hasproperty(tr, :data) && hasproperty(tr, :model)
+        @test length(StochasticGene.get_param(tr.model)) > 0
+        cj = StochasticGene.benchmark_inference_trace_coupled_3x3(seed=11, totaltime=120.0, ntrials=2)
+        @test hasproperty(cj, :data) && hasproperty(cj, :model)
+        @test length(StochasticGene.get_param(cj.model)) > 0
+        cjh = StochasticGene.benchmark_inference_trace_coupled_3x3_g3r0(seed=11, totaltime=120.0, ntrials=2)
+        @test hasproperty(cjh, :data) && hasproperty(cjh, :model)
+        @test length(StochasticGene.get_param(cjh.model)) > 0
+    end
+
 end

@@ -73,8 +73,10 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     usually the first row is the shared and mean hyper parameters and the 2nd are the standard deviations, the rest of the rows are the individual rates and noise params
 - `infolder::String=""`: result folder used for initial parameters
 - `inference=INFERENCE_MH`: posterior approximation — [`INFERENCE_MH`](@ref) (Metropolis–Hastings via [`run_mh`](@ref)), [`INFERENCE_NUTS`](@ref) (NUTS via [`run_nuts_fit`](@ref); `nchains` must be `1`), or [`INFERENCE_ADVI`](@ref) (not wired through `fit` yet — use [`run_advi`](@ref)). See [`INFERENCE_CHOICES`](@ref).
-- `steady_state_solver=:augmented`: forwarded to the log-likelihood when `inference=INFERENCE_NUTS` (see [`run_nuts_fit`](@ref)).
-- `ad_likelihood=nothing`: forwarded to NUTS (`nothing` → automatic: AD likelihood for [`RNACountData`](@ref) only).
+- `steady_state_solver=:augmented`: forwarded to the log-likelihood when `inference=INFERENCE_NUTS` (see [`run_nuts_fit`](@ref)); ignored for MH.
+- `ad_likelihood=nothing`: forwarded to NUTS (`nothing` → automatic: AD likelihood for [`AbstractHistogramData`](@ref) and [`AbstractTraceData`](@ref)); ignored for MH.
+- `nuts_gradient=nothing`: when `inference=INFERENCE_NUTS`, gradient mode for [`NUTSOptions`](@ref). `nothing` → **`:finite`** for trace / [`AbstractTraceData`](@ref) (Zygote through long HMMs is unreliable), **`:Zygote`** otherwise. Override with `nuts_gradient=:Zygote`, `:finite`, or `:ForwardDiff` (forward-mode AD; often good for **few** parameters). Ignored for MH.
+- `nuts_δ=0.8`, `nuts_fd_ε=1e-5`: NUTS dual-averaging target acceptance `δ` and finite-difference step `fd_ε` when `nuts_gradient=:finite` (same defaults as [`NUTSOptions`](@ref)). Ignored for MH.
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted. Must be >= 1; when R = 0, insertstep is ignored (no RNA steps).
 - `label::String=""`: label of output files produced
@@ -89,7 +91,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
 - `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
+- `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`. If you already include a `results/...` prefix in `resultfolder`, it is not doubled to `results/results/...` (see [`folder_path`](@ref)).
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: number of MCMC sampling steps
@@ -232,6 +234,9 @@ const _FIT_DEFAULTS = (
     inference=INFERENCE_MH,
     steady_state_solver=:augmented,
     ad_likelihood=nothing,
+    nuts_gradient=nothing,
+    nuts_δ=0.8,
+    nuts_fd_ε=1e-5,
 )
 
 """
@@ -259,6 +264,8 @@ fewer MCMC steps than the single-gene RNA default, etc. Shared **two-unit** stru
 `coupled_G` / `coupled_R` / … defaults on [`makeswarmfiles`](@ref) (not the single-unit RNA `G=2`, `R=0`
 from [`fit_default_spec`](@ref)). Override with `kwargs` or an existing `info_<key>` merge when needed
 (e.g. H3 latent layouts).
+
+For [`INFERENCE_NUTS`](@ref), set `nchains=1` in overrides (defaults here use `nchains=16` for MH).
 """
 function fit_coupled_default_spec()
     d = fit_default_spec()
@@ -364,6 +371,9 @@ function fit(; key=nothing, kwargs...)
     inference = merged[:inference]
     steady_state_solver = merged[:steady_state_solver]
     ad_likelihood = merged[:ad_likelihood]
+    nuts_gradient = merged[:nuts_gradient]
+    nuts_δ = merged[:nuts_δ]
+    nuts_fd_ε = merged[:nuts_fd_ε]
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, merged[:TransitionType])
     run_spec[:label] = label
     run_spec[:inlabel] = inlabel
@@ -378,9 +388,9 @@ function fit(; key=nothing, kwargs...)
     _current_name_override[] = name_override
     try
         if rinit === nothing
-            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood)
+            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
         else
-            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood)
+            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
         end
     finally
         _current_run_spec[] = nothing
@@ -392,23 +402,23 @@ end
     fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference=INFERENCE_MH, ...)
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
     propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
-    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood)
+    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
 end
 
 """
     fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference=INFERENCE_MH, ...)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing)
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
-    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
 end
 
 
@@ -418,16 +428,43 @@ end
 
 When `inference=INFERENCE_MH` (default), runs [`run_mh`](@ref). When `inference=INFERENCE_NUTS`, runs [`run_nuts_fit`](@ref)
 (`nchains` must be 1; `samplesteps` / `warmupsteps` map to NUTS `n_samples` / `n_adapts`). [`INFERENCE_ADVI`](@ref) is not supported here — use [`run_advi`](@ref).
+
+For NUTS, keywords `nuts_gradient`, `nuts_δ`, `nuts_fd_ε` build [`NUTSOptions`](@ref) (defaults `nuts_δ=0.8`, `nuts_fd_ε=1e-5`); when `nuts_gradient === nothing`, trace / [`AbstractTraceData`](@ref) uses `:finite` gradients (see [`fit`](@ref) top-level docs). These are ignored when `inference=INFERENCE_MH`.
 """
-function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing)
+function _nuts_options_for_fit(
+    options::MHOptions,
+    data::AbstractExperimentalData,
+    nuts_gradient::Union{Nothing,Symbol},
+    nuts_δ::Union{Nothing,Float64},
+    nuts_fd_ε::Union{Nothing,Float64},
+)
+    g = if nuts_gradient === nothing
+        data isa AbstractTraceData ? :finite : :Zygote
+    else
+        nuts_gradient
+    end
+    g in (:Zygote, :finite, :ForwardDiff) || throw(ArgumentError("nuts_gradient must be :Zygote, :finite, or :ForwardDiff, got $(repr(g))"))
+    δ = something(nuts_δ, 0.8)
+    fd = something(nuts_fd_ε, 1e-5)
+    return NUTSOptions(;
+        n_samples=options.samplesteps,
+        n_adapts=options.warmupsteps,
+        δ=δ,
+        gradient=g,
+        fd_ε=fd,
+        verbose=false,
+        progress=false,
+    )
+end
+
+function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
     print_ll(data, model)
-    println("inference: ", inference)
     if inference === INFERENCE_MH
         fits, stats, measures = run_mh(data, model, options, nchains)
     elseif inference === INFERENCE_NUTS
         nchains == 1 || throw(ArgumentError("inference=INFERENCE_NUTS requires nchains == 1; use inference=INFERENCE_MH for multi-chain Metropolis–Hastings."))
         options.samplesteps > 0 || throw(ArgumentError("inference=INFERENCE_NUTS requires samplesteps > 0 (NUTS retained samples)."))
-        nuts_opts = NUTSOptions(; n_samples=options.samplesteps, n_adapts=options.warmupsteps)
+        nuts_opts = _nuts_options_for_fit(options, data, nuts_gradient, nuts_δ, nuts_fd_ε)
         fits, stats, measures, _nuts_info = run_nuts_fit(
             data, model, nuts_opts;
             rng=Random.default_rng(),
@@ -1731,7 +1768,8 @@ Create reporter components for trace analysis with coupling support.
 - Creates TComponents or TForcedComponents based on coupling
 - Used for fluorescence trace data modeling with optional coupling
 """
-function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple())
+function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple(); coupled_stack::Symbol=:full)
+    # `coupled_stack` is unused here (single-unit, uncoupled); accepted so `load_model` forwards it for all `AbstractTraceData`.
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0

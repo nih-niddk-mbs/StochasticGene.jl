@@ -102,7 +102,7 @@ Batch workflows (swarms, combined starts, key-based runs) are documented in the 
 - `CSV`, `DataFrames`: Data handling and manipulation
 - `Distributed`: Parallel processing
 - `Distributions`, `StatsBase`: Statistical distributions and functions
-- `LSODA`, `OrdinaryDiffEq`: ODE solvers
+- `LSODA`, `OrdinaryDiffEq`, `SciMLSensitivity`: ODE solvers and adjoints for Zygote through `solve`
 - `MultivariateStats`: Statistical analysis
 - `Optim`: Optimization algorithms
 - `FFTW`: FFT operations
@@ -134,6 +134,7 @@ using LSODA
 using MultivariateStats
 using Optim
 using OrdinaryDiffEq
+using SciMLSensitivity  # reverse-mode AD through `solve` (Zygote + trace HMM / `kolmogorov_forward`)
 using Printf
 using SparseArrays
 using Statistics
@@ -186,6 +187,11 @@ export
     load_data,
     load_model,
     loglikelihood,
+    loglikelihood_ad,
+    HMM_STACK_MH,
+    HMM_STACK_AD,
+    set_hmm_zygote_checkpoint_steps!,
+    hmm_zygote_checkpoint_steps,
     lsoda,
     make_array,
     make_dataframes,
@@ -209,6 +215,8 @@ export
     NUTSOptions,
     ADVIOptions,
     run_nuts,
+    longest_trace_timesteps,
+    check_ad_gradient_feasibility,
     run_nuts_fit,
     run_NUTS,
     run_advi,
@@ -280,6 +288,23 @@ export
     test_normalized_nullspace_augmented_pullback_fd,
     test_trace_specs_utilities,
     test_benchmark_trace_joint_fit_stacks,
+    benchmark_inference_simrna_small,
+    benchmark_inference_trace_gr2r2,
+    benchmark_inference_trace_coupled_3x3,
+    benchmark_scenario_coupled_3x3_10traces_220frames,
+    benchmark_inference_trace_coupled_3x3_g3r0,
+    benchmark_inference_ensure_workers,
+    benchmark_inference_setup_parallel_workers,
+    benchmark_inference_run_mh,
+    benchmark_inference_run_nuts_parallel,
+    benchmark_trace_zygote_gradient,
+    benchmark_trace_forwarddiff_gradient,
+    benchmark_trace_finitediff_gradient,
+    benchmark_trace_compare_forwarddiff_vs_finitediff,
+    benchmark_trace_zygote_subset_gradient,
+    compare_trace_subset_gradient_benchmarks,
+    benchmark_inference_run_advi,
+    benchmark_inference_print_summary,
     makeswarmfiles_driver,
     makeswarmfiles,
     makeswarmfiles_coupled,

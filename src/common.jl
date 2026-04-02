@@ -44,6 +44,63 @@ Abstract type for intensity time series data with RNA histogram data
 
 abstract type AbstractTraceHistogramData <: AbstractTraceData end
 
+"""
+    HMM_STACK_MH
+
+Likelihood **MH / MCMC track**: in-place `forward`, `kolmogorov_forward` (`fkf!`). This is the default for
+[`loglikelihood`](@ref) and [`ll_hmm_trace`](@ref) when you do not pass `hmm_stack`.
+
+See also [`HMM_STACK_AD`](@ref).
+"""
+const HMM_STACK_MH = :fast
+
+"""
+    HMM_STACK_AD
+
+Likelihood **AD track** (NUTS, ADVI, Zygote): [`forward_ad`](@ref), [`kolmogorov_forward_ad`](@ref), etc.
+Default for [`loglikelihood_ad`](@ref) on trace data. Use the same tag with `ll_hmm_trace(...; hmm_stack=HMM_STACK_AD)`.
+
+See also [`HMM_STACK_MH`](@ref).
+"""
+const HMM_STACK_AD = :zygote
+
+"""
+    set_hmm_zygote_checkpoint_steps!(n::Union{Nothing,Integer})
+    hmm_zygote_checkpoint_steps()
+
+Configure **gradient checkpointing** for reverse-mode AD (Zygote) through the trace HMM forward pass
+([`forward_ad`](@ref) / [`forward_grid_ad`](@ref)): when `n` is a positive integer, time steps are processed in
+chunks of `n` using [`Zygote.checkpointed`](@ref), trading extra forward work for lower memory during the
+backward pass. Set to `nothing` to disable (default).
+
+For **multiple discrete traces**, [`loglikelihood_ad`](@ref) / [`ll_hmm_trace`](@ref) with [`HMM_STACK_AD`](@ref)
+also applies [`Zygote.checkpointed`](@ref) **per trace** so reverse-mode does not retain one tape over all traces
+(only the per-trace forward pass is recomputed on the backward pass).
+
+The same frame setting can be passed per call as `hmm_checkpoint_steps` to [`run_nuts`](@ref), [`ll_hmm_trace`](@ref),
+or [`loglikelihood_ad`](@ref) on trace data (restored after the call).
+
+Does not affect [`ForwardDiff`](@ref) or finite-difference gradients.
+"""
+const HMM_ZYGOTE_CHECKPOINT_STEPS = Ref{Union{Nothing,Int}}(nothing)
+
+function set_hmm_zygote_checkpoint_steps!(n::Union{Nothing,Integer})
+    HMM_ZYGOTE_CHECKPOINT_STEPS[] = n === nothing ? nothing : Int(n)
+end
+
+hmm_zygote_checkpoint_steps() = HMM_ZYGOTE_CHECKPOINT_STEPS[]
+
+function with_hmm_zygote_checkpoint(f::Function, ck::Union{Nothing,Integer})
+    ck === nothing && return f()
+    prev = HMM_ZYGOTE_CHECKPOINT_STEPS[]
+    HMM_ZYGOTE_CHECKPOINT_STEPS[] = Int(ck)
+    try
+        return f()
+    finally
+        HMM_ZYGOTE_CHECKPOINT_STEPS[] = prev
+    end
+end
+
 # Data structures 
 #
 # Do not use underscore "_" in label
@@ -207,6 +264,61 @@ Get the true nRNA size. Returns nRNA_true from tuple if available, otherwise nRN
 """
 get_nRNA_true(yield::Float64, nRNA_observed::Int) = nRNA_observed
 get_nRNA_true(yield::Tuple{Float64, Int}, nRNA_observed::Int) = yield[2]
+
+# --- trace length (for AD feasibility / benchmarks) ---
+
+function _trace_trials_longest(tr::AbstractVector)::Union{Nothing,Int}
+    isempty(tr) && return 0
+    L = 0
+    for t in tr
+        t isa AbstractArray || return nothing
+        L = max(L, Int(size(t, 1)))
+    end
+    return L
+end
+
+function _trace_trials_longest(raw::Tuple)::Union{Nothing,Int}
+    isempty(raw) && return nothing
+    t1 = first(raw)
+    if t1 isa AbstractVector
+        return _trace_trials_longest(t1)
+    elseif t1 isa AbstractMatrix
+        return _trace_trials_longest([t1])
+    else
+        return nothing
+    end
+end
+
+function _trace_trials_longest(raw::AbstractMatrix)::Union{Nothing,Int}
+    _trace_trials_longest([raw])
+end
+
+function _trace_nframes_hint(raw)::Union{Nothing,Int}
+    raw isa Tuple && length(raw) >= 4 || return nothing
+    n = raw[4]
+    (n isa Integer && n > 0) ? Int(n) : nothing
+end
+
+"""
+    longest_trace_timesteps(data::AbstractTraceData) -> Union{Nothing,Int}
+
+Largest per-trial frame count inferred from `data.trace` (and optional `nframes` hint in
+coupled `tracejoint` tuples). Used for diagnostics and for warning when Zygote reverse-mode
+is used on long HMM likelihoods.
+"""
+function longest_trace_timesteps(data::AbstractTraceData)
+    hasproperty(data, :trace) || return nothing
+    raw = data.trace
+    L_trial = _trace_trials_longest(raw)
+    L_nf = _trace_nframes_hint(raw)
+    if L_trial !== nothing && L_nf !== nothing
+        return max(L_trial, L_nf)
+    elseif L_trial !== nothing
+        return L_trial
+    else
+        return L_nf
+    end
+end
 
 # Model structures
 

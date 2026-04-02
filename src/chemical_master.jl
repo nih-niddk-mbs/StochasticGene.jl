@@ -5,6 +5,19 @@
 # Functions to solve the chemical master equation
 # operates on the transpose of the Markov process transition rate matrix
 
+using ForwardDiff
+
+"""Sparse `\\` / sparse `qr` / `svd` use LAPACK and do not support `ForwardDiff.Dual`; use dense QR or dense `\\` instead."""
+_use_dense_ad_eltype(::Type{T}) where {T<:Real} = T <: ForwardDiff.Dual
+
+function _nullspace_robust_fallback(M::SparseMatrixCSC{T}) where T
+    _use_dense_ad_eltype(T) ? normalized_nullspace_qr(M) : normalized_nullspace_svd(M)
+end
+
+function _augmented_linear_solve(A::SparseMatrixCSC{T}, b::AbstractVector) where T
+    _use_dense_ad_eltype(T) && return Matrix(A) \ b
+    return A \ b
+end
 
 # Functions to compute steady state mRNA histograms
 """
@@ -338,22 +351,27 @@ normalized_nullspace_qr(M::SparseMatrixCSC)
 Fast QR-based nullspace used historically in this package.
 Assumes an irreducible rate matrix of rank n-1; may be fragile
 when the matrix is close to singular beyond rank n-1.
+
+Implementation avoids in-place `setindex!` so reverse-mode AD (Zygote) can differentiate
+when this path is used; for gradients prefer [`normalized_nullspace_augmented`](@ref) with
+`steady_state_solver=:augmented`.
 """
-function normalized_nullspace_qr(M::SparseMatrixCSC)
+function _backsub_upper_tri_one(R::AbstractMatrix, m::Int)
+    Tr = eltype(R)
+    m == 1 && return [one(Tr)]
+    foldr(1:m-1; init=[one(Tr)]) do k, p_tail
+        pk = -dot(@view(R[k, (k+1):m]), p_tail) / R[k, k]
+        [pk; p_tail]
+    end
+end
+
+function normalized_nullspace_qr(M::SparseMatrixCSC{T}) where T
     m = size(M, 1)
-    p = zeros(m)
-    F = qr(M)   # QR decomposition
+    Md = _use_dense_ad_eltype(T) ? Matrix(M) : M
+    F = qr(Md)   # dense QR for ForwardDiff.Dual (sparse qr stacks)
     R = Matrix(F.R)  # convert to dense once to avoid repeated sparse slicing in back substitution
-    # Back substitution to solve R*p = 0
-    p[end] = 1.0
-    for i in 1:m-1
-        p[m-i] = -dot(@view(R[m-i, m-i+1:end]), @view(p[m-i+1:end])) / R[m-i, m-i]
-    end
-    # Permute elements according to sparse matrix result
-    pp = copy(p)
-    for i in eachindex(p)
-        pp[F.pcol[i]] = p[i]
-    end
+    p = _backsub_upper_tri_one(R, m)
+    pp = p[invperm(F.pcol)]
     max.(pp / sum(pp), 0)
 end
 
@@ -388,7 +406,7 @@ function normalized_nullspace(M::SparseMatrixCSC)
     if all(isfinite, v) && (s = sum(v); isfinite(s) && s != 0)
         return v
     end
-    normalized_nullspace_svd(M)
+    _nullspace_robust_fallback(M)
 end
 
 """
@@ -407,7 +425,8 @@ is linearly dependent on the others.
 Output is clipped and renormalized like [`normalized_nullspace`](@ref): negative
 entries from roundoff are projected with `max(·,0)` and the vector is rescaled to
 sum to 1. If the augmented system is singular or non-finite, falls back to
-[`normalized_nullspace_svd`](@ref) (then [`pullback_normalized_nullspace_augmented`](@ref) errors).
+[`normalized_nullspace_svd`](@ref) for `Float32`/`Float64`, or dense [`normalized_nullspace_qr`](@ref)
+for `ForwardDiff.Dual` (SVD is unavailable). [`pullback_normalized_nullspace_augmented`](@ref) errors on any fallback.
 
 # See also
 - [`normalized_nullspace`](@ref) — fast QR default for plain `Float64` use.
@@ -417,7 +436,7 @@ function normalized_nullspace_augmented(M::SparseMatrixCSC{T}) where T
     n == 0 && return T[]
     n == 1 && return ones(T, 1)
     r = _augmented_nullspace_try(M, n)
-    return r === nothing ? normalized_nullspace_svd(M) : r.out
+    return r === nothing ? _nullspace_robust_fallback(M) : r.out
 end
 
 """
@@ -428,11 +447,11 @@ On success, returns `(; out, A, p, s)` where `out` is the normalized steady stat
 Returns `nothing` if the augmented system fails (singular / non-finite).
 """
 function _augmented_nullspace_try(M::SparseMatrixCSC{T}, n::Int) where T
-    A = vcat(M[1:n-1, :], sparse(ones(T, 1, n)))
+    A = vcat(M[1:n-1, :], sparse(fill(one(T), 1, n)))
     # Dense RHS required: sparse `b` makes `A \\ b` error on some Julia versions
     b = vcat(zeros(T, n - 1), one(T))
     p = try
-        A \ b
+        _augmented_linear_solve(A, b)
     catch
         return nothing
     end
@@ -444,10 +463,10 @@ function _augmented_nullspace_try(M::SparseMatrixCSC{T}, n::Int) where T
     return (; out, A, p, s)
 end
 
-"""Returns `(output, augmented_path_ok)`; if `!augmented_path_ok`, output is from SVD."""
+"""Returns `(output, augmented_path_ok)`; if `!augmented_path_ok`, output is from SVD or dense QR (Dual)."""
 function _normalized_nullspace_augmented_core(M::SparseMatrixCSC, n::Int)
     r = _augmented_nullspace_try(M, n)
-    r === nothing ? (normalized_nullspace_svd(M), false) : (r.out, true)
+    r === nothing ? (_nullspace_robust_fallback(M), false) : (r.out, true)
 end
 
 """
@@ -515,7 +534,7 @@ function ChainRulesCore.rrule(::typeof(normalized_nullspace_augmented), M::Spars
     end
     r = _augmented_nullspace_try(M, n)
     if r === nothing
-        out = normalized_nullspace_svd(M)
+        out = _nullspace_robust_fallback(M)
         function normalized_nullspace_augmented_pullback_svd(ȳ)
             ChainRulesCore.unthunk(ȳ)
             throw(

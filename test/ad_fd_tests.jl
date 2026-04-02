@@ -41,6 +41,25 @@ end
     @test isapprox(z, fd; rtol=0.02, atol=1e-3)
 end
 
+@testset "benchmark_trace_compare: ForwardDiff vs finite-diff gradient agreement" begin
+    sc = StochasticGene.benchmark_inference_trace_gr2r2(seed=1, totaltime=80.0, ntrials=1)
+    r = StochasticGene.benchmark_trace_compare_forwarddiff_vs_finitediff(
+        sc; param_indices=[1, 2], nruns=1, warmup=true, fd_ε=1e-4,
+    )
+    @test r.gradient_max_abs_diff < 1e-5
+    @test r.gradient_max_rel_diff < 0.05
+end
+
+@testset "check_ad_gradient_feasibility: coupled trace + ForwardDiff path" begin
+    sc = StochasticGene.benchmark_inference_trace_coupled_3x3(seed=1, totaltime=10.0, ntrials=1)
+    StochasticGene.check_ad_gradient_feasibility(
+        sc.data, sc.model;
+        forwarddiff_through_likelihood=true,
+        zygote_through_likelihood=false,
+    )
+    @test StochasticGene.longest_trace_timesteps(sc.data) isa Union{Nothing,Int}
+end
+
 @testset "Zygote vs FD: steady_state_vector (solver=:augmented)" begin
     θ0 = Float64[1.5, 1.1]
     h(θ) = dot([0.2, 0.8], StochasticGene.steady_state_vector(twostate_generator(θ); solver=:augmented))

@@ -259,7 +259,9 @@ function _folder_path_quiet(folder::AbstractString, root::AbstractString, folder
     ispath(f) && return f
     f = joinpath(root, folder)
     ispath(f) && return f
-    joinpath(root, folderatetype, folder)
+    parts = splitpath(folder)
+    nested_under_type = !isempty(folderatetype) && length(parts) >= 1 && parts[1] == folderatetype
+    nested_under_type ? joinpath(root, folder) : joinpath(root, folderatetype, folder)
 end
 
 """
@@ -1460,13 +1462,23 @@ Returns the full path for a given folder, optionally creating the path if it doe
 
 # Returns
 - `String`: The full path for the given folder.
+
+If `folder` already begins with `folderatetype` as its first path component (e.g. `resultfolder="results/run-1"` with
+`folderatetype="results"`), the resolved path is `joinpath(root, folder)` only — never `root/results/results/...`.
 """
 function folder_path(folder::String, root::String, folderatetype::String=""; make=false)
     f = folder
     if ~ispath(folder) && ~isempty(folder)
         f = joinpath(root, folder)
         if ~ispath(f)
-            f = joinpath(root, folderatetype, folder)
+            # Avoid results/results/... when callers pass resultfolder="results/..." (already under results/)
+            parts = splitpath(folder)
+            nested_under_type = !isempty(folderatetype) && length(parts) >= 1 && parts[1] == folderatetype
+            f = if nested_under_type
+                joinpath(root, folder)
+            else
+                joinpath(root, folderatetype, folder)
+            end
             if ~ispath(f) && ~make
                 @warn "folder_path: no existing directory matched" folder=folder root=root folderatetype=folderatetype tried=f
             elseif ~ispath(f) && make

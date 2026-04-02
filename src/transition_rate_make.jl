@@ -1181,23 +1181,28 @@ Iterates `elements_base` (indexed by `rates[model][localindex]`) and
 `elements_coupling` (indexed by `coupling_rates[localindex]`).
 
 # Arguments
-- `rates::Vector{Vector{Float64}}`: per-model rate vectors.
-- `coupling_rates::Vector{Float64}`: precomputed `γ_k * base_rate_k` for each coupling.
+- `rates`: per-model rate vectors (e.g. `Vector{Vector{Float64}}` or `Vector{Vector{ForwardDiff.Dual{…}}}`; inner `eltype` may widen to `Real` under AD).
+- `coupling_rates`: precomputed `γ_k * base_rate_k` for each coupling.
 
 # Returns
-- `SparseMatrixCSC{Float64}`: the assembled T matrix.
+- `SparseMatrixCSC{T}`: the assembled T matrix with `T` the promoted scalar element type.
 """
 function make_mat_TC(components::TCoupledFullComponents,
-                     rates::Vector{Vector{Float64}},
-                     coupling_rates::Vector{Float64})
-    T = spzeros(Float64, components.N, components.N)
+                     rates::AbstractVector{<:AbstractVector{<:Real}},
+                     coupling_rates::AbstractVector{<:Real})
+    T = eltype(coupling_rates)
+    for rv in rates
+        T = promote_type(T, eltype(rv))
+    end
+    N = components.N
+    mat = spzeros(T, N, N)
     for e in components.elements_base
-        T[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
+        mat[e.a, e.b] += T(e.pm) * T(rates[e.idx.model][e.idx.localindex])
     end
     for e in components.elements_coupling
-        T[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
+        mat[e.a, e.b] += T(e.pm) * T(coupling_rates[e.idx.localindex])
     end
-    return T
+    return mat
 end
 
 """
