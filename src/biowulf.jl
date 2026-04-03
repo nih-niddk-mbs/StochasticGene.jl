@@ -1471,13 +1471,10 @@ function folder_path(folder::String, root::String, folderatetype::String=""; mak
     if ~ispath(folder) && ~isempty(folder)
         f = joinpath(root, folder)
         if ~ispath(f)
-            # Avoid results/results/... when callers pass resultfolder="results/..." (already under results/)
-            parts = splitpath(folder)
-            nested_under_type = !isempty(folderatetype) && length(parts) >= 1 && parts[1] == folderatetype
-            f = if nested_under_type
-                joinpath(root, folder)
-            else
-                joinpath(root, folderatetype, folder)
+            # Only prepend folderatetype if folder doesn't already start with it (prevents results/results nesting)
+            first_component = splitpath(folder)[1]
+            if isempty(folderatetype) || first_component != folderatetype
+                f = joinpath(root, folderatetype, folder)
             end
             if ~ispath(f) && ~make
                 @warn "folder_path: no existing directory matched" folder=folder root=root folderatetype=folderatetype tried=f

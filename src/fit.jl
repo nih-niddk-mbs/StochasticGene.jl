@@ -1865,6 +1865,7 @@ Create reporter components for RNA data analysis.
 - Used for steady-state RNA histogram analysis
 """
 function make_reporter_components(data::AbstractRNAData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    # `coupled_stack` is accepted for API compatibility with `load_model`, but RNA-only reporter assembly does not branch on it.
     reporter = onstates
     # Use nRNA_true from data (already computed in load_data)
     # For RNACountData: data.nRNA is already nRNA_true (computed using nhist_loss)
@@ -1908,6 +1909,7 @@ Create reporter components for RNA ON/OFF data analysis.
 - Used for combined RNA histogram and ON/OFF state analysis
 """
 function make_reporter_components(data::RNAOnOffData, transitions, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    # `coupled_stack` is accepted for API compatibility with `load_model`, but ON/OFF reporter assembly does not branch on it.
     if isempty(onstates)
         onstates = on_states(G, R, S, insertstep)
     else
@@ -1975,7 +1977,8 @@ Create reporter components for dwell time data analysis.
 - Creates appropriate components for dwell time distribution modeling
 - Used for analyzing time spent in different model states
 """
-function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[])
+function make_reporter_components(data::DwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; dttype_full=nothing, dwell_specs=[], coupled_stack::Symbol=:full)
+    # `coupled_stack` is accepted for API compatibility with `load_model`, but dwell-only reporter assembly does not branch on it.
     if !isempty(dwell_specs)
         make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, dwell_specs, coupling)
     else
@@ -2011,6 +2014,7 @@ Create reporter components for combined RNA and dwell time data analysis.
 - Used for comprehensive transcription analysis
 """
 function make_reporter_components(data::RNADwellTimeData, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber=1; coupled_stack::Symbol=:full)
+    # `coupled_stack` is accepted for API compatibility with `load_model`, but RNA+dwell reporter assembly does not branch on it.
     reporter, tcomponents = make_reporter_components_DT(transitions, G, R, S, insertstep, splicetype, onstates, data.DTtypes, coupling)
     # Use nRNA_true if available (from yield tuple), otherwise use observed nRNA
     nRNA_size = get_nRNA_true(data.yield, data.nRNA)
@@ -2478,9 +2482,11 @@ function load_model(data, r, rmean, fittedparam, fixedeffects, transitions, G, R
     end
     insertstep = normalize_insertstep(R, insertstep)
     reporter, components = if data isa DwellTimeData
-        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs)
-    else
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; dwell_specs=dwell_specs, coupled_stack=coupled_stack)
+    elseif data isa AbstractTraceData
         make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber; coupled_stack=coupled_stack)
+    else
+        make_reporter_components(data, transitions, G, R, S, insertstep, splicetype, onstates, decayrate, probfn, noisepriors, coupling, ejectnumber)
     end
 
     nrates = num_rates(transitions, R, S, insertstep)

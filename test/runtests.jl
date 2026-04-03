@@ -30,9 +30,14 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
-    @testset "AD smoke checks" begin
-        @test StochasticGene.test_ad_gradient_smoke()
-        @test StochasticGene.test_normalized_nullspace_augmented_pullback_fd()
+    @testset "RNA + ON/OFF + dwell" begin
+        h1, h2 = StochasticGene.test_fit_rnaonoff()
+        @test isapprox(h1, h2, rtol=0.05)
+
+        h1, h2 = StochasticGene.test_fit_rnadwelltime()
+        @test isapprox(h1, h2, rtol=0.3)
+
+        @test StochasticGene.test_load_model_keyword_compatibility()
     end
 
     @testset "get_rates_ad consistency" begin

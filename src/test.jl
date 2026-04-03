@@ -1231,6 +1231,45 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 0.3, 0.23, 0.02, 0.25, 0.17, 0.
 end
 
 """
+    test_load_model_keyword_compatibility(; method=Tsit5())
+
+Regression test for the `load_model(...; coupled_stack=...)` upstream path across non-trace
+histogram data. The keyword is meaningful only for trace stacks, but RNA / ON-OFF / RNA+dwell
+paths must accept the same upstream call without throwing a `MethodError`.
+"""
+function test_load_model_keyword_compatibility(; method=Tsit5())
+    checks = Bool[]
+
+    for stack in (:full, :legacy)
+        transitions_rna = ([1, 2], [2, 1])
+        r_rna = [0.02, 0.1, 0.5, 0.2]
+        data_rna = RNAData("compat", "test", 10, ones(11), 1.0)
+        rm_rna = prior_ratemean(transitions_rna, 1, 0, 1, r_rna[end], Float64[], mean_elongationtime(r_rna, transitions_rna, 1))
+        model_rna = load_model(data_rna, r_rna, rm_rna, collect(1:length(r_rna)-1), tuple(), transitions_rna, 2, 1, 0, 1, "", 1, 10.0, Int[], r_rna[end], 0.05, prob_Gaussian, Float64[], method, tuple(), tuple(), nothing; coupled_stack=stack)
+        push!(checks, model_rna.components isa MComponents)
+
+        transitions_onoff = ([1, 2], [2, 1])
+        r_onoff = [0.02, 0.1, 0.5, 0.2, 0.1, 0.01]
+        data_onoff = RNAOnOffData("compat", "test", 10, ones(11), collect(0.1:0.1:2.0), ones(20), ones(20), 1.0)
+        rm_onoff = prior_ratemean(transitions_onoff, 1, 1, 1, r_onoff[end], Float64[], mean_elongationtime(r_onoff, transitions_onoff, 1))
+        model_onoff = load_model(data_onoff, r_onoff, rm_onoff, collect(1:length(r_onoff)-1), tuple(), transitions_onoff, 2, 1, 1, 1, "", 1, 10.0, Int[], r_onoff[end], 0.05, prob_Gaussian, Float64[], method, tuple(), tuple(), nothing; coupled_stack=stack)
+        push!(checks, model_onoff.components isa MTAIComponents)
+
+        transitions_dt = ([1, 2], [2, 1], [2, 3], [3, 2])
+        r_dt = [0.038, 0.3, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.00231]
+        onstates_dt = [Int[], Int[], [2, 3], [2, 3]]
+        bins_dt = [collect(0.1:0.1:2.0) for _ in 1:4]
+        dwell_dt = [ones(length(bins_dt[1])) for _ in 1:4]
+        data_dt = RNADwellTimeData("compat", "test", 20, ones(21), bins_dt, dwell_dt, ["ON", "OFF", "ONG", "OFFG"], 1.0)
+        rm_dt = prior_ratemean(transitions_dt, 2, 2, 1, r_dt[end], Float64[], mean_elongationtime(r_dt, transitions_dt, 2))
+        model_dt = load_model(data_dt, r_dt, rm_dt, collect(1:length(r_dt)-1), tuple(), transitions_dt, 3, 2, 2, 1, "", 2, 10.0, onstates_dt, r_dt[end], 0.05, prob_Gaussian, Float64[], method, tuple(), tuple(), nothing; coupled_stack=stack)
+        push!(checks, model_dt.components isa MTComponents)
+    end
+
+    all(checks)
+end
+
+"""
     test_fit_trace(; G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, nchains)
 
 Fit a simulated trace dataset using the provided parameters and compare to the target.
