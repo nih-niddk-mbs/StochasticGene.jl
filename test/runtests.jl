@@ -27,6 +27,8 @@ using Test
 
         h1, h2 = StochasticGene.test_fit_rnadwelltime()
         @test isapprox(h1, h2, rtol=0.3)
+
+        @test StochasticGene.test_load_model_keyword_compatibility()
     end
 
     @testset "Traces (single-unit)" begin
