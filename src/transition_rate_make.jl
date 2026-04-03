@@ -1195,14 +1195,16 @@ function make_mat_TC(components::TCoupledFullComponents,
         T = promote_type(T, eltype(rv))
     end
     N = components.N
-    mat = spzeros(T, N, N)
-    for e in components.elements_base
-        mat[e.a, e.b] += T(e.pm) * T(rates[e.idx.model][e.idx.localindex])
-    end
-    for e in components.elements_coupling
-        mat[e.a, e.b] += T(e.pm) * T(coupling_rates[e.idx.localindex])
-    end
-    return mat
+    eb = components.elements_base
+    ec = components.elements_coupling
+    isempty(eb) && isempty(ec) && return spzeros(T, N, N)
+    I = ChainRulesCore.@ignore_derivatives vcat([Int(e.a) for e in eb], [Int(e.a) for e in ec])
+    J = ChainRulesCore.@ignore_derivatives vcat([Int(e.b) for e in eb], [Int(e.b) for e in ec])
+    V = vcat(
+        [T(e.pm) * T(rates[e.idx.model][e.idx.localindex]) for e in eb],
+        [T(e.pm) * T(coupling_rates[e.idx.localindex]) for e in ec],
+    )
+    return sparse(I, J, V, N, N)
 end
 
 """
@@ -1213,14 +1215,17 @@ Build the full T matrix from a `TDCoupledFullComponents` (same element loop as `
 function make_mat_TC(components::TDCoupledFullComponents,
                      rates::Vector{Vector{Float64}},
                      coupling_rates::Vector{Float64})
-    T = spzeros(Float64, components.N, components.N)
-    for e in components.elements_base
-        T[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
-    end
-    for e in components.elements_coupling
-        T[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
-    end
-    return T
+    N = components.N
+    eb = components.elements_base
+    ec = components.elements_coupling
+    isempty(eb) && isempty(ec) && return spzeros(Float64, N, N)
+    I = vcat([Int(e.a) for e in eb], [Int(e.a) for e in ec])
+    J = vcat([Int(e.b) for e in eb], [Int(e.b) for e in ec])
+    V = vcat(
+        [e.pm * rates[e.idx.model][e.idx.localindex] for e in eb],
+        [e.pm * coupling_rates[e.idx.localindex] for e in ec],
+    )
+    return sparse(I, J, V, N, N)
 end
 
 """
@@ -1231,14 +1236,17 @@ is T restricted to sojourn-state columns (transitions to non-sojourn states are 
 """
 function make_mat_TCD(components::TDCoupledFullComponents, unit::Int, dtype::Int,
                       rates::Vector{Vector{Float64}}, coupling_rates::Vector{Float64})
-    TD = spzeros(Float64, components.N, components.N)
-    for e in components.elementsTD_base[unit][dtype]
-        TD[e.a, e.b] += e.pm * rates[e.idx.model][e.idx.localindex]
-    end
-    for e in components.elementsTD_coupling[unit][dtype]
-        TD[e.a, e.b] += e.pm * coupling_rates[e.idx.localindex]
-    end
-    return TD
+    elems_base = components.elementsTD_base[unit][dtype]
+    elems_cpl = components.elementsTD_coupling[unit][dtype]
+    N = components.N
+    isempty(elems_base) && isempty(elems_cpl) && return spzeros(Float64, N, N)
+    I = vcat([Int(e.a) for e in elems_base], [Int(e.a) for e in elems_cpl])
+    J = vcat([Int(e.b) for e in elems_base], [Int(e.b) for e in elems_cpl])
+    V = vcat(
+        [e.pm * rates[e.idx.model][e.idx.localindex] for e in elems_base],
+        [e.pm * coupling_rates[e.idx.localindex] for e in elems_cpl],
+    )
+    return sparse(I, J, V, N, N)
 end
 
 """

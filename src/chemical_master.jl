@@ -7,15 +7,43 @@
 
 using ForwardDiff
 
-"""Sparse `\\` / sparse `qr` / `svd` use LAPACK and do not support `ForwardDiff.Dual`; use dense QR or dense `\\` instead."""
-_use_dense_ad_eltype(::Type{T}) where {T<:Real} = T <: ForwardDiff.Dual
+"""Sparse `\\` / sparse `qr` / `svd` use LAPACK and do not support `ForwardDiff.Dual`; abstract `Real` eltypes can also hide dual numbers, so route both cases through dense generic linear algebra."""
+_use_dense_ad_eltype(::Type{T}) where {T<:Real} = !isconcretetype(T) || T <: ForwardDiff.Dual
+
+function _concrete_value_eltype(vals)
+    isempty(vals) && return Float64
+    T = typeof(first(vals))
+    for x in Iterators.drop(vals, 1)
+        T = promote_type(T, typeof(x))
+    end
+    return T
+end
+
+function _dense_generic_matrix(M::SparseMatrixCSC)
+    Tv = _concrete_value_eltype(nonzeros(M))
+    D = zeros(Tv, size(M))
+    rows, cols, vals = findnz(M)
+    @inbounds for k in eachindex(vals)
+        D[rows[k], cols[k]] = vals[k]
+    end
+    return D
+end
+
+function _dense_generic_vector(v::AbstractVector)
+    Tv = _concrete_value_eltype(v)
+    out = Vector{Tv}(undef, length(v))
+    @inbounds for i in eachindex(v)
+        out[i] = v[i]
+    end
+    return out
+end
 
 function _nullspace_robust_fallback(M::SparseMatrixCSC{T}) where T
     _use_dense_ad_eltype(T) ? normalized_nullspace_qr(M) : normalized_nullspace_svd(M)
 end
 
 function _augmented_linear_solve(A::SparseMatrixCSC{T}, b::AbstractVector) where T
-    _use_dense_ad_eltype(T) && return Matrix(A) \ b
+    _use_dense_ad_eltype(T) && return _dense_generic_matrix(A) \ _dense_generic_vector(b)
     return A \ b
 end
 
@@ -367,8 +395,8 @@ end
 
 function normalized_nullspace_qr(M::SparseMatrixCSC{T}) where T
     m = size(M, 1)
-    Md = _use_dense_ad_eltype(T) ? Matrix(M) : M
-    F = qr(Md)   # dense QR for ForwardDiff.Dual (sparse qr stacks)
+    Md = _use_dense_ad_eltype(T) ? _dense_generic_matrix(M) : M
+    F = qr(Md)   # dense QR for ForwardDiff.Dual / abstract Real paths
     R = Matrix(F.R)  # convert to dense once to avoid repeated sparse slicing in back substitution
     p = _backsub_upper_tri_one(R, m)
     pp = p[invperm(F.pcol)]
@@ -384,7 +412,7 @@ More expensive than QR but numerically safer; useful as a
 fallback and for benchmarking.
 """
 function normalized_nullspace_svd(M::SparseMatrixCSC)
-    Md = Matrix(M)
+    Md = !isconcretetype(eltype(M)) ? _dense_generic_matrix(M) : Matrix(M)
     Fsvd = svd(Md)
     v = Fsvd.V[:, end]  # smallest singular value (svd sorts descending)
     s = sum(v)

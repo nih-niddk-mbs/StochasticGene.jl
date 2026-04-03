@@ -3,12 +3,10 @@
 # runtests.jl
 #
 # Role: **orchestrate** `Pkg.test()` and **assert** outcomes. Reusable scenarios and
-# computations live in `src/test.jl` as `test_*` functions so you can run the same checks
-# interactively (e.g. `using StochasticGene; test_fit_simrna()`).
+# computations called from this file live in `src/test.jl` as exported `test_*` helpers,
+# so each check can also be rerun interactively (e.g. `using StochasticGene; test_fit_simrna()`).
 #
-# Additional focused suites (`ad_fd_tests.jl`, `get_rates_ad_tests.jl`, `nuts_fit_tests.jl`)
-# live under `test/` for Zygote/FD and short NUTS smoke tests; they can be folded into
-# `src/test.jl` over time if you want a single entry point for everything.
+# Standalone files under `test/` are developer-focused and are not included here.
 #
 # Default `Pkg.test()` runs AD checks and other fast tests only. Long MCMC / fit
 # integration tests are gated: set environment variable
@@ -23,10 +21,6 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
 
 @testset "StochasticGene" begin
 
-    include("ad_fd_tests.jl")
-    include("get_rates_ad_tests.jl")
-    include("nuts_fit_tests.jl")
-
     @testset "maxtime_seconds" begin
         @test StochasticGene.maxtime_seconds(3600) == 3600.0
         @test StochasticGene.maxtime_seconds(3600.0) == 3600.0
@@ -36,8 +30,17 @@ const FULL_TESTS = get(ENV, "STOCHASTICGENE_FULL_TESTS", "0") == "1"
         @test StochasticGene.maxtime_seconds(" 1.5h ") == 5400.0
     end
 
-    @testset "normalized_nullspace_augmented pullback (FD check)" begin
+    @testset "AD smoke checks" begin
+        @test StochasticGene.test_ad_gradient_smoke()
         @test StochasticGene.test_normalized_nullspace_augmented_pullback_fd()
+    end
+
+    @testset "get_rates_ad consistency" begin
+        @test StochasticGene.test_get_rates_ad_consistency()
+    end
+
+    @testset "run_nuts_fit smoke" begin
+        @test StochasticGene.test_run_nuts_fit_smoke()
     end
 
     if FULL_TESTS

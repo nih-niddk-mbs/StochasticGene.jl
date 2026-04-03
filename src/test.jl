@@ -1463,7 +1463,250 @@ function test_trace_specs_utilities()
     return length(sp) == 2 && sp[1].unit == 1 && sp[2].unit == 2 && sp[1].interval == 1.0
 end
 
+function _test_twostate_generator(θ::AbstractVector{T}) where {T}
+    length(θ) == 2 || throw(ArgumentError("expected length-2 rate vector"))
+    θ1, θ2 = θ[1], θ[2]
+    sparse(Int[1, 2, 1, 2], Int[1, 1, 2, 2], T[-θ2, θ2, θ1, -θ1], 2, 2)
+end
+
+function _test_central_grad(f, x::AbstractVector{<:Real}; ε::Float64=1e-6)
+    g = Vector{Float64}(undef, length(x))
+    δ = zeros(length(x))
+    for i in eachindex(x)
+        δ[i] = ε
+        g[i] = (f(x .+ δ) - f(x .- δ)) / (2ε)
+        δ[i] = 0.0
+    end
+    return g
+end
+
+"""
+    test_ad_gradient_smoke(; ε=1e-6, rtol=0.02, atol=1e-3)
+
+Lightweight AD installation check used by `test/runtests.jl`.
+Verifies a few small augmented steady-state derivatives against central finite differences.
+"""
+function test_ad_gradient_smoke(; ε::Float64=1e-6, rtol::Float64=0.02, atol::Float64=1e-3)
+    θ0 = Float64[1.2, 0.7]
+    f(θ) = sum(normalized_nullspace_augmented(_test_twostate_generator(θ)))
+    z = Zygote.gradient(f, θ0)[1]
+    fd = _test_central_grad(f, θ0; ε=ε)
+    isapprox(z, fd; rtol=rtol, atol=atol) || return false
+
+    w = Float64[0.2, 0.8]
+    g(θ) = dot(w, steady_state_vector(_test_twostate_generator(θ); solver=:augmented))
+    zg = Zygote.gradient(g, θ0)[1]
+    fdg = _test_central_grad(g, θ0; ε=ε)
+    isapprox(zg, fdg; rtol=rtol, atol=atol) || return false
+
+    return true
+end
+
+"""
+    test_get_rates_ad_consistency(; ε=1e-4)
+
+Smoke-test the AD-friendly rate reconstruction helpers used by histogram and trace likelihoods.
+Returns `true` when fixed effects, `get_rates_ad`, and `predictedfn(...; rates_fn=get_rates_ad)`
+match their non-AD counterparts on short GM / GRSM examples.
+"""
+function test_get_rates_ad_consistency(; ε::Float64=1e-4)
+    r = Float64[0.1, 0.2, 0.3, 0.4, 0.5]
+    fixed_rates(copy(r), tuple()) ≈ fixed_rates_ad(r, tuple()) || return false
+    fe = ([1, 3, 4],)
+    fixed_rates(copy(r), fe) ≈ fixed_rates_ad(r, fe) || return false
+    fe2 = ([2, 4], [1, 3, 5])
+    fixed_rates(copy(r), fe2) ≈ fixed_rates_ad(r, fe2) || return false
+
+    transitions = ([1, 2], [2, 1])
+    G = 2
+    rtarget = [0.33, 0.19, 20.5, 1.0]
+    nRNA = 60
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=20_000, nalleles=2)[1]
+    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0, [])
+    rinit = [0.1, 0.1, 0.1, 1.0]
+    fittedparam = [1, 2, 3]
+    model = load_model(
+        data, rinit, prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0),
+        fittedparam, tuple(), transitions, G, 0, 0, 0, "", 2, 10.0, Int[], rtarget[end], 0.02,
+        prob_Gaussian, [], 1, tuple(), tuple(), nothing,
+    )
+    θ = Vector{Float64}(get_param(model))
+    get_rates(θ, model) ≈ get_rates_ad(θ, model) || return false
+    p1 = predictedfn(θ, data, model; steady_state_solver=:augmented, rates_fn=get_rates)
+    p2 = predictedfn(θ, data, model; steady_state_solver=:augmented, rates_fn=get_rates_ad)
+    p1 ≈ p2 || return false
+
+    R = 1
+    S = 1
+    insertstep = 1
+    rtarget2 = [0.02, 0.1, 0.5, 0.2, 0.1, 0.01]
+    nhist = 24
+    bins = collect(1:1.0:200.0)
+    hs = simulator(
+        rtarget2, transitions, G, R, S, insertstep;
+        nalleles=2,
+        nhist=nhist,
+        totalsteps=80_000,
+        bins=bins,
+    )
+    hRNA = div.(hs[1], 30)
+    data2 = RNAOnOffData("test", "test", nhist, hRNA, bins, hs[2], hs[3], 1.0)
+    rinit2 = fill(0.01, num_rates(transitions, R, S, insertstep))
+    fittedparam2 = collect(1:length(rtarget2) - 1)
+    model2 = load_model(
+        data2,
+        rinit2,
+        prior_ratemean(transitions, R, S, insertstep, rtarget2[end], [], mean_elongationtime(rtarget2, transitions, R)),
+        fittedparam2,
+        tuple(),
+        transitions,
+        G,
+        R,
+        S,
+        insertstep,
+        "",
+        2,
+        10.0,
+        Int[],
+        rtarget2[end],
+        0.05,
+        prob_Gaussian,
+        [],
+        1,
+        tuple(),
+        tuple(),
+        nothing,
+    )
+    θ2 = Vector{Float64}(get_param(model2))
+    get_rates(θ2, model2) ≈ get_rates_ad(θ2, model2) || return false
+    q1 = predictedfn(θ2, data2, model2; steady_state_solver=:augmented, rates_fn=get_rates)
+    q2 = predictedfn(θ2, data2, model2; steady_state_solver=:augmented, rates_fn=get_rates_ad)
+    q1 ≈ q2 || return false
+
+    fsum(θv) = sum(get_rates_ad(θv, model))
+    zg = Zygote.gradient(fsum, θ)[1]
+    fdg = _test_central_grad(fsum, θ; ε=ε)
+    isapprox(zg, fdg; rtol=1e-3, atol=1e-3) || return false
+
+    return true
+end
+
+"""
+    test_run_nuts_fit_smoke(; seed=42, n_samples=12, n_adapts=12)
+
+Short finite-difference NUTS smoke test used by `test/runtests.jl`.
+Returns `true` when the returned fit/statistics shapes match the expected `run_mh`-style layout.
+"""
+function test_run_nuts_fit_smoke(; seed::Int=42, n_samples::Int=12, n_adapts::Int=12)
+    transitions = ([1, 2], [2, 1])
+    G = 2
+    rtarget = [0.33, 0.19, 20.5, 1.0]
+    nRNA = 40
+    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=8_000, nalleles=2)[1]
+    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0, [])
+    rinit = [0.1, 0.1, 0.1, 1.0]
+    fittedparam = [1, 2, 3]
+    model = load_model(
+        data, rinit, prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0),
+        fittedparam, tuple(), transitions, G, 0, 0, 0, "", 2, 10.0, Int[], rtarget[end], 0.02,
+        prob_Gaussian, [], 1, tuple(), tuple(), nothing,
+    )
+    opts = NUTSOptions(
+        ;
+        n_samples=n_samples,
+        n_adapts=n_adapts,
+        δ=0.8,
+        gradient=:finite,
+        fd_ε=1e-4,
+        verbose=false,
+        progress=false,
+    )
+    rng = MersenneTwister(seed)
+    fits, stats, measures, nuts_info = run_nuts_fit(
+        data, model, opts;
+        rng=rng,
+        steady_state_solver=:augmented,
+    )
+    size(fits.param, 2) == n_samples || return false
+    length(fits.ll) == n_samples || return false
+    fits.total == opts.n_adapts + n_samples || return false
+    length(stats.meanparam) == size(fits.param, 1) || return false
+    measures.waic isa Tuple || return false
+    length(measures.ess) == size(fits.param, 1) || return false
+    haskey(nuts_info, :nuts_stats) || return false
+    haskey(nuts_info, :initial_θ) || return false
+
+    out = run_NUTS(data, model, opts; rng=MersenneTwister(seed), steady_state_solver=:augmented)
+    size(out[1].param, 2) == n_samples || return false
+    return true
+end
+
 ### end of functions used in runtest
+
+### developer-only benchmark helpers (not called by `runtests.jl`)
+
+"""
+    test_trace_subset_benchmark_keyword_bundle(; kwargs...)
+
+Smoke-test the trace subset benchmark helpers with one shared keyword bundle,
+including `fd_ε`. The finite-difference path uses `fd_ε`; the ForwardDiff and
+Zygote subset benchmark helpers should accept it for API compatibility.
+
+Use `scenario=:gr2r2` for a fast default smoke test or `scenario=:coupled_3x3`
+to reproduce the uploaded coupled benchmark shape.
+
+Returns a `NamedTuple` with `forwarddiff`, `finitediff`, and `zygote` results.
+"""
+function test_trace_subset_benchmark_keyword_bundle(
+    ;
+    scenario::Symbol=:gr2r2,
+    seed::Int=2,
+    totaltime::Float64=40.0,
+    ntrials::Int=1,
+    interval::Float64=5 / 3,
+    fittedparam::AbstractVector{<:Integer}=Int[1, 2, 3],
+    param_indices::AbstractVector{<:Integer}=Int[1],
+    nruns::Int=1,
+    warmup::Bool=false,
+    steady_state_solver::Symbol=:augmented,
+    hmm_checkpoint_steps::Union{Nothing,Integer}=8,
+    fd_ε::Float64=1e-4,
+)
+    scen = if scenario === :gr2r2
+        benchmark_inference_trace_gr2r2(
+            ;
+            seed=seed,
+            totaltime=totaltime,
+            ntrials=ntrials,
+            interval=interval,
+            fittedparam=collect(Int, fittedparam),
+        )
+    elseif scenario === :coupled_3x3
+        benchmark_inference_trace_coupled_3x3(
+            ;
+            seed=seed,
+            totaltime=totaltime,
+            ntrials=ntrials,
+            interval=interval,
+            fittedparam=collect(Int, fittedparam),
+        )
+    else
+        throw(ArgumentError("scenario must be :gr2r2 or :coupled_3x3 (got $(scenario))"))
+    end
+    kw = (
+        ;
+        param_indices=collect(Int, param_indices),
+        nruns=nruns,
+        warmup=warmup,
+        steady_state_solver=steady_state_solver,
+        hmm_checkpoint_steps=hmm_checkpoint_steps,
+        fd_ε=fd_ε,
+    )
+    forwarddiff = benchmark_trace_forwarddiff_gradient(scen; kw...)
+    finitediff = benchmark_trace_finitediff_gradient(scen; kw...)
+    zygote = benchmark_trace_zygote_subset_gradient(scen; kw...)
+    return (; forwarddiff, finitediff, zygote)
+end
 
 ### functions to be used in the future
 """
@@ -3306,6 +3549,11 @@ function benchmark_inference_run_nuts_parallel(
             end
             res
         end
+        for r in results
+            r isa Distributed.RemoteException && throw(r)
+            r isa Exception && throw(r)
+            r isa Tuple || throw(ErrorException("benchmark_inference_run_nuts_parallel: expected each chain result to be a tuple from run_nuts_fit, got $(typeof(r))"))
+        end
         fits_vec = [r[1] for r in results]
         merged = merge_fit(fits_vec)
         stats = compute_stats(merged.param, model)
@@ -3627,11 +3875,15 @@ function _benchmark_trace_ll_subparams(
     steady_state_solver::Symbol,
     hmm_checkpoint_steps::Union{Nothing,Integer},
 )
-    T = promote_type(Float64, eltype(u))
-    θc = T.(θ)
-    for j in eachindex(idx)
-        θc[idx[j]] = u[j]
-    end
+    seed = first(u)
+    θbase = [θi + zero(seed) for θi in θ]
+    θc = [
+        begin
+            j = findfirst(==(i), idx)
+            j === nothing ? θbase[i] : u[j]
+        end
+        for i in eachindex(θbase)
+    ]
     return loglikelihood_ad(
         θc, data, model;
         steady_state_solver=steady_state_solver,
@@ -3701,6 +3953,7 @@ on `u ↦ loglikelihood_ad(θ with u embedded at param_indices, …)`.
 # Keywords
 - `param_indices`: indices into `θ` (1-based); default `nothing` → `1:min(3, length(θ))`.
 - `steady_state_solver` (default `:augmented`), `hmm_checkpoint_steps` (default `nothing`): passed to [`loglikelihood_ad`](@ref).
+- `fd_ε`: accepted for compatibility with shared benchmark keyword bundles; **ignored** by the ForwardDiff path.
 - `nruns`, `warmup`: same meaning as [`benchmark_trace_zygote_gradient`](@ref).
 
 # Returns
@@ -3720,10 +3973,12 @@ function benchmark_trace_forwarddiff_gradient(
     param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
     steady_state_solver::Symbol=:augmented,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    fd_ε::Union{Nothing,Float64}=nothing,
     nruns::Int=3,
     warmup::Bool=true,
 )
     nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    fd_ε !== nothing && fd_ε <= 0 && throw(ArgumentError("fd_ε must be positive when provided"))
     θ = Vector{Float64}(get_param(model))
     θlen = length(θ)
     idx = _benchmark_trace_resolve_param_indices(θlen, param_indices)
@@ -3844,6 +4099,7 @@ or memory-heavy; use [`hmm_checkpoint_steps`](@ref) and per-trace checkpointing 
 
 # Keywords
 Same as [`benchmark_trace_forwarddiff_gradient`](@ref) (`param_indices`, `steady_state_solver`, `hmm_checkpoint_steps`, `nruns`, `warmup`).
+`fd_ε` is also accepted for compatibility with shared keyword bundles and ignored on the Zygote path.
 
 # Returns
 `NamedTuple` with `method` (`:zygote`), `time_sec`, **`gradient`**, `param_indices`, `nparams`, `θlen`, `steady_state_solver`, `hmm_checkpoint_steps`.
@@ -3854,10 +4110,12 @@ function benchmark_trace_zygote_subset_gradient(
     param_indices::Union{Nothing,AbstractVector{<:Integer}}=nothing,
     steady_state_solver::Symbol=:augmented,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
+    fd_ε::Union{Nothing,Float64}=nothing,
     nruns::Int=3,
     warmup::Bool=true,
 )
     nruns < 1 && throw(ArgumentError("nruns must be >= 1"))
+    fd_ε !== nothing && fd_ε <= 0 && throw(ArgumentError("fd_ε must be positive when provided"))
     θ = Vector{Float64}(get_param(model))
     θlen = length(θ)
     idx = _benchmark_trace_resolve_param_indices(θlen, param_indices)

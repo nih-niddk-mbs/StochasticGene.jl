@@ -18,6 +18,14 @@ using Zygote: checkpointed
 """Use chunked Zygote checkpointing when trace length `T` exceeds chunk size `ck`."""
 @inline _use_hmm_checkpoint(ck, T) = ck !== nothing && ck > 0 && T > ck
 
+"""Checkpoint a zero-argument closure only on the reverse-mode HMM path."""
+@inline function _maybe_trace_checkpoint(f::Function, hmm_stack::Symbol)
+    hmm_stack === HMM_STACK_AD ? checkpointed(f) : f()
+end
+
+# Support both direct-call and do-block argument orders.
+@inline _maybe_trace_checkpoint(hmm_stack::Symbol, f::Function) = _maybe_trace_checkpoint(f, hmm_stack)
+
 """
     _norm_primal(x)
 
@@ -68,6 +76,15 @@ function _matrix_exp_taylor(A::AbstractMatrix{T}; order::Int=50) where T
     return S
 end
 
+function _dense_concrete_matrix(A::AbstractMatrix)
+    T = _concrete_value_eltype(A)
+    B = Matrix{T}(undef, size(A)...)
+    @inbounds for j in axes(A, 2), i in axes(A, 1)
+        B[i, j] = A[i, j]
+    end
+    return B
+end
+
 """
 `exp(A)` for matrices whose **eltype** is plain `Float32`/`Float64` only.
 
@@ -75,14 +92,15 @@ If `eltype(A)` is `Real`, `ForwardDiff.Dual`, etc., we must **not** call `Linear
 `opnorm`/`Float64` internally (`Float64(::Dual)` fails). Use Taylor + primal-norm scaling instead.
 """
 function _matrix_exp_dispatch(A::AbstractMatrix)
-    TA = eltype(A)
+    A_use = isconcretetype(eltype(A)) ? A : _dense_concrete_matrix(A)
+    TA = eltype(A_use)
     if TA <: Union{Float32, Float64}
-        return exp(A)
+        return exp(Matrix(A_use))
     end
-    vn = _matrix_opnorm1_primal(A)
+    vn = _matrix_opnorm1_primal(A_use)
     s = vn <= 0 ? 0 : max(0, ceil(Int, log2(vn)))
     scale = inv(Base.float(2^s))
-    Aₛ = A * scale
+    Aₛ = A_use * scale
     E = _matrix_exp_taylor(Aₛ)
     for _ in 1:s
         E = E * E
@@ -1108,7 +1126,8 @@ function forward(a::Vector{T1}, b::Vector{T2}, p0) where {T1 <: AbstractArray, T
 end
 
 function forward_ad_step(α_prev::AbstractVector, a::AbstractMatrix, b, N::Int, ϵ, t::Int)
-    α_new = [sum(α_prev[i] * a[i, j] * b[j, t] for i in 1:N) for j in 1:N]
+    bt = @view b[:, t]
+    α_new = (transpose(a) * α_prev) .* bt
     st = sum(α_new)
     if iszero(st)
         α_new = fill(one(st) / N, N)
@@ -1186,6 +1205,48 @@ function forward_ad(a::Matrix, b, p0, N, T)
     αs, cs, _ = foldl(recur, 2:T; init=([α1], [c1], α1))
     α = hcat(αs...)
     return α, cs
+end
+
+function _forward_ad_loglik_segment(α_prev, a, b, N, ϵ, rng::UnitRange{Int})
+    t = first(rng)
+    α, c = forward_ad_step(α_prev, a, b, N, ϵ, t)
+    ℓ = -log(c)
+    if first(rng) == last(rng)
+        return ℓ, α
+    end
+    ℓ_rest, α_last = _forward_ad_loglik_segment(α, a, b, N, ϵ, (t + 1):last(rng))
+    return ℓ + ℓ_rest, α_last
+end
+
+function _forward_ad_loglik(a::Matrix, b, p0, N, T)
+    Tϵ = promote_type(eltype(a), eltype(b), eltype(p0))
+    ϵ = eps(Tϵ)
+    b = max.(b, ϵ)
+    α1 = p0 .* b[:, 1]
+    s1 = sum(α1)
+    if iszero(s1)
+        α1 = fill(one(s1) / N, N)
+        s1 = one(s1)
+    end
+    c1 = inv(max(s1, ϵ))
+    α_prev = α1 .* c1
+    ℓ = -log(c1)
+    ck = hmm_zygote_checkpoint_steps()
+    if _use_hmm_checkpoint(ck, T)
+        t = 2
+        while t <= T
+            t_end = min(T, t + ck - 1)
+            ℓ_part, α_prev = checkpointed(_forward_ad_loglik_segment, α_prev, a, b, N, ϵ, t:t_end)
+            ℓ += ℓ_part
+            t = t_end + 1
+        end
+    else
+        for t in 2:T
+            α_prev, c = forward_ad_step(α_prev, a, b, N, ϵ, t)
+            ℓ += -log(c)
+        end
+    end
+    return ℓ
 end
 
 """
@@ -1306,13 +1367,8 @@ Compute forward variables for grid-based HMM using automatic differentiation-fri
 - `Tuple{Array{Float64,3}, Vector{Float64}}`: (α, C) where α is the forward variable array and C is the scaling parameter array
 """
 function forward_grid_ad_step(α_prev, a, a_grid, b, Nstate::Int, Ngrid::Int, t::Int)
-    α_new = [
-        sum(
-            α_prev[k, l] * a[k, i] * a_grid[l, j] * b[i, j, t]
-            for k in 1:Nstate for l in 1:Ngrid
-        )
-        for i in 1:Nstate, j in 1:Ngrid
-    ]
+    bt = @view b[:, :, t]
+    α_new = (transpose(a) * α_prev * a_grid) .* bt
     st = sum(α_new)
     c = 1 / st
     α_new = α_new .* c
@@ -1372,6 +1428,41 @@ function forward_grid_ad(a, a_grid, b, p0, Nstate, Ngrid, T)
     return α, cs
 end
 
+function _forward_grid_loglik_segment(α_prev, a, a_grid, b, Nstate::Int, Ngrid::Int, rng::UnitRange{Int})
+    t = first(rng)
+    α, c = forward_grid_ad_step(α_prev, a, a_grid, b, Nstate, Ngrid, t)
+    ℓ = -log(c)
+    if first(rng) == last(rng)
+        return ℓ, α
+    end
+    ℓ_rest, α_last = _forward_grid_loglik_segment(α, a, a_grid, b, Nstate, Ngrid, (t + 1):last(rng))
+    return ℓ + ℓ_rest, α_last
+end
+
+function _forward_grid_ad_loglik(a, a_grid, b, p0, Nstate::Int, Ngrid::Int, T::Int)
+    α1 = p0 .* b[:, :, 1]
+    s1 = sum(α1)
+    c1 = 1 / s1
+    α_prev = α1 .* c1
+    ℓ = -log(c1)
+    ck = hmm_zygote_checkpoint_steps()
+    if _use_hmm_checkpoint(ck, T)
+        t = 2
+        while t <= T
+            t_end = min(T, t + ck - 1)
+            ℓ_part, α_prev = checkpointed(_forward_grid_loglik_segment, α_prev, a, a_grid, b, Nstate, Ngrid, t:t_end)
+            ℓ += ℓ_part
+            t = t_end + 1
+        end
+    else
+        for t in 2:T
+            α_prev, c = forward_grid_ad_step(α_prev, a, a_grid, b, Nstate, Ngrid, t)
+            ℓ += -log(c)
+        end
+    end
+    return ℓ
+end
+
 # --- Parallel tracks: `HMM_STACK_MH` (MCMC) vs `HMM_STACK_AD` (Zygote); see `common.jl`. ---
 
 function _hmm_kolmogorov_fn(hmm_stack::Symbol)
@@ -1399,6 +1490,15 @@ function _hmm_forward(a::Matrix, b::Matrix, p0, ::Val{:zygote})
     end
 end
 
+function _hmm_forward_loglik(a::Matrix, b::Matrix, p0, ::Val{:fast})
+    _, C = forward(a, b, p0)
+    return -sum(log.(C))
+end
+function _hmm_forward_loglik(a::Matrix, b::Matrix, p0, ::Val{:zygote})
+    N, T = size(b)
+    return _forward_ad_loglik(a, b, p0, N, T)
+end
+
 function _hmm_forward_grid(a, a_grid, b, p0, ::Val{:fast})
     forward_grid(a, a_grid, b, p0)
 end
@@ -1412,6 +1512,15 @@ function _hmm_forward_grid(a, a_grid, b, p0, ::Val{:zygote})
     end
 end
 
+function _hmm_forward_grid_loglik(a, a_grid, b, p0, ::Val{:fast})
+    _, C = forward_grid(a, a_grid, b, p0)
+    return -sum(log.(C))
+end
+function _hmm_forward_grid_loglik(a, a_grid, b, p0, ::Val{:zygote})
+    Nstate, Ngrid, T = size(b)
+    return _forward_grid_ad_loglik(a, a_grid, b, p0, Nstate, Ngrid, T)
+end
+
 # --- Multi-trace Zygote: checkpoint each trace so reverse-mode does not retain one tape over all traces ---
 # Frame-wise checkpointing remains in `forward_ad_checkpointed` / `forward_grid_ad_checkpointed`.
 
@@ -1419,8 +1528,7 @@ end
 function _ll_hmm_single_trace_contrib(a, p0, d, trace, hmm_stack::Symbol)
     V = _hmm_stack_val(hmm_stack)
     b = _set_b_emission(trace, d, hmm_stack)
-    _, C = _hmm_forward(a, b, p0, V)
-    -sum(log.(C))
+    _hmm_forward_loglik(a, b, p0, V)
 end
 
 function _ll_hmm_noiseparam_trace_contrib(noiseparam_i, a, p0, reporter, trace, hmm_stack::Symbol)
@@ -1443,8 +1551,7 @@ end
 function _ll_hmm_grid_single_contrib(a, a_grid, p0, d, trace, hmm_stack::Symbol)
     V = _hmm_stack_val(hmm_stack)
     b = _set_b_emission(trace, d, hmm_stack)
-    _, C = _hmm_forward_grid(a, a_grid, b, p0, V)
-    -sum(log.(C))
+    _hmm_forward_grid_loglik(a, a_grid, b, p0, V)
 end
 
 function _ll_hmm_grid_noiseparam_contrib(noiseparams_i, Ngrid, a, a_grid, p0, reporter, trace_i, hmm_stack::Symbol)
@@ -1465,6 +1572,32 @@ function _ll_hmm_grid_r_coupling_contrib(r_i, coupling_i, noiseparams_i, pgrid, 
     d = set_d(noiseparams_i, reporter, Ngrid)
     _ll_hmm_grid_single_contrib(a, a_grid, p0, d, trace_i, hmm_stack)
 end
+
+function _tracewise_logpredictions(f::Function, traces, hmm_stack::Symbol)
+    ntr = length(traces)
+    ntr == 0 && return 0.0, Float64[]
+    ell1 = _maybe_trace_checkpoint(() -> f(traces[1]), hmm_stack)
+    foldl(Iterators.drop(traces, 1); init=(ell1, [ell1])) do (total, logpredictions), tr
+        ell = _maybe_trace_checkpoint(() -> f(tr), hmm_stack)
+        return total + ell, vcat(logpredictions, [ell])
+    end
+end
+
+_tracewise_logpredictions(traces, hmm_stack::Symbol, f::Function) =
+    _tracewise_logpredictions(f, traces, hmm_stack)
+
+function _tracewise_indexed_logpredictions(f::Function, traces, hmm_stack::Symbol)
+    ntr = length(traces)
+    ntr == 0 && return 0.0, Float64[]
+    ell1 = _maybe_trace_checkpoint(() -> f(1, traces[1]), hmm_stack)
+    foldl(zip(2:ntr, Iterators.drop(traces, 1)); init=(ell1, [ell1])) do (total, logpredictions), (i, tr)
+        ell = _maybe_trace_checkpoint(() -> f(i, tr), hmm_stack)
+        return total + ell, vcat(logpredictions, [ell])
+    end
+end
+
+_tracewise_indexed_logpredictions(traces, hmm_stack::Symbol, f::Function) =
+    _tracewise_indexed_logpredictions(f, traces, hmm_stack)
 
 """
     forward_grid(a, a_grid, b, p0)
@@ -1899,8 +2032,7 @@ function ll_off(trace::Tuple, noiseparams, reporter, components, a::Matrix, p0; 
         d = set_d_background(noiseparams, trace[5], reporter.per_state, reporter.probfn, components.nT)
         b = set_b_background(trace[2], d)
         V = _hmm_stack_val(hmm_stack)
-        _, C = _hmm_forward(a, b, p0, V)
-        return -sum(log.(C)) * trace[3] * trace[4] * length(trace[1])
+        return _hmm_forward_loglik(a, b, p0, V) * trace[3] * trace[4] * length(trace[1])
     else
         return 0.0
     end
@@ -1919,12 +2051,13 @@ function ll_off(trace::Tuple, rates, noiseparams, reporter::Vector, interval, co
     unit_inds = observed_units !== nothing ? observed_units : eachindex(rates)
     for (idx, i) in enumerate(unit_inds)
         if typeof(trace[3]) <: AbstractVector && length(trace[3]) >= idx && trace[3][idx] > 0.0
-            a, p0 = make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method; kolmogorov_forward_fn=kf)
+            a, p0 = _maybe_trace_checkpoint(hmm_stack) do
+                make_ap(rates[i], interval, components[i].elementsT, components[i].nT, method; kolmogorov_forward_fn=kf)
+            end
             rps = reduce_reporters_per_state(reporter[i].per_state, dims, i)
             d = set_d_background(noiseparams[i], trace[5][idx], rps, reporter[i].probfn, dims[i])
             b = set_b_background(trace[2][idx], d)
-            _, C = _hmm_forward(a, b, p0, V)
-            l += -sum(log.(C)) * trace[3][idx] * trace[4]
+            l += _hmm_forward_loglik(a, b, p0, V) * trace[3][idx] * trace[4]
         end
     end
     l * length(trace[1])
@@ -1939,12 +2072,10 @@ end
 function _ll_hmm(a, p0, d, traces; hmm_stack::Symbol=HMM_STACK_MH)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        # Zygote: checkpoint each trace so reverse-mode does not retain one tape over all traces.
-        logpredictions = [checkpointed(_ll_hmm_single_trace_contrib, a, p0, d, traces[i], hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_single_trace_contrib(a, p0, d, traces[1], hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_logpredictions(traces, hmm_stack) do tr
+            _ll_hmm_single_trace_contrib(a, p0, d, tr, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -1963,11 +2094,10 @@ end
 function _ll_hmm(noiseparams::Vector, a, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_noiseparam_trace_contrib, noiseparams[i], a, p0, reporter, traces[i], hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_noiseparam_trace_contrib(noiseparams[1], a, p0, reporter, traces[1], hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_noiseparam_trace_contrib(noiseparams[i], a, p0, reporter, tr, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2000,11 +2130,10 @@ function _ll_hmm(r::Vector, noiseparams::Vector, interval::Float64, components::
     kf = _hmm_kolmogorov_fn(hmm_stack)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_r_rates_trace_contrib, r[i], noiseparams[i], interval, components, method, reporter, traces[i], kf, hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_r_rates_trace_contrib(r[1], noiseparams[1], interval, components, method, reporter, traces[1], kf, hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_r_rates_trace_contrib(r[i], noiseparams[i], interval, components, method, reporter, tr, kf, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2026,11 +2155,10 @@ function _ll_hmm(r::Vector, couplingStrength::Vector, noiseparams::Vector, inter
     kf = _hmm_kolmogorov_fn(hmm_stack)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_r_coupling_trace_contrib, r[i], couplingStrength[i], noiseparams[i], interval, components, method, reporter, traces[i], kf, hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_r_coupling_trace_contrib(r[1], couplingStrength[1], noiseparams[1], interval, components, method, reporter, traces[1], kf, hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_r_coupling_trace_contrib(r[i], couplingStrength[i], noiseparams[i], interval, components, method, reporter, tr, kf, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2053,11 +2181,10 @@ end
 function _ll_hmm_grid(a::Matrix, a_grid::Matrix, p0::Vector, d, traces; hmm_stack::Symbol=HMM_STACK_MH)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_grid_single_contrib, a, a_grid, p0, d, traces[i], hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_grid_single_contrib(a, a_grid, p0, d, traces[1], hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_logpredictions(traces, hmm_stack) do tr
+            _ll_hmm_grid_single_contrib(a, a_grid, p0, d, tr, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2076,11 +2203,10 @@ end
 function _ll_hmm_grid(noiseparams::Vector, Ngrid::Int, a::Matrix, a_grid::Matrix, p0::Vector, reporter, traces; hmm_stack::Symbol=HMM_STACK_MH)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_grid_noiseparam_contrib, noiseparams[i], Ngrid, a, a_grid, p0, reporter, traces[i], hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_grid_noiseparam_contrib(noiseparams[1], Ngrid, a, a_grid, p0, reporter, traces[1], hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_grid_noiseparam_contrib(noiseparams[i], Ngrid, a, a_grid, p0, reporter, tr, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2101,11 +2227,10 @@ function _ll_hmm_grid(r::Vector, noiseparams::Vector, pgrid::Vector, Ngrid::Int,
     kf = _hmm_kolmogorov_fn(hmm_stack)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_grid_r_contrib, r[i], noiseparams[i], pgrid, Ngrid, interval, components, reporter, traces[i], method, kf, hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_grid_r_contrib(r[1], noiseparams[1], pgrid, Ngrid, interval, components, reporter, traces[1], method, kf, hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_grid_r_contrib(r[i], noiseparams[i], pgrid, Ngrid, interval, components, reporter, tr, method, kf, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2128,11 +2253,10 @@ function _ll_hmm_grid(r::Vector, couplingStrength::Vector, noiseparams::Vector, 
     kf = _hmm_kolmogorov_fn(hmm_stack)
     V = _hmm_stack_val(hmm_stack)
     ntr = length(traces)
-    if hmm_stack === HMM_STACK_AD && ntr > 1
-        logpredictions = [checkpointed(_ll_hmm_grid_r_coupling_contrib, r[i], couplingStrength[i], noiseparams[i], pgrid, Ngrid, interval, components, reporter, traces[i], method, kf, hmm_stack) for i in eachindex(traces)]
-    elseif hmm_stack === HMM_STACK_AD && ntr == 1
-        ell = _ll_hmm_grid_r_coupling_contrib(r[1], couplingStrength[1], noiseparams[1], pgrid, Ngrid, interval, components, reporter, traces[1], method, kf, hmm_stack)
-        logpredictions = [ell]
+    if hmm_stack === HMM_STACK_AD
+        return _tracewise_indexed_logpredictions(traces, hmm_stack) do i, tr
+            _ll_hmm_grid_r_coupling_contrib(r[i], couplingStrength[i], noiseparams[i], pgrid, Ngrid, interval, components, reporter, tr, method, kf, hmm_stack)
+        end
     else
         logpredictions = Array{Float64}(undef, ntr)
         for i in eachindex(traces)
@@ -2177,6 +2301,16 @@ end
 function ll_hmm(r::Tuple{T1,T2}, components::TComponents, reporter::HMMReporter, interval, trace, method=Tsit5(); steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH) where {T1,T2}
     rates, noiseparams = r
     kf = _hmm_kolmogorov_fn(hmm_stack)
+    if hmm_stack === HMM_STACK_AD
+        d = set_d(noiseparams, reporter)
+        ll, logpredictions = _tracewise_logpredictions(trace[1], hmm_stack) do tr
+            a, p0 = make_ap(rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
+            _ll_hmm_single_trace_contrib(a, p0, d, tr, hmm_stack)
+        end
+        a_off, p0_off = _maybe_trace_checkpoint(() -> make_ap(rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf), hmm_stack)
+        lb = ll_off(trace, noiseparams, reporter, components, a_off, p0_off; hmm_stack=hmm_stack)
+        return ll + lb, logpredictions
+    end
     a, p0 = make_ap(rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
     ll, logpredictions = _ll_hmm(a, p0, set_d(noiseparams, reporter), trace[1]; hmm_stack=hmm_stack)
     lb = ll_off(trace, noiseparams, reporter, components, a, p0; hmm_stack=hmm_stack)
@@ -2187,7 +2321,6 @@ end
 function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Vector{HMMReporter}, interval, trace, method=Tsit5(); observed_units=nothing, steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH) where {T1,T2,T3}
     rates, noiseparams, couplingStrength = r
     kf = _hmm_kolmogorov_fn(hmm_stack)
-    a, p0 = make_ap(rates, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
     if observed_units !== nothing
         noiseparams_obs = [noiseparams[i] for i in observed_units]
         reporter_obs = reporter[observed_units]
@@ -2195,6 +2328,15 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledComponents, reporter::Ve
     else
         d = set_d(noiseparams, reporter)
     end
+    if hmm_stack === HMM_STACK_AD
+        ll, logpredictions = _tracewise_logpredictions(trace[1], hmm_stack) do tr
+            a, p0 = make_ap(rates, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
+            _ll_hmm_single_trace_contrib(a, p0, d, tr, hmm_stack)
+        end
+        lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units, hmm_stack=hmm_stack)
+        return ll + lb, logpredictions
+    end
+    a, p0 = make_ap(rates, couplingStrength, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1]; hmm_stack=hmm_stack)
     lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units, hmm_stack=hmm_stack)
     ll + lb, logpredictions
@@ -2206,7 +2348,6 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter
     coupling_rates = [couplingStrength[k] * rates[components.targets[k][1]][components.targets[k][2]]
                       for k in eachindex(components.targets)]
     kf = _hmm_kolmogorov_fn(hmm_stack)
-    a, p0 = make_ap(rates, coupling_rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
     if observed_units !== nothing
         noiseparams_obs = [noiseparams[i] for i in observed_units]
         reporter_obs = reporter[observed_units]
@@ -2214,6 +2355,15 @@ function ll_hmm(r::Tuple{T1,T2,T3}, components::TCoupledFullComponents, reporter
     else
         d = set_d(noiseparams, reporter)
     end
+    if hmm_stack === HMM_STACK_AD
+        ll, logpredictions = _tracewise_logpredictions(trace[1], hmm_stack) do tr
+            a, p0 = make_ap(rates, coupling_rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
+            _ll_hmm_single_trace_contrib(a, p0, d, tr, hmm_stack)
+        end
+        lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units, hmm_stack=hmm_stack)
+        return ll + lb, logpredictions
+    end
+    a, p0 = make_ap(rates, coupling_rates, interval, components, method; steady_state_solver=steady_state_solver, kolmogorov_forward_fn=kf)
     ll, logpredictions = _ll_hmm(a, p0, d, trace[1]; hmm_stack=hmm_stack)
     lb = ll_off(trace, rates, noiseparams, reporter, interval, components, method; observed_units=observed_units, hmm_stack=hmm_stack)
     ll + lb, logpredictions

@@ -187,45 +187,31 @@ function prepare_rates_noiseparams(rates::AbstractArray, nrates::Int, reporter::
 end
 
 function prepare_rates_noiseparams(rates::Vector{T}, nrates::Int, reporter::HMMReporter) where {T<:AbstractArray}
-    r = Vector{Vector{Float64}}(undef, length(rates))
-    noiseparams = Vector{Vector{Float64}}(undef, length(rates))
-    k = 1
-    for i in eachindex(r)
-        r[i], noiseparams[i] = prepare_rates_noiseparams(rates[i], nrates, reporter)
-    end
+    parts = [prepare_rates_noiseparams(ri, nrates, reporter) for ri in rates]
+    r = [p[1] for p in parts]
+    noiseparams = [p[2] for p in parts]
     return r, noiseparams
 end
 
 function prepare_rates_noiseparams(rates::Vector, nrates::Vector{Int}, reporter::Vector{HMMReporter})
-    ET = eltype(rates)
-    r = Vector{Vector{ET}}(undef, length(nrates))
-    noiseparams = Vector{Vector{ET}}(undef, length(nrates))
-    k = 1
-    for i in eachindex(r)
-        n = nrates[i]
-        r[i] = rates[k:k+n-1]
-        k += n
-        noiseparams[i] = rates[k:k+reporter[i].n-1]
-        k += reporter[i].n
-    end
+    lens = nrates .+ getproperty.(reporter, :n)
+    starts = cumsum(vcat(1, lens[1:end-1]))
+    r = [rates[k:k+nrates[i]-1] for (i, k) in enumerate(starts)]
+    noiseparams = [rates[k+nrates[i]:k+nrates[i]+reporter[i].n-1] for (i, k) in enumerate(starts)]
     return r, noiseparams
 end
 
 function prepare_rates_noiseparams(rates::Vector{T}, nrates::Vector{Int}, reporter::Vector{HMMReporter}) where {T<:AbstractArray}
-    r = Vector{Vector{Vector{Float64}}}(undef, length(rates))
-    noiseparams = Vector{Vector{Vector{Float64}}}(undef, length(rates))
-    for i in eachindex(r)
-        r[i] = Vector{Vector{Float64}}(undef, length(nrates))
-        noiseparams[i] = Vector{Vector{Float64}}(undef, length(nrates))
-        k = 1
-        for j in eachindex(nrates)
-            n = nrates[j]
-            r[i][j] = rates[i][k:k+n-1]
-            k += n
-            noiseparams[i][j] = rates[i][k:k+reporter[j].n-1]
-            k += reporter[j].n
-        end
-    end
+    lens = nrates .+ getproperty.(reporter, :n)
+    starts = cumsum(vcat(1, lens[1:end-1]))
+    r = [
+        [rates[i][k:k+nrates[j]-1] for (j, k) in enumerate(starts)]
+        for i in eachindex(rates)
+    ]
+    noiseparams = [
+        [rates[i][k+nrates[j]:k+nrates[j]+reporter[j].n-1] for (j, k) in enumerate(starts)]
+        for i in eachindex(rates)
+    ]
     return r, noiseparams
 end
 
@@ -235,7 +221,7 @@ end
 """
 
 function prepare_coupling(rates::AbstractVector, couplingindices)
-    rates[couplingindices]
+    _typed_rate_copy(rates[couplingindices])
 end
 
 function prepare_coupling_inplace(rates::Vector{T}, couplingindices) where {T<:AbstractArray}
@@ -278,15 +264,19 @@ function prepare_rates_coupled(r, nrates, reporter, couplingindices)
     return rates, noiseparams, couplingStrength
 end
 
+function prepare_coupling_ad(rates::AbstractVector, couplingindices)
+    rates[couplingindices]
+end
+
+function prepare_rates_coupled_ad(r, nrates, reporter, couplingindices)
+    rates, noiseparams = prepare_rates_noiseparams(r, nrates, reporter)
+    couplingStrength = prepare_coupling_ad(r, couplingindices)
+    return rates, noiseparams, couplingStrength
+end
+
 function prepare_rates_coupled(rates::Vector, nrates::Vector{Int}, couplingindices)
-    ET = eltype(rates)
-    r = Vector{Vector{ET}}(undef, length(nrates))
-    k = 1
-    for i in eachindex(r)
-        n = nrates[i]
-        r[i] = rates[k:k+n-1]
-        k += n
-    end
+    starts = cumsum(vcat(1, nrates[1:end-1]))
+    r = [rates[k:k+nrates[i]-1] for (i, k) in enumerate(starts)]
     return r, rates[couplingindices]
 end
 
@@ -314,10 +304,10 @@ function prepare_rates_coupled_full(rates::Vector, nrates::Vector{Int},
                                     couplingindices, targets)
     # Per-unit base rates (same layout as prepare_rates_coupled)
     model_rates, couplingStrengths = prepare_rates_coupled(rates, nrates, couplingindices)
-    coupling_rates = similar(couplingStrengths)
-    @inbounds for k in eachindex(couplingStrengths)
-        coupling_rates[k] = couplingStrengths[k] * model_rates[targets[k][1]][targets[k][2]]
-    end
+    coupling_rates = [
+        couplingStrengths[k] * model_rates[targets[k][1]][targets[k][2]]
+        for k in eachindex(couplingStrengths)
+    ]
 
     return model_rates, coupling_rates
 end
@@ -463,12 +453,22 @@ function prepare_rates(param, model::AbstractGRSMmodel)
     prepare_rates_noiseparams(r, model.nrates, model.reporter)
 end
 
+function prepare_rates_ad(param, model::AbstractGRSMmodel)
+    r = get_rates_ad(param, model)
+    prepare_rates_noiseparams(r, model.nrates, model.reporter)
+end
+
 """
     prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
     r = get_rates(param, model)
     prepare_rates_coupled(r, model.nrates, model.reporter, model.trait.coupling.couplingindices)
+end
+
+function prepare_rates_ad(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling,)}}
+    r = get_rates_ad(param, model)
+    prepare_rates_coupled_ad(r, model.nrates, model.reporter, model.trait.coupling.couplingindices)
 end
 
 """
@@ -479,12 +479,32 @@ function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{
     prepare_rates_hierarchical(r, param, model.nrates, model.trait.hierarchical, model.reporter)
 end
 
+function prepare_rates_ad(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:hierarchical,)}}
+    r = get_rates_ad(param, model)
+    rshared, rindividual = prepare_rates_ad(r, model.trait.hierarchical)
+    pindividual, rhyper = prepare_hyper(r, param, model.trait.hierarchical)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, model.nrates, model.reporter)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, model.nrates, model.reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper
+end
+
 """
     prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
 """
 function prepare_rates(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
     r = get_rates(param, model)
     prepare_rates_coupled_hierarchical(r, param, model.nrates, model.trait.coupling, model.trait.hierarchical, model.reporter)
+end
+
+function prepare_rates_ad(param, model::AbstractGRSMmodel{T}) where {T<:NamedTuple{(:coupling, :hierarchical)}}
+    r = get_rates_ad(param, model)
+    rshared, rindividual = prepare_rates_ad(r, model.trait.hierarchical)
+    pindividual, rhyper = prepare_hyper(r, param, model.trait.hierarchical)
+    couplingshared = prepare_coupling_ad(rshared, model.trait.coupling.couplingindices)
+    couplingindividual = prepare_coupling_ad(rindividual, model.trait.coupling.couplingindices)
+    rshared, noiseshared = prepare_rates_noiseparams(rshared, model.nrates, model.reporter)
+    rindividual, noiseindividual = prepare_rates_noiseparams(rindividual, model.nrates, model.reporter)
+    return rshared, rindividual, noiseshared, noiseindividual, pindividual, rhyper, couplingshared, couplingindividual
 end
 
 """
@@ -729,7 +749,7 @@ function ll_hmm_trace(
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
     with_hmm_zygote_checkpoint(hmm_checkpoint_steps) do
-        r = prepare_rates(param, model)
+        r = hmm_stack === HMM_STACK_AD ? prepare_rates_ad(param, model) : prepare_rates(param, model)
         components = get_components(model, data)
         observed_units = isempty(data.units) ? nothing : data.units
         if !isnothing(model.trait) && haskey(model.trait, :grid)
@@ -1225,11 +1245,15 @@ end
 
 
 function apply_transform(p::AbstractVector, fs)
-    map((tf, x) -> tf(x), fs, p)
+    length(p) == length(fs) || throw(DimensionMismatch("apply_transform: length(p) != length(fs)"))
+    return [fs[i](p[i]) for i in eachindex(p, fs)]
 end
 
 function apply_transform(p::AbstractMatrix, fs)
-    hcat([map((tf, x) -> tf(x), fs, @view(p[:, i])) for i in 1:size(p, 2)]...)
+    size(p, 1) == length(fs) || throw(DimensionMismatch("apply_transform: size(p,1) != length(fs)"))
+    size(p, 2) == 0 && return Matrix{eltype(p)}(undef, size(p, 1), 0)
+    cols = [apply_transform(@view(p[:, j]), fs) for j in axes(p, 2)]
+    return reduce(hcat, cols)
 end
 
 """
@@ -1353,12 +1377,28 @@ end
 _rates_is_per_unit_vectors(rates) =
     rates isa AbstractVector && !isempty(rates) && eltype(rates) <: AbstractVector{<:Real}
 
+"""Concrete element type for a possibly abstract-typed rate container (e.g. `Vector{Real}` holding `Dual`s)."""
+function _concrete_rate_eltype(vals)
+    isempty(vals) && return Float64
+    T = typeof(first(vals))
+    for x in Iterators.drop(vals, 1)
+        T = promote_type(T, typeof(x))
+    end
+    return T
+end
+
+function _typed_rate_copy(vals::AbstractVector)
+    map(identity, vals)
+end
+
 """Merge `fittedparam` slots from `u` into base rates `r0` without mutating (AD-friendly)."""
 function _merge_param_into_rates(r0::AbstractVector, u::AbstractVector, fittedparam)
+    isempty(r0) && return _typed_rate_copy(r0)
+    seed = isempty(u) ? first(r0) : first(u)
     return [
         begin
             i = findfirst(==(k), fittedparam)
-            i === nothing ? r0[k] : u[i]
+            i === nothing ? (r0[k] + zero(seed)) : u[i]
         end for k in eachindex(r0)
     ]
 end
@@ -1370,8 +1410,8 @@ Same result as [`fixed_rates`](@ref), but implemented without in-place broadcast
 mutation so reverse-mode AD (e.g. Zygote) can differentiate through it.
 """
 function fixed_rates_ad(r::AbstractVector, fixedeffects)
-    isempty(fixedeffects) && return collect(r)
-    out = collect(r)
+    out = r
+    isempty(fixedeffects) && return out
     for effect in fixedeffects
         ref = out[effect[1]]
         slaves = effect[2:end]
