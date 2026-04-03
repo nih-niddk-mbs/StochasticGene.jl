@@ -1466,7 +1466,11 @@ function folder_path(folder::String, root::String, folderatetype::String=""; mak
     if ~ispath(folder) && ~isempty(folder)
         f = joinpath(root, folder)
         if ~ispath(f)
-            f = joinpath(root, folderatetype, folder)
+            # Only prepend folderatetype if folder doesn't already start with it (prevents results/results nesting)
+            first_component = splitpath(folder)[1]
+            if isempty(folderatetype) || first_component != folderatetype
+                f = joinpath(root, folderatetype, folder)
+            end
             if ~ispath(f) && ~make
                 @warn "folder_path: no existing directory matched" folder=folder root=root folderatetype=folderatetype tried=f
             elseif ~ispath(f) && make
