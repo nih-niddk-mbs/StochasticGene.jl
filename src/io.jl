@@ -2835,8 +2835,19 @@ Write fit measures into a file.
 function write_measures(file::String, fits::Fit, measures::Measures, dev, temp, data, model)
     f = open(file, "w")
     # Calculate n_obs based on data type
-    if is_histogram_compatible(data)
-        n_obs = sum(datahistogram(data))
+    if typeof(data) <: RNADwellTimeData
+        # For RNA dwell-time data: count RNA observations + assume 100 for normalized dwell PDFs
+        n_obs = Int(sum(data.histRNA))
+        for d in data.DwellTimes
+            s = sum(d)
+            if s ≈ 1.0  # Normalized PDF (sum to ~1.0)
+                n_obs += 100  # Default assumption for normalized dwell distributions
+            else
+                n_obs += Int(round(s))  # Use actual count if not normalized
+            end
+        end
+    elseif is_histogram_compatible(data)
+        n_obs = Int(sum(datahistogram(data)))
     elseif typeof(data) <: RNACountData
         n_obs = length(data.countsRNA)
     elseif typeof(data) <: AbstractTraceData
