@@ -90,8 +90,8 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `priormean=Float64[]`: mean rates of prior distribution (must set priors for all rates including those that are not fitted)
 - `priorcv=10.`: (vector or number) coefficient of variation(s) for the rate prior distributions, default is 10.
 - `probfn=prob_Gaussian`: probability function for HMM observation probability (i.e., noise distribution), tuple of functions for each unit, e.g. (prob_Gaussian, prob_Gaussian) for coupled models, use 1 for forced (e.g. one unit drives the other)
-- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution, if cv <= 0. then cv from previous run will be used
-- `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`. If you already include a `results/...` prefix in `resultfolder`, it is not doubled to `results/results/...` (see [`folder_path`](@ref)).
+- `propcv=0.01`: coefficient of variation (mean/std) of proposal distribution. If positive, uses this fixed value. If negative (e.g., `-0.01`), attempts to load the proposal covariance matrix from a previous fit with the same model. If loading succeeds, warmup is automatically skipped (even if `warmupsteps > 0` is set). If loading fails or file doesn't exist, falls back to `abs(propcv)` and warmup proceeds normally. Loading validates that model parameters match exactly (G, R, S, transitions, fittedparam, nalleles, etc.). This enables efficient proposal reuse when running multiple chains or extensions with expensive likelihood evaluations.
+- `resultfolder::String=test`: folder for results of MCMC run. Resolved with `root` as: if `joinpath(root, resultfolder)` exists that path is used, else `joinpath(root, "results", resultfolder)` is used (and created if missing). So results go under `root` or `root/results/`
 - `R=0`: number of pre-RNA steps (set to 0 for classic telegraph models)
 - `root="."`: name of root directory for project, e.g. "scRNA"
 - `samplesteps::Int=1000000`: number of MCMC sampling steps
@@ -107,7 +107,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
-- `warmupsteps=0`: MH **warmup** steps — discarded for inference; used to reduce initial-transient effects and (when applicable) adapt the proposal before retained sampling (see [`MHOptions`](@ref)).
+- `warmupsteps=0`: number of MCMC warmup steps to adapt proposal distribution covariance. Warmup runs before annealing and sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
@@ -1535,27 +1535,27 @@ function load_data(datatype, dttype, datapath, label, gene, datacond, traceinfo,
 
     if dt == :rna
         len, h = read_rna(gene, datacond, datapath)
-        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
+        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor
         return RNAData{typeof(len),typeof(h)}(label, gene, len, h, yield, units)
 
     elseif dt == :rnacount
         countsRNA, yield_vec, nRNA = read_rnacount(gene, datacond, datapath)
         min_yield = minimum(yield_vec)
-        nRNA_computed = min_yield < 1.0 ? nhist_loss(nRNA, min_yield) : nRNA
+        nRNA_computed = min_yield < 1.0 ? nhist_loss(nRNA, min_yield, max_nRNA=500) : nRNA
         return RNACountData(label, gene, nRNA_computed, countsRNA, yield_vec, units)
 
     elseif dt == :rnaonoff
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         LC = readfile(gene, datacond, datapath[2])
-        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
+        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor
         return RNAOnOffData(label, gene, len, h, LC[:, 1], LC[:, 2], LC[:, 3], yield, units)
 
     elseif dt == :rnadwelltime
         len, h = read_rna(gene, datacond, datapath[1])
         h = div.(h, temprna)
         bins, DT = read_dwelltimes(datapath[2:end])
-        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor)) : yieldfactor
+        yield = yieldfactor < 1.0 ? (yieldfactor, nhist_loss(len, yieldfactor, max_nRNA=500)) : yieldfactor
         return RNADwellTimeData(label, gene, len, h, bins, DT, dttype, yield, units)
 
     elseif dt == :dwelltime
@@ -1769,7 +1769,6 @@ Create reporter components for trace analysis with coupling support.
 - Used for fluorescence trace data modeling with optional coupling
 """
 function make_reporter_components(transitions::Tuple, G::Int, R::Int, S::Int, insertstep::Int, splicetype, onstates, probfn, noisepriors, coupling=tuple(); coupled_stack::Symbol=:full)
-    # `coupled_stack` is unused here (single-unit, uncoupled); accepted so `load_model` forwards it for all `AbstractTraceData`.
     nnoise = length(noisepriors)
     n = num_rates(transitions, R, S, insertstep)
     weightind = occursin("Mixture", "$(probfn)") ? n + nnoise : 0
@@ -3864,16 +3863,31 @@ Get proposal coefficient of variation from file or use default.
 """
 function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
     if propcv < 0.0
-        file = get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles)
-        if !isfile(file)
-            println(file, " does not exist")
-            return abs(propcv)
-        end
-        cv = read_bottom_float_block(file)
-        cv = 2.38^2 * cv / size(cv, 1)
-        if isposdef(cv)
-            return (cv, abs(propcv))
+        # Construct path to proposal covariance file
+        # Strip extension from param-stats path and use proposal-cov.jld2 instead
+        param_stats_file = get_resultfile("param-stats", infolder, label, gene, G, R, S, insertstep, nalleles)
+        proposal_cov_file = replace(param_stats_file, "param-stats" => "proposal-cov", r"\.(csv|txt)$" => ".jld2")
+        
+        # Try to load proposal covariance matrix if file exists
+        if isfile(proposal_cov_file)
+            try
+                covparam = load(proposal_cov_file, "covparam")
+                scale_factor = 2.38^2 / size(covparam, 1)
+                scaled_cov = scale_factor .* covparam
+                
+                if isposdef(scaled_cov)
+                    @info "Loaded proposal covariance from $proposal_cov_file"
+                    return (scaled_cov, abs(propcv))
+                else
+                    @warn "Loaded covariance not positive definite, using default proposal"
+                    return abs(propcv)
+                end
+            catch e
+                @warn "Failed to load proposal covariance from $proposal_cov_file: $e"
+                return abs(propcv)
+            end
         else
+            @debug "No proposal covariance file found at: $proposal_cov_file"
             return abs(propcv)
         end
     else

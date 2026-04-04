@@ -58,10 +58,49 @@ Under each **`resultfolder`**, names encode cell, condition, gene, model string 
 
 - **`rates_*.txt`** — posterior summaries and ML row (see file header / docs).
 - **`measures_*.txt`**, **`param-stats_*.txt`** — diagnostics and parameter summaries.
+- **`proposal-cov_*.jld2`** — proposal covariance matrix and metadata (see MCMC proposal & warmup below).
 - **`burst_*.txt`** — optional burst statistics when requested.
 - **`optimized_*.txt`** — optional optimizer output.
 
 Underscore **`_`** separates fields in filenames; avoid **`_`** inside user labels where the naming convention would become ambiguous.
+
+## MCMC proposal covariance and warmup
+
+When fitting expensive models (e.g., with ODE-based likelihood evaluation that takes minutes per step), proposal covariance reuse can significantly speed up workflows:
+
+### Proposal Covariance Reuse
+
+The `propcv` keyword controls the proposal distribution:
+
+- **`propcv=0.01` (positive)**: Use fixed coefficient of variation. MCMC will compute empirical covariance during warmup (if `warmupsteps > 0`) and save it to `proposal-cov_*.jld2`.
+- **`propcv=-0.01` (negative)**: Attempt to load covariance from `proposal-cov_*.jld2` if it exists and model parameters match exactly (G, R, S, transitions, fittedparam, nalleles all equal). 
+  - If **loading succeeds**: Warmup is **automatically skipped** (even if `warmupsteps > 0`), and sampling proceeds immediately with the loaded proposal.
+  - If **loading fails**: Falls back to `abs(propcv)` and warmup proceeds normally.
+
+**Workflow example:**
+```julia
+# First run: compute and save covariance
+fits1 = fit(; G=2, R=0, transitions=([1,2],[2,1]), 
+            propcv=0.01, warmupsteps=10000, ...)
+
+# Subsequent run: reuse covariance (warmup skipped automatically)
+fits2 = fit(; G=2, R=0, transitions=([1,2],[2,1]), 
+            propcv=-0.01, warmupsteps=10000, ...)  # warmup still specified but skipped
+```
+
+No need to remember to set `warmupsteps=0` on the second run — the presence of a loaded covariance automatically prevents warmup from running.
+
+### Adaptive Warmup
+
+When `warmupsteps > 0` and no covariance is loaded, the warmup phase adapts the proposal covariance to improve MCMC efficiency:
+
+- **Periodic Adaptation**: Adapts every `max(1000, samplesteps ÷ 3)` steps (typically 2–3 times per warmup).
+- **Acceptance Rate Targeting**: 
+  - Acceptance target scales with problem dimension: 44% (d=1) → 30% (d=5–20) → 23.4% (d>>1).
+  - If current rate < 15%, shrinks proposals; if > 40%, expands them.
+- **Time Allocation**: Warmup time is proportional to step count: `warmup_time = maxtime × (warmupsteps / total_steps)`. For expensive steps, increase `maxtime` or reduce `warmupsteps` if warmup times out before adaptation triggers.
+
+The saved covariance is stored as `proposal-cov_<name>.jld2` with metadata validation, ensuring proposals are only reused when model structure matches.
 
 ## Cluster workflows (pointer)
 

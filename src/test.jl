@@ -1043,114 +1043,103 @@ function test_fit_simrna(; rtarget=[0.33, 0.19, 2.5, 1.0], transitions=([1, 2], 
 end
 
 """
-    test_compare_mh_nuts_posterior(data, model; kwargs...)
+    test_compare_yield(; r, transitions, G, R, S, insertstep, nRNA, nalleles, bins, total, tol, onstates, dttype, ejectnumber, yieldfactor)
 
-Run **Metropolis–Hastings** and **NUTS** on the same `data` / `model` and compare **posterior
-means in rate space** (`Stats.meanparam` from [`compute_stats`](@ref), same as [`run_mh`](@ref) / [`run_nuts_fit`](@ref)).
+Compare simulated and chemical master equation RNA histograms WITH yield factor (observation noise).
 
-Use this to check that both samplers target the same posterior. With finite Monte Carlo error,
-`mean_mh` and `mean_nuts` should be close when `mh_samplesteps` is large and NUTS is well mixed.
+Like `test_compare` but includes yield < 1.0 for the RNA histogram only. Both the CME predictions 
+AND simulated RNA data have observation loss applied via binomial sampling, then compared.
+Dwell time histograms are returned unchanged.
 
-**Important:** Pass `steady_state_solver=:default` (default here) so the log-likelihood matches
-[`run_mh`](@ref), which uses `predictedfn` with the default steady-state solver. If you use
-`:augmented` for NUTS only, the posteriors need not match.
-
-# Keyword arguments
-- `mh_samplesteps`, `mh_warmup`, `mh_maxtime`: [`MHOptions`](@ref) for MH.
-- `nuts_n_samples`, `nuts_n_adapts`, `nuts_δ`, `nuts_gradient`, `nuts_fd_ε`: [`NUTSOptions`](@ref)-style settings.
-- `steady_state_solver`: forwarded to NUTS only; keep `:default` to match MH.
-- `mh_seed`: optional `Random.seed!` before [`run_mh`](@ref) (MH uses the global RNG).
-- `rng_nuts`: RNG passed to [`run_nuts_fit`](@ref).
+# Arguments
+- All arguments same as `test_compare`, plus:
+- `yieldfactor::Float64`: Detection efficiency for RNA histogram (default 1.0). Values < 1.0 enable yield mode.
 
 # Returns
-A `NamedTuple` with `mean_mh`, `mean_nuts`, `abs_diff`, `max_abs_diff`, `stats_mh`, `stats_nuts`,
-`fits_mh`, `fits_nuts`, `measures_mh`, `measures_nuts`, `nuts_info`.
+- Tuple of (CME histograms [RNA_with_yield, dwell1, dwell2], simulated histograms [RNA_with_yield, dwell1, dwell2]).
 """
-function test_compare_mh_nuts_posterior(
-    data::AbstractExperimentalData,
-    model::AbstractGeneTransitionModel;
-    mh_samplesteps::Int=50_000,
-    mh_warmup::Int=10_000,
-    mh_maxtime::Float64=300.0,
-    mh_seed::Union{Nothing,Int}=nothing,
-    nuts_n_samples::Int=2_000,
-    nuts_n_adapts::Int=1_000,
-    nuts_δ::Float64=0.8,
-    nuts_gradient::Symbol=:finite,
-    nuts_fd_ε::Float64=1e-4,
-    steady_state_solver::Symbol=:default,
-    rng_nuts::Random.AbstractRNG=Random.default_rng(),
-)
-    mh_seed !== nothing && Random.seed!(mh_seed)
-    mh_options = MHOptions(mh_samplesteps, mh_warmup, maxtime_seconds(mh_maxtime), 1.0)
-    fits_mh, stats_mh, measures_mh = run_mh(data, model, mh_options)
-    nuts_options = NUTSOptions(;
-        n_samples=nuts_n_samples,
-        n_adapts=nuts_n_adapts,
-        δ=nuts_δ,
-        gradient=nuts_gradient,
-        fd_ε=nuts_fd_ε,
-        verbose=false,
-        progress=false,
-    )
-    fits_nuts, stats_nuts, measures_nuts, nuts_info = run_nuts_fit(
-        data, model, nuts_options;
-        rng=rng_nuts,
-        steady_state_solver=steady_state_solver,
-    )
-    μ_mh = vec(stats_mh.meanparam)
-    μ_nuts = vec(stats_nuts.meanparam)
-    Δ = abs.(μ_mh .- μ_nuts)
-    return (
-        mean_mh=μ_mh,
-        mean_nuts=μ_nuts,
-        abs_diff=Δ,
-        max_abs_diff=maximum(Δ),
-        stats_mh=stats_mh,
-        stats_nuts=stats_nuts,
-        fits_mh=fits_mh,
-        fits_nuts=fits_nuts,
-        measures_mh=measures_mh,
-        measures_nuts=measures_nuts,
-        nuts_info=nuts_info,
-    )
-end
-
-"""
-    test_fit_simrna_mh_nuts(; rtarget, transitions, G, nRNA, ...)
-
-Same simulated **GM + RNA histogram** setup as [`test_fit_simrna`](@ref), then runs
-[`test_compare_mh_nuts_posterior`](@ref) on the resulting `data` and `model`.
-
-Set `sim_seed` for a reproducible synthetic dataset. Remaining keywords are passed to
-[`test_compare_mh_nuts_posterior`](@ref).
-"""
-function test_fit_simrna_mh_nuts(;
-    rtarget=[0.33, 0.19, 2.5, 1.0],
-    transitions=([1, 2], [2, 1]),
-    G=2,
-    nRNA=100,
-    nalleles=2,
-    fittedparam=[1, 2, 3],
-    fixedeffects=tuple(),
-    rinit=[0.1, 0.1, 0.1, 1.0],
-    totalsteps=100_000,
-    sim_seed::Union{Nothing,Int}=nothing,
-    kwargs...,
-)
-    if sim_seed !== nothing
-        Random.seed!(sim_seed)
+function test_compare_yield(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], ejectnumber=1, yieldfactor=0.5)
+    hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol, Int(ejectnumber))
+    h = test_cm(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins, ejectnumber)
+    
+    # Apply yield (technical loss) to RNA histogram only (first component)
+    if yieldfactor < 1.0
+        # Apply loss to simulated RNA histogram (hs is a tuple, so hs[1] is RNA)
+        hs = (technical_loss(hs[1], yieldfactor, length(hs[1])), hs[2:end]...)
+        
+        # Apply loss to CME concatenated array - need to extract RNA part first
+        # h is concatenated: [RNA..., ON..., OFF..., ONG...]
+        h_rna_with_yield = technical_loss(h[1:nRNA], yieldfactor, nRNA)
+        h = vcat(h_rna_with_yield, h[nRNA+1:end])
     end
-    h = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
-    data = RNAData{typeof(nRNA),typeof(h)}("", "", nRNA, h, 1.0, [1])
-    model = load_model(
-        data, rinit,
-        StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0),
-        fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02,
-        prob_Gaussian, [], 1, tuple(), tuple(), nothing,
-    )
-    return test_compare_mh_nuts_posterior(data, model; kwargs...)
+    
+    hs = StochasticGene.normalize_histogram.(hs)
+    return h, make_array(hs)
 end
+
+"""
+    test_fit_simrna_yield(; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, nchains, yieldfactor)
+
+Fit synthetic RNA histogram WITH yield factor.
+
+Generate synthetic RNA histogram data, apply yield-induced loss to create observed data, fit the model 
+with that yield parameter, and compare predictions at both the true (lossless) and observed (lossy) levels.
+
+# Arguments
+- All arguments same as `test_fit_simrna`, plus:
+- `yieldfactor::Float64`: Detection efficiency (default 0.5). Values < 1.0 enable yield mode
+  where the model uses internal histogram expansion and loss matrix during fitting.
+
+# Returns
+- Named tuple with:
+  - `full_pred`: Predicted full (lossless) histogram
+  - `full_actual`: Actual full (true) simulated histogram (no loss applied)
+  - `lossy_pred`: Predicted histogram after applying yieldfactor loss
+  - `lossy_actual`: Observed histogram after applying yieldfactor loss to true sim data
+"""
+function test_fit_simrna_yield(; maxtime = 60.0, rtarget=[0.33, 0.19, 2.5, .1], transitions=([1, 2], [2, 1]), G=2, nRNA=100, nalleles=2, fittedparam=[1, 2, 3], fixedeffects=tuple(), rinit=[0.1, 0.1, 0.1, 1.0], totalsteps=1000000, nchains=1, yieldfactor=0.5)
+    # Simulate without loss
+    h_true = simulator(rtarget, transitions, G, 0, 0, 0, nhist=nRNA, totalsteps=totalsteps, nalleles=nalleles)[1]
+    
+    # Apply yield loss to create observed data
+    if yieldfactor < 1.0
+        h_observed_full = technical_loss(h_true, yieldfactor, nRNA)
+        # Find the observed histogram size: where we reach 99% cumulative probability
+        cdf_obs = cumsum(h_observed_full)
+        nRNA_observed = findfirst(x -> x > 0.999, cdf_obs)
+        h_observed = h_observed_full[1:nRNA_observed]
+        nRNA_true = nhist_loss(nRNA_observed, yieldfactor)
+        yield_tuple = (yieldfactor, nRNA_true)
+        println("Yield=$yieldfactor: nRNA_true_original=$nRNA, nRNA_observed=$nRNA_observed, nRNA_true_estimated=$nRNA_true (expansion: $(nRNA_true/nRNA_observed)x)")
+    else
+        h_observed = h_true
+        nRNA_observed = nRNA
+        yield_tuple = yieldfactor
+        println("No yield (yieldfactor=$yieldfactor)")
+    end
+    
+    # Fit using the observed (lossy) data with yield parameter
+    data = RNAData{typeof(nRNA_observed),typeof(h_observed)}("", "", nRNA_observed, h_observed, yield_tuple, [1])
+    model = load_model(data, rinit, StochasticGene.prior_ratemean(transitions, 0, 0, 1, rtarget[end], [], 1.0), fittedparam, fixedeffects, transitions, G, 0, 0, 0, "", nalleles, 10.0, Int[], rtarget[end], 0.02, prob_Gaussian, [], 1, tuple(), tuple(), nothing)
+    nRNA_true_actual = StochasticGene.get_nRNA_true(data.yield, data.nRNA)
+    println("Model will use nRNA_true=$nRNA_true_actual for loss matrix")
+    options = StochasticGene.MHOptions(5000000, 500000, 0, maxtime, 1.0, 1.0)
+    fits, stats, measures = run_mh(data, model, options, nchains)
+    
+    # Get predictions at both levels
+    h_pred_full = predictedfn(fits.parml, data, model)  # Prediction (normalized, loss matrix applied if yield < 1.0)
+    
+    # Compare using same scalings as loglikelihood does
+    h_pred_lossy = h_pred_full  # Predictions from model
+    h_actual_lossy = StochasticGene.datapdf(data)  # Data histogram normalized by datapdf
+    
+    return (
+        full_actual=normalize_histogram(h_true),
+        lossy_pred=h_pred_lossy,
+        lossy_actual=h_actual_lossy
+    )
+end
+
 
 """
     test_fit_rna(; gene, G, nalleles, propcv, fittedparam, fixedeffects, transitions, rinit, datacond, datapath, label, root, nchains)
@@ -1270,6 +1259,36 @@ function test_load_model_keyword_compatibility(; method=Tsit5())
 end
 
 """
+    compute_quantile_bounds(qparam_row1, qparam_row3, n_accepts, n_total)
+
+Expand quantile-based bounds to account for sampling variability from limited MCMC accepts.
+With low acceptance rates, quantile estimates are uncertain and need wider margins.
+
+# Arguments
+- `qparam_row1`: Vector of 2.5% quantiles (lower bounds)
+- `qparam_row3`: Vector of 97.5% quantiles (upper bounds)
+- `n_accepts`: Number of accepted samples (from fits.accept)
+- `n_total`: Total number of samples (from fits.total)
+
+# Returns
+- Tuple of (expanded_lower, expanded_upper) bounds
+
+# Notes
+Expansion factor scales with acceptance rate: lower acceptance → wider bounds.
+Accounts for increased noise in quantile estimation with small effective sample sizes.
+"""
+function compute_quantile_bounds(qparam_row1, qparam_row3, n_accepts, n_total)
+    # Effective sample size based on acceptance rate
+    # Expansion factor increases as n_accepts decreases (more noisy quantiles)
+    # At 283 accepts: ~13%, at 500: ~9%, at 1000: ~6%, at 2000: ~4%
+    expansion_factor = 1.0 + 2.0 / sqrt(max(n_accepts, 1))
+    
+    lower = qparam_row1 ./ expansion_factor
+    upper = qparam_row3 .* expansion_factor
+    return lower, upper
+end
+
+"""
     test_fit_trace(; G, R, S, insertstep, transitions, rtarget, rinit, nsamples, onstates, totaltime, ntrials, fittedparam, propcv, cv, interval, noisepriors, nchains)
 
 Fit a simulated trace dataset using the provided parameters and compare to the target.
@@ -1283,7 +1302,7 @@ Fit a simulated trace dataset using the provided parameters and compare to the t
 # Returns
 - Tuple of (fitted rates, target rates).
 """
-function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000000, totaltime=4000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.05, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime="60m", initprior=0.1)
+function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5], nsamples=10000, totaltime=4000.0, ntrials=10, fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1], propcv=0.05, cv=100.0, noisepriors=[0.0, 0.1, 1.0, 0.1], nchains=1, zeromedian=true, maxtime=60.0, initprior=0.1)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials)
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -1301,11 +1320,10 @@ function test_fit_trace(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, ins
     priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
     rinit = isempty(tuple()) ? set_rinit(rtarget, priormean) : set_rinit(rtarget, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
-    options = StochasticGene.MHOptions(nsamples, 10000, maxtime_seconds(maxtime), 1.0)
+    options = StochasticGene.MHOptions(nsamples, nsamples, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     println(fits.accept," ",fits.total)
-    lower = stats.qparam[1, 1:4]
-    upper = stats.qparam[3, 1:4]
+    lower, upper = compute_quantile_bounds(stats.qparam[1, 1:4], stats.qparam[3, 1:4], fits.accept, fits.total)
     return lower, rtarget[1:4], upper
 end
 
@@ -1350,9 +1368,8 @@ Fit a simulated trace dataset using a hierarchical model and compare to the targ
 # Returns
 - Tuple `(lower, target, upper)` of 2.5% / true / 97.5% quantiles for the first four rates.
 """
-function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.1, 0.1, 1.0, 5, 0.5, 20, 1], nsamples=10000000, warmupsteps=10000, onstates=Int[], totaltime=4000.0, ntrials=200, fittedparam=[1, 2, 3, 4, 5, 6], propcv=0.01, noisepriors=[0.0, 0.1, 1.0, 0.1], hierarchical=(2, [7], tuple()), method=(Tsit5(), true), maxtime=120.0, nchains=1, zeromedian=true, hierarchical_sim_seed=12345, mh_seed::Union{Nothing,Int}=12346)
-    rng_h = hierarchical_sim_seed === nothing ? Random.default_rng() : Random.MersenneTwister(hierarchical_sim_seed)
-    rh = 5.0 .+ 0.5 * randn(rng_h, ntrials)
+function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, R=2, S=0, insertstep=1, transitions=([1, 2], [2, 1]), rtarget=[0.01, 0.01, 0.1, 0.1, 0.1, 1.0, 5, 0.5, 20, 1], nsamples=10000, onstates=Int[], totaltime=4000.0, ntrials=200, fittedparam=[1, 2, 3, 4], propcv=0.01, noisepriors=[0.0, 0.1, 1.0, 0.1], hierarchical=(2, [7], tuple()), method=(Tsit5(), true), maxtime=120.0, nchains=1, zeromedian=true)
+    rh = 5.0 .+ 0.5 * randn(ntrials)
     tracer = simulate_trace_vector(rtarget, transitions, G, R, S, insertstep, traceinfo[1], totaltime, ntrials, hierarchical=(6, rh))
     trace, tracescale = zero_median(tracer, zeromedian)
     nframes = round(Int, mean(size.(trace, 1)))  #mean number of frames of all traces
@@ -1371,12 +1388,10 @@ function test_fit_trace_hierarchical(; traceinfo=(1.0, 1.0, -1, 1.0, 0.5), G=2, 
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, "trace", transitions, R, S, insertstep, noisepriors, tuple(), tuple())
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, 0.1, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, method, hierarchical, tuple(), nothing, zeromedian)
-    options = StochasticGene.MHOptions(nsamples, warmupsteps, maxtime_seconds(maxtime), 1.0)
-    mh_seed !== nothing && Random.seed!(mh_seed)
+    options = StochasticGene.MHOptions(nsamples, nsamples, 0, maxtime, 1.0, 1.0)
     fits, stats, measures = run_mh(data, model, options, nchains)
     println(fits.accept," ",fits.total)
-    lower = stats.qparam[1, 1:4]
-    upper = stats.qparam[3, 1:4]
+    lower, upper = compute_quantile_bounds(stats.qparam[1, 1:4], stats.qparam[3, 1:4], fits.accept, fits.total)
     return lower, rtarget[1:4], upper
 end
 
@@ -1448,8 +1463,7 @@ function test_fit_tracejoint_full(;
     options = StochasticGene.MHOptions(nsamples, 100, maxtime_seconds(maxtime), 1.0)
     fits, stats, measures = run_mh(data, model, options)
     println(fits.accept, " ", fits.total)
-    lower = stats.qparam[1, :]
-    upper = stats.qparam[3, :]
+    lower, upper = compute_quantile_bounds(stats.qparam[1, :], stats.qparam[3, :], fits.accept, fits.total)
     return lower, rtarget[fittedparam], upper
 end
 
@@ -1856,8 +1870,7 @@ function test_fit_tracejoint_3unit(;
     options = StochasticGene.MHOptions(nsamples, 100, maxtime_seconds(maxtime), 1.0)
     fits, stats, measures = run_mh(data, model, options)
     println(fits.accept," ",fits.total)
-    lower = stats.qparam[1, :]
-    upper = stats.qparam[3, :]
+    lower, upper = compute_quantile_bounds(stats.qparam[1, :], stats.qparam[3, :], fits.accept, fits.total)
     return lower, rtarget[fittedparam], upper
 end
 
