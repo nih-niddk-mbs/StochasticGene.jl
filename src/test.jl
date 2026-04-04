@@ -10,6 +10,12 @@
 #     long correlation/simulation checks). These are NOT called from `runtests.jl`
 #     and are intended for algorithm development and debugging.
 
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION 1: UTILITY & HELPER FUNCTIONS
+# ════════════════════════════════════════════════════════════════════════════════════
+# Low-level infrastructure for model testing, simulator validation, and matrix operations.
+# These functions support the higher-level tests that follow.
+
 """
     test_steadystatemodel(model::AbstractGMmodel, nhist)
 
@@ -402,6 +408,13 @@ Compare simulated and chemical master equation histograms for a given parameter 
 # Returns
 - Tuple of (chemical master histogram, array of simulated histograms).
 """
+
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION 2: CME vs SIMULATOR COMPARISON TESTS
+# ════════════════════════════════════════════════════════════════════════════════════
+# Validate accuracy of chemical master equation against Gillespie simulator.
+
+
 function test_compare(; r=[0.038, 1.0, 0.23, 0.02, 0.25, 0.17, 0.02, 0.06, 0.02, 0.000231], transitions=([1, 2], [2, 1], [2, 3], [3, 2]), G=3, R=2, S=2, insertstep=1, nRNA=150, nalleles=2, bins=[collect(5/3:5/3:200), collect(5/3:5/3:200), collect(0.1:0.1:20), collect(0.1:0.1:20)], total=10000000, tol=1e-6, onstates=[Int[], Int[], [2, 3], [2, 3]], dttype=["ON", "OFF", "ONG", "OFFG"], ejectnumber=1)
     hs = test_sim(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates[[1, 3]], bins[[1, 3]], total, tol, Int(ejectnumber))
     h = test_cm(r, transitions, G, R, S, insertstep, nRNA, nalleles, onstates, dttype, bins, ejectnumber)
@@ -1016,6 +1029,13 @@ function diagnose_sim_vs_cme(; testfn=nothing, verbose=true)
     verbose && println("Max |CME - sim| = $(maximum(diff)); sum diff = $(sum(diff))")
     return true, cme_vec, sim_vec
 end
+
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION 3: CORE INFERENCE TESTS
+# ════════════════════════════════════════════════════════════════════════════════════
+# Essential tests called by Pkg.test() (test/runtests.jl).
+# These validate core package functionality: model fitting, AD gradients, and inference.
+# Run in quick mode by default; extended tests available with FULL_TESTS=1 environment var.
 
 """
     test_fit_simrna(; rtarget, transitions, G, nRNA, nalleles, fittedparam, fixedeffects, rinit, totalsteps, nchains)
@@ -1695,6 +1715,13 @@ function test_run_nuts_fit_smoke(; seed::Int=42, n_samples::Int=12, n_adapts::In
 end
 
 ### end of functions used in runtest
+
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION 4: EXTENDED & EXPERIMENTAL TESTS
+# ════════════════════════════════════════════════════════════════════════════════════
+# Variants, extensions, and experimental tests for specialized scenarios.
+# Exported for interactive use but NOT called by Pkg.test().
+# Useful for testing specific model configurations, hierarchical structures, and edge cases.
 
 ### developer-only benchmark helpers (not called by `runtests.jl`)
 
@@ -3119,6 +3146,13 @@ function profile_trace_prediction(info_jld2::String, rates_file::String; ratetyp
     println("  PProf.Allocs.pprof()  # requires PProf.jl")
     return nothing
 end
+
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION 5: DEVELOPER BENCHMARKS & PERFORMANCE ANALYSIS
+# ════════════════════════════════════════════════════════════════════════════════════
+# Performance testing infrastructure for inference, gradients, and algorithm comparison.
+# NOT called by Pkg.test(); designed for development, profiling, and performance validation.
+# Useful for benchmarking AD methods (Zygote, ForwardDiff, finite-diff) and inference strategies.
 
 # --- Inference benchmark (MH / NUTS / ADVI wall-clock comparison) ---
 # Interactive: `using StochasticGene; benchmark_inference_setup_parallel_workers(8)` then

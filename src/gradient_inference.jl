@@ -160,7 +160,7 @@ Options for `run_nuts`.
 # Fields
 - `n_samples`, `n_adapts`: post-warmup samples and adaptation steps
 - `δ`: target acceptance (NUTS dual averaging)
-- `gradient`: `:Zygote` (struct default), `:finite` (central differences; uses `fd_ε`), or `:ForwardDiff` (forward-mode AD via `ForwardDiff.jl` / `LogDensityProblemsAD`). For **trace** / long HMM likelihoods, callers such as [`benchmark_inference_run_nuts_parallel`](@ref) typically select **`gradient=:finite`** automatically (`nuts_gradient=:auto`): that is the practical NUTS path, not a fallback for failed Zygote.
+- `gradient`: `:ForwardDiff` (struct default; forward-mode AD), `:finite` (central differences; uses `fd_ε`), or `:Zygote` (reverse-mode AD). For **trace** / long HMM likelihoods, `:finite` or `:ForwardDiff` are preferred (Zygote is memory-intensive on long traces). Forward-mode is efficient for **few** fitted parameters (typical for gene switching models); use Zygote for many parameters.
 - `fd_ε`: finite-difference step when `gradient === :finite`
 - `verbose`, `progress`: passed to `AdvancedHMC.sample`
 """
@@ -174,15 +174,15 @@ struct NUTSOptions
     progress::Bool
 end
 
-NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:Zygote, fd_ε=1e-5, verbose=true, progress=false) =
+NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false) =
     NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress)
 
 """
     run_nuts(data, model, rng, options=NUTSOptions(); kwargs...)
 
 Hamiltonian Monte Carlo with the No-U-Turn sampler (NUTS) and diagonal mass matrix
-adaptation (Stan-style). Gradients of the log posterior follow `options.gradient` (see [`NUTSOptions`](@ref)); the struct default is **Zygote**.
-For **trace** data, prefer **`gradient=:finite`** (central differences) or **`ForwardDiff`** when dimension is small—trace HMMs often break or explode memory with Zygote reverse mode.
+adaptation (Stan-style). Gradients of the log posterior follow `options.gradient` (see [`NUTSOptions`](@ref)); the struct default is **ForwardDiff** (forward-mode AD, efficient for few parameters).
+For **trace** data, `:finite` (central differences) is preferred; [`fit`](@ref) with `estimation=INFERENCE_NUTS` auto-selects `:finite` for `AbstractTraceData` unless overridden with `nuts_gradient=:ForwardDiff` or `:Zygote`.
 
 `rng` must be an `AbstractRNG` (e.g. `using Random; Random.default_rng()`).
 
@@ -270,7 +270,7 @@ same transformed space as MCMC, with `σ_i = softplus(s_i) + ε`.
 - `n_mc`: fixed Monte Carlo draws `ε` for the reparameterization gradient (deterministic objective)
 - `σ_floor`: lower bound on `σ_i`
 - `init_s_raw`: initial value for the **log-scale** state `s` with `σ_i = softplus(s_i) + σ_floor`. Default is negative so initial `σ` is small: reparameterized draws `η = μ + σ ε` stay near `μ` and avoid `-Inf` log-prior / likelihood at cold start. (`s = 0` gives `softplus(0) ≈ 0.69`, often too wide.)
-- `gradient`: `:Zygote` (default), `:finite`, or `:ForwardDiff`. For ADVI, `:finite` and `:ForwardDiff` are the same: `ForwardDiff` gradients of `neg_elbo` (not Optim’s element-wise finite differences). For [`AbstractTraceData`](@ref), [`run_advi`](@ref) overrides Zygote with `:finite` unless `zygote_trace=true`.
+- `gradient`: `:Zygote` (default), `:finite`, or `:ForwardDiff`. For ADVI, `:finite` and `:ForwardDiff` both use `ForwardDiff` gradients of `neg_elbo` (not Optim's element-wise finite differences). For [`AbstractTraceData`](@ref), [`run_advi`](@ref) auto-selects `:finite` to avoid Zygote reverse-mode overhead on long HMM likelihoods; use `zygote_trace=true` to override.
 - `verbose`: `Optim` show trace
 - `time_limit`: optional wall-clock limit (**seconds**) for `Optim` (`nothing` = no limit; useful for fair comparisons with MH `maxtime`)
 """
@@ -544,7 +544,7 @@ Samples are in **transformed** parameter space (`get_param` / `get_rates`).
 
 # Notes
 - Single-chain R-hat uses the same split-half heuristic as [`compute_rhat`](@ref) (needs enough samples).
-- For gradients, prefer histogram data + default Zygote when the AD likelihood path is valid; for long trace HMMs use `NUTSOptions(gradient=:finite)` (see [`fit`](@ref) `nuts_gradient`).
+- For gradients: prefer forward-mode AD (`:ForwardDiff`, the new default) for typical gene switching models with **few** parameters. For trace HMMs, `:finite` (central differences) is auto-selected by [`fit`](@ref); override with `nuts_gradient=:Zygote` for many parameters or if memory-intensive Zygote reverse mode is desired.
 
 See also: [`run_nuts`](@ref) for raw samples without `Fit`/`Stats` construction.
 """

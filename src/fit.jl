@@ -75,7 +75,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `inference=INFERENCE_MH`: posterior approximation — [`INFERENCE_MH`](@ref) (Metropolis–Hastings via [`run_mh`](@ref)), [`INFERENCE_NUTS`](@ref) (NUTS via [`run_nuts_fit`](@ref); `nchains` must be `1`), or [`INFERENCE_ADVI`](@ref) (not wired through `fit` yet — use [`run_advi`](@ref)). See [`INFERENCE_CHOICES`](@ref).
 - `steady_state_solver=:augmented`: forwarded to the log-likelihood when `inference=INFERENCE_NUTS` (see [`run_nuts_fit`](@ref)); ignored for MH.
 - `ad_likelihood=nothing`: forwarded to NUTS (`nothing` → automatic: AD likelihood for [`AbstractHistogramData`](@ref) and [`AbstractTraceData`](@ref)); ignored for MH.
-- `nuts_gradient=nothing`: when `inference=INFERENCE_NUTS`, gradient mode for [`NUTSOptions`](@ref). `nothing` → **`:finite`** for trace / [`AbstractTraceData`](@ref) (Zygote through long HMMs is unreliable), **`:Zygote`** otherwise. Override with `nuts_gradient=:Zygote`, `:finite`, or `:ForwardDiff` (forward-mode AD; often good for **few** parameters). Ignored for MH.
+- `nuts_gradient=nothing`: when `inference=INFERENCE_NUTS`, gradient mode for [`NUTSOptions`](@ref). `nothing` → **`:finite`** for trace / [`AbstractTraceData`](@ref) (Zygote through long HMMs is unreliable), **`:ForwardDiff`** (forward-mode AD) otherwise. Override with `nuts_gradient=:Zygote`, `:finite`, or `:ForwardDiff`. Forward-mode is preferred for **few** parameters (typical for gene switching models); use `:Zygote` for many parameters. Ignored for MH.
 - `nuts_δ=0.8`, `nuts_fd_ε=1e-5`: NUTS dual-averaging target acceptance `δ` and finite-difference step `fd_ε` when `nuts_gradient=:finite` (same defaults as [`NUTSOptions`](@ref)). Ignored for MH.
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted. Must be >= 1; when R = 0, insertstep is ignored (no RNA steps).
@@ -429,7 +429,7 @@ end
 When `inference=INFERENCE_MH` (default), runs [`run_mh`](@ref). When `inference=INFERENCE_NUTS`, runs [`run_nuts_fit`](@ref)
 (`nchains` must be 1; `samplesteps` / `warmupsteps` map to NUTS `n_samples` / `n_adapts`). [`INFERENCE_ADVI`](@ref) is not supported here — use [`run_advi`](@ref).
 
-For NUTS, keywords `nuts_gradient`, `nuts_δ`, `nuts_fd_ε` build [`NUTSOptions`](@ref) (defaults `nuts_δ=0.8`, `nuts_fd_ε=1e-5`); when `nuts_gradient === nothing`, trace / [`AbstractTraceData`](@ref) uses `:finite` gradients (see [`fit`](@ref) top-level docs). These are ignored when `inference=INFERENCE_MH`.
+For NUTS, keywords `nuts_gradient`, `nuts_δ`, `nuts_fd_ε` build [`NUTSOptions`](@ref) (defaults `nuts_δ=0.8`, `nuts_fd_ε=1e-5`); when `nuts_gradient === nothing`, trace / [`AbstractTraceData`](@ref) uses `:finite` gradients and other data types use `:ForwardDiff` (see [`fit`](@ref) `nuts_gradient` docs). These are ignored when `inference=INFERENCE_MH`.
 """
 function _nuts_options_for_fit(
     options::MHOptions,
@@ -439,7 +439,7 @@ function _nuts_options_for_fit(
     nuts_fd_ε::Union{Nothing,Float64},
 )
     g = if nuts_gradient === nothing
-        data isa AbstractTraceData ? :finite : :Zygote
+        data isa AbstractTraceData ? :finite : :ForwardDiff
     else
         nuts_gradient
     end
