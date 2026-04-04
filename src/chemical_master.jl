@@ -416,69 +416,42 @@ allele_deconvolve(mhist, nalleles) = irfft((rfft(mhist)) .^ (1 / nalleles), leng
 
 
 """
-nhist_loss(nhist, yieldfactor; threshold=0.999)
+    nhist_loss(nhist::Int, yieldfactor::Float64; threshold::Float64=0.99, max_nRNA::Int=500)
 
-Compute length of pre-loss histogram using a principled probabilistic approach.
+Estimate the true histogram size from observed histogram size and yield factor.
 
-Given an observed histogram with `nhist` bins (support 0 to nhist-1), this function
-estimates the true histogram size needed to account for binomial observation loss.
+## Theory
 
-# Arguments
-- `nhist::Int`: Size of observed histogram (number of bins)
-- `yieldfactor::Float64`: Detection efficiency (0-1)
-- `threshold::Float64`: Cumulative probability threshold (default 0.99)
-  - Finds the smallest true count where P(observe ≤ nhist-1 | true = j) ≥ threshold
-  - Lower values (e.g., 0.95) are less conservative and reduce computational cost
+After yield sampling:
+- Input `nhist` = observed histogram size (bin containing 99% cumulative probability)
+- `yieldfactor` = observed_mean / true_mean
+- Since means and quantiles scale together: `true_size ≈ observed_size / yieldfactor`
 
-# Returns
-- `Int`: Estimated true histogram size
+## Parameters
 
-# Method
-Uses cumulative probability: finds the smallest true count `j` such that the
-probability of observing at most `nhist-1` given true count `j` is at least `threshold`.
-This ensures we capture at least `threshold` fraction of the probability mass.
+- `nhist::Int`: Observed histogram size (99th percentile point)
+- `yieldfactor::Float64`: Yield factor = observed_mean / true_mean
+- `threshold::Float64`: Unused; kept for API compatibility
+- `max_nRNA::Int`: Hard cap on expansion (default 500)
 
-# Example
-```julia
-# If we observe up to 20 counts with 5% yield, what's the true range?
-nhist_loss(21, 0.05)  # Returns ~300-350 (with threshold=0.99)
-nhist_loss(21, 0.05, threshold=0.95)  # Returns ~250-300 (less conservative)
-```
+## Returns
+
+Estimated true histogram size: `round(nhist / yieldfactor)`, capped at `max_nRNA`.
 """
-function nhist_loss(nhist::Int, yieldfactor::Float64; threshold::Float64=0.99)
-    if yieldfactor >= 1.0
+function nhist_loss(nhist::Int, yieldfactor::Float64; threshold::Float64=0.99, max_nRNA::Int=500)
+    if yieldfactor >= 0.99 || nhist == 0
         return nhist
     end
     
-    max_observed = nhist - 1  # 0-indexed: observed counts are 0 to nhist-1
-    
-    # Binary search for the smallest true count j where 
-    # P(observe ≤ max_observed | true = j) ≥ threshold
-    # Start with simple scaling as lower bound
-    lower = max(nhist, round(Int, max_observed / yieldfactor))
-    # Upper bound: use a conservative multiplier
-    upper = max(lower + 1, round(Int, max_observed / yieldfactor * 3))
-    
-    # Binary search
-    while upper - lower > 1
-        mid = (lower + upper) ÷ 2
-        d = Binomial(mid, clamp(yieldfactor, 0.0, 1.0))
-        cumprob = cdf(d, max_observed)
-        
-        if cumprob >= threshold
-            upper = mid
-        else
-            lower = mid
-        end
+    if yieldfactor <= 0.0
+        return nhist
     end
     
-    # Check final bounds
-    d_lower = Binomial(lower, clamp(yieldfactor, 0.0, 1.0))
-    if cdf(d_lower, max_observed) >= threshold
-        return lower
-    else
-        return upper
-    end
+    # Simple inversion: true ≈ observed / yield
+    nRNA_true = round(Int, nhist / yieldfactor)
+    
+    # Apply cap
+    return min(nRNA_true, max_nRNA)
 end
 
 """
@@ -500,7 +473,7 @@ function technical_loss(mhist::Vector, yieldfactor, nhist)
     p = zeros(nhist)
     for m in eachindex(mhist)
         d = Binomial(m - 1, clamp(yieldfactor, 0.0, 1.0))
-        for c in 1:m+1
+        for c in 1:min(m+1, nhist)
             p[c] += mhist[m] * pdf(d, c - 1)
         end
     end

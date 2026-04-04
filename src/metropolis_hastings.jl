@@ -314,9 +314,14 @@ function metropolis_hastings(data, model, options)
         println("Annealing")
         param, parml, ll, llml, logpredictions, temp = anneal(logpredictions, param, parml, ll, llml, d, model.proposal, data, model, options.annealsteps, options.temp, options.tempanneal, time(), maxtime * options.annealsteps / totalsteps)
     end
-    if options.warmupsteps > 0
+    # Skip warmup if proposal covariance was successfully loaded from file
+    # (indicated by model.proposal being a Tuple with (matrix, scalar))
+    skip_warmup_due_to_loaded_cov = (model.proposal isa Tuple)
+    if options.warmupsteps > 0 && !skip_warmup_due_to_loaded_cov
         println("Warmup")
         param, parml, ll, llml, d, proposalcv, logpredictions = warmup(logpredictions, param, param, ll, ll, d, model.proposal, data, model, options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps)
+    elseif options.warmupsteps > 0 && skip_warmup_due_to_loaded_cov
+        println("Skipping warmup (loaded proposal covariance from previous fit)")
     end
     println("Sampling")
     fits = sample(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, options.samplesteps, options.temp, time(), maxtime * options.samplesteps / totalsteps)
@@ -379,7 +384,7 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 - `ll`: Initial negative log-likelihood.
 - `llml`: Initial maximum likelihood value.
 - `d`: Initial proposal distribution.
-- `proposalcv`: Initial proposal covariance or scale.
+- `proposalcv`: Initial proposal covariance or scale (can be a fixed scalar or user-provided matrix).
 - `data`: Experimental data structure.
 - `model`: Model structure.
 - `samplesteps`: Number of warmup steps to run.
@@ -393,16 +398,32 @@ Run a warmup phase for the Metropolis-Hastings MCMC algorithm to adapt proposal 
 - `ll`: Final negative log-likelihood.
 - `llml`: Minimum negative log-likelihood found during warmup.
 - `d`: Final proposal distribution.
-- `proposalcv`: Final proposal covariance or scale (can be adapted during warmup).
+- `proposalcv`: Final proposal covariance or scale (adapted during warmup).
 - `logpredictions`: Final log-likelihood predictions.
 
-This function can be used to adapt the proposal distribution (e.g., empirical covariance) before the main MCMC sampling phase.
+# Adaptation Strategy
+
+When `proposalcv` is a scalar (not user-provided), the function adapts periodically every `max(500, samplesteps ÷ 5)` steps (more frequent than earlier implementations):
+
+- **Acceptance rate targeting**: Target rate scales with dimension (d): `min(0.44, 0.234 + 0.206/√d)`, yielding ~30% for d=5–20 (typical gene models) and ~23.4% for large d.
+- **Adaptive proposal scaling**: Scales proposals as `(current_rate / target_rate)^1.5`, responding dynamically to how far acceptance is from target. Example: 52% acceptance vs 23.4% target → scale multiplied by 3.3×.
+- **Covariance computation**: Computes empirical covariance from samples collected so far; uses stricter conditioning (cond < 1e6).
+
+This ensures proposal distributions quickly converge to optimal acceptance rates, improving MCMC efficiency especially with expensive likelihood evaluations.
 """
 function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, model, samplesteps, temp, t1, maxtime)
     parout = Array{Float64,2}(undef, length(param), samplesteps)
     prior = logprior(param, model)
     step = 0
     accepttotal = 0
+    
+    # Periodic adaptation tracking
+    # Adapt ~3 times during warmup phase (not too frequently with small warmup)
+    last_adapt_step = 0
+    adapt_interval = max(500, samplesteps ÷ 5)  # Every ~1/5 of warmup steps (more frequent)
+    min_accepts = 2 * length(param)
+    d_param = length(param)
+    
     while step < samplesteps && time() - t1 < maxtime
         step += 1
         accept, logpredictions, param, ll, prior, d = mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, temp)
@@ -411,32 +432,62 @@ function warmup(logpredictions, param, parml, ll, llml, d, proposalcv, data, mod
         end
         parout[:, step] = param
         accepttotal += accept
-    end
-    # Compute and scale covariance for proposal adaptation only when initial proposal
-    # is scalar or vector; preserve user-provided full covariance (Tuple or Matrix).
-    # Minimum accepts = 2*n so cov is not rank-deficient; isposdef + cond() reject degenerate cov.
-    keep_user_cov = (proposalcv isa Tuple) || (proposalcv isa AbstractMatrix)
-    d_param = length(param)
-    min_accepts = 2 * d_param
-    covparam = cov(parout[:,1:step]')
-    scaling = (2.38^2) / d_param
-    if !keep_user_cov && step > 1000 && accepttotal >= min_accepts && accepttotal/step > .15
-        if isposdef(covparam)
-            # Skip adapt if covariance is ill-conditioned (would give bad proposals)
-            cond_ok = (cond(covparam) < 1e10)
-            if cond_ok
-                proposalcv = covparam * scaling
-                d = proposal_dist(param, proposalcv, model)
-                @info "Updated proposal covariance (scaled)" proposalcv
+        
+        # Compute covariance for proposal adaptation
+        # Minimum accepts = 2*n so cov is not rank-deficient; isposdef + cond() reject degenerate cov.
+        keep_user_cov = (proposalcv isa Tuple) || (proposalcv isa AbstractMatrix)
+        acceptance_rate = accepttotal / step
+        
+        # Periodic re-adaptation: every adapt_interval steps after initial 1000 steps
+        if !keep_user_cov && step >= 1000 && accepttotal >= min_accepts && (step - last_adapt_step) >= adapt_interval
+            last_adapt_step = step
+            accepttotal_pre_adapt = accepttotal
+            steps_pre_adapt = step
+            
+            covparam = cov(parout[:, 1:step]')
+            # Optimal acceptance rate scales with dimensionality (Roberts & Rosenthal)
+            # d=1: 0.44, d=5: ~0.30, d>>1: 0.234
+            # Use: target ≈ min(0.44, 0.234 + 0.206/sqrt(d))
+            acceptance_target = min(0.44, 0.234 + 0.206 / sqrt(max(1, d_param)))
+            current_rate = accepttotal / step
+            
+            # Compute base scaling
+            scaling = (2.38^2) / d_param
+            
+            # Adaptive scaling: adjust by (target / current)^2 to converge toward target
+            # If current_rate > target: increase scaling to reduce acceptance
+            # If current_rate < target: decrease scaling to increase acceptance
+            rate_ratio = current_rate / acceptance_target
+            if rate_ratio > 1.0
+                # Acceptance too high: increase scaling (take bigger steps)
+                scaling *= rate_ratio^1.5  # Responsive scaling based on overage
+            else
+                # Acceptance too low: decrease scaling (take smaller steps)
+                scaling *= rate_ratio^1.5  # Also responsive for underage
             end
-        else
-            # Fallback: use scaled diagonal covariance
-            diag_cov = Diagonal(diag(covparam) * scaling)
-            proposalcv = diag_cov
-            d = proposal_dist(param, diag_cov, model)
-            @info "Updated proposal covariance (scaled diagonal)" proposalcv
+            
+            if isposdef(covparam)
+                # Stricter conditioning check (1e6 instead of 1e10)
+                cond_ok = (cond(covparam) < 1e6)
+                
+                if cond_ok
+                    # Try full covariance if well-conditioned
+                    proposalcv_new = covparam * scaling
+                    d_new = proposal_dist(param, proposalcv_new, model)
+                    @info "Updated proposal covariance (scaled)" adapt_step=step curr_acceptance=current_rate
+                    proposalcv = proposalcv_new
+                    d = d_new
+                else
+                    # Fallback: use scaled diagonal covariance if full cov is ill-conditioned
+                    diag_cov = Diagonal(diag(covparam) * scaling)
+                    proposalcv = diag_cov
+                    d = proposal_dist(param, diag_cov, model)
+                    @info "Updated proposal covariance (scaled diagonal)" adapt_step=step cond_number=cond(covparam)
+                end
+            end
         end
     end
+    
     return param, parml, ll, llml, d, proposalcv, logpredictions
 end
 

@@ -112,6 +112,8 @@ function datapdf(data::AbstractRNAData{Array{Array,1}})
 end
 
 function datapdf(data::RNADwellTimeData)
+    # Normalize each component separately to match predictedfn structure
+    # (which returns [RNA steady state; dwell time distributions...])
     v = normalize_histogram(data.histRNA)
     for d in data.DwellTimes
         v = vcat(v, normalize_histogram(d))

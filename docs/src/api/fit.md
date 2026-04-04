@@ -133,3 +133,12 @@ fits = fit(
    - R-hat should be close to 1 (ideally < 1.05)
    - Increase `maxtime` or `samplesteps` if R-hat is high
    - Use `warmupsteps` to improve proposal distribution
+
+3. **Proposal Covariance and Warmup**
+   - **First run** with expensive models: Set `propcv=0.01` and `warmupsteps` > 0. The covariance is learned during warmup and saved to `proposal-cov_*.jld2`.
+   - **Subsequent runs** with same model: Use `propcv=-0.01` to attempt loading the saved covariance. If successful, warmup is **automatically skipped** (even if `warmupsteps > 0`). If loading fails, falls back to abs(propcv) and warmup runs normally.
+   - Warmup adapts periodically every ~1/3 of warmup steps, targeting an acceptance rate that scales with dimension (30% for typical d=5–20 gene models).
+   - Time allocation: warmup receives `maxtime × (warmupsteps / total_steps)`. For very expensive steps (minutes each), increase `maxtime` or reduce total steps if warmup times out.
+
+4. **Key-Based Workflows**
+   - Use `key="<name>"` to load run specifications from `info_<name>.toml` and ensure consistent naming across runs. All outputs (including `proposal-cov_<name>.jld2`) use that stem.

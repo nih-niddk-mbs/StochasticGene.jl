@@ -2624,6 +2624,8 @@ function writeall(path::String, fits::Fit, stats::Stats, measures::Measures, dat
     write_rates(joinpath(path, "rates" * name), fits, stats, model, labels)
     write_measures(joinpath(path, "measures" * name), fits, measures, deviance(fits, data, model), temp, data, model)
     write_param_stats(joinpath(path, "param-stats" * name), stats, model, labels)
+    proposal_cov_file = joinpath(path, replace("proposal-cov" * name, r"\.(csv|txt)$" => ".jld2"))
+    save_proposal_covariance(proposal_cov_file, stats.covparam, model, name)
     if typeof(model) <: GRSMmodel && hastrait(model, :hierarchical)
         write_hierarchy(joinpath(path, "shared" * name), fits, stats, model, labels)
     end
@@ -2913,7 +2915,6 @@ function write_param_stats(file, stats::Stats, model, labels)
     writedlm(f, stats.qparam, ',')
     writedlm(f, stats.corparam, ',')
     writedlm(f, stats.covparam, ',')
-    writedlm(f, stats.covlogparam, ',')
     close(f)
 end
 
@@ -2936,6 +2937,101 @@ Write parameter statistics using default labels.
 """
 function write_param_stats(file, stats::Stats, model)
     write_param_stats(file, stats, model, rlabels(model))
+end
+
+"""
+    save_proposal_covariance(file, covparam, model, label="")
+
+Save proposal covariance with metadata for validation on load.
+Only saves if covariance is valid (positive definite).
+
+# Arguments
+- `file`: Output JLD2 file path
+- `covparam`: Proposal covariance matrix
+- `model`: Model instance (metadata source)
+- `label`: Optional run label for traceability
+
+# Returns
+- `true` if successful, `false` otherwise
+"""
+function save_proposal_covariance(file, covparam, model, label="")
+    if !isposdef(covparam)
+        @warn "Proposal covariance not positive definite. Not saving."
+        return false
+    end
+    
+    try
+        jldopen(file, "w") do f
+            f["covparam"] = covparam
+            f["metadata/fittedparam"] = model.fittedparam
+            f["metadata/G"] = model.G
+            f["metadata/R"] = model.R
+            f["metadata/S"] = model.S
+            f["metadata/insertstep"] = model.insertstep
+            f["metadata/Gtransitions"] = model.Gtransitions
+            f["metadata/nalleles"] = model.nalleles
+            f["metadata/timestamp"] = now()
+            f["metadata/label"] = label
+        end
+        @info "Saved proposal covariance to $(basename(file))"
+        return true
+    catch e
+        @warn "Failed to save proposal covariance: $e"
+        return false
+    end
+end
+
+"""
+    load_proposal_covariance(file, model)
+
+Load proposal covariance if model parameters match exactly.
+No scaling or transformation applied - use directly.
+
+# Arguments
+- `file`: JLD2 file path
+- `model`: Model instance (for validation)
+
+# Returns
+- Proposal covariance matrix if loaded successfully and validated, `nothing` otherwise
+
+# Notes
+- Returns `nothing` if file doesn't exist or parameters don't match
+- Validates positive definiteness before returning
+- No transformation needed - matrix can be used directly as proposal
+"""
+function load_proposal_covariance(file, model)
+    if !isfile(file)
+        return nothing
+    end
+    
+    try
+        jldopen(file, "r") do f
+            # Validate metadata matches current model
+            if f["metadata/fittedparam"] != model.fittedparam ||
+               f["metadata/G"] != model.G ||
+               f["metadata/R"] != model.R ||
+               f["metadata/S"] != model.S ||
+               f["metadata/insertstep"] != model.insertstep ||
+               f["metadata/Gtransitions"] != model.Gtransitions ||
+               f["metadata/nalleles"] != model.nalleles
+                @info "Saved proposal covariance has different model parameters. Starting fresh."
+                return nothing
+            end
+            
+            covparam = f["covparam"]
+            
+            if !isposdef(covparam)
+                @warn "Loaded proposal covariance not positive definite. Skipping."
+                return nothing
+            end
+            
+            @info "Loaded proposal covariance from $(basename(file))"
+            return covparam
+        end
+    catch e
+        @warn "Failed to load proposal covariance: $e"
+        return nothing
+    end
 end
 
 """
