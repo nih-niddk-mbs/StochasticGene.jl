@@ -66,7 +66,6 @@ Summary statistics for MCMC parameters.
 - `qparam::Array`: Quantiles (2.5%, 50%, 97.5%) for each parameter.
 - `corparam::Array`: Correlation matrix of parameters.
 - `covparam::Array`: Covariance matrix of parameters.
-- `covlogparam::Array`: Covariance matrix of log-parameters.
 """
 struct Stats
     meanparam::Array
@@ -76,7 +75,6 @@ struct Stats
     qparam::Array
     corparam::Array
     covparam::Array
-    covlogparam::Array
 end
 
 """
@@ -768,6 +766,9 @@ return parameters to be fitted and an initial proposal distribution
 function initial_proposal(model)
     param = get_param(model)
     d = proposal_dist(param, model.proposal, model)
+    if length(param) > 100
+        @warn "initial_proposal: param vector has $(length(param)) elements (expected ~7). model.fittedparam has $(length(model.fittedparam)) elements. model.rates has $(length(model.rates)) elements ($(typeof(model.rates)). This may indicate a dimension mismatch!"
+    end
     return param, d
 end
 
@@ -1023,10 +1024,22 @@ compute_stats(fits::Fit)
 
 returns Stats structure
 
-Compute mean, std, median, mad, quantiles and correlations, covariances of parameters
+Compute mean, std, median, mad, quantiles and correlations, covariances of parameters.
+
+# Arguments
+- `param_samp::Array{Float64,2}`: MCMC samples in algorithm/sampling space (what sampler produces).
+- `model::AbstractGeneTransitionModel`: The model structure.
+
+# Returns
+- `Stats`: Structure containing statistics computed in physical space and covariance in sampling space.
+
+# Notes
+- Transforms `param_samp` to `param` (physical space) for human-readable statistics
+- Covariance computed from `param_samp_thin` (sampling space) for use as proposal distribution
+- All interpretation stats (mean, std, median, etc.) are in physical space
 """
-function compute_stats(paramin::Array{Float64,2}, model)
-    param = Float64.(inverse_transform_params(paramin, model))
+function compute_stats(param_samp::Array{Float64,2}, model)
+    param = Float64.(inverse_transform_params(param_samp, model))
     meanparam = mean(param, dims=2)
     stdparam = std(param, dims=2)
     medparam = median(param, dims=2)
@@ -1037,19 +1050,28 @@ function compute_stats(paramin::Array{Float64,2}, model)
         madparam[i] = mad(param[i, :], normalize=false)
         qparam = hcat(qparam, quantile(param[i, :], [0.025; 0.5; 0.975]))
     end
-    # Thin for covariance/correlation calculations
-    param_thin = thin_columns(param)
+    # Thin samples in sampling space for proposal covariance calculation
+    param_samp_thin = thin_columns(param_samp)
+    if size(param_samp_thin, 1) > 100
+        @warn "compute_stats: param_samp has $(size(param_samp, 1)) rows, param_samp_thin has $(size(param_samp_thin, 1)) rows. Expected ~7. This will create a $(size(param_samp_thin, 1))×$(size(param_samp_thin, 1)) covariance matrix!"
+    end
     if typeof(model) <: AbstractGRSMmodel && hastrait(model, :hierarchical)
         nrates = num_fitted_core_params(model)
-        corparam = cor(param_thin[1:nrates, :]')
-        covparam = cov(param_thin[1:nrates, :]')
-        covlogparam = cov(paramin[1:nrates, :]')
+        corparam = cor(param_samp_thin[1:nrates, :]')
+        covparam = cov(param_samp_thin[1:nrates, :]')
+        # Sanity check: covparam should be (nrates × nrates), not (n_samples × n_samples)
+        if size(covparam, 1) != nrates
+            error("compute_stats: covparam has shape $(size(covparam)), expected ($nrates, $nrates). Matrix orientation error in covariance calculation!")
+        end
     else
-        corparam = cor(param_thin')
-        covparam = cov(param_thin')
-        covlogparam = cov(paramin')
+        corparam = cor(param_samp_thin')
+        covparam = cov(param_samp_thin')
+        # Sanity check: covparam should be (d × d), not (n_samples × n_samples)
+        if size(covparam, 1) != size(param_samp_thin, 1)
+            error("compute_stats: covparam has shape $(size(covparam)), expected ($(size(param_samp_thin, 1)), $(size(param_samp_thin, 1))). Matrix orientation error in covariance calculation!")
+        end
     end
-    Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam, covlogparam)
+    Stats(meanparam, stdparam, medparam, madparam, qparam, corparam, covparam)
 end
 
 # function compute_stats(paramin::Array{Float64,2}, model::AbstractGRSMhierarchicalmodel)
