@@ -47,13 +47,21 @@ const _COUPLED_CSV_DEFAULT_ECOLS = (2, 3, 4, 5, 6, 7)
 
 """Map CSV sign string to `:activate` or `:inhibit` (`>0` / `<0`)."""
 function parse_coupling_sign_csv(s)::Symbol
-    strip(lowercase(string(s))) == ">0" ? :activate : :inhibit
+    s_clean = strip(lowercase(string(s)))
+    if s_clean == ">0"
+        return :activate
+    elseif isempty(s_clean) || s_clean == "0" || s_clean == "free"
+        return :free
+    else
+        return :inhibit
+    end
 end
 
 """Default γ placeholder per mode (matches legacy `makescriptcoupled.jl`)."""
 function default_coupling_gamma_csv(mode::Symbol)
     mode === :activate && return 0.1
     mode === :inhibit && return -0.1
+    mode === :free && return 0.0
     return 0.0
 end
 
