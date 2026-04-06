@@ -1,31 +1,40 @@
 # This file is part of StochasticGene.jl
 #
-# coupled_csv.jl — Coupled_models_to_test.csv → coupling connections and fit-spec pieces.
+# coupled_csv.jl — Coupled_models_to_test.csv or Coupled_models_free.csv → coupling connections and fit-spec pieces.
 #
-# Column layout (minimum 7 columns; key column name defaults to Model_name):
-#   1 Model_name — run key (spaces → -)
-#   2–3 enhancer→gene block 1 + sign
-#   4–5 enhancer→gene block 2 + sign
-#   6–7 gene→enhancer + sign
+# Column naming (order-independent, searched by name pattern):
+#   Model_name — run key (spaces → -)
+#   enhancer_to_gene_1, enhancer_sign_1 — enhancer→gene connections for unit 1
+#   enhancer_to_gene_2, enhancer_sign_2 — enhancer→gene connections for unit 2
+#   gene_to_enhancer, gene_to_enhancer_sign — gene→enhancer connections
+#   background_gene, background_gene_sign — genetic background connections
+# Missing columns default to empty string (parse as :free sign mode).
+#
+# Legacy fixed-column format still supported via coupled_csv_cols parameter.
 # Token codes: two-digit "st", "Rsumk", "Ranyk", legacy "Rk" (see csv_row_to_connections_simple).
 
 """
-    Coupled_models_to_test CSV schema
+    Coupled_models CSV schema
 
-This module implements parsing from **Coupled_models_to_test**-style spreadsheets into coupling connections
-and keyword dicts for [`build_coupled_fit_spec_from_csv_cells`](@ref), used by [`makeswarmfiles`](@ref)
-when `coupled_csv=true` and by [`makeswarmfiles_coupled`](@ref).
+This module implements parsing from coupled model spreadsheets (e.g., **Coupled_models_to_test.csv**
+or **Coupled_models_free.csv**) into coupling connections and keyword dicts for 
+[`build_coupled_fit_spec_from_csv_cells`](@ref), used by [`makeswarmfiles`](@ref) when `coupled_csv=true`.
 
-# Column layout
+# Column naming (flexible order and subset)
 
-At least **7 columns** are required unless `coupled_csv_cols` remaps indices (default `(2, 3, 4, 5, 6, 7)`):
+Columns are found by **name pattern** (case-insensitive, order-independent):
 
-| Section | Columns (default) | Content |
-|---------|-------------------|---------|
-| Key | 1 (`key_col`, default `Model_name`) | Run key; spaces → `-`. |
-| Enhancer→gene (1) | 2–3 | State token string + sign (`>0` / `<0`). |
-| Enhancer→gene (2) | 4–5 | Same. |
-| Gene→enhancer | 6–7 | State tokens + sign. |
+| Purpose | Column name patterns | Content |
+|---------|----------------------|---------|
+| Model key | `Model_name` | Run key; spaces → `-`. **Required.** |
+| Enhancer→gene (unit 1) | `enhancer_to_gene_1`, `e1` | State token string. |
+| Sign (unit 1) | `enhancer_sign_1`, `e1s` | Sign (`">0"` = activate, empty/`0`/`"free"` = free, else inhibit). |
+| Enhancer→gene (unit 2) | `enhancer_to_gene_2`, `gene_to_enhancer`, `e2` | State token string. |
+| Sign (unit 2) | `enhancer_sign_2`, `gene_to_enhancer_sign`, `e2s` | Sign. |
+| Gene→enhancer (unit 1) | `background_gene`, `ge` | State token string. |
+| Sign | `background_gene_sign`, `ges` | Sign. |
+
+**Missing columns** default to empty string (which parse as `:free` mode).
 
 # Token strings in cells
 
@@ -35,11 +44,20 @@ Comma-separated tokens are parsed per [`csv_row_to_connections_simple`](@ref):
 - **`Rsumk`**, **`Ranyk`** — sum or “any R step” coupling for elongation step `k`.
 - Legacy **`Rk`** — may be rewritten to `Rsumk` / `Ranyk` via [`replace_csv_cell_legacy_r`](@ref) when emitting variants.
 
-Sign cells use [`parse_coupling_sign_csv`](@ref) (`>0` → activate, else inhibit).
+Sign cells use [`parse_coupling_sign_csv`](@ref):
+- `">0"` → `:activate` (positive coupling)  
+- empty string / `"0"` / `"free"` → `:free` (unconstrained coupling)
+- anything else → `:inhibit` (negative coupling)
+
+# Legacy fixed-column format
+
+Older CSVs with 7 fixed columns use the `coupled_csv_cols` parameter (default `(2, 3, 4, 5, 6, 7)`).
+The new flexible schema is recommended for clarity.
 
 # See also
 
-[`csv_row_to_connections_simple`](@ref), [`build_coupled_fit_spec_from_csv_cells`](@ref), [`makeswarmfiles`](@ref) docstring section *Coupled CSV*.
+[`csv_row_to_connections_simple`](@ref), [`parse_coupling_sign_csv`](@ref), 
+[`build_coupled_fit_spec_from_csv_cells`](@ref), [`makeswarmfiles`](@ref) docstring section *Coupled CSV*.
 """
 const COUPLED_CSV_SCHEMA = true
 
@@ -47,13 +65,21 @@ const _COUPLED_CSV_DEFAULT_ECOLS = (2, 3, 4, 5, 6, 7)
 
 """Map CSV sign string to `:activate` or `:inhibit` (`>0` / `<0`)."""
 function parse_coupling_sign_csv(s)::Symbol
-    strip(lowercase(string(s))) == ">0" ? :activate : :inhibit
+    s_clean = strip(lowercase(string(s)))
+    if s_clean == ">0"
+        return :activate
+    elseif isempty(s_clean) || s_clean == "0" || s_clean == "free"
+        return :free
+    else
+        return :inhibit
+    end
 end
 
 """Default γ placeholder per mode (matches legacy `makescriptcoupled.jl`)."""
 function default_coupling_gamma_csv(mode::Symbol)
     mode === :activate && return 0.1
     mode === :inhibit && return -0.1
+    mode === :free && return 0.0
     return 0.0
 end
 

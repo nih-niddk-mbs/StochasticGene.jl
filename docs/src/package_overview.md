@@ -108,4 +108,16 @@ For NIH Biowulf **swarm** generation, **`makeswarm`** / **`makeswarm_genes`** / 
 
 ## Coupled CSV (`Coupled_models_to_test`)
 
-Batch coupled jobs can read a seven-column (or wider) CSV processed in **`coupled_csv.jl`**: model name plus six cells describing enhancer→gene and gene→enhancer connections and signs. See docstrings for `csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, and `makeswarmfiles_coupled` in the Julia package (use `?` in the REPL after `using StochasticGene`), and the *Coupled CSV* section in the long docstring of `makeswarmfiles` (source: `biowulf.jl`; overview: [Cluster and batch workflows](cluster_batch_workflows.md)).
+Batch coupled jobs can read CSVs processed in **`coupled_csv.jl`**. Each row defines a coupled model by specifying connections between units.
+
+**Column naming** (by pattern; order-independent):
+- `Model_name` — required, key for the model
+- `enhancer_to_gene_1`, `enhancer_sign_1` — optional, enhancer→gene connections for unit 1
+- `enhancer_to_gene_2`, `enhancer_sign_2` — optional, enhancer→gene connections for unit 2  
+- `gene_to_enhancer` or `gene_to_enhancer_sign` — optional, gene→enhancer connections
+- `background_gene`, `background_gene_sign` —optional, genetic background connections
+- Sign columns (`*_sign`) accept: `">0"` (activate), anything else except empty/`0`/`"free"` (inhibit), or empty/`0`/`"free"` (**:free** mode)
+
+Minimal example: `Model_name`, `enhancer_to_gene_1`, `enhancer_sign_1` (other couplings default to `:free` mode).
+
+See docstrings for `csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, and `makeswarmfiles_coupled` (use `?` in REPL after `using StochasticGene`), and the *Coupled CSV* section in the long docstring of `makeswarmfiles` (source: `biowulf.jl`; overview: [Cluster and batch workflows](cluster_batch_workflows.md)).

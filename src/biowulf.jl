@@ -375,6 +375,38 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
     return run_keys
 end
 
+"""
+    _extract_coupling_columns_from_row(row, col_names::Vector{String})
+
+Extract coupling columns (e1, e1s, e2, e2s, ge, ges) from a DataFrame row,
+supporting flexible column naming and missing columns.
+
+Column name patterns searched (in order):
+- enhancer_to_gene_{1,2}, enhancer_sign_{1,2}
+- gene_to_enhancer, gene_to_enhancer_sign
+- e1, e1s, e2, e2s, ge, ges
+- 1,2,3,4,5,6 (positional fallback)
+
+Missing columns default to empty string.
+"""
+function _extract_coupling_columns_from_row(row, col_names::Vector{String})
+    function get_col(patterns::Vector{String}; default="")
+        for pat in patterns
+            pat in col_names && return row[Symbol(pat)]
+        end
+        return default
+    end
+    
+    e1 = get_col(["enhancer_to_gene_1", "e1"])
+    e1s = get_col(["enhancer_sign_1", "e1s"])
+    e2 = get_col(["enhancer_to_gene_2", "gene_to_enhancer", "e2"])
+    e2s = get_col(["enhancer_sign_2", "gene_to_enhancer_sign", "e2s"])
+    ge = get_col(["background_gene", "ge"])
+    ges = get_col(["background_gene_sign", "ges"])
+    
+    return e1, e1s, e2, e2s, ge, ges
+end
+
 function _makeswarmfiles_coupled_models_csv(
     csv_path::AbstractString;
     filedir::AbstractString,
@@ -393,10 +425,10 @@ function _makeswarmfiles_coupled_models_csv(
     swarm_kw::Dict{Symbol,Any},
 )
     df = DataFrame(CSV.File(csv_path))
-    ncol(df) < maximum(coupled_csv_cols) &&
-        throw(ArgumentError("coupled_models_csv: need at least $(maximum(coupled_csv_cols)) columns (got $(ncol(df)))"))
     key_col in names(df) || throw(ArgumentError("missing key column '$key_col' in $csv_path"))
-    cix = coupled_csv_cols
+    
+    col_names = String.(names(df))
+    
     keys_ordered = String[]
     specs_by_key = Dict{String, Dict{Symbol,Any}}()
     for hierarchical in hierarchical_modes
@@ -405,12 +437,9 @@ function _makeswarmfiles_coupled_models_csv(
             (skip_empty && isempty(kn)) && continue
             kn == "Model_name" && continue
             key_base = replace(kn, " " => "-")
-            e1 = row[cix[1]]
-            e1s = row[cix[2]]
-            e2 = row[cix[3]]
-            e2s = row[cix[4]]
-            ge = row[cix[5]]
-            ges = row[cix[6]]
+            
+            # Extract coupling columns by name (flexible order/naming)
+            e1, e1s, e2, e2s, ge, ges = _extract_coupling_columns_from_row(row, col_names)
             has_lr = coupled_emit_legacy_r_variants && csv_row_has_legacy_r(e1, e2, ge)
             variant_kinds = has_lr ? ((:rsum, "-Rsum"), (:rany, "-Rany")) : ((:none, ""),)
             for (vkind, vsuffix) in variant_kinds
