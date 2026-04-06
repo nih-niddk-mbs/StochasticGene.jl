@@ -68,10 +68,10 @@ function parse_coupling_sign_csv(s)::Symbol
     s_clean = strip(lowercase(string(s)))
     if s_clean == ">0"
         return :activate
-    elseif isempty(s_clean) || s_clean == "0" || s_clean == "free"
-        return :free
-    else
+    elseif s_clean == "<0"
         return :inhibit
+    else
+        return :free
     end
 end
 
