@@ -78,7 +78,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `data`, `model`, `options`: The data, model, and options structures used
 
 # Notes
-- If `propcv < 0`, proposal covariance is read from previous run if available.
+- If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
 
@@ -869,6 +869,7 @@ Create and configure data, model, and options structures for fitting.
 - Sets up priors and initial conditions
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
+- Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
 """
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     gene = check_genename(gene, "[")
@@ -3723,26 +3724,28 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
 end
 
 """
-    get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+    get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
 
-Get proposal coefficient of variation from file or use default.
+Load or generate proposal coefficient of variation for MCMC sampling.
 
 # Arguments
-- `propcv`: Proposal coefficient of variation (if negative, will be read from file)
-- `infolder`: Input folder path
-- `label`: Label for the dataset
+- `propcv`: Proposal coefficient of variation (if positive, used directly; if negative, loaded from file)
+- `infolder`: Input folder path containing previous fit results
+- `label`: Dataset label for locating proposal covariance file
 - `gene`: Gene name
 - `G, R, S, insertstep`: Model structure parameters
 - `nalleles`: Number of alleles
+- `fittedparam`: Vector of fitted parameter indices (used for metadata validation)
+- `Gtransitions`: Gene transition structure (used for metadata validation)
 
 # Returns
-- Proposal coefficient of variation (scalar or matrix)
+- Proposal coefficient of variation: either a scalar (if positive propcv or load fails) or tuple `(scaled_cov_matrix, abs(propcv))`
 
 # Notes
-- If propcv < 0, reads covariance matrix from param-stats file
-- Scales covariance by 2.38^2 / n for optimal MCMC acceptance rate
-- Returns absolute value of propcv if file doesn't exist or matrix is not positive definite
-- Used for MCMC proposal distribution setup
+- If `propcv < 0`, attempts to load covariance matrix from previous fit's proposal-cov.jld2 file
+- Validates loaded covariance metadata: fittedparam, G, R, S, insertstep, Gtransitions, nalleles must all match
+- If metadata mismatch, falls back to `abs(propcv)` and prints diagnostic message
+- Scales covariance by `2.38^2 / n_parameters` for optimal MCMC acceptance rate (~23.4% for high-dimensional)
 """
 function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
     if propcv < 0.0
