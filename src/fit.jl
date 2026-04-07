@@ -334,7 +334,6 @@ end
 function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
-    propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
     fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 end
 
@@ -892,6 +891,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    propcv = get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     if samplesteps > 0
         options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
