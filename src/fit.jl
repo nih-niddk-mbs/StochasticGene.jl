@@ -3744,7 +3744,7 @@ Get proposal coefficient of variation from file or use default.
 - Returns absolute value of propcv if file doesn't exist or matrix is not positive definite
 - Used for MCMC proposal distribution setup
 """
-function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
     if propcv < 0.0
         # Construct path to proposal covariance file
         # Strip extension from param-stats path and use proposal-cov.jld2 instead
@@ -3754,26 +3754,46 @@ function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles
         # Try to load proposal covariance matrix if file exists
         if isfile(proposal_cov_file)
             try
-                covparam = load(proposal_cov_file, "covparam")
-                scale_factor = 2.38^2 / size(covparam, 1)
-                scaled_cov = scale_factor .* covparam
-                
-                if isposdef(scaled_cov)
-                    @info "Loaded proposal covariance from $proposal_cov_file"
-                    return (scaled_cov, abs(propcv))
-                else
-                    @warn "Loaded covariance not positive definite, using default proposal"
-                    return abs(propcv)
+                jldopen(proposal_cov_file, "r") do f
+                    # Validate metadata matches current parameters
+                    if f["metadata/fittedparam"] != fittedparam ||
+                       f["metadata/G"] != G ||
+                       f["metadata/R"] != R ||
+                       f["metadata/S"] != S ||
+                       f["metadata/insertstep"] != insertstep ||
+                       f["metadata/Gtransitions"] != Gtransitions ||
+                       f["metadata/nalleles"] != nalleles
+                        @debug "Proposal covariance has different model parameters. Starting fresh."
+                        println("Using propcv = ", abs(propcv))
+                        return abs(propcv)
+                    end
+                    
+                    covparam = f["covparam"]
+                    scale_factor = 2.38^2 / size(covparam, 1)
+                    scaled_cov = scale_factor .* covparam
+                    
+                    if isposdef(scaled_cov)
+                        println("Loaded proposal covariance from ", basename(proposal_cov_file))
+                        flush(stdout)
+                        return (scaled_cov, abs(propcv))
+                    else
+                        @warn "Scaled covariance not positive definite, using default proposal"
+                        println("Using propcv = ", abs(propcv))
+                        return abs(propcv)
+                    end
                 end
             catch e
                 @warn "Failed to load proposal covariance from $proposal_cov_file: $e"
+                println("Using propcv = ", abs(propcv))
                 return abs(propcv)
             end
         else
             @debug "No proposal covariance file found at: $proposal_cov_file"
+            println("Using propcv = ", abs(propcv))
             return abs(propcv)
         end
     else
+        println("Using propcv = ", propcv)
         return propcv
     end
 end
