@@ -2973,7 +2973,8 @@ function save_proposal_covariance(file, covparam, model, label="")
             f["metadata/timestamp"] = now()
             f["metadata/label"] = label
         end
-        @info "Saved proposal covariance to $(basename(file))"
+        println("Saved proposal covariance to ", basename(file))
+        flush(stdout)
         return true
     catch e
         @warn "Failed to save proposal covariance: $e"

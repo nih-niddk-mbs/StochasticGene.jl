@@ -6,44 +6,6 @@
 #
 
 """
-    maxtime_seconds(x) -> Float64
-
-Convert a [`fit`](@ref) / [`make_structures`](@ref) `maxtime` value to wall-clock **seconds** for [`MHOptions`](@ref).
-
-- A **number** (`Real`) is **seconds** (e.g. `3600` → one hour).
-- A **string** may end with `m` (minutes) or `h` (hours), case-insensitive (e.g. `"90m"`, `"2h"`). A string **without**
-  a suffix is parsed as seconds (e.g. `"120"` → `120.0`).
-
-Throws `ArgumentError` if the value is negative or the string is invalid.
-"""
-function maxtime_seconds(x::Real)
-    xf = float(x)
-    xf < 0 && throw(ArgumentError("maxtime must be non-negative, got $x"))
-    return Float64(xf)
-end
-
-function maxtime_seconds(s::AbstractString)
-    t = strip(s)
-    isempty(t) && throw(ArgumentError("maxtime string must be non-empty"))
-    lc = lowercase(t)
-    if endswith(lc, 'h')
-        u = strip(chop(lc; tail=1))
-        v = parse(Float64, u)
-        v < 0 && throw(ArgumentError("maxtime must be non-negative, got $(repr(s))"))
-        return v * 3600.0
-    elseif endswith(lc, 'm')
-        u = strip(chop(lc; tail=1))
-        v = parse(Float64, u)
-        v < 0 && throw(ArgumentError("maxtime must be non-negative, got $(repr(s))"))
-        return v * 60.0
-    else
-        v = parse(Float64, t)
-        v < 0 && throw(ArgumentError("maxtime must be non-negative, got $(repr(s))"))
-        return Float64(v)
-    end
-end
-
-"""
     fit(; <keyword arguments> )
 
 Fit steady state or transient GM/GRSM model to RNA data for a single gene, write the result (through function finalize), and return fit results and diagnostics.
@@ -51,6 +13,7 @@ Fit steady state or transient GM/GRSM model to RNA data for a single gene, write
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
 
 #Arguments
+- `annealsteps=0`: number of annealing steps (during annealing temperature is dropped from tempanneal to temp)
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
 - `coupling=tuple()`: if nonempty, a 2- or 3-tuple: `(unit_model, connections::Vector{ConnectionSpec}[, sign_modes])`. Each connection is `(β, s, α, t) = (source unit, source state, target unit, target transition)`. Use `make_coupling("31", G, R)` or `make_coupling_reciprocal("3131", G, R)` in io.jl to build from a coupling field string. For **three units** with a **hidden latent** third unit (G=3, fully connected G-only dynamics) modulating observed units 1–2 from hidden states **1** and **3**, use `make_coupling_hidden_latent(t1, t2)` or `make_coupling_hidden_latent("H3#t1-t2")` and `transitions_hidden_g3_all_pairs()` for unit 3; see docs *Units and models — hidden latent unit*. Empty `connections` is valid (uncoupled T is still built). Optional third element `sign_modes` constrains the sign of each coupling parameter γ: use a single `Symbol` for all connections, or a vector/tuple of one per connection. Canonical symbols: `:free` (γ ∈ (-1, ∞)), `:activate` (γ ∈ (0, ∞)), `:inhibit` (γ ∈ (-1, 0)). Aliases `:positive` and `:negative` are normalized to `:activate` and `:inhibit`. See `coupling_ranges`.
@@ -72,15 +35,10 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     for hierarchical models the keywords `fittedparam` and `fixedeffects` pertain to shared rates.  rates are given by a single vector that can be reshaped into a matrix where the columns correspond to the model rates and noise params, the first nhyper rows pertain to the shared and hyper parameter rates (whether fit or not), 
     usually the first row is the shared and mean hyper parameters and the 2nd are the standard deviations, the rest of the rows are the individual rates and noise params
 - `infolder::String=""`: result folder used for initial parameters
-- `inference=INFERENCE_MH`: posterior approximation — [`INFERENCE_MH`](@ref) (Metropolis–Hastings via [`run_mh`](@ref)), [`INFERENCE_NUTS`](@ref) (NUTS via [`run_nuts_fit`](@ref); `nchains` must be `1`), or [`INFERENCE_ADVI`](@ref) (not wired through `fit` yet — use [`run_advi`](@ref)). See [`INFERENCE_CHOICES`](@ref).
-- `steady_state_solver=:augmented`: forwarded to the log-likelihood when `inference=INFERENCE_NUTS` (see [`run_nuts_fit`](@ref)); ignored for MH.
-- `ad_likelihood=nothing`: forwarded to NUTS (`nothing` → automatic: AD likelihood for [`AbstractHistogramData`](@ref) and [`AbstractTraceData`](@ref)); ignored for MH.
-- `nuts_gradient=nothing`: when `inference=INFERENCE_NUTS`, gradient mode for [`NUTSOptions`](@ref). `nothing` → **`:finite`** for trace / [`AbstractTraceData`](@ref) (Zygote through long HMMs is unreliable), **`:ForwardDiff`** (forward-mode AD) otherwise. Override with `nuts_gradient=:Zygote`, `:finite`, or `:ForwardDiff`. Forward-mode is preferred for **few** parameters (typical for gene switching models); use `:Zygote` for many parameters. Ignored for MH.
-- `nuts_δ=0.8`, `nuts_fd_ε=1e-5`: NUTS dual-averaging target acceptance `δ` and finite-difference step `fd_ε` when `nuts_gradient=:finite` (same defaults as [`NUTSOptions`](@ref)). Ignored for MH.
 - `inlabel::String=""`: label of files used for initial conditions
 - `insertstep=1`: R step where reporter is inserted. Must be >= 1; when R = 0, insertstep is ignored (no RNA steps).
 - `label::String=""`: label of output files produced
-- `maxtime=60`: maximum **total** wall time for the MH phase, including warmup and sampling — a **number** is **seconds**, or use a **string** with suffix `m` (minutes) or `h` (hours), e.g. `"90m"`, `"2h"` (see [`maxtime_seconds`](@ref)); stored as seconds in [`MHOptions`](@ref)
+- `maxtime=60`: maximum wall time for run, default = 60 min
 - `method=Tsit5()`: DifferentialEquations.jl numerical method (e.g. Tsit5(), Tsit5(),...); use a tuple for hierarchical models: method = tuple(method, Bool) = (numerical method (currently not used), true if transition rates are shared)
 - `nalleles=1`: number of alleles, value in alleles folder will be used if it exists, for coupled models, nalleles is only used when computing steady state RNA histograms and considered uncoupled.  For add coupled alleles as units and set nalleles to 1.
 - `nchains::Int=2`: number of MCMC chains = number of processors called by Julia, default = 2
@@ -98,6 +56,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `S=0`: number of splice sites (set to 0 for classic telegraph models and R - insertstep + 1 for GRS models)
 - `splicetype=""`: RNA pathway for GRS models, (e.g., "offeject" = spliced intron is not viable)
 - `temp=1.0`: MCMC temperature
+- `tempanneal=100.`: annealing temperature
 - `temprna=1.`: reduce RNA counts by temprna compared to dwell times
 - `trace_specs=[]`: container of trace specs; each spec is a NamedTuple with at least `unit`, `interval`, `start`, `t_end`, `zeromedian` (and optionally `active_fraction`, `background`). **Coupled `tracejoint`:** when `trace_specs` is empty, `make_structures` fills defaults via [`default_trace_specs_for_coupled`](@ref) from `traceinfo` and `zeromedian` so `data.units` lists observed units. **If you pass non-empty `trace_specs`,** `interval`, `zeromedian`, and **`t_end`** (→ effective `traceinfo[3]` for [`read_tracefiles`](@ref), same semantics as `traceinfo[3]`) control loading; keep `traceinfo[1]` in sync with `interval` or expect a warning.
 - `dwell_specs=[]`: container of dwell-time specs per unit (e.g. onstates, bins, dttype). When non-empty, used for dwell-time data with multiple units or observation mapping. Legacy dwell data uses single-unit defaults when empty.
@@ -119,7 +78,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
 - `data`, `model`, `options`: The data, model, and options structures used
 
 # Notes
-- If `propcv < 0`, proposal covariance is read from previous run if available.
+- If `propcv < 0`, proposal covariance is loaded from previous run if available during [`make_structures`](@ref), after model parameters (including fittedparam) are determined. Validation occurs against stored metadata to ensure compatibility.
 - WAIC standard error is for the total WAIC (not per observation), and is scaled by sqrt(n_obs).
 - File and folder conventions: see the package manual (*Package overview*, *Cluster and batch workflows*) and the [GitHub README](https://github.com/nih-niddk-mbs/StochasticGene.jl#readme).
 
@@ -161,21 +120,6 @@ fits = fit(
 # Set by top-level fit(; key=..., ...) so finalize/writeall get key-based naming and info TOML without kwargs in the call chain.
 const _current_run_spec = Ref{Any}(nothing)
 const _current_name_override = Ref{Any}(nothing)
-
-"""
-Public `inference` keyword values for [`fit`](@ref) and related APIs.
-
-Use these constants instead of raw symbols (e.g. `fit(inference=INFERENCE_NUTS, ...)`).
-`INFERENCE_CHOICES` is the exhaustive tuple for validation.
-
-- [`INFERENCE_MH`](@ref): default; multi-chain MH via [`run_mh`](@ref).
-- [`INFERENCE_NUTS`](@ref): single-chain NUTS via [`run_nuts_fit`](@ref) (`nchains` must be 1).
-- [`INFERENCE_ADVI`](@ref): not implemented in `fit`; call [`run_advi`](@ref) directly.
-"""
-const INFERENCE_MH = :mh
-const INFERENCE_NUTS = :nuts
-const INFERENCE_ADVI = :advi
-const INFERENCE_CHOICES = (INFERENCE_MH, INFERENCE_NUTS, INFERENCE_ADVI)
 
 const _FIT_DEFAULTS = (
     rinit=nothing,
@@ -231,12 +175,6 @@ const _FIT_DEFAULTS = (
     yieldfactor=1.0,
     trace_specs=[],
     dwell_specs=[],
-    inference=INFERENCE_MH,
-    steady_state_solver=:augmented,
-    ad_likelihood=nothing,
-    nuts_gradient=nothing,
-    nuts_δ=0.8,
-    nuts_fd_ε=1e-5,
 )
 
 """
@@ -264,8 +202,6 @@ fewer MCMC steps than the single-gene RNA default, etc. Shared **two-unit** stru
 `coupled_G` / `coupled_R` / … defaults on [`makeswarmfiles`](@ref) (not the single-unit RNA `G=2`, `R=0`
 from [`fit_default_spec`](@ref)). Override with `kwargs` or an existing `info_<key>` merge when needed
 (e.g. H3 latent layouts).
-
-For [`INFERENCE_NUTS`](@ref), set `nchains=1` in overrides (defaults here use `nchains=16` for MH).
 """
 function fit_coupled_default_spec()
     d = fit_default_spec()
@@ -273,8 +209,8 @@ function fit_coupled_default_spec()
     d[:datacond] = ["gene", "enhancer"]
     d[:nchains] = 16
     d[:samplesteps] = 100_000
-    d[:warmupsteps] = 0
     d[:annealsteps] = 0
+    d[:warmupsteps] = 0
     d[:writesamples] = false
     d[:G] = (3, 3)
     d[:R] = (3, 3)
@@ -313,8 +249,6 @@ function fit(; key=nothing, kwargs...)
     if key !== nothing
         run_spec[:key] = key
     end
-    inf = merged[:inference]
-    inf in INFERENCE_CHOICES || throw(ArgumentError("inference must be one of $(INFERENCE_CHOICES), got $(repr(inf))"))
     name_override = key !== nothing ? filename(key) : nothing
     rinit = merged[:rinit]
     nchains = merged[:nchains]
@@ -355,8 +289,8 @@ function fit(; key=nothing, kwargs...)
     samplesteps = merged[:samplesteps]
     warmupsteps = merged[:warmupsteps]
     annealsteps = merged[:annealsteps]
-    tempanneal = merged[:tempanneal]
     temp = merged[:temp]
+    tempanneal = merged[:tempanneal]
     temprna = merged[:temprna]
     burst = merged[:burst]
     optimize = merged[:optimize]
@@ -368,12 +302,6 @@ function fit(; key=nothing, kwargs...)
     yieldfactor = merged[:yieldfactor]
     trace_specs = merged[:trace_specs]
     dwell_specs = merged[:dwell_specs]
-    inference = merged[:inference]
-    steady_state_solver = merged[:steady_state_solver]
-    ad_likelihood = merged[:ad_likelihood]
-    nuts_gradient = merged[:nuts_gradient]
-    nuts_δ = merged[:nuts_δ]
-    nuts_fd_ε = merged[:nuts_fd_ε]
     label, inlabel = create_label(label, inlabel, datatype, datacond, cell, merged[:TransitionType])
     run_spec[:label] = label
     run_spec[:inlabel] = inlabel
@@ -388,9 +316,9 @@ function fit(; key=nothing, kwargs...)
     _current_name_override[] = name_override
     try
         if rinit === nothing
-            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
+            fit(nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
         else
-            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
+            fit(rinit, nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
         end
     finally
         _current_run_spec[] = nothing
@@ -399,83 +327,37 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference=INFERENCE_MH, ...)
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
+
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
-    propcv = get_propcv(propcv, folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles)
-    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
+    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference=INFERENCE_MH, ...)
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
     data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, annealsteps, temp, tempanneal, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
-    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference=inference, steady_state_solver=steady_state_solver, ad_likelihood=ad_likelihood, nuts_gradient=nuts_gradient, nuts_δ=nuts_δ, nuts_fd_ε=nuts_fd_ε)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
 
 
 """
-    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference=INFERENCE_MH, ...)
+    fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 
-When `inference=INFERENCE_MH` (default), runs [`run_mh`](@ref). When `inference=INFERENCE_NUTS`, runs [`run_nuts_fit`](@ref)
-(`nchains` must be 1; `samplesteps` / `warmupsteps` map to NUTS `n_samples` / `n_adapts`). [`INFERENCE_ADVI`](@ref) is not supported here — use [`run_advi`](@ref).
-
-For NUTS, keywords `nuts_gradient`, `nuts_δ`, `nuts_fd_ε` build [`NUTSOptions`](@ref) (defaults `nuts_δ=0.8`, `nuts_fd_ε=1e-5`); when `nuts_gradient === nothing`, trace / [`AbstractTraceData`](@ref) uses `:finite` gradients and other data types use `:ForwardDiff` (see [`fit`](@ref) `nuts_gradient` docs). These are ignored when `inference=INFERENCE_MH`.
 """
-function _nuts_options_for_fit(
-    options::MHOptions,
-    data::AbstractExperimentalData,
-    nuts_gradient::Union{Nothing,Symbol},
-    nuts_δ::Union{Nothing,Float64},
-    nuts_fd_ε::Union{Nothing,Float64},
-)
-    g = if nuts_gradient === nothing
-        data isa AbstractTraceData ? :finite : :ForwardDiff
-    else
-        nuts_gradient
-    end
-    g in (:Zygote, :finite, :ForwardDiff) || throw(ArgumentError("nuts_gradient must be :Zygote, :finite, or :ForwardDiff, got $(repr(g))"))
-    δ = something(nuts_δ, 0.8)
-    fd = something(nuts_fd_ε, 1e-5)
-    return NUTSOptions(;
-        n_samples=options.samplesteps,
-        n_adapts=options.warmupsteps,
-        δ=δ,
-        gradient=g,
-        fd_ε=fd,
-        verbose=false,
-        progress=false,
-    )
-end
-
-function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples; inference::Symbol=INFERENCE_MH, steady_state_solver::Symbol=:augmented, ad_likelihood=nothing, nuts_gradient=nothing, nuts_δ=0.8, nuts_fd_ε=1e-5)
+function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
-    if inference === INFERENCE_MH
-        fits, stats, measures = run_mh(data, model, options, nchains)
-    elseif inference === INFERENCE_NUTS
-        nchains == 1 || throw(ArgumentError("inference=INFERENCE_NUTS requires nchains == 1; use inference=INFERENCE_MH for multi-chain Metropolis–Hastings."))
-        options.samplesteps > 0 || throw(ArgumentError("inference=INFERENCE_NUTS requires samplesteps > 0 (NUTS retained samples)."))
-        nuts_opts = _nuts_options_for_fit(options, data, nuts_gradient, nuts_δ, nuts_fd_ε)
-        fits, stats, measures, _nuts_info = run_nuts_fit(
-            data, model, nuts_opts;
-            rng=Random.default_rng(),
-            steady_state_solver=steady_state_solver,
-            ad_likelihood=ad_likelihood,
-        )
-    elseif inference === INFERENCE_ADVI
-        throw(ArgumentError("inference=INFERENCE_ADVI is not implemented in fit(); call run_advi(data, model, rng, ADVIOptions(); ...) directly."))
-    else
-        throw(ArgumentError("unknown inference=$(repr(inference))"))
-    end
+    fits, stats, measures = run_mh(data, model, options, nchains)
     optimized = 0
     if optimize
         try
@@ -952,7 +834,7 @@ Create and configure data, model, and options structures for fitting.
 - `coupling::Tuple`: Coupling structure (default: empty tuple)
 - `grid`: Grid parameter (default: nothing)
 - `root`: Root directory (default: ".")
-- `maxtime`: Maximum **total** MH wall time for warmup **and** sampling combined (default: `60` seconds); a `Real` is seconds, or a string may use `m`/`h` (see [`maxtime_seconds`](@ref)); passed to `MHOptions` as seconds
+- `maxtime`: Maximum runtime in minutes (default: 60)
 - `elongationtime`: RNA elongation time (default: 6.0)
 - `priormean`: Prior means for parameters (default: empty array)
 - `priorcv`: Prior coefficient of variation (default: 10.0)
@@ -966,9 +848,10 @@ Create and configure data, model, and options structures for fitting.
 - `ratetype`: Rate type (default: "median")
 - `propcv`: Proposal coefficient of variation (default: 0.01)
 - `samplesteps`: Number of sampling steps (default: 1000000)
-- `warmupsteps`: MH warmup steps — discarded for inference; proposal adaptation may run (default: 0)
-- `annealsteps`, `tempanneal`: Accepted for API compatibility with `main` run specs; ignored when building [`MHOptions`](@ref) (MH annealing phase not implemented on this branch).
-- `temp`: MCMC temperature for MH (default: 1.0)
+- `warmupsteps`: Number of warmup steps (default: 0)
+- `annealsteps`: Number of annealing steps (default: 0)
+- `temp`: Temperature (default: 1.0)
+- `tempanneal`: Annealing temperature (default: 100.0)
 - `temprna`: RNA temperature (default: 1.0)
 - `method`: Numerical method (default: Tsit5())
 - `zeromedian`: Whether to zero median (default: true)
@@ -986,9 +869,9 @@ Create and configure data, model, and options structures for fitting.
 - Sets up priors and initial conditions
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
+- Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
 """
 function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
-    annealsteps > 0 && @warn "annealsteps > 0 is ignored: MH annealing is not implemented on this branch." maxlog=1
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -1009,9 +892,10 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     priormean, priorcv = set_priormean(priormean, transitions, R, S, insertstep, decayrate, noisepriors, elongationtime, hierarchical, coupling, grid, datatype; priorcv=priorcv)
     rinit = isempty(hierarchical) ? set_rinit(rinit, priormean) : set_rinit(rinit, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), coupling, grid; nhypersets=hierarchical[1])
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
+    propcv = get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     if samplesteps > 0
-        options = MHOptions(samplesteps, warmupsteps, maxtime_seconds(maxtime), temp)
+        options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
     else
         throw(ArgumentError("samplesteps must be greater than 0"))
     end
@@ -3840,28 +3724,30 @@ function finalize(data, model, fits, stats, measures, temp, writefolder, optimiz
 end
 
 """
-    get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+    get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
 
-Get proposal coefficient of variation from file or use default.
+Load or generate proposal coefficient of variation for MCMC sampling.
 
 # Arguments
-- `propcv`: Proposal coefficient of variation (if negative, will be read from file)
-- `infolder`: Input folder path
-- `label`: Label for the dataset
+- `propcv`: Proposal coefficient of variation (if positive, used directly; if negative, loaded from file)
+- `infolder`: Input folder path containing previous fit results
+- `label`: Dataset label for locating proposal covariance file
 - `gene`: Gene name
 - `G, R, S, insertstep`: Model structure parameters
 - `nalleles`: Number of alleles
+- `fittedparam`: Vector of fitted parameter indices (used for metadata validation)
+- `Gtransitions`: Gene transition structure (used for metadata validation)
 
 # Returns
-- Proposal coefficient of variation (scalar or matrix)
+- Proposal coefficient of variation: either a scalar (if positive propcv or load fails) or tuple `(scaled_cov_matrix, abs(propcv))`
 
 # Notes
-- If propcv < 0, reads covariance matrix from param-stats file
-- Scales covariance by 2.38^2 / n for optimal MCMC acceptance rate
-- Returns absolute value of propcv if file doesn't exist or matrix is not positive definite
-- Used for MCMC proposal distribution setup
+- If `propcv < 0`, attempts to load covariance matrix from previous fit's proposal-cov.jld2 file
+- Validates loaded covariance metadata: fittedparam, G, R, S, insertstep, Gtransitions, nalleles must all match
+- If metadata mismatch, falls back to `abs(propcv)` and prints diagnostic message
+- Scales covariance by `2.38^2 / n_parameters` for optimal MCMC acceptance rate (~23.4% for high-dimensional)
 """
-function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles)
+function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, Gtransitions)
     if propcv < 0.0
         # Construct path to proposal covariance file
         # Strip extension from param-stats path and use proposal-cov.jld2 instead
@@ -3871,26 +3757,46 @@ function get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles
         # Try to load proposal covariance matrix if file exists
         if isfile(proposal_cov_file)
             try
-                covparam = load(proposal_cov_file, "covparam")
-                scale_factor = 2.38^2 / size(covparam, 1)
-                scaled_cov = scale_factor .* covparam
-                
-                if isposdef(scaled_cov)
-                    @info "Loaded proposal covariance from $proposal_cov_file"
-                    return (scaled_cov, abs(propcv))
-                else
-                    @warn "Loaded covariance not positive definite, using default proposal"
-                    return abs(propcv)
+                jldopen(proposal_cov_file, "r") do f
+                    # Validate metadata matches current parameters
+                    if f["metadata/fittedparam"] != fittedparam ||
+                       f["metadata/G"] != G ||
+                       f["metadata/R"] != R ||
+                       f["metadata/S"] != S ||
+                       f["metadata/insertstep"] != insertstep ||
+                       f["metadata/Gtransitions"] != Gtransitions ||
+                       f["metadata/nalleles"] != nalleles
+                        @debug "Proposal covariance has different model parameters. Starting fresh."
+                        println("Using propcv = ", abs(propcv))
+                        return abs(propcv)
+                    end
+                    
+                    covparam = f["covparam"]
+                    scale_factor = 2.38^2 / size(covparam, 1)
+                    scaled_cov = scale_factor .* covparam
+                    
+                    if isposdef(scaled_cov)
+                        println("Loaded proposal covariance from ", basename(proposal_cov_file))
+                        flush(stdout)
+                        return (scaled_cov, abs(propcv))
+                    else
+                        @warn "Scaled covariance not positive definite, using default proposal"
+                        println("Using propcv = ", abs(propcv))
+                        return abs(propcv)
+                    end
                 end
             catch e
                 @warn "Failed to load proposal covariance from $proposal_cov_file: $e"
+                println("Using propcv = ", abs(propcv))
                 return abs(propcv)
             end
         else
             @debug "No proposal covariance file found at: $proposal_cov_file"
+            println("Using propcv = ", abs(propcv))
             return abs(propcv)
         end
     else
+        println("Using propcv = ", propcv)
         return propcv
     end
 end

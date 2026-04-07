@@ -319,6 +319,7 @@ function metropolis_hastings(data, model, options)
     if options.warmupsteps > 0 && !skip_warmup_due_to_loaded_cov
         println("Warmup")
         param, parml, ll, llml, d, proposalcv, logpredictions = warmup(logpredictions, param, param, ll, ll, d, model.proposal, data, model, options.warmupsteps, options.temp, time(), maxtime * options.warmupsteps / totalsteps)
+        println("Now using adapted proposal covariance")
     elseif options.warmupsteps > 0 && skip_warmup_due_to_loaded_cov
         println("Skipping warmup (loaded proposal covariance from previous fit)")
     end
