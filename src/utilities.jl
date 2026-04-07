@@ -2,6 +2,57 @@
 
 # utilities.jl
 
+"""
+    maxtime_seconds(maxtime)
+
+Convert a time specification into seconds.
+
+# Arguments
+- `maxtime`: Time value as:
+  - `Number`: Interpreted as seconds (returned as Float64)
+  - `String`: Parsed as one of:
+    - `"<number>"`: seconds
+    - `"<number>m"`: minutes (converted to seconds)
+    - `"<number>h"`: hours (converted to seconds)
+    - Whitespace is trimmed
+
+# Returns
+- `Float64`: Time in seconds
+
+# Examples
+```julia
+maxtime_seconds(60)           # 60.0
+maxtime_seconds(1.5)          # 1.5
+maxtime_seconds("90m")        # 5400.0
+maxtime_seconds("2h")         # 7200.0
+maxtime_seconds(" 1.5h ")     # 5400.0
+```
+
+# Notes
+Used by [`fit`](@ref) to accept flexible time specifications for `maxtime` parameter.
+"""
+function maxtime_seconds(maxtime::Number)
+    Float64(maxtime)
+end
+
+function maxtime_seconds(maxtime::AbstractString)
+    s = strip(uppercase(maxtime))
+    
+    # Try to match pattern: number + optional suffix (m or h)
+    if endswith(s, "H")
+        # Hours
+        num_str = strip(s[1:end-1])
+        return Float64(parse(Float64, num_str) * 3600.0)
+    elseif endswith(s, "M")
+        # Minutes
+        num_str = strip(s[1:end-1])
+        return Float64(parse(Float64, num_str) * 60.0)
+    else
+        # Plain number (seconds)
+        return Float64(parse(Float64, s))
+    end
+end
+
 
 """
     invert_dict(D)

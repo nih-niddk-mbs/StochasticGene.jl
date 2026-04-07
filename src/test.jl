@@ -3526,8 +3526,8 @@ Proposal scaling is **not** set here — it lives on `model` as **`propcv`** (se
 function benchmark_inference_run_mh(
     data::AbstractExperimentalData,
     model::AbstractGeneTransitionModel;
-    nchains::Int=8,
-    samplesteps::Int=10_000_000,
+    nchains::Int=1,
+    samplesteps::Int=10_000,
     warmupsteps::Int=5_000,
     maxtime::Float64=600.0,
     mh_seed::Union{Nothing,Int}=nothing,
