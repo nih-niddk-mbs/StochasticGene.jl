@@ -3534,7 +3534,7 @@ function benchmark_inference_run_mh(
 )
     nchains > 1 && benchmark_inference_ensure_workers(nchains)
     mh_seed !== nothing && Random.seed!(mh_seed)
-    opts = MHOptions(samplesteps, warmupsteps, maxtime_seconds(maxtime), 1.0)
+    opts = MHOptions(samplesteps, warmupsteps, 0, maxtime_seconds(maxtime), 1.0, 2.0)
     elapsed_sec = @elapsed begin
         fits, stats, measures = run_mh(data, model, opts, nchains)
     end
@@ -3588,7 +3588,7 @@ function benchmark_inference_run_nuts_parallel(
     report_chains::Bool=true,
 )
     ss = if steady_state_solver === :auto
-        data isa AbstractTraceData ? :augmented : :default
+        :augmented  # Use augmented solver for AD compatibility with NUTS
     else
         steady_state_solver
     end
