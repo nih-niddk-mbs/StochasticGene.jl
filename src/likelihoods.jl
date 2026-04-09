@@ -1497,16 +1497,33 @@ and other reals propagate). For `param::Vector{Vector}`, the implementation stil
 # Returns
 - Full rate vector (or vector of vectors for coupled/hierarchical) with fitted indices set from `param` and fixed effects applied.
 """
+
+"""
+    get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
+
+Classic (non-AD) parameter-to-rate logic. Copies model rates, inserts (optionally inverse-transformed) params, applies fixed effects. Does NOT call or delegate to get_rates_ad. For AD/gradient code, use get_rates_ad instead.
+
+# Arguments
+- `param`: Vector of parameters in transformed space (e.g. from `get_param(model)` or MCMC samples).
+- `model`: The model defining the transform and fitted indices.
+- `inverse`: If `true` (default), apply inverse transform to `param`; if `false`, treat `param` as already in rate space for the fitted indices.
+
+# Returns
+- Full rate vector (or vector of vectors for coupled/hierarchical) with fitted indices set from `param` and fixed effects applied.
+"""
 function get_rates(param, model::AbstractGeneTransitionModel, inverse=true)
-    get_rates_ad(param, model, inverse)
+    r = copy_r(model)
+    get_rates!(r, param, model, inverse)
+    fixed_rates(r, model.fixedeffects)
 end
 
 function get_rates(param::Vector{Vector}, model::AbstractGeneTransitionModel, inverse=true)
     rv = copy_r(model)
-    for r in rv
-        get_rates!(r, param, model, inverse)
+    for (i, r) in enumerate(rv)
+        get_rates!(r, param[i], model, inverse)
+        rv[i] = fixed_rates(r, model.fixedeffects)
     end
-    fixed_rates(r, model.fixedeffects)
+    rv
 end
 
 
