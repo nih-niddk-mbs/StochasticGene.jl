@@ -81,7 +81,6 @@ function test_benchmark_trace_joint_fit_stacks(;
     ],
     nsamples=1500,
     warmupsteps=0,
-    annealsteps=0,
     totaltime=800.0,
     ntrials=4,
     fittedparam=Int[19],
