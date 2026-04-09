@@ -64,7 +64,7 @@ For coupled transcribing units, arguments transitions, G, R, S, insertstep, and 
     Note that all traces are scaled by the maximum of the medians of all the traces, the traces are all scaled by the same factor since the signal amplitude should be the same
 - `TransitionType=""`: String describing G transition type, e.g. "3state", "KP" (kinetic proofreading), "cyclic", or if hierarchical, coupled
 - `transitions::Tuple=([1,2],[2,1])`: tuple of vectors that specify state transitions for G states, e.g. ([1,2],[2,1]) for classic 2-state telegraph model and ([1,2],[2,1],[2,3],[3,1]) for 3-state kinetic proofreading model, empty for G=1
-- `warmupsteps=0`: number of MCMC warmup steps to adapt proposal distribution covariance. Warmup runs before annealing and sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
+- `warmupsteps=0`: number of MCMC warmup steps to adapt proposal distribution covariance. Warmup runs beore sampling, using periodic adaptation every `max(1000, samplesteps ÷ 3)` steps to refine the proposal toward optimal acceptance rate (which scales with dimensionality: ~44% for d=1, ~30% for d=5-20, ~23.4% for d>>1). Acceptance rate below 15% shrinks proposals; above 40% expands them. Time is allocated proportionally: `warmup_time = maxtime × (warmupsteps / total_steps)`.
 - `writesamples=false`: write out MH samples if true, default is false
 - `zeromedian=true`: subtract the median of each trace from each trace, then scale by the maximum of the medians; set `false` to leave traces unmodified
 - `key=nothing`: when nothing, fit uses the keyword arguments you pass (and defaults). When a string (e.g. `key=\"33il\"`), fit looks for `info_<key>.toml` in the results folder; if found, loads that spec and overrides with any kwargs you pass (kwargs take precedence). If not found, uses your kwargs and defaults. Results are always written to `info_<stem>.toml`; with a key, that file is also read on the next run when present.
@@ -205,7 +205,6 @@ function fit_coupled_default_spec()
     d[:datacond] = ["gene", "enhancer"]
     d[:nchains] = 16
     d[:samplesteps] = 100_000
-    # annealsteps removed
     d[:warmupsteps] = 0
     d[:writesamples] = false
     d[:G] = (3, 3)
@@ -321,21 +320,21 @@ function fit(; key=nothing, kwargs...)
 end
 
 """
-    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
+    fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
         fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
 end
 
 """
-    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
+    fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
@@ -843,9 +842,7 @@ Create and configure data, model, and options structures for fitting.
 - `propcv`: Proposal coefficient of variation (default: 0.01)
 - `samplesteps`: Number of sampling steps (default: 1000000)
 - `warmupsteps`: Number of warmup steps (default: 0)
-- `annealsteps`: Number of annealing steps (default: 0)
 - `temp`: Temperature (default: 1.0)
-- `tempanneal`: Annealing temperature (default: 100.0)
 - `temprna`: RNA temperature (default: 1.0)
 - `method`: Numerical method (default: Tsit5())
 - `zeromedian`: Whether to zero median (default: true)
@@ -865,7 +862,7 @@ Create and configure data, model, and options structures for fitting.
 - Handles hierarchical, coupled, and grid models
 - Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
 """
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, annealsteps=0, temp=1.0, tempanneal=100.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -889,7 +886,7 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     propcv = get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
     if samplesteps > 0
-        options = MHOptions(samplesteps, warmupsteps, annealsteps, Float64(maxtime), temp, tempanneal)
+        options = MHOptions(samplesteps, warmupsteps, Float64(maxtime), temp)
     else
         throw(ArgumentError("samplesteps must be greater than 0"))
     end
