@@ -631,9 +631,17 @@ function mhstep(logpredictions, param, ll, prior, d, proposalcv, model, data, te
         return 0, logpredictions, param, ll, prior, d
     end
     priort = logprior(paramt, model)
-    llt, logpredictionst = loglikelihood(paramt, data, model)
-    # Reject immediately if proposed point has invalid posterior (avoids NaN in acceptance ratio)
-    if !isfinite(llt) || !isfinite(priort)
+
+    local llt, logpredictionst
+    try
+        llt, logpredictionst = loglikelihood(paramt, data, model)
+    catch err
+        @debug "Rejecting proposal after likelihood evaluation failed" exception=(err, catch_backtrace())
+        return 0, logpredictions, param, ll, prior, d
+    end
+
+    # Reject immediately if proposed point has invalid posterior or malformed pointwise likelihoods.
+    if !isfinite(llt) || !isfinite(priort) || !all(isfinite, logpredictionst) || length(logpredictionst) != length(logpredictions)
         return 0, logpredictions, param, ll, prior, d
     end
     mhstep(logpredictions, logpredictionst, ll, llt, param, paramt, prior, priort, d, dt, temp)

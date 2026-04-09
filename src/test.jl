@@ -1278,6 +1278,30 @@ function test_load_model_keyword_compatibility(; method=Tsit5())
     all(checks)
 end
 
+struct MHRejectDummyModel <: AbstractGeneTransitionModel end
+struct MHRejectDummyData <: AbstractExperimentalData end
+
+num_rates(::MHRejectDummyModel) = 1
+get_rates(param, ::MHRejectDummyModel, inverse::Bool=true) = param
+logprior(param, ::MHRejectDummyModel) = 0.0
+loglikelihood(param, ::MHRejectDummyData, ::MHRejectDummyModel) = throw(DimensionMismatch("synthetic invalid likelihood"))
+
+"""
+    test_mhstep_rejects_invalid_likelihood()
+
+Regression test: if likelihood evaluation fails for a proposed point (e.g. malformed
+RNA dwell-time solve output), Metropolis-Hastings should reject the proposal rather than
+crash the run.
+"""
+function test_mhstep_rejects_invalid_likelihood()
+    model = MHRejectDummyModel()
+    data = MHRejectDummyData()
+    param = [0.1]
+    d = proposal_dist(param, 0.01, model)
+    accept, logpredictions, param_out, ll_out, prior_out, _ = mhstep([0.0], param, 0.0, 0.0, d, 0.01, model, data, 1.0)
+    accept == 0 && logpredictions == [0.0] && param_out == param && ll_out == 0.0 && prior_out == 0.0
+end
+
 """
     compute_quantile_bounds(qparam_row1, qparam_row3, n_accepts, n_total)
 
@@ -3236,10 +3260,10 @@ function benchmark_inference_trace_gr2r2(;
     S::Int=0,
     insertstep::Int=1,
     transitions=([1, 2], [2, 1]),
-    rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 50, 5, 50, 5],
+    rtarget=[0.01, 0.01, 0.1, 0.15, 0.1, 1.0, 0, 0.1, 1., 0.1],
     totaltime::Float64=4000.0,
     ntrials::Int=10,
-    fittedparam=[1:num_rates(transitions, R, S, insertstep)-1; num_rates(transitions, R, S, insertstep)+1:num_rates(transitions, R, S, insertstep)+1],
+    fittedparam=[1,2,3,4,5,7],
     propcv::Float64=0.01,
     noisepriors=[0.0, 0.1, 1.0, 0.1],
     zeromedian::Bool=true,
@@ -3261,7 +3285,7 @@ function benchmark_inference_trace_gr2r2(;
     elongationtime = mean_elongationtime(rtarget, transitions, R)
     priormean = [fill(0.01, length(transitions)); initprior; fill(R / elongationtime, R); fill(0.05, max(0, S - insertstep + 1)); 1.0; noisepriors]
     priorcv = [fill(1.0, length(transitions)); 0.1; fill(0.1, R); fill(0.1, max(0, S - insertstep + 1)); 1.0; [0.5, 0.5, 0.1, 0.1]]
-    rinit = isempty(tuple()) ? set_rinit(rtarget, priormean) : set_rinit(rtarget, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
+    rinit = !isempty(rtarget) ? set_rinit(rtarget, priormean) : set_rinit(rtarget, priormean, transitions, R, S, insertstep, noisepriors, length(data.trace[1]), tuple(), nothing)
     model = load_model(data, rinit, priormean, fittedparam, tuple(), transitions, G, R, S, insertstep, "", 1, priorcv, Int[], rtarget[num_rates(transitions, R, S, insertstep)], propcv, prob_Gaussian, noisepriors, Tsit5(), tuple(), tuple(), nothing, zeromedian)
     meta = (; traceinfo, G, R, S, insertstep, transitions, rtarget, totaltime, ntrials, fittedparam, propcv, zeromedian, seed)
     return (; data, model, meta)
@@ -4432,30 +4456,89 @@ end
     benchmark_inference_run_advi(data, model; kwargs...)
     benchmark_inference_run_advi(scenario; kwargs...)
 
-Mean-field [`run_advi`](@ref) with optional Optim `time_limit` (seconds) for wall-clock alignment with MH `maxtime`.
-ESS is not defined for ADVI; the returned tuple includes `neg_elbo_min` from `Optim.minimum`.
+Mean-field ADVI benchmark runner with the **same comparison-facing payload shape** as the MH and NUTS
+benchmark helpers: it returns `fits`, `stats`, `measures`, plus ADVI-specific diagnostics.
+This makes scenario-based head-to-head comparisons straightforward.
+
+For benchmark use, the default ADVI settings are intentionally **interactive** rather than
+maximum-effort: `gradient=:finite` (implemented via `ForwardDiff` on `neg_elbo`), moderate
+`maxiter`, and a bounded `time_limit`. This makes head-to-head scenario comparisons practical.
+If you explicitly request `gradient=:Zygote` and that path fails on a scenario, this helper
+retries once with `:finite` so the benchmark still completes.
 
 # Keywords
-- `rng`, `steady_state_solver`, `ad_likelihood`, `zygote_trace`: passed to [`run_advi`](@ref).
-- `advi_options`: [`ADVIOptions`](@ref) (default: `maxiter` large, `time_limit=600`, `gradient=:Zygote`, `init_s_raw=-4`). For **trace** [`AbstractTraceData`](@ref), [`run_advi`](@ref) switches to **`gradient=:finite`** unless `zygote_trace=true` (Zygote through long HMM traces overflows the compiler stack).
+- `rng`, `steady_state_solver`, `ad_likelihood`, `zygote_trace`: passed to [`run_advi_fit`](@ref).
+- `advi_options`: [`ADVIOptions`](@ref) for the ADVI optimization. The benchmark default uses
+  `gradient=:finite` for robust comparisons.
+
+# Returns
+`NamedTuple` including `elapsed_sec`, `fits`, `stats`, `measures`, `advi_info`, `neg_elbo_min`,
+`gradient_used`, `zygote_fallback_used`, and the same ESS summary fields used by the MH/NUTS
+benchmark runners (typically `NaN`/formal-only for ADVI).
 """
 function benchmark_inference_run_advi(
     data::AbstractExperimentalData,
     model::AbstractGeneTransitionModel;
     rng::Random.AbstractRNG=Random.default_rng(),
-    steady_state_solver::Symbol=:augmented,
+    steady_state_solver::Symbol=:auto,
     ad_likelihood::Union{Nothing,Bool}=nothing,
     zygote_trace::Bool=false,
-    advi_options::ADVIOptions=ADVIOptions(; maxiter=50_000, n_mc=8, σ_floor=1e-4, verbose=false, gradient=:Zygote, time_limit=600.0),
+    posterior_samples::Int=1000,
+    advi_options::ADVIOptions=ADVIOptions(; maxiter=200, n_mc=4, σ_floor=1e-4, verbose=false, gradient=:finite, time_limit=60.0),
 )
-    elapsed_sec = @elapsed out = run_advi(
-        data, model, rng, advi_options;
-        steady_state_solver=steady_state_solver,
-        ad_likelihood=ad_likelihood,
-        zygote_trace=zygote_trace,
-    )
-    neg_elbo_min = Optim.minimum(out.optimization)
-    return (; elapsed_sec, μ=out.μ, σ=out.σ, optimization=out.optimization, neg_elbo_min, initial_θ=out.initial_θ)
+    ss = if steady_state_solver === :auto
+        data isa AbstractTraceData ? :augmented : :default
+    else
+        steady_state_solver
+    end
+    opts_used = advi_options
+    zygote_fallback_used = false
+    local fits, stats, measures, advi_info
+    elapsed_sec = @elapsed begin
+        try
+            fits, stats, measures, advi_info = run_advi_fit(
+                data, model, opts_used;
+                rng=rng,
+                steady_state_solver=ss,
+                ad_likelihood=ad_likelihood,
+                zygote_trace=zygote_trace,
+                posterior_samples=posterior_samples,
+            )
+        catch e
+            if opts_used.gradient === :Zygote
+                @warn "benchmark_inference_run_advi: ADVI with gradient=:Zygote failed on this scenario; retrying with gradient=:finite for a robust benchmark comparison."
+                opts_used = ADVIOptions(
+                    opts_used.maxiter,
+                    opts_used.n_mc,
+                    opts_used.σ_floor,
+                    opts_used.init_s_raw,
+                    opts_used.verbose,
+                    :finite,
+                    opts_used.time_limit,
+                )
+                zygote_fallback_used = true
+                fits, stats, measures, advi_info = run_advi_fit(
+                    data, model, opts_used;
+                    rng=rng,
+                    steady_state_solver=ss,
+                    ad_likelihood=ad_likelihood,
+                    zygote_trace=zygote_trace,
+                    posterior_samples=posterior_samples,
+                )
+            else
+                rethrow(e)
+            end
+        end
+    end
+    ess = _benchmark_ess_summary(measures, elapsed_sec)
+    neg_elbo_min = Optim.minimum(advi_info.optimization)
+    optimization_converged = Optim.converged(advi_info.optimization)
+    optimizer_iterations = Optim.iterations(advi_info.optimization)
+    posterior_mean = vec(stats.meanparam)
+    posterior_std = vec(stats.stdparam)
+    posterior_median = vec(stats.medparam)
+    posterior_q = stats.qparam
+    return (; elapsed_sec, fits, stats, measures, advi_info, neg_elbo_min, μ=advi_info.μ, σ=advi_info.σ, optimization=advi_info.optimization, initial_θ=advi_info.initial_θ, gradient_used=opts_used.gradient, zygote_fallback_used, steady_state_solver_used=ss, optimization_converged, optimizer_iterations, posterior_samples, posterior_mean, posterior_std, posterior_median, posterior_q, ess...)
 end
 
 function benchmark_inference_run_advi(scenario::NamedTuple; kwargs...)
@@ -4465,19 +4548,106 @@ function benchmark_inference_run_advi(scenario::NamedTuple; kwargs...)
 end
 
 """
+    benchmark_inference_compare_mh_nuts_advi(data, model; kwargs...)
+    benchmark_inference_compare_mh_nuts_advi(scenario; kwargs...)
+
+Run **MH**, **NUTS**, and **ADVI** on the same benchmark target so simulated scenarios from
+[`benchmark_inference_simrna_small`](@ref), [`benchmark_inference_trace_gr2r2`](@ref), or related
+helpers can be compared head-to-head without rebuilding `data` / `model`.
+
+This is intentionally thin: it reuses [`benchmark_inference_run_mh`](@ref),
+[`benchmark_inference_run_nuts_parallel`](@ref), and [`benchmark_inference_run_advi`](@ref)
+rather than duplicating inference code.
+
+# Keywords
+- `run_mh`, `run_nuts`, `run_advi`: enable/disable individual methods.
+- `mh_kwargs`, `nuts_kwargs`, `advi_kwargs`: `NamedTuple`s splatted into the corresponding
+  benchmark runner.
+
+# Returns
+A `NamedTuple` with keys `mh`, `nuts`, `advi`, and `compare=:mh_nuts_advi`.
+Each field is either the benchmark result `NamedTuple` from the underlying runner or `nothing`
+if that method was disabled.
+
+# Example
+```julia
+scen = benchmark_inference_simrna_small(seed=1)
+out = benchmark_inference_compare_mh_nuts_advi(
+    scen;
+    mh_kwargs=(; nchains=1, samplesteps=2_000, warmupsteps=1_000, maxtime=30.0),
+    nuts_kwargs=(; nchains=1, n_samples=50, n_adapts=50, report_chains=false),
+    advi_kwargs=(; advi_options=ADVIOptions(maxiter=300, gradient=:finite, time_limit=60.0)),
+)
+benchmark_inference_print_summary(out)
+```
+"""
+function benchmark_inference_compare_mh_nuts_advi(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel;
+    run_mh::Bool=true,
+    run_nuts::Bool=true,
+    run_advi::Bool=true,
+    mh_kwargs::NamedTuple=(; nchains=1, samplesteps=10_000, warmupsteps=5_000, maxtime=600.0),
+    nuts_kwargs::NamedTuple=(; nchains=1, n_samples=150, n_adapts=80, report_chains=true, verbose=false, progress=false),
+    advi_kwargs::NamedTuple=(;),
+)
+    mh = run_mh ? benchmark_inference_run_mh(data, model; mh_kwargs...) : nothing
+    nuts = run_nuts ? benchmark_inference_run_nuts_parallel(data, model; nuts_kwargs...) : nothing
+    advi = run_advi ? benchmark_inference_run_advi(data, model; advi_kwargs...) : nothing
+    return (; compare=:mh_nuts_advi, mh, nuts, advi)
+end
+
+function benchmark_inference_compare_mh_nuts_advi(scenario::NamedTuple; kwargs...)
+    hasproperty(scenario, :data) && hasproperty(scenario, :model) ||
+        throw(ArgumentError("scenario must be a NamedTuple with :data and :model"))
+    out = benchmark_inference_compare_mh_nuts_advi(scenario.data, scenario.model; kwargs...)
+    return hasproperty(scenario, :meta) ? merge(out, (; meta=scenario.meta)) : out
+end
+
+"""
     benchmark_inference_print_summary(result::NamedTuple)
 
 Print a short summary for benchmark `NamedTuple` returns:
 
 - [`benchmark_inference_run_mh`](@ref) / [`benchmark_inference_run_nuts_parallel`](@ref): `elapsed_sec` and, when present, ESS / R-hat lines.
-- [`benchmark_inference_run_advi`](@ref): `elapsed_sec` and `neg_elbo_min` when present.
+- [`benchmark_inference_run_advi`](@ref): `elapsed_sec`, `neg_elbo_min`, and now `fits` / `stats` / `measures` for direct comparison with MH and NUTS.
 - [`benchmark_trace_zygote_gradient`](@ref): `success`, `time_no_checkpoint`, `time_with_checkpoint`, `ratio`, `θlen`, `longest_timesteps`, and `error` on failure.
 - [`benchmark_trace_forwarddiff_gradient`](@ref) / [`benchmark_trace_finitediff_gradient`](@ref): `time_sec`, `param_indices`, `nparams`, `θlen`, and finite-diff extras when present.
 - [`benchmark_trace_compare_forwarddiff_vs_finitediff`](@ref): `time_forwarddiff_sec`, `time_finitediff_sec`, `faster`, `ratio_forwarddiff_over_finitediff`.
 - [`compare_trace_subset_gradient_benchmarks`](@ref): `time_*_sec`, `fastest_method`, pairwise gradient diffs.
 """
 function benchmark_inference_print_summary(result::NamedTuple)
-    if get(result, :compare, nothing) === :trace_subset_gradient_three_way
+    if get(result, :compare, nothing) === :mh_nuts_advi
+        println("benchmark_inference_compare_mh_nuts_advi:")
+        if get(result, :mh, nothing) !== nothing
+            println("  MH elapsed_sec: ", result.mh.elapsed_sec)
+            haskey(result.mh, :min_ess) && println("  MH min_ess / mean_ess / max_rhat: ", result.mh.min_ess, " / ", result.mh.mean_ess, " / ", result.mh.max_rhat)
+            haskey(result.mh, :ess_per_sec_min) && println("  MH ESS/s (min / mean): ", result.mh.ess_per_sec_min, " / ", result.mh.ess_per_sec_mean)
+        end
+        if get(result, :nuts, nothing) !== nothing
+            println("  NUTS elapsed_sec: ", result.nuts.elapsed_sec)
+            haskey(result.nuts, :min_ess) && println("  NUTS min_ess / mean_ess / max_rhat: ", result.nuts.min_ess, " / ", result.nuts.mean_ess, " / ", result.nuts.max_rhat)
+            haskey(result.nuts, :ess_per_sec_min) && println("  NUTS ESS/s (min / mean): ", result.nuts.ess_per_sec_min, " / ", result.nuts.ess_per_sec_mean)
+        end
+        if get(result, :advi, nothing) !== nothing
+            println("  ADVI elapsed_sec: ", result.advi.elapsed_sec)
+            haskey(result.advi, :gradient_used) && println("  ADVI gradient_used: ", result.advi.gradient_used)
+            haskey(result.advi, :steady_state_solver_used) && println("  ADVI steady_state_solver_used: ", result.advi.steady_state_solver_used)
+            haskey(result.advi, :zygote_fallback_used) && println("  ADVI zygote_fallback_used: ", result.advi.zygote_fallback_used)
+            haskey(result.advi, :optimization_converged) && println("  ADVI optimization_converged: ", result.advi.optimization_converged)
+            haskey(result.advi, :optimizer_iterations) && println("  ADVI optimizer_iterations: ", result.advi.optimizer_iterations)
+            haskey(result.advi, :neg_elbo_min) && println("  ADVI neg_elbo_min: ", result.advi.neg_elbo_min)
+            haskey(result.advi, :measures) && println("  ADVI WAIC: ", result.advi.measures.waic)
+            haskey(result.advi, :posterior_samples) && println("  ADVI posterior_samples: ", result.advi.posterior_samples)
+            haskey(result.advi, :posterior_mean) && println("  ADVI posterior_mean: ", result.advi.posterior_mean)
+            haskey(result.advi, :posterior_std) && println("  ADVI posterior_std: ", result.advi.posterior_std)
+            haskey(result.advi, :posterior_q) && println("  ADVI posterior_q (2.5%, 50%, 97.5%): ", result.advi.posterior_q)
+        end
+        if get(result, :mh, nothing) !== nothing && get(result, :nuts, nothing) !== nothing &&
+           haskey(result.mh, :ess_per_sec_min) && haskey(result.nuts, :ess_per_sec_min)
+            println("  MH/NUTS ESS-per-sec ratio (min): ", result.mh.ess_per_sec_min / result.nuts.ess_per_sec_min)
+        end
+    elseif get(result, :compare, nothing) === :trace_subset_gradient_three_way
         println("compare_trace_subset_gradient_benchmarks:")
         println("  time_forwarddiff_sec: ", result.time_forwarddiff_sec)
         println("  time_finitediff_sec: ", result.time_finitediff_sec)
@@ -4561,8 +4731,142 @@ function benchmark_inference_print_summary(result::NamedTuple)
     return nothing
 end
 
-# --- Notes on the `set_d` function family ---
-# Your `set_d` functions often return newly created arrays of Distributions.
-# e.g., `probfn(noiseparams, reporters_per_state, N)`
-# If `probfn` itself is allocating significantly or if creating Distribution objects is costly,
+# ════════════════════════════════════════════════════════════════════════════════════
+# SECTION: NUTS/ADVI Test Functions (for gradient-based Bayesian inference)
+# ════════════════════════════════════════════════════════════════════════════════════
+
+"""
+    test_nuts_fit_smoke(; seed=42, n_samples=12, n_adapts=12, gradient=:finite)
+
+Simple NUTS smoke test on a small synthetic RNA histogram problem. Validates that
+`run_nuts_fit` returns proper structure (fits, stats, measures, nuts_info) matching
+`run_mh` convention.
+
+# Keywords
+- `seed`: RNG seed
+- `n_samples`: post-warmup samples
+- `n_adapts`: adaptation steps
+- `gradient`: gradient mode (`:finite`, `:ForwardDiff`, `:Zygote`)
+
+# Returns
+- `(fits, stats, measures, nuts_info)` from [`run_nuts_fit`](@ref)
+"""
+function test_nuts_fit_smoke(; seed::Int=42, n_samples::Int=12, n_adapts::Int=12, gradient::Symbol=:finite)
+    gradient == :finite || @warn "test_nuts_fit_smoke delegates to test_run_nuts_fit_smoke, which uses gradient=:finite. Pass gradient=:finite for the existing smoke test path."
+    return test_run_nuts_fit_smoke(; seed=seed, n_samples=n_samples, n_adapts=n_adapts)
+end
+
+"""
+    test_run_advi_fit_smoke(; seed=42, maxiter=100, gradient=:finite)
+
+Short ADVI smoke test for interactive validation. Reuses the existing synthetic
+benchmark scenario from [`benchmark_inference_simrna_small`](@ref).
+Returns `true` when the returned fit/statistics layout is consistent.
+"""
+function test_run_advi_fit_smoke(; seed::Int=42, maxiter::Int=100, gradient::Symbol=:finite)
+    scen = benchmark_inference_simrna_small(seed=seed)
+    opts = ADVIOptions(;
+        maxiter=maxiter,
+        n_mc=4,
+        σ_floor=1e-4,
+        init_s_raw=-4.0,
+        verbose=false,
+        gradient=gradient,
+        time_limit=nothing,
+    )
+    fits, stats, measures, advi_info = run_advi_fit(
+        scen.data, scen.model, opts;
+        rng=MersenneTwister(seed),
+        steady_state_solver=:augmented,
+    )
+    size(fits.param, 2) == 1 || return false
+    length(fits.ll) == 1 || return false
+    length(stats.meanparam) == size(fits.param, 1) || return false
+    measures.waic isa Tuple || return false
+    haskey(advi_info, :μ) || return false
+    haskey(advi_info, :σ) || return false
+    haskey(advi_info, :vb_elbo) || return false
+
+    bench = benchmark_inference_run_advi(
+        scen;
+        rng=MersenneTwister(seed),
+        advi_options=opts,
+    )
+    haskey(bench, :fits) || return false
+    haskey(bench, :stats) || return false
+    haskey(bench, :measures) || return false
+    haskey(bench, :advi_info) || return false
+    haskey(bench, :neg_elbo_min) || return false
+    return true
+end
+
+"""
+    test_run_advi_trace_smoke(; seed=42, maxiter=40, totaltime=30.0, ntrials=1)
+
+Short trace-data ADVI smoke test using the existing GR2R2 benchmark scenario.
+This exercises the AD-friendly trace likelihood path and the automatic switch
+from `gradient=:Zygote` to the safer finite-difference route for traces.
+"""
+function test_run_advi_trace_smoke(; seed::Int=42, maxiter::Int=40, totaltime::Float64=30.0, ntrials::Int=1)
+    scen = benchmark_inference_trace_gr2r2(; seed=seed, totaltime=totaltime, ntrials=ntrials)
+    out = benchmark_inference_run_advi(
+        scen;
+        rng=MersenneTwister(seed),
+        advi_options=ADVIOptions(
+            ;
+            maxiter=maxiter,
+            n_mc=2,
+            σ_floor=1e-4,
+            init_s_raw=-4.0,
+            verbose=false,
+            gradient=:Zygote,
+            time_limit=60.0,
+        ),
+    )
+    isfinite(out.neg_elbo_min) || return false
+    length(out.μ) == length(get_param(scen.model)) || return false
+    length(out.σ) == length(get_param(scen.model)) || return false
+    return true
+end
+
+"""
+    test_nuts_vs_advi_consistency(; seed=42, n_samples=50)
+
+Run both NUTS and ADVI on the same data/model and compare posterior estimates.
+Both methods should produce similar posterior means (within MCMC variance).
+
+# Returns
+- `true` if consistency check passes
+"""
+function test_nuts_vs_advi_consistency(; seed::Int=42, n_samples::Int=50)
+    scen = benchmark_inference_simrna_small(seed=seed)
+    nuts = benchmark_inference_run_nuts_parallel(
+        scen;
+        nchains=1,
+        n_samples=n_samples,
+        n_adapts=max(20, n_samples ÷ 2),
+        nuts_gradient=:finite,
+        nuts_fd_ε=1e-4,
+        verbose=false,
+        progress=false,
+        report_chains=false,
+    )
+    advi = benchmark_inference_run_advi(
+        scen;
+        rng=MersenneTwister(seed),
+        advi_options=ADVIOptions(
+            ;
+            maxiter=200,
+            n_mc=4,
+            σ_floor=1e-4,
+            init_s_raw=-4.0,
+            verbose=false,
+            gradient=:finite,
+            time_limit=60.0,
+        ),
+    )
+    mean_diff = norm(nuts.stats.meanparam .- inverse_transform_params(reshape(advi.μ, :, 1), scen.model)[:, 1])
+    mean_diff < 2.0 || return false
+    return true
+end
 # you might also need to make `set_d`

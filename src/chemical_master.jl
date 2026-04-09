@@ -39,7 +39,20 @@ function _dense_generic_vector(v::AbstractVector)
 end
 
 function _nullspace_robust_fallback(M::SparseMatrixCSC{T}) where T
-    _use_dense_ad_eltype(T) ? normalized_nullspace_qr(M) : normalized_nullspace_svd(M)
+    if _use_dense_ad_eltype(T)
+        return normalized_nullspace_qr(M)
+    end
+    try
+        v = normalized_nullspace_qr(M)
+        if all(isfinite, v)
+            s = sum(v)
+            if isfinite(s) && s != 0
+                return v
+            end
+        end
+    catch
+    end
+    return normalized_nullspace_svd(M)
 end
 
 function _augmented_linear_solve(A::SparseMatrixCSC{T}, b::AbstractVector) where T
@@ -399,7 +412,7 @@ function normalized_nullspace_qr(M::SparseMatrixCSC{T}) where T
     F = qr(Md)   # dense QR for ForwardDiff.Dual / abstract Real paths
     R = Matrix(F.R)  # convert to dense once to avoid repeated sparse slicing in back substitution
     p = _backsub_upper_tri_one(R, m)
-    pp = p[invperm(F.pcol)]
+    pp = hasproperty(F, :pcol) ? p[invperm(getproperty(F, :pcol))] : p
     max.(pp / sum(pp), 0)
 end
 
@@ -413,7 +426,11 @@ fallback and for benchmarking.
 """
 function normalized_nullspace_svd(M::SparseMatrixCSC)
     Md = !isconcretetype(eltype(M)) ? _dense_generic_matrix(M) : Matrix(M)
-    Fsvd = svd(Md)
+    Fsvd = try
+        svd(Md)
+    catch
+        return normalized_nullspace_qr(M)
+    end
     v = Fsvd.V[:, end]  # smallest singular value (svd sorts descending)
     s = sum(v)
     if s != 0 && isfinite(s)

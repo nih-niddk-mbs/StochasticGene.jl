@@ -256,7 +256,7 @@ function run_nuts(
 end
 
 @inline function _softplus(x::Real)
-    return log1p(exp(x))
+    return x > 0 ? x + log1p(exp(-x)) : log1p(exp(x))
 end
 
 """
@@ -323,6 +323,11 @@ function run_advi(
     zygote_trace::Bool=false,
 )
     ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    options.gradient in (:Zygote, :finite, :ForwardDiff) ||
+        throw(ArgumentError("ADVIOptions.gradient must be :Zygote, :finite, or :ForwardDiff, got $(repr(options.gradient))"))
+    options.n_mc >= 1 || throw(ArgumentError("ADVIOptions.n_mc must be ≥ 1, got $(options.n_mc)"))
+    options.maxiter >= 1 || throw(ArgumentError("ADVIOptions.maxiter must be ≥ 1, got $(options.maxiter)"))
+
     options_eff = if !zygote_trace && data isa AbstractTraceData && options.gradient === :Zygote
         @info "ADVI: using finite-difference gradients for trace data (Zygote through long HMM likelihoods is not supported; set `zygote_trace=true` to try)."
         ADVIOptions(
@@ -364,6 +369,7 @@ function run_advi(
     else
         Optim.Options(iterations=options_eff.maxiter, show_trace=options_eff.verbose, time_limit=options_eff.time_limit)
     end
+    lbfgs_method = LBFGS(linesearch=Optim.LineSearches.BackTracking())
     result = if options_eff.gradient === :finite || options_eff.gradient === :ForwardDiff
         if options_eff.verbose && data isa AbstractTraceData
             @info "ADVI: gradients use ForwardDiff on neg_elbo (not Optim finite-differences); " *
@@ -375,7 +381,7 @@ function run_advi(
             return g
         end
         od = OnceDifferentiable(neg_elbo, neg_elbo_grad_fd!, x0)
-        Optim.optimize(od, x0, LBFGS(), opts)
+        Optim.optimize(od, x0, lbfgs_method, opts)
     else
         # One Zygote tape over the whole MC loop retains every forward intermediate → huge RAM.
         # ∇(-mean_i ℓ_i - H) = -mean_i ∇ℓ_i - ∇H, so accumulate per-ε gradients separately.
@@ -386,7 +392,7 @@ function run_advi(
             return g
         end
         od = OnceDifferentiable(neg_elbo, neg_elbo_grad!, x0)
-        Optim.optimize(od, x0, LBFGS(), opts)
+        Optim.optimize(od, x0, lbfgs_method, opts)
     end
 
     xmin = Optim.minimizer(result)
@@ -411,7 +417,11 @@ function _elbo_single_lp(
     σ = _softplus.(s_raw) .+ σ_floor
     η = μ .+ σ .* ε
     # No try/catch here: Zygote cannot differentiate through `catch` (see ADVI + `gradient=:Zygote`).
-    logprior(η, model) + _ll_first(η, data, model, steady_state_solver, ad_likelihood)
+    lp = logprior(η, model)
+    isfinite(lp) || return oftype(lp, -Inf)
+    ll = _ll_first(η, data, model, steady_state_solver, ad_likelihood)
+    isfinite(ll) || return oftype(lp + ll, -Inf)
+    return lp + ll
 end
 
 function _elbo_entropy(
@@ -595,5 +605,112 @@ function run_NUTS(
         steady_state_solver=steady_state_solver,
         ad_likelihood=ad_likelihood,
         hmm_checkpoint_steps=hmm_checkpoint_steps,
+    )
+end
+
+function _advi_posterior_stats(
+    μ::AbstractVector{Float64},
+    σ::AbstractVector{Float64},
+    model::AbstractGeneTransitionModel,
+    rng::Random.AbstractRNG,
+    posterior_samples::Int,
+)
+    posterior_samples >= 2 || return compute_stats(reshape(μ, :, 1), model)
+    D = length(μ)
+    Z = randn(rng, D, posterior_samples)
+    param_draws = reshape(μ, :, 1) .+ reshape(σ, :, 1) .* Z
+    return compute_stats(Matrix{Float64}(param_draws), model)
+end
+
+"""
+    run_advi_fit(data, model, options=ADVIOptions(); rng=Random.default_rng(), kwargs...)
+
+Mean-field ADVI with the same **return convention as [`run_nuts_fit`](@ref) and [`run_mh`](@ref)**:
+`fits::Fit`, `stats::Stats`, `measures::Measures`, plus a fourth value `advi_info` with variational diagnostics.
+
+Posterior summary uses the **variational mean** (μ) as the point estimate and the variational standard deviation (σ)
+for interval reporting. Since ADVI returns a single point estimate, `Fit.param` is 1 column, and `R-hat`, `ESS`,
+`Geweke` are computed as single-sample proxies (values will indicate insufficient samples).
+
+# Arguments
+- `data`, `model`: experimental data and model (same as `run_mh`).
+- `options`: [`ADVIOptions`](@ref) (`maxiter`, `n_mc`, `σ_floor`, `gradient`, `time_limit`, …).
+- `rng`: random number generator (default `Random.default_rng()`).
+- `steady_state_solver`, `ad_likelihood`, `zygote_trace`: forwarded to [`run_advi`](@ref).
+
+# Returns
+- `fits`: [`Fit`](@ref) — `param` is `d × 1` (the variational mean μ); `ll` contains the single log-likelihood; `accept`/`total` are both 1 (pseudo-sample count).
+- `stats`: [`compute_stats`](@ref) on the variational mean.
+- `measures`: R-hat (single sample; expect values ~1.0 or NA), ESS (also single-sample proxy), WAIC from μ, etc.
+- `advi_info`: `NamedTuple` with `μ` (mean), `σ` (std), `optimization` (Optim.OptimizationResults), `initial_θ`, and `vb_elbo` (neg_elbo × -1).
+
+# Notes
+- ADVI provides a point estimate (μ) and uncertainty (σ), but does **not** produce a sample-based posterior. Results are for **variational approximation only** — posteriors are assumed Gaussian.
+- For interpretation and model comparison, use WAIC from the variational mean; R-hat and ESS are formal-only (not valid for single-sample output).
+
+See also: [`run_advi`](@ref) for raw variational output, [`run_nuts_fit`](@ref) for sample-based NUTS results.
+"""
+function run_advi_fit(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel,
+    options::ADVIOptions=ADVIOptions();
+    rng::Random.AbstractRNG=Random.default_rng(),
+    steady_state_solver::Symbol=:augmented,
+    ad_likelihood::Union{Nothing,Bool}=nothing,
+    zygote_trace::Bool=false,
+    posterior_samples::Int=1000,
+)
+    ad = something(ad_likelihood, data isa AbstractHistogramData || data isa AbstractTraceData)
+    vb_out = run_advi(
+        data, model, rng, options;
+        steady_state_solver=steady_state_solver,
+        ad_likelihood=ad_likelihood,
+        zygote_trace=zygote_trace,
+    )
+
+    μ_matrix = reshape(vb_out.μ, :, 1)
+    fits = _nuts_samples_to_fit(μ_matrix, data, model, 0, steady_state_solver, ad)
+    stats = _advi_posterior_stats(vb_out.μ, vb_out.σ, model, rng, posterior_samples)
+    nparam = size(μ_matrix, 1)
+    rhat = fill(NaN, nparam)
+    ess = fill(NaN, nparam)
+    geweke = fill(NaN, nparam)
+    mcse = fill(NaN, nparam)
+    waic_val = compute_waic(fits.lppd, fits.pwaic, data)
+    measures = Measures(waic_val, rhat, ess, geweke, mcse)
+    
+    # ELBO = -neg_elbo; store for diagnostic reporting.
+    vb_elbo = -Optim.minimum(vb_out.optimization)
+    
+    advi_info = (
+        μ=vb_out.μ,
+        σ=vb_out.σ,
+        optimization=vb_out.optimization,
+        initial_θ=vb_out.initial_θ,
+        vb_elbo=vb_elbo,
+        posterior_samples=posterior_samples,
+    )
+    
+    return fits, stats, measures, advi_info
+end
+
+"""Alias for [`run_advi_fit`](@ref) (same signature and return values)."""
+function run_ADVI(
+    data::AbstractExperimentalData,
+    model::AbstractGeneTransitionModel,
+    options::ADVIOptions=ADVIOptions();
+    rng::Random.AbstractRNG=Random.default_rng(),
+    steady_state_solver::Symbol=:augmented,
+    ad_likelihood::Union{Nothing,Bool}=nothing,
+    zygote_trace::Bool=false,
+    posterior_samples::Int=1000,
+)
+    return run_advi_fit(
+        data, model, options;
+        rng=rng,
+        steady_state_solver=steady_state_solver,
+        ad_likelihood=ad_likelihood,
+        zygote_trace=zygote_trace,
+        posterior_samples=posterior_samples,
     )
 end
