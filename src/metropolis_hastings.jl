@@ -25,6 +25,12 @@ struct MHOptions <: Options
     tempanneal::Float64
 end
 
+MHOptions(samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real) =
+    MHOptions(Int64(samplesteps), Int64(warmupsteps), 0, Float64(maxtime), Float64(temp), Float64(temp))
+
+MHOptions(samplesteps::Integer, warmupsteps::Integer, annealsteps::Integer, maxtime::Real, temp::Real) =
+    MHOptions(Int64(samplesteps), Int64(warmupsteps), Int64(annealsteps), Float64(maxtime), Float64(temp), Float64(temp))
+
 """
 struct Fit <: Results
 

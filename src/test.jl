@@ -612,6 +612,8 @@ function test_compare_3unit(; r=[0.38, 0.1, 0.23, 0.2, 0.25, 0.17, 0.2, 0.6, 0.2
     return cme_vec, sim_vec
 end
 
+#= Feature/regression helpers moved to `test_features.jl`.
+
 """
     test_trace_full(; coupling, G, R, S, insertstep, transitions, rtarget, noisepriors,
                     interval, totaltime, ntrials, method)
@@ -1029,6 +1031,12 @@ function diagnose_sim_vs_cme(; testfn=nothing, verbose=true)
     verbose && println("Max |CME - sim| = $(maximum(diff)); sum diff = $(sum(diff))")
     return true, cme_vec, sim_vec
 end
+=#
+
+# Companion suites: feature/regression checks and developer benchmarks.
+# Included here so these helpers remain available after `using StochasticGene`.
+include("benchmarks.jl")
+include("test_features.jl")
 
 # ════════════════════════════════════════════════════════════════════════════════════
 # SECTION 3: CORE INFERENCE TESTS
@@ -1239,6 +1247,8 @@ function test_fit_rnadwelltime(; rtarget=[0.038, 0.3, 0.23, 0.02, 0.25, 0.17, 0.
     # return lower, rtarget[model.fittedparam], upper, fits, stats, measures
 end
 
+#= Feature/regression helpers now live in `test_features.jl`.
+
 """
     test_load_model_keyword_compatibility(; method=Tsit5())
 
@@ -1301,6 +1311,7 @@ function test_mhstep_rejects_invalid_likelihood()
     accept, logpredictions, param_out, ll_out, prior_out, _ = mhstep([0.0], param, 0.0, 0.0, d, 0.01, model, data, 1.0)
     accept == 0 && logpredictions == [0.0] && param_out == param && ll_out == 0.0 && prior_out == 0.0
 end
+=#
 
 """
     compute_quantile_bounds(qparam_row1, qparam_row3, n_accepts, n_total)
@@ -1510,6 +1521,8 @@ function test_fit_tracejoint_full(;
     lower, upper = compute_quantile_bounds(stats.qparam[1, :], stats.qparam[3, :], fits.accept, fits.total)
     return lower, rtarget[fittedparam], upper
 end
+
+#= Feature-level AD/NUTS/ADVI smoke tests moved to `test_features.jl`.
 
 """
     test_normalized_nullspace_augmented_pullback_fd(; n, ε, rtol, atol)
@@ -1811,6 +1824,7 @@ function test_trace_subset_benchmark_keyword_bundle(
     zygote = benchmark_trace_zygote_subset_gradient(scen; kw...)
     return (; forwarddiff, finitediff, zygote)
 end
+=#
 
 ### functions to be used in the future
 """
@@ -3044,6 +3058,8 @@ end
 # end
 
 
+#= Feature/regression helper moved to `test_features.jl`.
+
 """
     test_run_spec_roundtrip(; tmpdir=mktempdir())
 
@@ -3131,6 +3147,7 @@ function test_run_spec_roundtrip(; tmpdir=mktempdir())
     end
     return isempty(failures)
 end
+=#
 
 """
     profile_trace_prediction(info_jld2::String, rates_file::String; ratetype="median")
@@ -3170,6 +3187,8 @@ function profile_trace_prediction(info_jld2::String, rates_file::String; ratetyp
     println("  PProf.Allocs.pprof()  # requires PProf.jl")
     return nothing
 end
+
+#= Legacy benchmark implementations moved to `benchmarks.jl`.
 
 # ════════════════════════════════════════════════════════════════════════════════════
 # SECTION 5: DEVELOPER BENCHMARKS & PERFORMANCE ANALYSIS
@@ -4730,6 +4749,9 @@ function benchmark_inference_print_summary(result::NamedTuple)
     end
     return nothing
 end
+=#
+
+#= Legacy NUTS/ADVI smoke tests moved to `test_features.jl`.
 
 # ════════════════════════════════════════════════════════════════════════════════════
 # SECTION: NUTS/ADVI Test Functions (for gradient-based Bayesian inference)
@@ -4869,4 +4891,5 @@ function test_nuts_vs_advi_consistency(; seed::Int=42, n_samples::Int=50)
     mean_diff < 2.0 || return false
     return true
 end
+=#
 # you might also need to make `set_d`

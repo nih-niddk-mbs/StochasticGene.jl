@@ -93,7 +93,7 @@ fits = fit(
 - `biowulf.jl`: NIH Biowulf cluster support (`makeswarm`, `makeswarmfiles`, `makeswarm_models`, …)
 - `coupled_csv.jl`: `Coupled_models_to_test.csv` → coupling specs (`csv_row_to_connections_simple`, `build_coupled_fit_spec_from_csv_cells`, …)
 - `hmm.jl`: Hidden Markov model functions
-- `test.jl`: Test functions
+- `test.jl`, `test_features.jl`, `benchmarks.jl`: full-stack tests, feature/regression checks, and benchmarking helpers
 
 Batch workflows (swarms, combined starts, key-based runs) are documented in the manual: **[Cluster and batch workflows](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/cluster_batch_workflows.html)**. Repository layout, `results/` conventions, and nomenclature are in **[Package overview](https://nih-niddk-mbs.github.io/StochasticGene.jl/stable/package_overview.html)**.
 
@@ -126,6 +126,7 @@ using Distributed
 using Distributions
 using Downloads
 using FFTW
+using FiniteDiff
 using JLD2
 using JSON
 using LinearAlgebra
@@ -136,6 +137,7 @@ using Optim
 using OrdinaryDiffEq
 using SciMLSensitivity  # reverse-mode AD through `solve` (Zygote + trace HMM / `kolmogorov_forward`)
 using Printf
+using Profile
 using SparseArrays
 using Statistics
 using StatsBase
