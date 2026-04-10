@@ -519,7 +519,7 @@ end
 
 Structure for GRSM models.
 
-# Fields
+-# Fields
 - `trait::TraitType`: Trait type.
 - `rates::RateType`: Transition rates.
 - `transforms::Transformation`: Transformation of rates.
@@ -559,25 +559,29 @@ struct GRSMmodel{TraitType,RateType,nratesType,GType,PriorType,ProposalType,Para
     method::MethodType
     components::ComponentType
     reporter::ReporterType
-end
+    hmm_stack::Symbol # :fast (HMM_STACK_MH) or :zygote (HMM_STACK_AD)
+# Fields
 
-
-"""
-    print_model(model::AbstractModel)
-
-Print all fields of model
-
-# Arguments
-- `model::AbstractModel`: Model to print.
-
-# Returns
-- `nothing`
-"""
-function print_model(model::AbstractModel)
-    for fname in fieldnames(model)
-        println("$fname =", getfield(model, fname))
-    end
-end
+# Fields
+# - `trait::TraitType`: Trait type.
+# - `rates::RateType`: Transition rates.
+# - `transforms::Transformation`: Transformation of rates.
+# - `nrates::nratesType`: Number of transition rates.
+# - `Gtransitions::Tuple`: Tuple of vectors of G state transitions.
+# - `G::Int`: Number of G steps.
+# - `R::Int`: Number of R steps.
+# - `S::Int`: Indicator for splicing, 0 means no splicing, > 1 means splicing.
+# - `insertstep::Int`: R step where reporter is inserted (first step where reporter is visible).
+# - `nalleles::Int`: Number of alleles producing RNA.
+# - `splicetype::String`: Choices are "", "offeject", "offdecay".
+# - `rateprior::PriorType`: Prior distribution for rates.
+# - `proposal::ProposalType`: MCMC proposal distribution.
+# - `fittedparam::ParamType`: Indices of rates to be fitted.
+# - `fixedeffects::Tuple`: Indices of rates that are fixed to each other, in the form of a 2-tuple of vectors with index 1 being the tied index vector and 2 being the corresponding fitted index vector.
+# - `method::MethodType`: Method option, for non-hierarchical models 1 indicates solving Master equation directly, otherwise by eigendecomposition.
+# - `components::ComponentType`: Components of the model.
+# - `reporter::ReporterType`: Vector of reporters or sojourn states (onstates) or vectors of vectors depending on model and data.
+# - `hmm_stack::Symbol`: Stack selection for HMM likelihoods (`HMM_STACK_MH` for classic, `HMM_STACK_AD` for AD/gradient).
 
 """
 Abstract Option types for fitting methods
@@ -745,4 +749,7 @@ const DEFAULT_CORRELATION_ALGORITHM = StandardCorrelation()
 
 # Type alias for backward compatibility
 const CorrelationAlgorithm = CorrelationTrait
+
+# Add missing end to close the file properly
+end
 

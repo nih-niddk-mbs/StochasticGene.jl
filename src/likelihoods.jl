@@ -660,8 +660,9 @@ function loglikelihood_ad(param, data::AbstractHistogramData, model::AbstractGen
     return sum(hist .* logpredictions), hist .* logpredictions
 end
 
-function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH)
-    ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
+function loglikelihood(param, data::AbstractTraceData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=nothing)
+    stack = isnothing(hmm_stack) ? getfield(model, :hmm_stack) : hmm_stack
+    ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=stack)
 end
 
 """
@@ -675,19 +676,21 @@ function loglikelihood_ad(
     data::AbstractTraceData,
     model::AbstractGRSMmodel;
     steady_state_solver::Symbol=:augmented,
-    hmm_stack::Symbol=HMM_STACK_AD,
+    hmm_stack::Symbol=nothing,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
+    stack = isnothing(hmm_stack) ? getfield(model, :hmm_stack) : hmm_stack
     ll_hmm_trace(
         param, data, model;
         steady_state_solver=steady_state_solver,
-        hmm_stack=hmm_stack,
+        hmm_stack=stack,
         hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
 end
 
-function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=HMM_STACK_MH)
-    llg, llgp = ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=hmm_stack)
+function loglikelihood(param, data::TraceRNAData, model::AbstractGRSMmodel; steady_state_solver::Symbol=:default, hmm_stack::Symbol=nothing)
+    stack = isnothing(hmm_stack) ? getfield(model, :hmm_stack) : hmm_stack
+    llg, llgp = ll_hmm_trace(param, data, model; steady_state_solver=steady_state_solver, hmm_stack=stack)
     r = get_rates(param, model)
     
     # Get nRNA_true from data structure (extract from yield tuple)
@@ -713,13 +716,14 @@ function loglikelihood_ad(
     data::TraceRNAData,
     model::AbstractGRSMmodel;
     steady_state_solver::Symbol=:augmented,
-    hmm_stack::Symbol=HMM_STACK_AD,
+    hmm_stack::Symbol=nothing,
     hmm_checkpoint_steps::Union{Nothing,Integer}=nothing,
 )
+    stack = isnothing(hmm_stack) ? getfield(model, :hmm_stack) : hmm_stack
     llg, llgp = ll_hmm_trace(
         param, data, model;
         steady_state_solver=steady_state_solver,
-        hmm_stack=hmm_stack,
+        hmm_stack=stack,
         hmm_checkpoint_steps=hmm_checkpoint_steps,
     )
     r = get_rates(param, model)
