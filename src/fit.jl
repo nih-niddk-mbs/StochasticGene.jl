@@ -12,6 +12,26 @@ Fit steady state or transient GM/GRSM model to RNA data for a single gene, write
 
 For coupled transcribing units, arguments transitions, G, R, S, insertstep, and trace become tuples of the single unit type, e.g. If two types of transcription models are desired with G=2 and G=3 then G = (2,3).
 
+# Inference Method Selection
+- `inference_method = :fast` (default): Classic Metropolis–Hastings (MH)
+- `inference_method = :zygote`: Gradient-based inference using automatic differentiation (Zygote/ForwardDiff)
+- Advanced: You may also set `hmm_stack` directly for custom stack selection.
+
+# Example: AD/Gradient-based inference
+```julia
+fits = fit(
+    G = 2,
+    R = 0,
+    transitions = ([1,2], [2,1]),
+    datatype = "rna",
+    datapath = "data/HCT116_testdata/",
+    gene = "MYC",
+    datacond = "MOCK",
+    inference_method = :zygote,  # Use AD/gradient-based inference
+    nchains = 1                  # Required for NUTS/gradient-based methods
+)
+```
+
 # Arguments
 - `burst=false`: if true then compute burst frequency
 - `cell::String=""`: cell type for halflives and allele numbers
