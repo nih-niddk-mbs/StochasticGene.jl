@@ -152,32 +152,8 @@ function _make_ℓπ(ℓ)
     end
 end
 
-"""
-    NUTSOptions
 
-Options for `run_nuts`.
 
-# Fields
-- `n_samples`, `n_adapts`: post-warmup samples and adaptation steps
-- `δ`: target acceptance (NUTS dual averaging)
-- `gradient`: `:ForwardDiff` (struct default; forward-mode AD), `:finite` (central differences; uses `fd_ε`), or `:Zygote` (reverse-mode AD). For **trace** / long HMM likelihoods, `:finite` or `:ForwardDiff` are preferred (Zygote is memory-intensive on long traces). Forward-mode is efficient for **few** fitted parameters (typical for gene switching models); use Zygote for many parameters.
-- `fd_ε`: finite-difference step when `gradient === :finite`
-- `verbose`, `progress`: passed to `AdvancedHMC.sample`
-"""
-struct NUTSOptions
-    n_samples::Int
-    n_adapts::Int
-    δ::Float64
-    gradient::Symbol
-    fd_ε::Float64
-    verbose::Bool
-    progress::Bool
-    device::Symbol  # :cpu, :gpu
-    parallel::Symbol  # :single, :threaded, :distributed
-end
-
-NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false, device::Symbol=:cpu, parallel::Symbol=:single) =
-    NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress, device, parallel)
 
 """
     run_nuts(data, model, rng, options=NUTSOptions(); kwargs...)
@@ -261,35 +237,6 @@ end
     return x > 0 ? x + log1p(exp(-x)) : log1p(exp(x))
 end
 
-"""
-    ADVIOptions
-
-Black-box ADVI-style mean-field Gaussian VI: `q(θ) = ∏_i N(θ_i | μ_i, σ_i^2)` in the
-same transformed space as MCMC, with `σ_i = softplus(s_i) + ε`.
-
-# Fields
-- `maxiter`: `Optim` iterations
-- `n_mc`: fixed Monte Carlo draws `ε` for the reparameterization gradient (deterministic objective)
-- `σ_floor`: lower bound on `σ_i`
-- `init_s_raw`: initial value for the **log-scale** state `s` with `σ_i = softplus(s_i) + σ_floor`. Default is negative so initial `σ` is small: reparameterized draws `η = μ + σ ε` stay near `μ` and avoid `-Inf` log-prior / likelihood at cold start. (`s = 0` gives `softplus(0) ≈ 0.69`, often too wide.)
-- `gradient`: `:Zygote` (default), `:finite`, or `:ForwardDiff`. For ADVI, `:finite` and `:ForwardDiff` both use `ForwardDiff` gradients of `neg_elbo` (not Optim's element-wise finite differences). For [`AbstractTraceData`](@ref), [`run_advi`](@ref) auto-selects `:finite` to avoid Zygote reverse-mode overhead on long HMM likelihoods; use `zygote_trace=true` to override.
-- `verbose`: `Optim` show trace
-- `time_limit`: optional wall-clock limit (**seconds**) for `Optim` (`nothing` = no limit; useful for fair comparisons with MH `maxtime`)
-"""
-struct ADVIOptions
-    maxiter::Int
-    n_mc::Int
-    σ_floor::Float64
-    init_s_raw::Float64
-    verbose::Bool
-    gradient::Symbol
-    time_limit::Union{Nothing,Float64}
-    device::Symbol  # :cpu, :gpu
-    parallel::Symbol  # :single, :threaded, :distributed
-end
-
-ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing, device::Symbol=:cpu, parallel::Symbol=:single) =
-    ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit, device, parallel)
 
 """
     run_advi(data, model, rng, options=ADVIOptions(); kwargs...)

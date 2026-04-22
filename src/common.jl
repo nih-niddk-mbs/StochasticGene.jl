@@ -583,6 +583,92 @@ end
 Abstract Option types for fitting methods
 """
 abstract type Options end
+"""
+    MHOptions <: Options
+
+Options for Metropolis-Hastings MCMC.
+
+# Fields
+- `samplesteps::Int64`: Number of MCMC samples to collect.
+- `warmupsteps::Int64`: Number of warmup (burn-in) steps.
+- `maxtime::Float64`: Maximum allowed runtime (seconds).
+- `temp::Float64`: Temperature for MCMC.
+- `device::Symbol`: :cpu, :gpu
+- `parallel::Symbol`: :single, :threaded, :distributed
+- `gradient::Symbol`: Gradient type (:none, :finite, :ForwardDiff, :Zygote)
+"""
+struct MHOptions <: Options
+    samplesteps::Int64
+    warmupsteps::Int64
+    maxtime::Float64
+    temp::Float64
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
+    gradient::Symbol
+end
+
+MHOptions(samplesteps::Integer, warmupsteps::Integer, maxtime::Real, temp::Real; device::Symbol=:cpu, parallel::Symbol=:single, gradient::Symbol=:none) =
+    MHOptions(Int64(samplesteps), Int64(warmupsteps), Float64(maxtime), Float64(temp), device, parallel, gradient)
+
+"""
+    NUTSOptions
+
+Options for `run_nuts` (NUTS/AdvancedHMC).
+
+# Fields
+- `n_samples`, `n_adapts`: post-warmup samples and adaptation steps
+- `δ`: target acceptance (NUTS dual averaging)
+- `gradient`: :ForwardDiff (default), :finite, :Zygote
+- `fd_ε`: finite-difference step when `gradient === :finite`
+- `verbose`, `progress`: passed to AdvancedHMC.sample
+- `device::Symbol`: :cpu, :gpu
+- `parallel::Symbol`: :single, :threaded, :distributed
+"""
+struct NUTSOptions <: Options
+    n_samples::Int
+    n_adapts::Int
+    δ::Float64
+    gradient::Symbol
+    fd_ε::Float64
+    verbose::Bool
+    progress::Bool
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
+end
+
+NUTSOptions(; n_samples=1000, n_adapts=1000, δ=0.8, gradient=:ForwardDiff, fd_ε=1e-5, verbose=true, progress=false, device::Symbol=:cpu, parallel::Symbol=:single) =
+    NUTSOptions(n_samples, n_adapts, δ, gradient, fd_ε, verbose, progress, device, parallel)
+
+"""
+    ADVIOptions
+
+Options for mean-field ADVI.
+
+# Fields
+- `maxiter`: Optim iterations
+- `n_mc`: Monte Carlo draws for reparameterization gradient
+- `σ_floor`: lower bound on σ
+- `init_s_raw`: initial value for log-scale state s
+- `verbose`: Optim show trace
+- `gradient`: :Zygote (default), :finite, :ForwardDiff
+- `time_limit`: wall-clock limit (seconds)
+- `device::Symbol`: :cpu, :gpu
+- `parallel::Symbol`: :single, :threaded, :distributed
+"""
+struct ADVIOptions <: Options
+    maxiter::Int
+    n_mc::Int
+    σ_floor::Float64
+    init_s_raw::Float64
+    verbose::Bool
+    gradient::Symbol
+    time_limit::Union{Nothing,Float64}
+    device::Symbol  # :cpu, :gpu
+    parallel::Symbol  # :single, :threaded, :distributed
+end
+
+ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing, device::Symbol=:cpu, parallel::Symbol=:single) =
+    ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit, device, parallel)
 abstract type Results end
 
 
