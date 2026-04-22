@@ -469,20 +469,17 @@ function benchmark_inference_run_advi(scenario;
     gradient = advi_options.gradient
     if data isa AbstractTraceData && gradient == :Zygote
         verbose && @info "Switching trace ADVI benchmark from gradient=:Zygote to :finite for robustness on the trace likelihood path."
-        advi_options = ADVIOptions(; n_mc=advi_options.n_mc,
-                                   maxiter=advi_options.maxiter,
-                                   lr=advi_options.lr,
-                                   optimizer=advi_options.optimizer,
-                                   optimizer_options=advi_options.optimizer_options,
-                                   σ_floor=advi_options.σ_floor,
-                                   init_s_raw=advi_options.init_s_raw,
-                                   verbose=advi_options.verbose,
-                                   gradient=:finite,
-                                   fd_ε=advi_options.fd_ε,
-                                   callback_interval=advi_options.callback_interval,
-                                   seed=advi_options.seed,
-                                   progress=advi_options.progress,
-                                   time_limit=advi_options.time_limit)
+        advi_options = ADVIOptions(;
+            maxiter=advi_options.maxiter,
+            n_mc=advi_options.n_mc,
+            σ_floor=advi_options.σ_floor,
+            init_s_raw=advi_options.init_s_raw,
+            verbose=advi_options.verbose,
+            gradient=:finite,
+            time_limit=advi_options.time_limit,
+            device=advi_options.device,
+            parallel=advi_options.parallel,
+        )
     end
     t = @elapsed fits, stats, measures, advi_info = run_advi_fit(data, model, advi_options; rng=rng)
     μ = advi_info[:μ]

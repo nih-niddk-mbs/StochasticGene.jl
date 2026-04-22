@@ -281,14 +281,16 @@ function run_advi(
 
     options_eff = if !zygote_trace && data isa AbstractTraceData && options.gradient === :Zygote
         @info "ADVI: using finite-difference gradients for trace data (Zygote through long HMM likelihoods is not supported; set `zygote_trace=true` to try)."
-        ADVIOptions(
-            options.maxiter,
-            options.n_mc,
-            options.σ_floor,
-            options.init_s_raw,
-            options.verbose,
-            :finite,
-            options.time_limit,
+        ADVIOptions(;
+            maxiter=options.maxiter,
+            n_mc=options.n_mc,
+            σ_floor=options.σ_floor,
+            init_s_raw=options.init_s_raw,
+            verbose=options.verbose,
+            gradient=:finite,
+            time_limit=options.time_limit,
+            device=options.device,
+            parallel=options.parallel,
         )
     else
         options

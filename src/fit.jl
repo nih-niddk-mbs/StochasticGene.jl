@@ -171,6 +171,10 @@ const _FIT_DEFAULTS = (
     yieldfactor=1.0,
     trace_specs=[],
     dwell_specs=[],
+    inference_method=:mh,
+    device=:cpu,
+    parallel=:single,
+    gradient=nothing,
 )
 
 """
@@ -324,21 +328,22 @@ end
 
 
 """
-function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, inlabel::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     S = reset_S(S, R, insertstep)
     nalleles = alleles(gene, cell, root, nalleles=nalleles)
-        fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+    fit(readrates(folder_path(infolder, root, "results"), inlabel, gene, G, R, S, insertstep, nalleles, ratetype), nchains, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, resultfolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 end
 
 """
     fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1)
 
 """
-function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function fit(rinit, nchains::Int, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, resultfolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     println(now())
     printinfo(gene, G, R, S, insertstep, datacond, datapath, infolder, resultfolder, maxtime, nalleles, propcv)
     resultfolder = folder_path(resultfolder, root, "results", make=true)
-    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+    opt = _make_structures_option_kwargs(; kwargs...)
+    data, model, options = make_structures(rinit, datatype, dttype, datapath, gene, cell, datacond, traceinfo, infolder, label, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, priorcv, nalleles, onstates, decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, method, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; pairs(opt)...)
     fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
 end
 
@@ -350,7 +355,7 @@ end
 """
 function fit(nchains, data, model, options, resultfolder, burst, optimize, writesamples)
     print_ll(data, model)
-    fits, stats, measures = run_mh(data, model, options, nchains)
+    fits, stats, measures = run_inference(data, model, options; rng=Random.default_rng(), nchains=nchains)
     optimized = 0
     if optimize
         try
@@ -364,7 +369,7 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
     else
         bs = 0
     end
-    finalize(data, model, fits, stats, measures, options.temp, resultfolder, optimized, bs, writesamples)
+    finalize(data, model, fits, stats, measures, _inference_temp(options), resultfolder, optimized, bs, writesamples)
     println(now())
     # get_rates(stats.medparam, model, false)
     return fits, stats, measures, data, model, options
@@ -801,6 +806,24 @@ function default_coupling_prior_means(coupling)
     return [default_coupling_prior_mean(m) for m in modes]
 end
 
+# Keywords accepted on positional `fit(...; kw...)` and forwarded into [`make_structures`](@ref) (then [`load_options`](@ref)).
+const _MAKE_STRUCTURES_OPTION_KW = (
+    :inference_method, :device, :parallel, :parallelism, :gradient,
+    :n_mc, :maxiter, :n_samples, :n_adapts, :nuts_delta, :δ, :fd_ε, :nuts_fd_ε,
+    :verbose, :progress, :nuts_verbose, :nuts_progress,
+    :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
+    :advi_verbose, :advi_n_mc, :zygote_trace,
+)
+
+function _make_structures_option_kwargs(; kwargs...)
+    d = Dict{Symbol,Any}()
+    for (k, v) in pairs(kwargs)
+        k isa Symbol || continue
+        (k in _MAKE_STRUCTURES_OPTION_KW) || continue
+        d[k] = v
+    end
+    return d
+end
 
 """
     make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, ...; trace_specs=[], dwell_specs=[])
@@ -859,8 +882,9 @@ Create and configure data, model, and options structures for fitting.
 - Creates appropriate model structure based on parameters
 - Handles hierarchical, coupled, and grid models
 - Loads proposal covariance via [`get_propcv`](@ref) after fittedparam is determined, enabling validation against actual model parameters
+- Optional trailing `kwargs...` (filtered to inference / sampler option keys; see `_MAKE_STRUCTURES_OPTION_KW` in the source) are merged into the run dict before [`load_options`](@ref) (e.g. `inference_method=:nuts`, `parallel=:distributed`, `gradient=:finite`).
 """
-function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[])
+function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene, cell, datacond, traceinfo, infolder::String, label::String, fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling::Tuple=tuple(), grid=nothing, root=".", maxtime=60, elongationtime=6.0, priormean=Float64[], priorcv=10.0, nalleles=1, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median", propcv=0.01, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, method=Tsit5(), zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     gene = check_genename(gene, "[")
     insertstep = normalize_insertstep(R, insertstep)
     S = reset_S(S, R, insertstep)
@@ -883,47 +907,166 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     propcv = get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
-    # Example: pass inference_method=:mh for Metropolis-Hastings, or :nuts for NUTS, etc.
-    inference_method = get(kwargs, :inference_method, :mh)
-    options = load_options(
-        inference_method=inference_method,
-        device=get(kwargs, :device, nothing),
-        parallelism=get(kwargs, :parallelism, nothing),
-        gradient=get(kwargs, :gradient, nothing),
-        samplesteps=samplesteps,
-        warmupsteps=warmupsteps,
-        maxtime=maxtime,
-        temp=temp
+    run = if _current_run_spec[] === nothing
+        Dict{Symbol,Any}()
+    else
+        Dict{Symbol,Any}(_current_run_spec[])
+    end
+    merge!(
+        run,
+        Dict{Symbol,Any}(
+            :samplesteps => samplesteps,
+            :warmupsteps => warmupsteps,
+            :maxtime => maxtime,
+            :temp => temp,
+        ),
     )
+    merge!(run, Dict{Symbol,Any}(kwargs))
+    options = load_options(run)
     return data, model, options
 end
 
 """
-    load_options(; inference_method, device=nothing, parallelism=nothing, gradient=nothing, kwargs...)
+    load_options(run::AbstractDict)
 
-Dispatches to the appropriate options constructor based on the inference method. Handles device, parallelism, gradient, and method-specific options.
+Build the concrete `Options` object (`MHOptions`, `NUTSOptions`, or `ADVIOptions`) from a merged run
+specification dict (typically `_current_run_spec[]` merged with explicit `samplesteps` / `warmupsteps` /
+`maxtime` / `temp` from [`make_structures`](@ref)).
+
+Shared keys:
+- `inference_method`: `:mh` / [`INFERENCE_MH`](@ref), `:nuts` / [`INFERENCE_NUTS`](@ref), `:advi` / [`INFERENCE_ADVI`](@ref)
+- `samplesteps`: MH posterior samples; NUTS `n_samples`; ADVI `maxiter` unless `maxiter` is set explicitly
+- `warmupsteps`: MH warmup; NUTS `n_adapts` unless `n_adapts` is set explicitly
+- `device`: `:cpu` or `:gpu` (GPU paths may error if unsupported)
+- `parallel` (alias `parallelism`): `:single`, `:threaded`, `:distributed`
+- `gradient`: method-specific (`:none`/`:finite`/`:ForwardDiff`/`:Zygote`, with `:forward` accepted as `:ForwardDiff`)
 """
-function load_options(; inference_method, device=nothing, parallelism=nothing, gradient=nothing, kwargs...)
-    if inference_method == :mh || inference_method == :metropolis_hastings
-        # MHOptions(samplesteps, warmupsteps, maxtime, temp; device, parallelism, gradient, ...)
-        return MHOptions(
-            get(kwargs, :samplesteps, 1000000),
-            get(kwargs, :warmupsteps, 0),
-            Float64(get(kwargs, :maxtime, 60)),
-            get(kwargs, :temp, 1.0);
-            device=device, parallelism=parallelism, gradient=gradient
+function load_options(run0::AbstractDict)
+    run = Dict{Symbol,Any}(Symbol(string(k)) => v for (k, v) in pairs(run0))
+    inference_method = get(run, :inference_method, INFERENCE_MH)
+    if inference_method isa AbstractString
+        inference_method = Symbol(lowercase(strip(inference_method)))
+    end
+    if inference_method === :metropolis || inference_method === :metropolis_hastings
+        inference_method = INFERENCE_MH
+    end
+
+    device = get(run, :device, :cpu)
+    device === nothing && (device = :cpu)
+    device isa AbstractString && (device = Symbol(lowercase(strip(device))))
+    device isa Symbol || throw(ArgumentError("device must be a Symbol or String, got $(repr(device))"))
+
+    parallel = get(run, :parallel, get(run, :parallelism, :single))
+    parallel === nothing && (parallel = :single)
+    parallel isa AbstractString && (parallel = Symbol(lowercase(strip(parallel))))
+    if parallel === :threads
+        parallel = :threaded
+    elseif parallel === :dist
+        parallel = :distributed
+    end
+    parallel isa Symbol || throw(ArgumentError("parallel must be a Symbol or String, got $(repr(parallel))"))
+
+    gradient = get(run, :gradient, nothing)
+    if gradient isa AbstractString
+        gradient = Symbol(lowercase(strip(gradient)))
+    end
+    if gradient isa Symbol
+        if gradient === :forwarddiff || gradient === :forward_diff
+            gradient = :ForwardDiff
+        elseif gradient === :zygote
+            gradient = :Zygote
+        elseif gradient === :finitediff
+            gradient = :finite
+        end
+    end
+
+    samplesteps = Int(get(run, :samplesteps, 1_000_000))
+    warmupsteps = Int(get(run, :warmupsteps, 0))
+    maxtime = Float64(get(run, :maxtime, 60.0))
+    temp = Float64(get(run, :temp, 1.0))
+
+    if inference_method == INFERENCE_MH || inference_method == :mh
+        gh = gradient === nothing ? :none : gradient
+        gh isa Symbol || throw(ArgumentError("MH gradient must be a Symbol or nothing, got $(repr(gh))"))
+        return MHOptions(samplesteps, warmupsteps, maxtime, temp; device=device, parallel=parallel, gradient=gh)
+    elseif inference_method == INFERENCE_NUTS || inference_method == :nuts
+        n_samples = Int(get(run, :n_samples, samplesteps))
+        n_adapts = if haskey(run, :n_adapts) && run[:n_adapts] !== nothing
+            Int(run[:n_adapts])
+        elseif warmupsteps > 0
+            Int(warmupsteps)
+        else
+            min(1000, max(1, n_samples ÷ 2))
+        end
+        δ = Float64(get(run, :nuts_delta, get(run, :δ, 0.8)))
+        fd_ε = Float64(get(run, :fd_ε, get(run, :nuts_fd_ε, 1e-5)))
+        verbose = Bool(get(run, :verbose, get(run, :nuts_verbose, true)))
+        progress = Bool(get(run, :progress, get(run, :nuts_progress, false)))
+        g = if gradient === nothing
+            :ForwardDiff
+        elseif gradient === :forward
+            :ForwardDiff
+        elseif gradient === :zygote
+            :Zygote
+        elseif gradient === :finite || gradient === :finitediff
+            :finite
+        else
+            gradient
+        end
+        g isa Symbol || throw(ArgumentError("NUTS gradient must be a Symbol or nothing, got $(repr(g))"))
+        g in (:ForwardDiff, :Zygote, :finite) || throw(ArgumentError("Invalid NUTS gradient $(repr(g))"))
+        return NUTSOptions(;
+            n_samples=n_samples,
+            n_adapts=n_adapts,
+            δ=δ,
+            gradient=g,
+            fd_ε=fd_ε,
+            verbose=verbose,
+            progress=progress,
+            device=device,
+            parallel=parallel,
         )
-    elseif inference_method == :nuts
-        # Example: NUTSOptions(...)
-        return NUTSOptions(
-            get(kwargs, :num_samples, 1000),
-            get(kwargs, :num_warmup, 500),
-            device=device, parallelism=parallelism, gradient=gradient
+    elseif inference_method == INFERENCE_ADVI || inference_method == :advi
+        maxiter = Int(get(run, :maxiter, samplesteps))
+        n_mc = Int(get(run, :n_mc, get(run, :advi_n_mc, 8)))
+        σ_floor = Float64(get(run, :σ_floor, get(run, :advi_σ_floor, 1e-4)))
+        init_s_raw = Float64(get(run, :init_s_raw, get(run, :advi_init_s_raw, -4.0)))
+        verbose_advi = Bool(get(run, :verbose, get(run, :advi_verbose, false)))
+        time_limit = let t = get(run, :time_limit, get(run, :advi_time_limit, nothing))
+            t === nothing ? nothing : Float64(t)
+        end
+        g = if gradient === nothing
+            :Zygote
+        elseif gradient === :forward
+            :ForwardDiff
+        elseif gradient === :zygote
+            :Zygote
+        elseif gradient === :finite || gradient === :finitediff
+            :finite
+        else
+            gradient
+        end
+        g isa Symbol || throw(ArgumentError("ADVI gradient must be a Symbol or nothing, got $(repr(g))"))
+        g in (:ForwardDiff, :Zygote, :finite) || throw(ArgumentError("Invalid ADVI gradient $(repr(g))"))
+        return ADVIOptions(;
+            maxiter=maxiter,
+            n_mc=n_mc,
+            σ_floor=σ_floor,
+            init_s_raw=init_s_raw,
+            verbose=verbose_advi,
+            gradient=g,
+            time_limit=time_limit,
+            device=device,
+            parallel=parallel,
         )
     else
-        error("Unknown inference method: $(inference_method)")
+        error("Unknown inference_method $(repr(inference_method)); expected one of $(repr(INFERENCE_CHOICES)).")
     end
 end
+
+_inference_temp(options::MHOptions) = options.temp
+_inference_temp(::NUTSOptions) = 1.0
+_inference_temp(::ADVIOptions) = 1.0
 
 """
     n_observed_trace_units(coupling)

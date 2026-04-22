@@ -220,6 +220,7 @@ export
    check_ad_gradient_feasibility,
    run_nuts_fit,
    run_inference,
+   load_options,
     logposterior,
     norm,
     normalize_histogram,

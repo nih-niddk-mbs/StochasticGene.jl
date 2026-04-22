@@ -2,7 +2,9 @@
 
 # biowulf.jl
 # NIH Biowulf helpers: swarm files, fit scripts, run-spec presets (`makeswarm`, `makeswarm_models`,
-# `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, …).
+# `makeswarmfiles`, `makeswarmfiles_h3_latent`, `write_run_spec_preset`, …). Run specs and emitted scripts
+# align with [`fit`](@ref) / [`make_structures`](@ref) / [`load_options`](@ref) (MH, NUTS, ADVI): include
+# `inference_method`, `device`, `parallel`, `gradient`, and shared budgets like `samplesteps` / `warmupsteps`.
 
 
 """
@@ -122,7 +124,8 @@ every row (positional / kw to [`makeswarm_models`](@ref)).
 
 # Keyword split
 Keywords `nthreads`, `nchains`, `swarmfile`, `juliafile`, `filedir`, `project`, `sysimage`, `src` are
-swarm-only; all others are merged into each run spec (and into `fit_default_spec()`).
+swarm-only; all others are merged into each run spec (and into `fit_default_spec()`), including inference
+options consumed by [`load_options`](@ref) (`inference_method`, `device`, `parallel`, `gradient`, `n_mc`, …).
 
 # Coupled follow-up
 For slow coupled fits, fit single units first, combine rates with [`create_combined_file`](@ref), then
@@ -225,8 +228,10 @@ run is defined by `info_<key>.toml` (if present) plus any overrides.
 - `filedir="."`: directory for swarm and script files.
 - `project=""`, `sysimage=""`: optional `--project` and `--sysimage` for the julia command.
 - `src=""`: path to StochasticGene src (for script prolog; empty if package is installed).
-- Overrides (optional): `resultfolder`, `root`, `maxtime`, `samplesteps`, etc. are written into each
-  script so `fit(; key=key, resultfolder=..., ...)` uses them. Only simple types (String, Number, Bool) are serialized.
+- Overrides (optional): `resultfolder`, `root`, `maxtime`, `samplesteps`, `warmupsteps`, `inference_method`,
+  `device`, `parallel` / `parallelism`, `gradient`, etc. are written into each script so
+  `fit(; key=key, resultfolder=..., ...)` uses them. Serializable types: `String`, `Number`, `Bool`, and `Symbol`
+  (symbols are emitted as `repr`, e.g. `inference_method=:nuts`).
 
 # Examples
 ```julia
@@ -234,7 +239,7 @@ makeswarm(["33il", "44il"]; filedir="swarm", resultfolder="HCT116_test", root=".
 makeswarm(; key="33il", resultfolder="HCT116_test", maxtime="120m")
 ```
 """
-function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
+function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", juliafile::String="fitscript", filedir=".", project="", sysimage="", src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, warmupsteps=nothing, kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
@@ -243,7 +248,7 @@ function makeswarm(keys::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::
     write_swarmfile_keys(joinpath(filedir, sfile), nchains, nthreads, juliafile, keys, project, sysimage)
     for k in keys
         scriptpath = joinpath(filedir, juliafile * "_" * sanitize_for_filename(k) * ".jl")
-        write_fitfile_key(scriptpath, k; src=src, resultfolder=resultfolder, root=root, maxtime=maxtime, samplesteps=samplesteps, kwargs...)
+        write_fitfile_key(scriptpath, k; src=src, resultfolder=resultfolder, root=root, maxtime=maxtime, samplesteps=samplesteps, warmupsteps=warmupsteps, kwargs...)
     end
 end
 
@@ -343,7 +348,14 @@ function _driver_write_specs_and_makeswarm(run_keys::Vector{String}, fit_base::D
             if p !== nothing
                 loaded = read_run_spec(p)
                 spec = merge(spec, loaded)
-                for k in (:datapath, :infolder, :resultfolder, :maxtime, :root)
+                for k in (
+                    :datapath, :infolder, :resultfolder, :maxtime, :root,
+                    :inference_method, :device, :parallel, :parallelism, :gradient,
+                    :samplesteps, :warmupsteps, :n_mc, :maxiter, :n_samples, :n_adapts,
+                    :nuts_delta, :δ, :fd_ε, :nuts_fd_ε, :verbose, :progress, :nuts_verbose, :nuts_progress,
+                    :time_limit, :advi_time_limit, :σ_floor, :advi_σ_floor, :init_s_raw, :advi_init_s_raw,
+                    :advi_verbose, :advi_n_mc, :zygote_trace,
+                )
                     haskey(fit_base, k) && (spec[k] = fit_base[k])
                 end
                 # Explicit `makeswarmfiles(...; kw...)` fit keys win over loaded info (merge loaded first for priors).
@@ -874,8 +886,9 @@ The generated script passes the gene name as `ARGS[1]` into `fit(...)`.
 - **`method`**: like other Biowulf helpers, this must be a **`String`** in the emitted script (e.g.
   `\"Tsit5()\"`), not a raw `Tsit5()` value, so the script parses when submitted.
 - Plus the same keywords as [`fit`](@ref) for the model and data (`datatype`, `datapath`, `cell`,
-  `datacond`, `transitions`, `G`, `R`, `S`, `insertstep`, …) and swarm-only options (`nchains`,
-  `nthreads`, `swarmfile`, `juliafile`, `project`, `sysimage`, `src`).
+  `datacond`, `transitions`, `G`, `R`, `S`, `insertstep`, …), inference options forwarded as trailing
+  `fit(...; ...)` kwargs (e.g. `inference_method=:nuts`, `parallel=:distributed`, `gradient=:finite`), and
+  swarm-only options (`nchains`, `nthreads`, `swarmfile`, `juliafile`, `project`, `sysimage`, `src`).
 
 # Cluster use
 
@@ -889,7 +902,7 @@ makeswarm_genes(["MYC", "SOX9"]; cell="HBEC", datatype="rna", datapath="data/", 
 """
 function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swarmfile::String="fit", batchsize=1000, juliafile::String="fitscript", datatype::String="rna", dttype=String[], datapath="", cell::String="HCT116", datacond="MOCK", traceinfo=(1.0, 1.0, -1, 1.0), infolder::String="HCT116_test", resultfolder::String="HCT116_test", inlabel::String="", label::String="",
     fittedparam::Vector=Int[], fixedeffects=tuple(), transitions::Tuple=([1, 2], [2, 1]), G::Int=2, R::Int=0, S::Int=0, insertstep::Int=1, coupling=tuple(), TransitionType="", grid=nothing, root=".", elongationtime=6.0, priormean=Float64[], nalleles=1, priorcv=10.0, onstates=Int[], decayrate=-1.0, splicetype="", probfn=prob_Gaussian, noisepriors=[], hierarchical=tuple(), ratetype="median",
-    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="")
+    propcv=0.01, maxtime=60.0, samplesteps::Int=1000000, warmupsteps=0, temp=1.0, temprna=1.0, burst=false, optimize=false, writesamples=false, method="Tsit5()", src="", zeromedian=true, datacol=3, ejectnumber=1, yieldfactor::Float64=1.0, trace_specs=[], dwell_specs=[], filedir=".", project="", sysimage="", kwargs...)
     if !isempty(filedir) && !isdir(filedir)
         mkpath(filedir)
     end
@@ -911,7 +924,7 @@ function makeswarm_genes(genes::Vector{String}; nchains::Int=2, nthreads=1, swar
     end
     write_fitfile_genes(joinpath(filedir, juliafile_full), nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
         fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+        decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
     end
 
 """
@@ -987,7 +1000,19 @@ function _format_fit_override(k::Symbol, v)::Union{String,Nothing}
     v isa AbstractString && return "$k=\"$(escape_string(String(v)))\""
     v isa Real && return "$k=$v"
     v isa Bool && return "$k=$v"
+    v isa Symbol && return "$k=$(repr(v))"
     return nothing
+end
+
+"""Build a `; kw1=..., kw2=...` suffix for emitted `fit(...)` scripts from keyword arguments."""
+function _fit_positional_script_kw_suffix(; kwargs...)
+    parts = String[]
+    for (k, v) in pairs(kwargs)
+        sym = k isa Symbol ? k : Symbol(k)
+        line = _format_fit_override(sym, v)
+        line === nothing || push!(parts, line)
+    end
+    return isempty(parts) ? "" : ("; " * join(parts, ", "))
 end
 
 """
@@ -1109,9 +1134,9 @@ end
 """
     write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, ...)
 
-Writes a script that runs `fit(; key=key, ...)` with optional overrides. Only String, Real, and Bool overrides are written.
+Writes a script that runs `fit(; key=key, ...)` with optional overrides. Writable overrides: `String`, `Real`, `Bool`, and `Symbol`.
 """
-function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, kwargs...)
+function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root=".", maxtime=nothing, samplesteps=nothing, warmupsteps=nothing, kwargs...)
     f = open(fitfile, "w")
     write_prolog(f, src)
     overrides = Dict{Symbol, String}()
@@ -1125,6 +1150,7 @@ function write_fitfile_key(fitfile, key::String; src="", resultfolder="", root="
     end
     maxtime !== nothing && (s = _format_fit_override(:maxtime, maxtime); s !== nothing && (overrides[:maxtime] = s))
     samplesteps !== nothing && (s = _format_fit_override(:samplesteps, samplesteps); s !== nothing && (overrides[:samplesteps] = s))
+    warmupsteps !== nothing && (s = _format_fit_override(:warmupsteps, warmupsteps); s !== nothing && (overrides[:warmupsteps] = s))
     for (k, v) in pairs(kwargs)
         s = _format_fit_override(Symbol(k), v)
         s !== nothing && (overrides[Symbol(k)] = s)
@@ -1143,14 +1169,14 @@ Writes a fit script that takes the gene as ARGS[1] and calls `fit(nchains, datat
 """
 function write_fitfile_genes(fitfile, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[])
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, ARGS[1], $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, ARGS[1], $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
     close(f)
 end
 
@@ -1164,14 +1190,14 @@ the legacy `traceinfo`/`zeromedian` inside `fit`.
 """
 function write_fitfile_coupled(fitfile, gene::String, nchains, datatype, dttype, datapath, cell, datacond, traceinfo, infolder, resultfolder, inlabel, label,
     fittedparam, fixedeffects, transitions, G, R, S, insertstep, coupling, grid, root, maxtime, elongationtime, priormean, nalleles, priorcv, onstates,
-    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[])
+    decayrate, splicetype, probfn, noisepriors, hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp, temprna, burst, optimize, writesamples, method, src, zeromedian, datacol, ejectnumber, yieldfactor=1.0, trace_specs=[], dwell_specs=[]; kwargs...)
     s = '"'
     transitions = transitions isa AbstractVector && !(transitions isa Tuple) ? Tuple(transitions) : transitions
     f = open(fitfile, "w")
     write_prolog(f, src)
     typeof(datapath) <: AbstractString && (datapath = "$s$datapath$s")
     typeof(datacond) <: AbstractString && (datacond = "$s$datacond$s")
-    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)\n")
+    write(f, "@time fit($nchains, $s$datatype$s, $dttype, $datapath, $s$gene$s, $s$cell$s, $datacond, $traceinfo, $s$infolder$s, $s$resultfolder$s, $s$inlabel$s, $s$label$s, $fittedparam, $fixedeffects, $transitions, $G, $R, $S, $insertstep, $coupling, $grid, $s$root$s, $maxtime, $elongationtime, $priormean, $priorcv, $nalleles, $onstates, $decayrate, $s$splicetype$s, $probfn, $noisepriors, $hierarchical, $s$ratetype$s, $propcv, $samplesteps, $warmupsteps, $temp, $temprna, $burst, $optimize, $writesamples, $method, $zeromedian, $datacol, $ejectnumber, $yieldfactor, $trace_specs, $dwell_specs)" * _fit_positional_script_kw_suffix(; kwargs...) * "\n")
     close(f)
 end
 
@@ -1219,7 +1245,7 @@ function makeswarm_coupled(; gene::String, inlabel::String, label::String,
         priormean, nalleles, priorcv, onstates, decayrate, splicetype, probfn, noisepriors,
         hierarchical, ratetype, propcv, samplesteps, warmupsteps, temp,
         temprna, burst, optimize, writesamples, method, src, zeromedian,
-        datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs)
+        datacol, ejectnumber, yieldfactor, trace_specs, dwell_specs; kwargs...)
 end
 
 """

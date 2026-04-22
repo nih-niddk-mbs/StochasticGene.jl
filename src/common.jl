@@ -669,6 +669,17 @@ end
 
 ADVIOptions(; maxiter=500, n_mc=8, σ_floor=1e-4, init_s_raw=-4.0, verbose=false, gradient=:Zygote, time_limit=nothing, device::Symbol=:cpu, parallel::Symbol=:single) =
     ADVIOptions(maxiter, n_mc, σ_floor, init_s_raw, verbose, gradient, time_limit, device, parallel)
+
+"""
+    INFERENCE_MH, INFERENCE_NUTS, INFERENCE_ADVI, INFERENCE_CHOICES
+
+Symbolic tags for `fit` / run-spec `inference_method` (also accept plain symbols like `:mh`).
+"""
+const INFERENCE_MH = :mh
+const INFERENCE_NUTS = :nuts
+const INFERENCE_ADVI = :advi
+const INFERENCE_CHOICES = (INFERENCE_MH, INFERENCE_NUTS, INFERENCE_ADVI)
+
 abstract type Results end
 
 
