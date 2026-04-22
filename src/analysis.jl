@@ -3969,7 +3969,7 @@ function write_correlation_functions(folder; transitions=(([1, 2], [2, 1], [2, 3
     end
 end
 
-function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median")
+function write_correlation_functions_key(folder::String; lags=collect(0:1:200), ratetype::String="median", insertstep=nothing)
     n = 0
     for (root, _, files) in walkdir(folder)
         for f in files
@@ -3978,12 +3978,14 @@ function write_correlation_functions_key(folder::String; lags=collect(0:1:200), 
                 info = read_run_spec(joinpath(root, f))
                 key = get_key(f)
                 ratefile = joinpath(root, "rates_" * key * ".txt")
-                @info "computing correlations for $ratefile"
                 r = readrates(ratefile, get_row(ratetype))
                 splicetype = String(get(info, :splicetype, ""))
+                this_insertstep = isnothing(insertstep) ? info[:insertstep] : insertstep
+                @info "computing correlations for $ratefile with insertstep=$(this_insertstep)"
                 tau, cc, ac1, ac2, m1, m2, v1, v2, ccON, ac1ON, ac2ON, mON1, mON2, v1ON, v2ON, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2, v1Reporters, v2Reporters =
-                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], info[:insertstep], info[:probfn], info[:coupling], lags; splicetype=splicetype)
-                write_correlation_csv(joinpath(root, "crosscorrelation_" * key * ".csv"), tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
+                    correlation_functions(r, info[:transitions], info[:G], info[:R], info[:S], this_insertstep, info[:probfn], info[:coupling], lags; splicetype=splicetype)
+                outname = joinpath(root, "crosscorrelation_" * key * "_insertstep$(this_insertstep[1])$(this_insertstep[2]).csv")
+                write_correlation_csv(outname, tau, ccON, ac1ON, ac2ON, mON1, mON2, ccReporters, ac1Reporters, ac2Reporters, mReporters1, mReporters2)
             end
         end
     end
