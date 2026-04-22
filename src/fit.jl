@@ -371,8 +371,6 @@ function fit(nchains, data, model, options, resultfolder, burst, optimize, write
 end
 
 
-
-
 """
     genes_hbec()
 
@@ -885,12 +883,46 @@ function make_structures(rinit, datatype::String, dttype::Vector, datapath, gene
     fittedparam = set_fittedparam(fittedparam, datatype, transitions, R, S, insertstep, noisepriors, coupling, grid)
     propcv = get_propcv(propcv, infolder, label, gene, G, R, S, insertstep, nalleles, fittedparam, transitions)
     model = load_model(data, rinit, priormean, fittedparam, fixedeffects, transitions, G, R, S, insertstep, splicetype, nalleles, priorcv, onstates, decayrate, propcv, probfn, noisepriors, method, hierarchical, coupling, grid, zeromedian, ejectnumber, 10, dwell_specs)
-    if samplesteps > 0
-        options = MHOptions(samplesteps, warmupsteps, Float64(maxtime), temp)
-    else
-        throw(ArgumentError("samplesteps must be greater than 0"))
-    end
+    # Example: pass inference_method=:mh for Metropolis-Hastings, or :nuts for NUTS, etc.
+    inference_method = get(kwargs, :inference_method, :mh)
+    options = load_options(
+        inference_method=inference_method,
+        device=get(kwargs, :device, nothing),
+        parallelism=get(kwargs, :parallelism, nothing),
+        gradient=get(kwargs, :gradient, nothing),
+        samplesteps=samplesteps,
+        warmupsteps=warmupsteps,
+        maxtime=maxtime,
+        temp=temp
+    )
     return data, model, options
+end
+
+"""
+    load_options(; inference_method, device=nothing, parallelism=nothing, gradient=nothing, kwargs...)
+
+Dispatches to the appropriate options constructor based on the inference method. Handles device, parallelism, gradient, and method-specific options.
+"""
+function load_options(; inference_method, device=nothing, parallelism=nothing, gradient=nothing, kwargs...)
+    if inference_method == :mh || inference_method == :metropolis_hastings
+        # MHOptions(samplesteps, warmupsteps, maxtime, temp; device, parallelism, gradient, ...)
+        return MHOptions(
+            get(kwargs, :samplesteps, 1000000),
+            get(kwargs, :warmupsteps, 0),
+            Float64(get(kwargs, :maxtime, 60)),
+            get(kwargs, :temp, 1.0);
+            device=device, parallelism=parallelism, gradient=gradient
+        )
+    elseif inference_method == :nuts
+        # Example: NUTSOptions(...)
+        return NUTSOptions(
+            get(kwargs, :num_samples, 1000),
+            get(kwargs, :num_warmup, 500),
+            device=device, parallelism=parallelism, gradient=gradient
+        )
+    else
+        error("Unknown inference method: $(inference_method)")
+    end
 end
 
 """
